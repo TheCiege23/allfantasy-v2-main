@@ -101,9 +101,12 @@ function LeagueCard({ l }: { l: OverviewLeagueCard }) {
             Nothing waiting
           </span>
         )}
-        <span className="afh-chip" data-tone={l.sync.tone === 'muted' ? undefined : l.sync.tone}>
-          {l.sync.label}
-        </span>
+        {/* A healthy sync is the normal case and says nothing; a stale one is said once, not twice. */}
+        {l.sync.tone !== 'good' && !(l.topItem ?? '').toLowerCase().includes('sync') ? (
+          <span className="afh-chip" data-tone={l.sync.tone === 'muted' ? undefined : l.sync.tone}>
+            {l.sync.label}
+          </span>
+        ) : null}
       </div>
       <nav className="afh-card-actions" aria-label={`${l.name} tools`}>
         <Link className="afh-card-commissioner" href={l.href}>
@@ -138,16 +141,13 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
         <div className="afh-hero-body cmg-band-body">
           <div className="afh-label">{g.eyebrow}</div>
           <h1 className="cmg-title">{g.headline}</h1>
-          <p className="cmg-sub">{g.intro}</p>
-          {has && g.chips.length > 0 ? (
-            <div className="cmg-chips">
-              {g.chips.map((c) => (
-                <Link key={c.key} className="cmg-chip" data-tone={c.tone} href={c.href}>
-                  {c.label}
-                </Link>
-              ))}
-            </div>
-          ) : null}
+          {/*
+            Simplified 2026-11-23 (user feedback: "somewhat crowded"). The intro paragraph and the four
+            summary chips repeated the to-do list directly below them — and with nothing waiting, the
+            list's own empty line says it — so the band is the headline and one button. The intro stays
+            only for someone who runs no league yet.
+          */}
+          {has ? null : <p className="cmg-sub">{g.intro}</p>}
           {canSend ? (
             <div className="cmg-band-action">
               <FocusComposerButton />
@@ -158,18 +158,20 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
 
       {has ? (
         <>
-          <p className="cmg-teach">
-            <b>Why it matters</b> {g.teach}
-          </p>
-
           {/* The to-do list first: one row per thing, the league, and the button that does it. */}
           <OverviewQueue rows={data.queue} title="Your to-do list" />
 
-          {/* Quiet managers in season, with the next step and a message to copy — only when there are some. */}
+          {/*
+            Quiet managers in season, with a message to copy for each. Folded (2026-11-23): the to-do list
+            above already names them, so this is the "how do I word it" detail, one tap away.
+          */}
           {(data.ladder ?? []).length > 0 ? (
-            <section className="afh-panel" id="af-ladder" aria-label="Inactive managers">
-              <InactiveLadderList entries={data.ladder ?? []} offSeason={false} />
-            </section>
+            <details className="afh-panel cmg-fold" id="af-ladder" aria-label="Inactive managers" data-testid="commissioner-ladder">
+              <summary>
+                Messages for quiet managers <span className="cmg-fold-count">{(data.ladder ?? []).length}</span>
+              </summary>
+              <InactiveLadderList entries={data.ladder ?? []} offSeason={false} showTeach={false} showHead={false} />
+            </details>
           ) : null}
 
           <section aria-labelledby="afh-run" className="afh-stack" id="afh-leagues">
@@ -219,7 +221,7 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
 
           {/* Everything else, one tap away (2026-11-13 guide). */}
           <details className="cmg-more" data-testid="commissioner-more">
-            <summary>More commissioner tools — mentions, inactive-manager rules, tournaments, Commissioner OS</summary>
+            <summary>More tools</summary>
             <div className="cmg-more-body">
               <section className="afh-panel" aria-labelledby="afh-mentions">
                 <div className="afh-panel-head">
@@ -311,12 +313,12 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
         </section>
       )}
 
-      <footer className="afh-foot">
-        <p>
-          Rulings and settings are applied on each league’s own platform.
-          {has && data.partial ? ' Some figures couldn’t be read just now and may be low.' : ''}
-        </p>
-      </footer>
+      {/* Said only when it matters: some figures could not be read and may be low. */}
+      {has && data.partial ? (
+        <footer className="afh-foot">
+          <p>Some figures couldn’t be read just now and may be low.</p>
+        </footer>
+      ) : null}
     </div>
   )
 }

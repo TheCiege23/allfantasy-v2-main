@@ -19,7 +19,8 @@ const ctx = vi.hoisted(() => {
   }
   const tx = {
     draftPick: { delete: vi.fn(async ({ where }: { where: { id: string } }) => { state.deleted.push(where.id) }) },
-    draftSession: { update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { state.updates.push(data); return {} }) },
+    // The pointer sync (draftProgressPointer.ts) reads the session back; it has its own suite.
+    draftSession: { findUnique: vi.fn(async () => null), update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { state.updates.push(data); return {} }) },
     draftPickAuditLog: { create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { state.audits.push(data) }) },
     playerContract: { deleteMany: vi.fn(async () => ({ count: 1 })) },
   }

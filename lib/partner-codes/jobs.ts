@@ -6,6 +6,7 @@ import { syncUserProfileFromSubscriptions } from '@/lib/subscription/syncBridge'
 import { sendNotificationEmail } from '@/lib/resend-client'
 import { getStripeClient } from '@/lib/stripe-client'
 import { overlapEmail, stopPaidPlansCoveredBy } from './paidPlanOverlap'
+import { refreshConnectStatus, sendPayoutTransfer } from './connect'
 import { loadPartnerSettings } from './service'
 import { buildPayout, previousMonthKey } from './money'
 import { countMeters, EMPTY_LEVEL, shouldUnlockCash, stepRewards, type FreePlan, type RewardLevels } from './meters'
@@ -135,7 +136,30 @@ export async function runPartnerDaily(now = new Date()) {
     await applyFreePlan(code.id, code.ownerUserId, freePlan, now)
     if (freePlan !== 'none') await stopOverlappingPaidPlan(code.id, code.ownerUserId, freePlan, code.freePlan)
   }
-  return { codes, cashUnlocked, slicesAccrued: accrued.count }
+  const payoutsReleased = await releasePayoutsHeldForSetup().catch((error) => {
+    console.warn('[partner-codes] payout release failed', (error as Error)?.message)
+    return 0
+  })
+  return { codes, cashUnlocked, slicesAccrued: accrued.count, payoutsReleased }
+}
+
+/**
+ * Commissioners who finished Stripe payout setup since their statement was held: re-check their
+ * account (the capability can take a while to turn active) and put the statement back in review.
+ */
+async function releasePayoutsHeldForSetup(): Promise<number> {
+  const held = await prisma.partnerPayout.findMany({ where: { status: 'held', isDemo: false, heldReason: { startsWith: 'Waiting for payout setup' } }, select: { id: true, ownerUserId: true } })
+  if (!held.length) return 0
+  const stripe = getStripeClient()
+  const checked = new Map<string, string>()
+  let released = 0
+  for (const h of held) {
+    if (!checked.has(h.ownerUserId)) checked.set(h.ownerUserId, await refreshConnectStatus(stripe, h.ownerUserId).catch(() => 'none'))
+    if (checked.get(h.ownerUserId) !== 'active') continue
+    await prisma.partnerPayout.update({ where: { id: h.id }, data: { status: 'pending_review', heldReason: null } })
+    released++
+  }
+  return released
 }
 
 /**
@@ -218,7 +242,29 @@ export async function runPartnerMonthly(now = new Date()) {
       console.warn('[partner-codes] statement email failed', (error as Error)?.message),
     )
   }
-  return { periodMonth, ...summary }
+  const autoSent = await autoSendSmallPayouts(s.autoSendMaxCents)
+  return { periodMonth, ...summary, autoSent }
+}
+
+/**
+ * The optional "send without approval" setting: pending statements up to `maxCents` whose
+ * commissioner's payout account is active go straight out. Never for a statement that touches a
+ * flagged or rejected subscriber. 0 = off.
+ */
+export async function autoSendSmallPayouts(maxCents: number): Promise<number> {
+  if (maxCents <= 0) return 0
+  const candidates = await prisma.partnerPayout.findMany({
+    where: { status: 'pending_review', isDemo: false, totalCents: { lte: maxCents }, transferError: null },
+    select: { id: true },
+  })
+  let sent = 0
+  for (const c of candidates) {
+    const flagged = await prisma.partnerCommissionEntry.count({ where: { payoutId: c.id, referral: { status: { in: ['flagged', 'rejected'] } } } })
+    if (flagged) continue
+    const r = await payPayout(c.id, 'auto').catch(() => null)
+    if (r?.status === 'paid') sent++
+  }
+  return sent
 }
 
 async function emailStatement(userId: string, periodMonth: string, totalCents: number, held: boolean) {
@@ -229,10 +275,10 @@ async function emailStatement(userId: string, periodMonth: string, totalCents: n
     to: user.email,
     subject: `Your ${periodMonth} Partner Code statement: ${amount}`,
     bodyHtml: held
-      ? `<p>You earned <strong>${amount}</strong> in ${periodMonth}. We need your W-9 tax form before we can send it.</p>`
-      : `<p>You earned <strong>${amount}</strong> in ${periodMonth}. It's in review and goes out around the 15th.</p>`,
+      ? `<p>You earned <strong>${amount}</strong> in ${periodMonth}. Set up payouts (your bank and tax info, through Stripe) and we'll send it.</p>`
+      : `<p>You earned <strong>${amount}</strong> in ${periodMonth}. It's in review and goes to your bank around the 15th.</p>`,
     actionHref: '/partner-code',
-    actionLabel: held ? 'Add your tax form' : 'See your statement',
+    actionLabel: held ? 'Set up payouts' : 'See your statement',
   })
 }
 
@@ -240,15 +286,67 @@ async function emailStatement(userId: string, periodMonth: string, totalCents: n
 // Admin actions
 // ---------------------------------------------------------------------------
 
-export async function setPayoutStatus(payoutId: string, action: 'approve' | 'hold' | 'mark_paid', adminUserId: string | null, note?: string) {
+/**
+ * Send an approved (or auto-approved) statement to the commissioner's Stripe payout account and
+ * record the result. A failed transfer leaves it `approved` with `transferError` set, so an admin
+ * can retry; the transfer's idempotency key is the payout id, so a retry can never pay twice.
+ */
+export async function payPayout(payoutId: string, by: 'admin' | 'auto', adminUserId: string | null = null) {
+  const p = await prisma.partnerPayout.findUnique({ where: { id: payoutId } })
+  if (!p) throw new Error('Payout not found')
+  if (p.status === 'paid') return p
+  if (p.status === 'held') throw new Error('Release the hold first')
+  const now = new Date()
+  const result = await sendPayoutTransfer(getStripeClient(), p)
+  if (!result.ok) {
+    return prisma.partnerPayout.update({
+      where: { id: p.id },
+      data: {
+        status: 'approved', approvedAt: p.approvedAt ?? now, approvedBy: p.approvedBy ?? (by === 'auto' ? 'auto' : adminUserId), transferError: result.message,
+        // A definite refusal frees the next retry to use a fresh idempotency key (see createPayoutTransfer).
+        ...(result.definite ? { transferAttempts: { increment: 1 } } : {}),
+      },
+    })
+  }
+  const paid = await prisma.$transaction(async (tx) => {
+    await tx.partnerCommissionEntry.updateMany({ where: { payoutId: p.id, status: 'accrued' }, data: { status: 'paid' } })
+    return tx.partnerPayout.update({
+      where: { id: p.id },
+      data: {
+        status: 'paid', paidAt: now, method: 'stripe_connect', externalRef: result.transferId, transferError: null,
+        approvedAt: p.approvedAt ?? now, approvedBy: p.approvedBy ?? (by === 'auto' ? 'auto' : adminUserId),
+      },
+    })
+  })
+  await emailPaid(p.ownerUserId, p.periodMonth, p.totalCents).catch(() => null)
+  return paid
+}
+
+async function emailPaid(userId: string, periodMonth: string, totalCents: number) {
+  const user = await prisma.appUser.findUnique({ where: { id: userId }, select: { email: true } })
+  if (!user?.email) return
+  const amount = `$${(totalCents / 100).toFixed(2)}`
+  await sendNotificationEmail({
+    to: user.email,
+    subject: `${amount} is on its way to your bank`,
+    bodyHtml: `<p>We sent your ${periodMonth} Partner Code commission of <strong>${amount}</strong>. It usually reaches your bank in about 2 business days.</p>`,
+    actionHref: '/partner-code',
+    actionLabel: 'See your statements',
+  })
+}
+
+export async function setPayoutStatus(payoutId: string, action: 'approve' | 'hold' | 'mark_paid' | 'send', adminUserId: string | null, note?: string) {
   const now = new Date()
   const p = await prisma.partnerPayout.findUnique({ where: { id: payoutId } })
   if (!p) throw new Error('Payout not found')
-  if (action === 'approve') {
+  if (action === 'approve' || action === 'send') {
     if (p.status === 'paid') throw new Error('Already paid')
     const tax = await prisma.partnerTaxProfile.findUnique({ where: { ownerUserId: p.ownerUserId } })
-    if (!(tax?.w9Status === 'submitted' || tax?.w9Status === 'verified')) throw new Error('No W-9 on file')
-    return prisma.partnerPayout.update({ where: { id: p.id }, data: { status: 'approved', heldReason: null, approvedAt: now, approvedBy: adminUserId } })
+    if (!(tax?.w9Status === 'submitted' || tax?.w9Status === 'verified')) throw new Error('No payout setup or W-9 on file')
+    const approved = await prisma.partnerPayout.update({ where: { id: p.id }, data: { status: 'approved', heldReason: null, approvedAt: now, approvedBy: adminUserId } })
+    // On Stripe Connect, approving IS sending. Without it, it waits for a manual "Mark paid".
+    if (tax?.stripeAccountId) return payPayout(p.id, 'admin', adminUserId)
+    return approved
   }
   if (action === 'hold') {
     if (p.status === 'paid') throw new Error('Already paid')

@@ -206,7 +206,8 @@ function LeagueWaiverRecommendationsPanel({
         <div>
           <h2 className={cx.title}>Chimmy&apos;s Waiver Recommendations</h2>
           <p className={cx.sub}>
-            Recommendation-only guidance for add/drop targets, FAAB bids, and risk-aware priorities.
+            {/* 2026-11-23: shorter, and no "FAAB bids" — it showed in leagues with no FAAB at all. */}
+            Who to add and drop. Suggestions only — nothing is claimed for you.
           </p>
         </div>
         <button

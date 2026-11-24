@@ -81,3 +81,17 @@ export function hubSeasonYear(tournament: HubTournament, now: Date = new Date())
   if (tournament === "nba_cup") return year
   return now.getUTCMonth() <= 1 ? year - 1 : year
 }
+
+/**
+ * The College Football Playoff card's window on the /core home (2026-11-23): from Nov 1 — the weekly CFP
+ * rankings, and the projected bracket synced from them (lib/playoffs/syncCfpPreview.ts) — through the end
+ * of this hub's own `ncaaf` window (Jan 25).
+ *
+ * ⚠ NOT the hub's `ncaaf` window alone: its months are 0-based, so `startMonth: 11` is DECEMBER, and the
+ * card would have stayed hidden through the whole rankings month that is the reason to show it.
+ */
+export function cfpPromoLive(now: Date = new Date()): boolean {
+  const win = windowAround("ncaaf", now)
+  const startYear = new Date(win.start).getUTCFullYear()
+  return now.getTime() >= Date.UTC(startYear, 10, 1) && now.getTime() <= win.end
+}

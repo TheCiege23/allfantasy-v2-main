@@ -2949,3 +2949,48 @@ button.af-ch-os-chip {
     transition: none;
   }
 }
+
+/*
+ * ── The fold groups (2026-11-23) ──────────────────────────────────────────────────────────────────
+ * User feedback: "crowded". The 22 folded rows were 22 separate boxes in one flat run. Now they sit under
+ * five headings, and each group's rows join into ONE rounded block with hairline dividers — the grouped
+ * list people know from a phone's Settings app. Rows, contents and ids are unchanged.
+ *
+ * Each group is its own column (`.af-ch-grp`), because the page column puts a 22px gap between ALL its
+ * children — no margin on a row can close that.
+ */
+.af-core .af-ch-grp {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.af-core .af-ch-group {
+  margin: 4px 4px 8px;
+  color: var(--muted, var(--text2));
+  font: 700 12px/1.3 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.af-core .af-ch-grp > .af-ch-fold {
+  border-radius: 0;
+}
+.af-core .af-ch-grp > .af-ch-fold + .af-ch-fold {
+  margin-top: -1px; /* one shared hairline between rows, not two */
+}
+.af-core .af-ch-grp > .af-ch-group + .af-ch-fold {
+  border-top-left-radius: var(--af-radius-inner, 12px);
+  border-top-right-radius: var(--af-radius-inner, 12px);
+}
+.af-core .af-ch-grp > .af-ch-fold:last-child {
+  border-bottom-left-radius: var(--af-radius-inner, 12px);
+  border-bottom-right-radius: var(--af-radius-inner, 12px);
+}
+/* An open row is the thing being read: it stands apart from its neighbours. */
+.af-core .af-ch-grp > .af-ch-fold[open] {
+  margin: 8px 0;
+  border-radius: var(--af-radius-inner, 12px);
+}
+.af-core .af-ch-grp > .af-ch-fold[open]:first-of-type,
+.af-core .af-ch-grp > .af-ch-group + .af-ch-fold[open] {
+  margin-top: 0;
+}

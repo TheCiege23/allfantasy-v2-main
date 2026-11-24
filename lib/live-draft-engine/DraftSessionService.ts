@@ -1,4 +1,5 @@
 import { ANNUAL_C2C_DRAFT } from './annualC2CDraft'
+import { syncDraftProgressPointer } from '@/lib/live-draft-engine/draftProgressPointer'
 import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { listAutoDraftRosterIds } from './instantAutopick'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
@@ -1178,6 +1179,7 @@ export async function undoLastPick(
         data: { version: { increment: 1 }, updatedAt: new Date(), ...(refundedBudgets ? { auctionBudgets: refundedBudgets } : {}) },
       })
     }
+    await syncDraftProgressPointer(tx as any, session.id)
     await recordArchiveEvent(tx, updatedSession, 'reset_timer', { actorUserId, correction: 'undo_pick' })
     if (actorUserId) {
       await tx.draftPickAuditLog.create({

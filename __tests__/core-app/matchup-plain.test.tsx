@@ -111,11 +111,11 @@ describe('to win', () => {
     expect(en.toWinBody(10, 20, 10, 1, 9, 0)).toBe('On projection you get there, with 1 player still to play.')
     expect(en.toWinBody(10, 20, 10, 3, null, null)).toBe('')
     expect(en.toWinBody(0, 20, 25, 3, 9, 0)).toBe('Your 25.0 already beats their projected final of 20.0.')
-    expect(en.toWinNeed(223)).toBe('223.0 more points to pass them')
+    expect(en.toWinNeed(223, 250)).toBe('223.0 more points to beat their projected 250.0')
     const es = matchupScreenMessages.es
     expect(es.toWinBody(10, 20, 10, 16, 186.9, 46.2)).toBe('Según la proyección te quedas a 46.2 puntos, con 16 jugadores por jugar.')
     expect(es.toWinBody(10, 20, 10, 1, 9, 0)).toBe('Según la proyección lo logras, con 1 jugador por jugar.')
-    expect(es.toWinNeed(223)).toBe('223.0 puntos más para superarlos')
+    expect(es.toWinNeed(223, 250)).toBe('223.0 puntos más para superar su proyección de 250.0')
   })
 
   it('draws no empty line when there is nothing to say', () => {
@@ -145,7 +145,7 @@ describe('Spanish', () => {
 
   it('never says «waiver» in the Spanish copy it touched', () => {
     const es = matchupScreenMessages.es
-    const text = [es.toWinLabel, es.toWinAhead, es.toWinNeed(5), es.toWinBody(5, 9, 4, 2, 3, 1), es.toWinBody(5, 9, 4, 2, 3, 0)].join(' ')
+    const text = [es.toWinLabel, es.toWinAhead, es.toWinNeed(5, 9), es.toWinBody(5, 9, 4, 2, 3, 1), es.toWinBody(5, 9, 4, 2, 3, 0)].join(' ')
     expect(text).not.toMatch(/waiver/i)
   })
 })

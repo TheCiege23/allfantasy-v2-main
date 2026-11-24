@@ -18,8 +18,12 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
  *   - Sleeper and native (AllFantasy-hosted) leagues: the grade reads each league's own weekly scores —
  *     the Sleeper import's, or our scoring engine's for a native league (source 'allfantasy', since
  *     2026-11-23) — keyed by the same Sleeper ids the roster uses (a native NFL roster holds Sleeper
- *     ids). ESPN, Yahoo, MFL and Fleaflicker store no weekly player scores, so a call there could never
- *     be graded and is not recorded. A league with no platform is not recorded either.
+ *     ids).
+ *   - ESPN, NFL ONLY (2026-11-24): graded on ESPN's own week points (`espnPlayerWeekScoresWriter.ts`, source
+ *     'espn'), stored already crosswalked to the canonical Sleeper id — the same `sleeperId` this records as
+ *     the key. An ESPN NBA/NHL/MLB league stores no player scores, so its call is not recorded.
+ *   - Yahoo, MFL and Fleaflicker store no weekly player scores, so a call there could never be graded and is
+ *     not recorded. A league with no platform is not recorded either.
  *   - NFL: the week recorded is the NFL projection feed's week, which must equal the real NFL week.
  *   - NBA, NHL and MLB (2026-11-23): the week recorded is the one My Team PRICED the call for — the
  *     daily-sport outlook's period (`myTeamDailySport.ts`), on that sport's own calendar and season —
@@ -75,8 +79,9 @@ export function benchLedgerWeek(
   if (String(env['ADVICE_LEDGER_MY_TEAM'] ?? '').trim().toLowerCase() === 'off') return null
   if (!ctx.fullRender || !ctx.userId || !ctx.leagueId) return null
   const platform = String(ctx.platform ?? '').trim().toLowerCase()
-  if (platform !== 'sleeper' && !(platform !== '' && isNativePlatform(platform))) return null
   const sport = String(ctx.sport ?? '').trim().toUpperCase()
+  const espnNfl = platform === 'espn' && sport === 'NFL'
+  if (platform !== 'sleeper' && !espnNfl && !(platform !== '' && isNativePlatform(platform))) return null
   if (WEEKLY_PERIOD_SPORTS.has(sport)) {
     const lp = ctx.lineupPeriod
     if (!lp || (lp.kind !== 'week' && lp.kind !== 'day')) return null

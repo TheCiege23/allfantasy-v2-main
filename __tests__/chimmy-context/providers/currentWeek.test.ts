@@ -25,6 +25,12 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
+// The effective-week read is doubled: an import's schedule week is 12, a native season keeps its own.
+vi.mock("@/lib/season-week/effectiveRedraftWeek", () => ({
+  resolveEffectiveRedraftWeek: vi.fn(async (season: { currentWeek?: number | null }, platform: string | null | undefined) =>
+    platform && platform !== "manual" ? 12 : Math.max(1, Number(season.currentWeek) || 1)),
+}))
+
 import { resolveCurrentWeek } from "@/lib/chimmy-context/providers/_helpers/currentWeek"
 
 describe("resolveCurrentWeek", () => {
@@ -62,6 +68,15 @@ describe("resolveCurrentWeek", () => {
     expect(res.isPlayoffWeek).toBe(false)
     expect(res.weeksUntilPlayoffs).toBe(6)
     expect(teamWeekResultFindFirstMock).not.toHaveBeenCalled()
+  })
+
+  // An imported season's stored week is 1 forever; read raw, Chimmy grounded imports on week 1.
+  it("reads an imported season's week through the effective-week read, not its stored 1", async () => {
+    leagueFindUniqueMock.mockResolvedValue({ season: 2026, playoffStartWeek: 15, settings: null, platform: "sleeper" })
+    redraftSeasonFindFirstMock.mockResolvedValue({ id: "rs", season: 2026, currentWeek: 1, playoffStartWeek: 15, totalWeeks: 17 })
+    const res = await resolveCurrentWeek({ leagueId: "L" })
+    expect(res.week).toBe(12)
+    expect(res.source).toBe("redraftSeason")
   })
 
   it("derives from TeamWeekResult MAX(week, status='final') + 1", async () => {

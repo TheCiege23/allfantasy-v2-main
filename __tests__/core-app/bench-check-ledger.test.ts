@@ -37,7 +37,8 @@ describe('benchLedgerWeek — when a render may record', () => {
     ['the projection feed is on another week', { projectionWeek: { season: '2026', week: 9 } }],
     ['a different season', { sportsWeek: { season: 2025, week: 10 } }],
     ['no week known', { sportsWeek: null }],
-    ['not Sleeper (the grade reads Sleeper scores)', { platform: 'espn' }],
+    ['Yahoo (no weekly player scores are stored)', { platform: 'yahoo' }],
+    ['an ESPN league in a daily sport', { platform: 'espn', sport: 'NBA' }],
     ['an NBA Sleeper league whose own week number happens to match the NFL\'s', { sport: 'NBA' }],
     ['an NHL Sleeper league on a matching week', { sport: 'nhl' }],
     ['a league with no sport', { sport: '' }],
@@ -52,6 +53,11 @@ describe('benchLedgerWeek — when a render may record', () => {
       expect(benchLedgerWeek({ ...CTX, platform }, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 10 })
     },
   )
+
+  it.each(['espn', 'ESPN'])('records in an ESPN NFL league (platform %s) — graded on ESPN\'s own week points (2026-11-24)', (platform) => {
+    expect(benchLedgerWeek({ ...CTX, platform }, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 10 })
+    expect(benchLedgerWeek({ ...CTX, platform, sport: 'nfl' }, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 10 })
+  })
 
   it.each([['yahoo'], ['mfl'], ['fleaflicker'], [''], [null]])('records nothing for platform %s (no stored weekly scores, or unknown)', (platform) => {
     expect(benchLedgerWeek({ ...CTX, platform }, {} as NodeJS.ProcessEnv)).toBeNull()

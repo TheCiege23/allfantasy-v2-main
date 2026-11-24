@@ -2031,6 +2031,12 @@ export function TradeCenter(props: {
             ⚠ THE SAME PRICED-ONLY TOTALS AS THE VALUE RAIL, AND THE SAME EM DASH. A side with
             nothing priced reads "—", never "0", for the reason every other total here gives.
           */}
+          {/*
+            No totals until there is something to total (2026-11-23, "crowded"): an empty deal read
+            "Get — Send —" above a builder saying "Nothing added yet". The button stays — on an empty
+            deal it opens the picker, which is the point of the bar.
+          */}
+          {giveAssets.length > 0 || getAssets.length > 0 ? (
           <span className="af-tc-stepbar-totals af-num" aria-live="polite">
             <span>{copy('Get')} <b>{balance?.get != null ? balance.get.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
             <span>{copy('Send')} <b>{balance?.give != null ? balance.give.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
@@ -2041,6 +2047,7 @@ export function TradeCenter(props: {
               </span>
             ) : null}
           </span>
+          ) : null}
           <button
             type="button"
             className="af-btn af-tc-stepbar-primary"

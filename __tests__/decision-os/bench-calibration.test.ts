@@ -253,21 +253,28 @@ describe('🛑 native NFL leagues are graded on our own engine\'s weekly scores 
     }
     expect(text).toContain(`r."playerId" = a.rec_player_key`)
     expect(text).toContain(`s."playerId" = a.alt_player_key`)
+    // ESPN NFL (2026-11-24): its own rows only, under the `espn:` key the writer uses — never the bare platform id.
+    for (const alias of ['r', 's']) {
+      expect(text).toContain(`WHEN lower(coalesce(l.platform, '')) = ? THEN ${alias}."leagueId" = ? || l."platformLeagueId" AND ${alias}.source = ?`)
+    }
     const values = valuesOf(call)
+    expect(values).toContain('espn')
+    expect(values).toContain('espn:')
     expect(values).toContain('allfantasy')
     // The native spellings come from the one predicate the app uses, never a local copy — and never ''.
     for (const p of ['allfantasy', 'af', 'manual', 'native']) expect(values).toContain(p)
     expect(values).not.toContain('')
   })
 
-  it('My Team reads the bench record in a native NFL league, not in ESPN, nor in a native NBA league with no NBA record', async () => {
+  it('My Team reads the bench record in a native or ESPN NFL league, not in Yahoo, nor in a native NBA league with no NBA record', async () => {
     const snapshot = { ledger: { benchEdges: { clear: { n: 30, right: 25, wrong: 5, same: 0, wDecided: 30, wRight: 25 } } } }
     vi.doMock('@/lib/chimmy-outcomes/learningStore', () => ({ readAdviceLearningSnapshot: vi.fn(async () => snapshot) }))
     vi.resetModules()
     const { loadBenchCalibration } = await import('@/lib/decision-os/lineup/benchCalibrationStore')
     expect(await loadBenchCalibration({ sport: 'NFL', platform: 'allfantasy' })).toMatchObject({ clear: { decided: 30 } })
     expect(await loadBenchCalibration({ sport: 'NFL', platform: 'sleeper' })).toMatchObject({ clear: { decided: 30 } })
-    expect(await loadBenchCalibration({ sport: 'NFL', platform: 'espn' })).toBeNull()
+    expect(await loadBenchCalibration({ sport: 'NFL', platform: 'espn' })).toMatchObject({ clear: { decided: 30 } })
+    expect(await loadBenchCalibration({ sport: 'NFL', platform: 'yahoo' })).toBeNull()
     expect(await loadBenchCalibration({ sport: 'NFL', platform: '' })).toBeNull()
     expect(await loadBenchCalibration({ sport: 'NBA', platform: 'allfantasy' })).toBeNull()
     vi.doUnmock('@/lib/chimmy-outcomes/learningStore')

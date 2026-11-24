@@ -16,6 +16,12 @@ type Graded = Extract<TradeGradeView, { graded: true }>
  */
 export function oneGradeBreakdown(args: { grade: Graded; receiverLabel: string; partnerLabel: string }): string[] {
   const { grade: g, receiverLabel: recv, partnerLabel: partner } = args
+  /*
+   * "You" is a label that also lands MID-sentence ("…and You got him", "— You got 19 for 21"); it is
+   * lowercase there (2026-11-23). Only the exact second-person label changes: a manager named "You…"
+   * keeps their name. tradeUiCopy reads either case as second person.
+   */
+  const mid = (label: string) => (label === 'You' ? 'you' : label)
   const get = g.getValue.toLocaleString()
   const give = g.giveValue.toLocaleString()
   const out: string[] = []
@@ -28,13 +34,13 @@ export function oneGradeBreakdown(args: { grade: Graded; receiverLabel: string; 
       out.push(`${recv} got the better end of it — ${get} in league value for ${give}.`)
       break
     case 'C':
-      out.push(`A near-even deal on league value — ${recv} got ${get} for ${give}.`)
+      out.push(`A near-even deal on league value — ${mid(recv)} got ${get} for ${give}.`)
       break
     case 'D':
-      out.push(`${partner} got the better end — ${recv} got ${get} in league value for ${give}.`)
+      out.push(`${partner} got the better end — ${mid(recv)} got ${get} in league value for ${give}.`)
       break
     case 'F':
-      out.push(`${partner} came out well ahead — ${recv} got only ${get} in league value for ${give}.`)
+      out.push(`${partner} came out well ahead — ${mid(recv)} got only ${get} in league value for ${give}.`)
       break
   }
 
@@ -47,8 +53,8 @@ export function oneGradeBreakdown(args: { grade: Graded; receiverLabel: string; 
     const split = (g.percentDiff > 0 && !toReceiver) || (g.percentDiff < 0 && toReceiver)
     out.push(
       split && g.letter !== 'C'
-        ? `Quality and quantity pulled apart: the best single asset was ${best.name}, and ${holder} got ${pronoun} — the other side won on the rest of the deal.`
-        : `The most valuable asset was ${best.name}, and ${holder} got ${pronoun}.`,
+        ? `Quality and quantity pulled apart: the best single asset was ${best.name}, and ${mid(holder)} got ${pronoun} — the other side won on the rest of the deal.`
+        : `The most valuable asset was ${best.name}, and ${mid(holder)} got ${pronoun}.`,
     )
   }
 

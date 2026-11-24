@@ -79,7 +79,12 @@ export const matchupScreenMessages = defineMessages({
     lineupFix: (n: number): string =>
       n === 1 ? 'That is a certain zero until the lineup changes.' : 'Each one is a certain zero until the lineup changes.',
     toWinLabel: 'To win',
-    toWinNeed: (needed: number) => `${needed.toFixed(1)} more points to pass them`,
+    /*
+     * Names the target (2026-11-23). "87.1 more points to pass them" sat under a headline reading "Behind by
+     * 7.4" — both true, but "pass them" read as their CURRENT score. It is their projected final.
+     */
+    toWinNeed: (needed: number, theirProjected: number) =>
+      `${needed.toFixed(1)} more points to beat their projected ${theirProjected.toFixed(1)}`,
     toWinAhead: 'Already past their projection',
     /*
      * One line that answers the card's question (2026-11-14): do you get there? It read "That passes
@@ -162,7 +167,7 @@ export const matchupScreenMessages = defineMessages({
     lineupFix: (n) =>
       n === 1 ? 'Es un cero seguro hasta que cambie la alineación.' : 'Cada uno es un cero seguro hasta que cambie la alineación.',
     toWinLabel: 'Para ganar',
-    toWinNeed: (needed) => `${needed.toFixed(1)} puntos más para superarlos`,
+    toWinNeed: (needed, theirProjected) => `${needed.toFixed(1)} puntos más para superar su proyección de ${theirProjected.toFixed(1)}`,
     toWinAhead: 'Ya superas su proyección',
     toWinBody: (needed, theirProjected, yourScore, left, _leftProjected, short) => {
       if (needed <= 0) return `Tus ${yourScore.toFixed(1)} ya superan su total proyectado de ${theirProjected.toFixed(1)}.`

@@ -84,6 +84,26 @@ with no store setup. Commission is 10% of what the store pays us: the price paid
 - There is no automatic image check: the app has no image-moderation service today, so admin review
   is the gate.
 
+### Payouts through Stripe Connect
+
+`lib/partner-codes/connect.ts`. Each commissioner gets a Stripe v2 connected account configured as a
+**recipient** (receives transfers only), Express dashboard. "Set up payouts" on `/partner-code` opens
+Stripe's hosted onboarding, which collects identity, bank details and US tax info (replacing the hand-kept W-9).
+
+- **Approving a statement sends it** as a transfer from AllFantasy's Stripe balance, keyed on the payout id
+  (a retry or double click can never pay twice). Readiness is re-checked first on the v2 path
+  `configuration.recipient.capabilities.stripe_balance.stripe_transfers.status === 'active'`.
+- A failed transfer stays `approved` with the reason (never Stripe's raw text); **Retry send** in admin.
+  An empty platform balance is named as such.
+- **Send without approval** (`autoSendMaxCents`, default 0 = off): statements up to the cap go out on
+  their own when the account is active and no subscriber on them is flagged.
+- Statements held for setup are released by the daily job once the account turns active.
+- Commissioners not on Connect still work the old way: approve, then **Mark paid** by hand.
+
+**One-time owner setup before this works:** enable Connect on the Stripe account (Dashboard → Connect),
+and keep enough available USD balance to cover approved statements. If you want Stripe to file the 1099s,
+turn on tax forms for connected accounts in the Connect settings.
+
 ## Scheduled work
 
 No cron slot of its own: the repo is at its cron ceiling (`docs/crons.md`). Once a day the existing

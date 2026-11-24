@@ -28,6 +28,7 @@ export default async function AdminPartnerCodesPage() {
   ])
   const tax = await prisma.partnerTaxProfile.findMany({ where: { ownerUserId: { in: payouts.map((p) => p.ownerUserId) } } })
   const taxBy = new Map(tax.map((t) => [t.ownerUserId, t.w9Status]))
+  const connectBy = new Map(tax.map((t) => [t.ownerUserId, t.stripeAccountId ? t.stripeTransfersStatus ?? 'pending' : null]))
   const total = payouts.filter((p) => p.status !== 'held').reduce((a, p) => a + p.totalCents, 0)
   const panel = 'rounded-2xl border border-[#2a2f5a] bg-[#12163e] p-5'
 
@@ -47,16 +48,21 @@ export default async function AdminPartnerCodesPage() {
           {payouts.length ? (
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[760px]">
-                <thead><tr className="text-left text-[#a3a8c9]"><th scope="col" className="py-2 font-semibold">Code</th><th scope="col" className="py-2 font-semibold">Month</th><th scope="col" className="py-2 text-right font-semibold">Amount</th><th scope="col" className="py-2 font-semibold">W-9</th><th scope="col" className="py-2 font-semibold">Status</th><th scope="col" className="py-2 text-right font-semibold">Actions</th></tr></thead>
+                <thead><tr className="text-left text-[#a3a8c9]"><th scope="col" className="py-2 font-semibold">Code</th><th scope="col" className="py-2 font-semibold">Month</th><th scope="col" className="py-2 text-right font-semibold">Amount</th><th scope="col" className="py-2 font-semibold">Payout account</th><th scope="col" className="py-2 font-semibold">Status</th><th scope="col" className="py-2 text-right font-semibold">Actions</th></tr></thead>
                 <tbody>
                   {payouts.map((p) => (
                     <tr key={p.id} className="border-t border-[#23284d]">
                       <th scope="row" className="py-3 text-left font-semibold">{p.partnerCode.code}{p.isDemo ? ' (demo)' : ''}</th>
                       <td className="py-3">{p.periodMonth}</td>
                       <td className="py-3 text-right font-bold">{money(p.totalCents)}</td>
-                      <td className={`py-3 ${taxBy.get(p.ownerUserId) && taxBy.get(p.ownerUserId) !== 'missing' ? 'text-emerald-400' : 'text-rose-300'}`}>{taxBy.get(p.ownerUserId) ?? 'missing'}</td>
-                      <td className="py-3">{p.status}{p.heldReason ? ` · ${p.heldReason}` : ''}</td>
-                      <td className="py-2 text-right"><AdminPartnerActions kind="payout" id={p.id} status={p.status} /></td>
+                      <td className={`py-3 ${connectBy.get(p.ownerUserId) === 'active' ? 'text-emerald-400' : 'text-amber-300'}`}>
+                        {connectBy.get(p.ownerUserId) === 'active' ? 'Stripe, ready' : connectBy.get(p.ownerUserId) ? 'Stripe, not ready' : taxBy.get(p.ownerUserId) && taxBy.get(p.ownerUserId) !== 'missing' ? 'Manual (W-9 on file)' : 'Not set up'}
+                      </td>
+                      <td className="py-3">
+                        {p.status}{p.heldReason ? ` · ${p.heldReason}` : ''}
+                        {p.transferError ? <div className="text-[12px] text-rose-300">{p.transferError}</div> : null}
+                      </td>
+                      <td className="py-2 text-right"><AdminPartnerActions kind="payout" id={p.id} status={p.status} sendsAutomatically={connectBy.get(p.ownerUserId) === 'active'} failed={!!p.transferError} /></td>
                     </tr>
                   ))}
                 </tbody>

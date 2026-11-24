@@ -2,10 +2,14 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { partnerApiUser } from '@/lib/partner-codes/http'
 import { getPartnerDashboard } from '@/lib/partner-codes/dashboard'
+import { getPartnerNudge } from '@/lib/partner-codes/nudge'
 import { checkCodeAvailability, claimPartnerCode } from '@/lib/partner-codes/service'
 import { CODE_REASON_COPY } from '@/lib/partner-codes/code'
 import { SHARE_LOGOS, isShareLook } from '@/lib/partner-codes/shareLooks'
 import { LOGO_ERROR_COPY, removePartnerLogo, uploadPartnerLogo } from '@/lib/partner-codes/logo'
+import { dashboardLink, ensureConnectedAccount, onboardingLink, PayoutSetupNeedsEmailError, refreshConnectStatus } from '@/lib/partner-codes/connect'
+import { getStripeClient } from '@/lib/stripe-client'
+import { getBaseUrl } from '@/lib/get-base-url'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,7 +19,10 @@ export const runtime = 'nodejs'
  * keeps its route count down):
  *   GET                → dashboard
  *   GET ?check=CODE    → live availability while typing
+ *   GET ?nudge=1       → the home card / account menu line (commissioners and code owners only)
  *   POST { code }      → claim, or change your code
+ *   POST { action: 'payouts_setup' }     → Stripe-hosted payout setup link (creates the account first)
+ *   POST { action: 'payouts_dashboard' } → a link into their Stripe Express dashboard
  *   PATCH { look, logo } → share-image choices
  *   PUT multipart `file` → upload your own logo (goes to admin review)
  *   DELETE               → remove it
@@ -23,7 +30,9 @@ export const runtime = 'nodejs'
 export async function GET(req: Request) {
   const auth = await partnerApiUser()
   if (!auth.ok) return auth.res
-  const check = new URL(req.url).searchParams.get('check')
+  const params = new URL(req.url).searchParams
+  if (params.get('nudge') === '1') return NextResponse.json(await getPartnerNudge(auth.userId))
+  const check = params.get('check')
   if (check !== null) {
     const res = await checkCodeAvailability(check, auth.userId)
     if (!res.ok) return NextResponse.json({ available: false, message: CODE_REASON_COPY[res.reason] })
@@ -35,7 +44,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const auth = await partnerApiUser()
   if (!auth.ok) return auth.res
-  const body = (await req.json().catch(() => null)) as { code?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { code?: unknown; action?: unknown } | null
+  if (body?.action === 'payouts_setup' || body?.action === 'payouts_dashboard') return payoutsAction(auth.userId, auth.email, body.action)
   const res = await claimPartnerCode(auth.userId, typeof body?.code === 'string' ? body.code : '')
   if (!res.ok) return NextResponse.json({ error: CODE_REASON_COPY[res.reason], reason: res.reason }, { status: res.reason === 'taken' ? 409 : 400 })
   return NextResponse.json({ ok: true, code: res.code, created: res.created })
@@ -55,6 +65,28 @@ export async function PATCH(req: Request) {
   })
   if (!res.count) return NextResponse.json({ error: logo === 'upload' ? 'Upload a logo first' : 'Claim a code first' }, { status: 404 })
   return NextResponse.json({ ok: true })
+}
+
+async function payoutsAction(userId: string, email: string | null, action: 'payouts_setup' | 'payouts_dashboard') {
+  const code = await prisma.partnerCode.findUnique({ where: { ownerUserId: userId }, select: { code: true } })
+  if (!code) return NextResponse.json({ error: 'Claim a code first' }, { status: 404 })
+  const stripe = getStripeClient()
+  try {
+    if (action === 'payouts_dashboard') {
+      const profile = await prisma.partnerTaxProfile.findUnique({ where: { ownerUserId: userId }, select: { stripeAccountId: true, stripeTransfersStatus: true } })
+      if (!profile?.stripeAccountId || profile.stripeTransfersStatus !== 'active') return NextResponse.json({ error: 'Finish payout setup first' }, { status: 409 })
+      return NextResponse.json({ url: await dashboardLink(stripe, profile.stripeAccountId) })
+    }
+    const accountId = await ensureConnectedAccount(stripe, { ownerUserId: userId, email, displayName: code.code })
+    const status = await refreshConnectStatus(stripe, userId)
+    return NextResponse.json({ url: await onboardingLink(stripe, { accountId, baseUrl: getBaseUrl(), update: status === 'active' }) })
+  } catch (error) {
+    if (error instanceof PayoutSetupNeedsEmailError) return NextResponse.json({ error: error.message, reason: 'needs_email' }, { status: 400 })
+    // Never Stripe's raw text to the browser (it can name key details). The likely cause before launch
+    // is Connect not yet enabled on the platform account.
+    console.error('[partner-codes] payouts action failed', { action, code: (error as { code?: string })?.code, type: (error as { type?: string })?.type })
+    return NextResponse.json({ error: "Payouts aren't available right now. Please try again later." }, { status: 503 })
+  }
 }
 
 export async function PUT(req: Request) {

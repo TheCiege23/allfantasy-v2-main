@@ -756,3 +756,25 @@
     display: none;
   }
 }
+
+/*
+ * Chimmy's picks and Competitive Edge as closed rows (2026-11-23, owner). One row each, opening in place;
+ * the panel inside keeps its own card look, so it sits flat inside the fold rather than a card in a card.
+ */
+.af-core .af-wv-fold { padding: 0 16px; }
+.af-core .af-wv-fold-summary {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-wv-fold-summary::-webkit-details-marker { display: none; }
+.af-core .af-wv-fold-summary::after { content: '▸'; margin-left: auto; color: var(--muted); }
+.af-core .af-wv-fold[open] > .af-wv-fold-summary::after { content: '▾'; }
+.af-core .af-wv-fold[open] { padding-bottom: 12px; }
+.af-core .af-wv-fold > .af-wv-section,
+.af-core .af-wv-fold > .af-wv-ai > section { border: 0; background: none; box-shadow: none; padding-left: 0; padding-right: 0; margin: 0; }

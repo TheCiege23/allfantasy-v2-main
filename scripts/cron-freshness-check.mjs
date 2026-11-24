@@ -261,7 +261,14 @@ export const PROBES = {
    */
   '/api/cron/adp-refresh': { heartbeat: 'cron-adp-refresh' },
   '/api/weather/refresh-cron': { table: 'WeatherCache', column: 'fetchedAt' },
-  '/api/cron/decision-os-activity-ingest?discover=1': { table: 'decision_os_imported_activity', column: 'updatedAt' },
+  /*
+   * ⚠ HEARTBEAT, NOT `decision_os_imported_activity.updatedAt`, since 2026-11-23. The writer now skips
+   * rows whose content is unchanged instead of re-saving every row each visit, so `updatedAt` only
+   * moves when a league has a NEW move — a healthy fire across quiet leagues (the offseason, a bye-week
+   * Tuesday) would read STALE. The same trap as `adp_data` above. The route records
+   * `cron-decision-os-activity-ingest` once per fire, `partial` when a few leagues time out.
+   */
+  '/api/cron/decision-os-activity-ingest?discover=1': { heartbeat: 'cron-decision-os-activity-ingest' },
   '/api/cron/decision-os-snapshot-capture?discover=1': { table: 'intelligence_league_snapshot', column: 'updatedAt' },
 
   // The `*/10` job whose 37-hour gap is how the whole scheduler outage was found in the first

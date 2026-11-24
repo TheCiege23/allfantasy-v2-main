@@ -3453,7 +3453,10 @@ model LeaguePlayerWeeklyScore {
   /// (contracts/rolling-insights/ENDPOINTS.yaml, `stat_corrections`), so a score is still
   /// moving well after the whistle. Only a reconcile pass past that window may set this.
   isFinalized Boolean  @default(false)
-  /// Which platform reported it: 'sleeper' (scheduled), or 'fantrax' (manual browser-download import only).
+  /// Which platform reported it: 'sleeper' (scheduled), 'fantrax' (manual browser-download import only),
+  /// 'allfantasy' (our own engine, native leagues, keyed on League.id), or 'espn' (NFL, current week, from the
+  /// scheduled ESPN sync — lib/league-import/espn/espnPlayerWeekScoresWriter.ts). ⚠ 'espn' rows are keyed
+  /// `espn:<platformLeagueId>` and hold the CANONICAL Sleeper id, not ESPN's (ESPN 12483 is not Sleeper 12483).
   source      String   @db.VarChar(16)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -20747,6 +20750,8 @@ model PartnerProgramSettings {
   activeWindowDays            Int      @default(28)
   paymentClearDays            Int      @default(30)
   minPayoutCents              Int      @default(2500)
+  /// Statements up to this amount are sent without admin approval when nothing about them is flagged. 0 = off.
+  autoSendMaxCents            Int      @default(0)
   maxCodeChangesPerYear       Int      @default(2)
   /// Stripe coupons built from the settings above; rebuilt when they change.
   stripeMonthlyCouponId       String?
@@ -20907,6 +20912,10 @@ model PartnerPayout {
   /// manual | stripe_connect (later)
   method        String?
   externalRef   String?
+  /// Why the last automatic transfer did not go through (shown in admin; never Stripe's raw text).
+  transferError String?
+  /// Definite transfer refusals so far; part of the idempotency key so a retry is not a replayed failure.
+  transferAttempts Int     @default(0)
   approvedAt    DateTime?
   approvedBy    String?
   paidAt        DateTime?
@@ -20927,5 +20936,10 @@ model PartnerTaxProfile {
   w9Status     String   @default("missing")
   payoutMethod String?
   legalName    String?
+  /// Stripe Connect (v2) recipient account that receives commission transfers.
+  stripeAccountId       String?   @unique
+  /// active | pending | restricted | unsupported | none: the stripe_transfers capability.
+  stripeTransfersStatus String?
+  stripeStatusCheckedAt DateTime?
   updatedAt    DateTime @updatedAt
 }

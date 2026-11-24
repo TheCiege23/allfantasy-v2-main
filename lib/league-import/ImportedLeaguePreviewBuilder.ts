@@ -21,7 +21,7 @@ import {
   mapImportedLeagueToFormat,
   resolveLeagueFormat,
 } from '@/lib/league/format-engine'
-import { expandProviderRosterPositions, footballSlotSpec } from '@/lib/league/importedLineupTemplate'
+import { expandProviderRosterPositions, footballSlotSpec, importedLineupTemplateSlots } from '@/lib/league/importedLineupTemplate'
 
 interface ImportPreviewLeague {
   id: string
@@ -377,12 +377,27 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     leagueType: mappedFormat.formatId,
     requestedModifiers: mappedFormat.modifiers,
   })
+  /*
+   * 🛑 AN IMPORTED FOOTBALL LEAGUE KEEPS ITS PROVIDER'S OWN LINEUP (2026-10-27,
+   * `importedProviderTemplate` in lib/multi-sport/RosterTemplateService.ts) whenever
+   * `importedLineupTemplateSlots` can read every slot. Comparing against the AF DEFAULT starter
+   * slots instead told a Sleeper dynasty commissioner "AF does not support this lineup spot yet:
+   * Flex (WR/TE)" (reported 2026-11-23) for a slot the imported league honours exactly. Only when the
+   * provider lineup is unreadable does the AF default apply — and only then is a slot outside it a
+   * real gap.
+   */
+  const providerLineupKept =
+    isFootballLeague &&
+    importedLineupTemplateSlots({
+      sport: String(normalized.league.sport ?? 'NFL'),
+      settings: { roster_positions: rosterPositions, reserve_slots: leagueSettings.reserve_slots, taxi_slots: leagueSettings.taxi_slots },
+    }) != null
   const unsupportedPositions = [...new Set(slotTokens)].filter((upper) => {
     if (upper in resolution.roster.starterSlots) return false
     if (['BENCH', 'BN', 'IR', 'RES', 'TAXI', 'SUPER_FLEX', 'SUPERFLEX'].includes(upper)) return false
     // A football provider's own spelling of a slot AF has: ESPN `D/ST`, `BE`, `OP`, Yahoo `W/R/T`.
     const spec = isFootballLeague ? footballSlotSpec(upper) : null
-    if (spec && (spec.kind !== 'starter' || spec.name in resolution.roster.starterSlots || spec.name === 'SUPERFLEX')) {
+    if (spec && (providerLineupKept || spec.kind !== 'starter' || spec.name in resolution.roster.starterSlots || spec.name === 'SUPERFLEX')) {
       return false
     }
     return true
