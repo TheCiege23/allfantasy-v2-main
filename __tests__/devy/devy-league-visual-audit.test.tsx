@@ -35,10 +35,13 @@ afterEach(() => {
 
 const src = (rel: string) => readFileSync(path.join(process.cwd(), rel), 'utf8')
 
-describe('Devy league is dark in every mode', () => {
-  it('wraps every league screen in the always-dark opt-out', () => {
+// Superseded 2026-11-23: the /devy screens follow the app's mode with /core tokens (__tests__/devy/devyVisualUpgrade.test.tsx).
+describe('Devy league follows the app mode', () => {
+  it('wraps every league screen in the /core token scope, not the always-dark opt-out', () => {
     const { container } = render(<DevyLeagueLayout><p>screen</p></DevyLeagueLayout>)
-    expect((container.firstElementChild as HTMLElement).className.split(/\s+/)).toContain('af-draft-dark')
+    const classes = (container.firstElementChild as HTMLElement).className.split(/\s+/)
+    expect(classes).toContain('af-core')
+    expect(classes).not.toContain('af-draft-dark')
   })
 })
 
@@ -77,10 +80,11 @@ describe('Devy picks', () => {
     }))
   }
 
-  it('names the team behind every pick, in the table and on the league board', async () => {
+  // 2026-11-23: your list names a team only for a pick that came from someone else ("via The Long Game").
+  it('names the team behind every pick, in your list and on the league board', async () => {
     stubApi()
     const { container } = render(<DevyPicksClient leagueId="L1" userId="me" />)
-    await screen.findByText('The Long Game')
+    await screen.findByText(/via The Long Game/)
     expect(container.textContent).not.toContain('ckdevy')
     fireEvent.click(screen.getByText('League board'))
     const headers = [...container.querySelectorAll('thead th')].map((th) => th.textContent)

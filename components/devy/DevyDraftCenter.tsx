@@ -68,11 +68,11 @@ export function DevyDraftCenter({
     .slice(0, 5)
 
   return (
-    <div data-devy-draft-center className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-4 lg:flex-row">
+    <div data-devy-draft-center className="flex flex-col gap-4 rounded-xl border border-[var(--line)] bg-[var(--chip)] p-4 lg:flex-row">
       <div className="flex-1 space-y-3">
-        <h3 className="text-base font-semibold text-white">Draft Center</h3>
+        <h3 className="text-base font-semibold text-[var(--text)]">Draft Center</h3>
         {current && currentTab ? (
-          <p className="text-xs text-white/60">
+          <p className="text-xs text-[var(--text2)]">
             Now: {PHASE_LABEL[currentTab]} · {STATUS_LABEL[current.status] ?? current.status.replace(/_/g, ' ')}
           </p>
         ) : null}
@@ -84,15 +84,15 @@ export function DevyDraftCenter({
               onClick={() => setTab(t.id)}
               aria-pressed={tab === t.id}
               className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                tab === t.id ? 'bg-white/15 text-white' : 'text-white/60 hover:bg-white/10'
+                tab === t.id ? 'bg-[var(--chip)] text-[var(--text)]' : 'text-[var(--text2)] hover:bg-[var(--chip)]'
               }`}
             >
               {t.label}
             </button>
           ))}
         </div>
-        <div className="rounded-lg bg-white/5 p-3">
-          <p className="text-sm text-white/80">
+        <div className="rounded-lg bg-[var(--chip)] p-3">
+          <p className="text-sm text-[var(--text)]">
             {tab === 'startup' && 'Startup vet draft: veterans only. No NCAA or rookies.'}
             {tab === 'rookie' && (sport === 'NBA'
               ? 'Rookie draft: first-year NBA pros. Devy-held promoted players are excluded.'
@@ -101,33 +101,28 @@ export function DevyDraftCenter({
               ? 'Devy draft: NCAA Basketball prospects only (G/F/C). Graduated and rostered excluded.'
               : 'Devy draft: NCAA Football prospects only (QB/RB/WR/TE). Graduated and rostered excluded.')}
           </p>
-          <p className="mt-1 text-xs text-white/50">
+          <p className="mt-1 text-xs text-[var(--muted)]">
             {tabs.find((t) => t.id === tab)?.rounds} rounds · {tabs.find((t) => t.id === tab)?.type}
           </p>
           <Link
             href={`/league/${leagueId}?tab=Draft`}
-            className="mt-3 inline-block rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/15"
+            className="mt-3 inline-block rounded-lg bg-[var(--chip)] px-3 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--chip)]"
           >
             Go to Draft
           </Link>
         </div>
         {bestBallEnabled && (
-          <p className="text-xs text-white/50">
+          <p className="text-xs text-[var(--muted)]">
             Best ball roster construction: prioritize ceiling and depth; lineup is auto-optimized each period.
           </p>
         )}
       </div>
       <div className="w-full space-y-3 lg:w-64">
-        <div className="rounded-lg bg-white/5 p-3">
-          <h4 className="text-xs font-medium text-white/80">Devy slots</h4>
-          <p className="mt-1 text-sm text-white">
-            {devySlotsUsed} / {devySlotCount} used
-          </p>
-        </div>
+        {/* Devy slots used is the stash card's count above; not repeated here (2026-11-23). */}
         {years.length > 0 && (
-          <div className="rounded-lg bg-white/5 p-3">
-            <h4 className="text-xs font-medium text-white/80">Class depth (by year)</h4>
-            <ul className="mt-2 space-y-1 text-xs text-white/70">
+          <div className="rounded-lg bg-[var(--chip)] p-3">
+            <h4 className="text-xs font-medium text-[var(--text)]">Class depth (by year)</h4>
+            <ul className="mt-2 space-y-1 text-xs text-[var(--text2)]">
               {years.map((y) => {
                 const d = classDepthByYear[y]
                 if (!d) return null

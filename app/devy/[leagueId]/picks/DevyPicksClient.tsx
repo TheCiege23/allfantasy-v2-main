@@ -91,17 +91,17 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
 
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center bg-[#040915] text-white/50">
+      <div className="flex min-h-[50vh] items-center justify-center bg-[var(--surface)] text-[var(--muted)]">
         Loading picks…
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#040915] text-white">
-      <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#0c0c1e]/95 px-4 py-3 backdrop-blur">
+    <div className="min-h-screen bg-[var(--surface)] text-[var(--text)]">
+      <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[var(--surface)] px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-2">
-          <Link href={`/league/${leagueId}`} className="text-[12px] font-semibold text-cyan-300/90">
+          <Link href={`/league/${leagueId}`} className="text-[12px] font-semibold text-[var(--accent)]">
             ← League
           </Link>
           <span className="text-[13px] font-bold">Devy picks</span>
@@ -112,7 +112,7 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
             type="button"
             onClick={() => setTab('yours')}
             className={`flex-1 rounded-lg py-2 text-[12px] font-semibold min-h-[44px] ${
-              tab === 'yours' ? 'bg-cyan-500/20 text-cyan-100' : 'bg-white/[0.04] text-white/45'
+              tab === 'yours' ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'bg-white/[0.04] text-[var(--muted)]'
             }`}
           >
             Your picks
@@ -121,7 +121,7 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
             type="button"
             onClick={() => setTab('board')}
             className={`flex-1 rounded-lg py-2 text-[12px] font-semibold min-h-[44px] ${
-              tab === 'board' ? 'bg-cyan-500/20 text-cyan-100' : 'bg-white/[0.04] text-white/45'
+              tab === 'board' ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'bg-white/[0.04] text-[var(--muted)]'
             }`}
           >
             League board
@@ -137,7 +137,7 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
               type="button"
               onClick={() => setYear(y)}
               className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-bold min-h-[44px] md:min-h-0 ${
-                year === y ? 'bg-violet-500/25 text-violet-100' : 'bg-white/[0.05] text-white/45'
+                year === y ? 'bg-[var(--devy-violet-soft)] text-[var(--devy-violet)]' : 'bg-white/[0.05] text-[var(--muted)]'
               }`}
             >
               {y}
@@ -149,7 +149,7 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
           <div className="space-y-6">
             {combined ? (
               <section>
-                <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-white/70">
+                <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[var(--text2)]">
                   Rookie + Devy picks
                 </h2>
                 <PickTable
@@ -162,13 +162,13 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
             ) : (
               <>
                 <section>
-                  <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-sky-200/90">
+                  <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[var(--accent)]">
                     Rookie picks
                   </h2>
                   <PickTable teamLabel={teamLabel} picks={yearData?.rookiePicks ?? []} rosterId={rosterId} onPick={(p) => setSheet(p)} />
                 </section>
                 <section>
-                  <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-violet-200/90">
+                  <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[var(--devy-violet)]">
                     Devy picks
                   </h2>
                   <PickTable teamLabel={teamLabel} picks={yearData?.devyPicks ?? []} rosterId={rosterId} onPick={(p) => setSheet(p)} />
@@ -177,8 +177,8 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
             )}
           </div>
         ) : (
-          <section className="rounded-xl border border-white/[0.08] bg-[#0a1228] p-3">
-            <h2 className="mb-3 text-[12px] font-bold uppercase text-white/70">All teams · {year}</h2>
+          <section className="rounded-xl border border-white/[0.08] bg-[var(--surface)] p-3">
+            <h2 className="mb-3 text-[12px] font-bold uppercase text-[var(--text2)]">All teams · {year}</h2>
             <PicksBoard
               teamLabel={teamLabel}
               picks={allPicks.filter((p) => (p.season ?? year) === year)}
@@ -190,32 +190,32 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
 
       {sheet ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 md:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-[var(--surface2)] md:items-center"
           onClick={() => setSheet(null)}
           role="presentation"
         >
           <div
-            className="w-full max-w-md rounded-t-2xl border border-white/[0.1] bg-[#0a1228] p-4 md:rounded-2xl"
+            className="w-full max-w-md rounded-t-2xl border border-white/[0.1] bg-[var(--surface)] p-4 md:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
           >
-            <p className="text-[13px] font-bold text-white">
+            <p className="text-[13px] font-bold text-[var(--text)]">
               Round {sheet.round} · {sheet.pickType}
             </p>
-            <p className="mt-2 text-[11px] text-white/55">
+            <p className="mt-2 text-[11px] text-[var(--muted)]">
               Owner: {teamLabel(sheet.currentOwnerId)}
             </p>
             {sheet.isTradeable && !sheet.isUsed ? (
               <button
                 type="button"
-                className="mt-4 w-full rounded-xl border border-cyan-500/40 bg-cyan-500/15 py-3 text-[13px] font-semibold text-cyan-100 min-h-[44px]"
+                className="mt-4 w-full rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] py-3 text-[13px] font-semibold text-[var(--accent)] min-h-[44px]"
               >
                 Trade this pick
               </button>
             ) : null}
             <button
               type="button"
-              className="mt-2 w-full rounded-xl border border-white/[0.1] py-3 text-[12px] text-white/70 min-h-[44px]"
+              className="mt-2 w-full rounded-xl border border-white/[0.1] py-3 text-[12px] text-[var(--text2)] min-h-[44px]"
               onClick={() => setSheet(null)}
             >
               Close
@@ -227,6 +227,10 @@ export function DevyPicksClient({ leagueId, userId }: { leagueId: string; userId
   )
 }
 
+/**
+ * Your picks, one row each (2026-11-23). It was a table whose Source, Owner and Status columns all read "You / You /
+ * Owned by you"; a row now names a team only when the pick came from someone else, and says "Used" once it is.
+ */
 function PickTable({
   picks,
   rosterId,
@@ -239,36 +243,25 @@ function PickTable({
   teamLabel: (ownerRosterId: string) => string
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-      <table className="w-full min-w-[320px] text-left text-[11px] text-white/75">
-        <thead className="border-b border-white/[0.06] bg-black/30 text-white/45">
-          <tr>
-            <th className="px-2 py-2">Rd</th>
-            <th className="px-2 py-2">Source</th>
-            <th className="px-2 py-2">Owner</th>
-            <th className="px-2 py-2">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {picks.map((p) => {
-            const mine = p.currentOwnerId === rosterId
-            return (
-              <tr
-                key={p.id}
-                className={`border-b border-white/[0.04] ${mine ? 'bg-cyan-500/10' : ''}`}
-                onClick={() => onPick(p)}
-              >
-                <td className="px-2 py-2 font-mono">{p.round}</td>
-                <td className="px-2 py-2 text-white/55">{teamLabel(p.originalOwnerId)}</td>
-                <td className="px-2 py-2">{teamLabel(p.currentOwnerId)}</td>
-                <td className="px-2 py-2">
-                  {p.isUsed ? '✓ Used' : mine ? 'Owned by you' : 'Traded'}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <ul className="rounded-xl border border-white/[0.08] bg-[var(--surface2)]">
+      {picks.map((p) => {
+        const via = p.originalOwnerId !== p.currentOwnerId && p.originalOwnerId !== rosterId ? teamLabel(p.originalOwnerId) : null
+        return (
+          <li key={p.id} className="border-t border-white/[0.06] first:border-t-0">
+            <button
+              type="button"
+              className="flex min-h-[48px] w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px]"
+              onClick={() => onPick(p)}
+            >
+              <span className="font-semibold text-[var(--text)]">Round {p.round}</span>
+              <span className="flex min-w-0 items-center gap-2 text-[12px]">
+                {via ? <span className="truncate text-[var(--text2)]">via {via}</span> : null}
+                {p.isUsed ? <span className="rounded-full bg-[var(--good-soft)] px-2 py-0.5 font-bold text-[var(--good)]">Used</span> : null}
+              </span>
+            </button>
+          </li>
+        )
+      })}
+    </ul>
   )
 }

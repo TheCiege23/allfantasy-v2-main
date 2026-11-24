@@ -134,7 +134,13 @@ export function devyPipelineByYear(stash: DevyStashItem[], seasonYear: number): 
 }
 
 /** The year tag the stash row shows: "Declared", or the draft-eligible year. */
-export function devyYearTag(item: Pick<DevyStashItem, 'declared' | 'draftEligibleYear'>): string {
+/**
+ * The stash row's tag. A leaving player says where he is (2026-11-23): 'Declared' only while declared, 'Drafted' once
+ * drafted with rights held, 'Ready to promote' once he can be promoted. All three used to read 'Declared'.
+ */
+export function devyYearTag(item: Pick<DevyStashItem, 'declared' | 'draftEligibleYear'> & { state?: string }): string {
+  if (item.state === DEVY_LIFECYCLE_STATE.PROMOTION_ELIGIBLE) return 'Ready to promote'
+  if (item.state === DEVY_LIFECYCLE_STATE.DRAFTED_RIGHTS_HELD) return 'Drafted'
   if (item.declared) return 'Declared'
   return item.draftEligibleYear != null ? String(item.draftEligibleYear) : 'TBD'
 }
@@ -157,7 +163,10 @@ const EVENT_COPY: Record<string, string> = {
   commissioner_override: 'had a commissioner change',
 }
 
-/** Feed lines for the rail. Unknown event types are skipped rather than shown raw. */
+/**
+ * Feed lines for the rail. Unknown event types are skipped rather than shown raw, and so is an event whose player
+ * cannot be named: 'A player was promoted by the commissioner' told nobody anything (2026-11-23).
+ */
 export function devyFeedItems(
   events: DevyFeedEventRow[],
   nameOf: (devyPlayerId: string) => string | null,
@@ -167,10 +176,11 @@ export function devyFeedItems(
     const copy = EVENT_COPY[e.eventType]
     if (!copy) continue
     const who = e.devyPlayerId ? nameOf(e.devyPlayerId) : null
+    if (!who) continue
     out.push({
       id: e.id,
       kind: e.eventType,
-      title: who ? `${who} ${copy}` : `A player ${copy}`,
+      title: `${who} ${copy}`,
       at: new Date(e.createdAt).toISOString(),
     })
   }
