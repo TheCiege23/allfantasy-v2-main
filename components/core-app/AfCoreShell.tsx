@@ -100,6 +100,7 @@ import '@/components/core-app/af-core-redraft.css'
 import '@/components/core-app/af-core-dynasty.css'
 import '@/components/core-app/af-survivor-theme.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { cfpPromoLive } from '@/lib/brackets/hubTournaments'
 import {
   LEAGUE_CHIP_SECTION,
   LEAGUE_RAIL_OMITTED_SECTIONS,
@@ -1366,6 +1367,8 @@ function AfCoreShell(incoming: AfCoreShellProps) {
   const copy = (english: string) => coreUiCopy(english, language)
   const msg = useMessages(coreShellMessages)
   const railMsg = useMessages(railRowMessages)
+  /* The CFP card's window: Nov 1 (weekly rankings, projected bracket) – Jan 25 (lib/brackets/hubTournaments.ts). */
+  const cfpSeasonLive = cfpPromoLive()
   /*
    * The screen streams in after this shell paints, so the few pieces of chrome only a screen
    * can know (week label, tab badges, Chimmy's home signals, the live slate count) arrive by
@@ -3032,23 +3035,25 @@ function AfCoreShell(incoming: AfCoreShellProps) {
             </RailScoresContext.Provider>
           </ShellSignalsContext.Provider>
           {/*
-            The bracket promo sits AFTER the screen on home (2026-11-06 phone pass). It used to open
-            the page, so on a phone the first screen was a promo and the setup guide while "16
-            lineups to fix" waited below the fold. Work first, offers after.
+            The College Football Playoff card, AFTER the screen on home (2026-11-06 phone pass: work
+            first, offers after). 2026-11-23 (owner): the generic "Bracket leagues — Explore and create"
+            ad is gone; in its place, ONLY during the college playoff window (lib/brackets/hubTournaments.ts
+            `cfpPromoLive`: Nov 1 – Jan 25), the CFP bracket. Its projection is synced from CFBD rankings
+            (lib/playoffs/syncCfpPreview.ts). Outside that window nothing is drawn here.
           */}
-          {active === 'home' ? (
-            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry" data-in-league={props.selectedLeagueId ? 'true' : undefined}>
+          {active === 'home' && cfpSeasonLive ? (
+            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry" data-promo="cfp" data-in-league={props.selectedLeagueId ? 'true' : undefined}>
               <div className="af-core-bracket-promo-copy">
-                <p className="af-core-bracket-promo-kicker">{msg.bracketKicker}</p>
-                <h2 id="af-core-bracket-promo-title">{msg.bracketTitle}</h2>
-                <p>{msg.bracketBody}</p>
+                <p className="af-core-bracket-promo-kicker">{msg.cfpKicker}</p>
+                <h2 id="af-core-bracket-promo-title">{msg.cfpTitle}</h2>
+                <p>{msg.cfpBody}</p>
               </div>
               <div className="af-core-bracket-promo-actions">
-                <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
-                  {msg.bracketExplore}
+                <Link href="/brackets/cfp/preview" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
+                  {msg.cfpPreview}
                 </Link>
-                <Link href="/brackets/join" className="af-core-bracket-promo-browse">
-                  {msg.bracketJoin}
+                <Link href="/brackets/leagues/new?sport=NCAAF&challengeType=playoff_challenge" className="af-core-bracket-promo-browse">
+                  {msg.cfpStart}
                 </Link>
               </div>
             </section>
