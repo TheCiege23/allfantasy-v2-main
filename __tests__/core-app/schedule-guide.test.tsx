@@ -2,6 +2,8 @@
  * A league's Schedule tab guide (2026-11-13): the headline about this week, the "What's next" list in
  * weeks from now, and the copy.
  */
+import fs from 'node:fs'
+import path from 'node:path'
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
@@ -305,5 +307,28 @@ describe('Schedule — simpler (2026-11-14)', () => {
     expect(es.thisWeekScore!(10, 'X', 0, 13, true)).toBe('Esta semana pierdes contra X 0.0 a 13.0.')
     expect(es.headAhead!(4, true, 11, 'Z', { wins: 6, losses: 3, ties: 0 })).toBe('Después de esta semana: quedan 4 partidos antes de los playoffs. Próximo: Z (6-3) en la semana 11.')
     expect(es.toughSummary!(3, 4)).toBe('3 de tus 4 son contra equipos de arriba.')
+  })
+})
+
+/*
+ * 2026-11-24: on every phone the "What's next" rows had no names. The screen-guide strip's stylesheet hid
+ * a bare `.af-sg-label` below 720px, and this page's rows use that class too; its root also carried the
+ * strip's own `.af-sg` class, which framed the page top in the strip's border.
+ */
+describe('Schedule on a phone: the row names are not hidden by the guide strip', () => {
+  it('the page root is not the guide strip, and every What’s next row has its name', () => {
+    const { container } = render(<LeagueSchedule data={data()} />)
+    expect(container.firstElementChild?.classList.contains('af-sg')).toBe(false)
+    const names = [...container.querySelectorAll('.af-sg-item .af-sg-label')].map((e) => e.textContent)
+    expect(names).toEqual(expect.arrayContaining(['Regular season', 'Trade deadline', 'Playoffs']))
+  })
+
+  it('the strip hides only its own label on a phone, and the page has no intro sentence', () => {
+    const css = fs.readFileSync(path.join(process.cwd(), 'components/core-app/screen-guide.css'), 'utf8')
+    // No rule hides `.af-sg-label` except the one scoped to the strip's own button.
+    expect(css).not.toMatch(/(?<!\.af-sg-line )\.af-sg-label\s*\{\s*display:\s*none/)
+    expect(css).toMatch(/\.af-sg-line \.af-sg-label \{ display: none; \}/)
+    render(<LeagueSchedule data={data()} />)
+    expect(document.body.textContent).not.toContain('Who you play the rest of the way')
   })
 })
