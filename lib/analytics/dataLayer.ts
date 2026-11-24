@@ -87,7 +87,7 @@ type AnalyticsEvent =
   | {
       event: 'app_store_badge_click'
       store: 'app_store' | 'google_play'
-      page: 'landing' | 'commissioners' | 'signup'
+      page: 'landing' | 'commissioners' | 'signup' | 'partner-code'
     }
   | { event: 'begin_checkout'; plan: Plan }
   | {

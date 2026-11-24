@@ -39,7 +39,7 @@ export const STORE_BADGES_EN: LandingStoreBadgesCopy = {
  *
  * Hidden inside our own iOS app and Android TWA: someone already in the app has nothing to install.
  */
-export type StoreBadgesPage = 'landing' | 'commissioners' | 'signup'
+export type StoreBadgesPage = 'landing' | 'commissioners' | 'signup' | 'partner-code'
 
 export function LandingStoreBadges({
   page,
