@@ -32,7 +32,7 @@ export function PartnerCodeDashboard({ initial, demo, imageBase = '/api/partner-
       ) : null}
       <div className="mx-auto flex max-w-[1200px] flex-col gap-6 px-4 py-8 sm:px-6">
         {!c ? (
-          <ClaimCode onClaimed={reload} settings={s} />
+          <ClaimCode onClaimed={reload} settings={s} demo={demo} />
         ) : (
           <>
             <Headline c={c} s={s} />
@@ -75,30 +75,64 @@ function Headline({ c, s }: { c: C; s: S }) {
   )
 }
 
-function ClaimCode({ onClaimed, settings }: { onClaimed: () => void; settings: S }) {
+const CODE_SHAPE = /^[A-Za-z0-9]{4,20}$/
+
+type CheckState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'available'; text: string }
+  | { kind: 'unavailable'; text: string }
+  | { kind: 'error' }
+
+function ClaimCode({ onClaimed, settings, demo }: { onClaimed: () => void; settings: S; demo: boolean }) {
   const [value, setValue] = useState('')
-  const [hint, setHint] = useState<{ ok: boolean; text: string } | null>(null)
+  const [check, setCheck] = useState<CheckState>({ kind: 'idle' })
   const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const shapeOk = CODE_SHAPE.test(value)
 
   useEffect(() => {
-    const v = value.trim()
-    if (v.length < 4) { setHint(null); return }
+    setSaveError(null)
+    if (!CODE_SHAPE.test(value)) { setCheck({ kind: 'idle' }); return }
+    setCheck({ kind: 'checking' })
+    let live = true
     const t = setTimeout(async () => {
-      const res = await fetch(`/api/partner-codes/me?check=${encodeURIComponent(v)}`)
-      const j = await res.json().catch(() => null)
-      if (j) setHint({ ok: !!j.available, text: j.message })
+      try {
+        const res = await fetch(`/api/partner-codes/me?check=${encodeURIComponent(value)}`)
+        const j = res.ok ? await res.json() : null
+        if (!live) return
+        if (!j) { setCheck({ kind: 'error' }); return }
+        setCheck(j.available ? { kind: 'available', text: j.message } : { kind: 'unavailable', text: j.message })
+      } catch {
+        if (live) setCheck({ kind: 'error' })
+      }
     }, 300)
-    return () => clearTimeout(t)
+    return () => { live = false; clearTimeout(t) }
   }, [value])
 
   const claim = async () => {
     setBusy(true)
-    const res = await fetch('/api/partner-codes/me', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: value }) })
-    const j = await res.json().catch(() => ({}))
+    setSaveError(null)
+    const res = await fetch('/api/partner-codes/me', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: value }) }).catch(() => null)
+    const j = res ? await res.json().catch(() => ({})) : {}
     setBusy(false)
-    if (!res.ok) { setHint({ ok: false, text: j.error ?? 'Could not save that code' }); return }
+    if (!res?.ok) { setSaveError(j.error ?? "Couldn't save that code. Please try again."); return }
     onClaimed()
   }
+
+  // The button only waits on things the commissioner can see and fix: a code that is the wrong shape,
+  // or one we KNOW is taken. A check that fails (offline, server hiccup) no longer locks it: claiming
+  // re-checks everything on the server anyway.
+  const canClaim = shapeOk && check.kind !== 'unavailable' && !busy && !demo
+  const help =
+    saveError ? { text: saveError, tone: 'bad' as const }
+      : value.length === 0 ? { text: 'Letters and numbers, 4 to 20. Shows the way you type it, works typed any way.', tone: 'muted' as const }
+        : !shapeOk ? { text: value.length < 4 ? `Keep going: at least 4 characters (${value.length} so far)` : 'Letters and numbers only', tone: 'muted' as const }
+          : check.kind === 'checking' ? { text: 'Checking…', tone: 'muted' as const }
+            : check.kind === 'available' ? { text: check.text, tone: 'good' as const }
+              : check.kind === 'unavailable' ? { text: check.text, tone: 'bad' as const }
+                : check.kind === 'error' ? { text: "Couldn't check right now. You can still try to claim it.", tone: 'muted' as const }
+                  : { text: '', tone: 'muted' as const }
 
   return (
     <section className={`${card} max-w-xl`} aria-labelledby="claim-h">
@@ -109,16 +143,19 @@ function ClaimCode({ onClaimed, settings }: { onClaimed: () => void; settings: S
         id="pc-code"
         value={value}
         onChange={(e) => setValue(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 20))}
-        placeholder="TheCiege"
+        onKeyDown={(e) => { if (e.key === 'Enter' && canClaim) void claim() }}
+        placeholder="e.g. TheCiege"
+        autoComplete="off"
         aria-describedby="pc-code-help"
-        className="mt-2 min-h-12 w-full rounded-xl border border-[#3b3f6e] bg-[#0a0e1a] px-4 text-lg font-extrabold text-white outline-none focus:border-purple-400"
+        className="mt-2 min-h-12 w-full rounded-xl border border-[#3b3f6e] bg-[#0a0e1a] px-4 text-lg font-extrabold text-white outline-none placeholder:font-medium placeholder:text-[#6b7099] focus:border-purple-400"
       />
-      <p id="pc-code-help" className={`mt-2 text-[13px] font-semibold ${hint ? (hint.ok ? 'text-emerald-400' : 'text-rose-300') : 'text-[#a3a8c9]'}`}>
-        {hint?.text ?? 'Letters and numbers, 4–20. Shows the way you type it, works typed any way.'}
+      <p id="pc-code-help" aria-live="polite" className={`mt-2 text-[13px] font-semibold ${help.tone === 'good' ? 'text-emerald-400' : help.tone === 'bad' ? 'text-rose-300' : 'text-[#a3a8c9]'}`}>
+        {help.text}
       </p>
-      <button type="button" disabled={busy || !hint?.ok} onClick={claim} className={`${btnPrimary} mt-4 disabled:opacity-50`}>
+      <button type="button" disabled={!canClaim} onClick={claim} className={`${btnPrimary} mt-4 disabled:opacity-50`}>
         {busy ? 'Saving…' : 'Claim this code'}
       </button>
+      {demo ? <p className="mt-3 text-[12px] text-[#a3a8c9]">Claiming is turned off in the demo.</p> : null}
     </section>
   )
 }
