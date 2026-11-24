@@ -15,6 +15,7 @@ import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategor
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, PlayerNameButton, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
 import { slotGameState } from '@/lib/league-media/redraftScreens'
+import { buildSurvivorMatchupView, type SurvivorMatchupInput } from '@/lib/survivor/survivorMatchupModel'
 import { RedraftScoreBug, RedraftScreen, useRedraftScreen, useRedraftScreenContext } from './RedraftScreenParts'
 
 /**
@@ -128,9 +129,133 @@ export function NativeMatchupScreen(props: ScreenProps) {
       </Card>
     </div></RedraftScreen>
   }
+  // Survivor has no opponent either: the week is the tribe race, then individual immunity after the merge.
+  if (isSurvivorMatchupLeague(props.league)) return <RedraftScreen identity={rd}><SurvivorMatchupScreen {...props} /></RedraftScreen>
   // Guillotine has no opponent: the tab is the week's scores against the chop line.
   if (isNativeGuillotineLeague(props.league)) return <RedraftScreen identity={rd}><GuillotineMatchupScreen {...props} /></RedraftScreen>
   return <RedraftScreen identity={rd}>{isRotisserieLeagueSettings(props.league.settings) ? <RotisserieMatchupScreen {...props} /> : <HeadToHeadMatchupScreen {...props} />}</RedraftScreen>
+}
+
+function isSurvivorMatchupLeague(league: UserLeague): boolean {
+  const v = String(league.leagueVariant ?? league.leagueType ?? '').toLowerCase()
+  return v === 'survivor'
+}
+
+/**
+ * The Matchup tab of a Survivor league (lib/survivor/survivorMatchupModel.ts): where the viewer's tribe
+ * stands in the week's race (or the viewer against the island after the merge), every castaway's week
+ * score, who holds immunity, and the viewer's starters with their games. The week's scores are the
+ * Survivor summary's — the same numbers the Island tab shows.
+ */
+function SurvivorMatchupScreen({ league, onSelectTab }: ScreenProps) {
+  const rd = useRedraftScreenContext()
+  const maxWeek = maxWeekForSport(String(league.sport ?? 'NFL'))
+  const [pickedWeek, setPickedWeek] = useState<number | null>(null)
+  const [summary, setSummary] = useState<SurvivorMatchupInput | null>(null)
+  const [mine, setMine] = useState<MatchupPlayerSlot[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const season = Number(league.season) > 0 ? Number(league.season) : new Date().getFullYear()
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    const weekQuery = pickedWeek != null ? `week=${pickedWeek}` : ''
+    void Promise.all([
+      fetch(`/api/leagues/${encodeURIComponent(league.id)}/survivor/summary${weekQuery ? `?${weekQuery}` : ''}`, { credentials: 'include', cache: 'no-store' }),
+      fetch(`/api/leagues/${encodeURIComponent(league.id)}/matchup-center?season=${season}${weekQuery ? `&${weekQuery}` : ''}`, { credentials: 'include', cache: 'no-store' }),
+    ])
+      .then(async ([s, m]) => {
+        if (cancelled) return
+        if (!s.ok) throw new Error('summary')
+        setSummary((await s.json()) as SurvivorMatchupInput)
+        const body = m.ok ? ((await m.json().catch(() => null)) as { payload?: MatchupCenterPayload } | null) : null
+        setMine(body?.payload?.left?.starters ?? [])
+      })
+      .catch(() => { if (!cancelled) setError('The island scores could not be loaded. Try again in a moment.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [league.id, pickedWeek, season])
+
+  const view = summary ? buildSurvivorMatchupView(summary) : null
+  const week = pickedWeek ?? view?.week ?? Math.max(1, league.currentWeek ?? 1)
+  const goToWeek = (n: number) => setPickedWeek(Math.min(maxWeek, Math.max(1, n)))
+  const fmtScore = (n: number | null) => (n == null ? '—' : fmt1(n))
+
+  return (
+    <div className="nls" data-testid="native-matchup-screen" data-survivor-matchup="true" data-rd-screen={rd ? 'matchup' : undefined}>
+      <ScreenHead
+        eyebrow={view?.merged ? 'Survivor · Individual immunity' : 'Survivor · Tribe race'}
+        title={`Week ${week}`}
+      >
+          <>
+            <button type="button" className="nls-iconbtn" aria-label="Previous week" disabled={week <= 1 || loading} onClick={() => goToWeek(week - 1)}>
+              <ChevronLeft size={18} aria-hidden />
+            </button>
+            <select className="nls-weeksel" aria-label="Choose a week" data-testid="matchup-week-select" value={week} disabled={loading} onChange={(e) => goToWeek(Number(e.target.value))}>
+              {Array.from({ length: maxWeek }, (_, i) => i + 1).map((w) => (
+                <option key={w} value={w}>{`Week ${w}${league.currentWeek != null && w === league.currentWeek ? ' (now)' : ''}`}</option>
+              ))}
+            </select>
+            <button type="button" className="nls-iconbtn" aria-label="Next week" disabled={week >= maxWeek || loading} onClick={() => goToWeek(week + 1)}>
+              <ChevronRight size={18} aria-hidden />
+            </button>
+          </>
+      </ScreenHead>
+      {error ? <Card label="Island scores" tone="warn"><p>{error}</p></Card> : null}
+      {view ? (
+        <>
+          <Card label="Your week" tone="accent">
+            <div className="nls-board-line" data-lead="true" data-testid="survivor-my-score">
+              <span>Your score{view.myImmune ? ' · Immune' : ''}</span>
+              <span>{fmtScore(view.myScore)}</span>
+            </div>
+            {view.myRank ? (
+              <div className="nls-board-line">
+                <span>{view.merged ? 'Your place on the island' : 'Your tribe’s place'}</span>
+                <span>{`${view.myRank.rank} of ${view.myRank.of}`}</span>
+              </div>
+            ) : null}
+            <p data-testid="survivor-status">{view.status}</p>
+            <p className="nls-muted">{view.final ? 'Final scores.' : 'Provisional: scores update as games finish.'}</p>
+          </Card>
+          <Card label={view.merged ? 'The island' : 'Tribe race'}>
+            <div data-testid="survivor-tribe-race">
+              {view.tribes.map((t) => (
+                <div key={t.id} className="nls-survivor-tribe" data-mine={t.mine || undefined} data-attending={t.attending || undefined}>
+                  <div className="nls-board-line" data-lead={t.rank === 1}>
+                    <span>{view.merged ? t.name : `${t.rank}. ${t.name}`}{t.attending ? ' · Elimination Council' : ''}</span>
+                    <span>{fmtScore(t.score)}</span>
+                  </div>
+                  <ul className="nls-survivor-members">
+                    {t.members.map((m) => (
+                      <li key={m.rosterId} data-mine={m.mine || undefined}>
+                        <span>{m.name}{m.mine ? ' (you)' : ''}{m.immune ? ' · Immune' : ''}</span>
+                        <span>{fmtScore(m.score)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </Card>
+          {mine.length > 0 ? (
+            <Card label="Your starters" right={<button type="button" className="nls-btn" data-size="sm" onClick={() => onSelectTab('roster')}>Edit my lineup</button>}>
+              <div className="nls-survivor-starters">
+                {mine.map((p) => (
+                  <div key={p.playerId} className="nls-survivor-starter">
+                    <SlotCell p={p} side="left" sport={league.sport} />
+                    <small className="nls-muted">{p.afProjectedPoints != null ? `Proj ${fmt1(p.afProjectedPoints)}` : ''}</small>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : null}
+        </>
+      ) : loading ? <p className="nls-muted">Loading the island…</p> : null}
+    </div>
+  )
 }
 
 /**
