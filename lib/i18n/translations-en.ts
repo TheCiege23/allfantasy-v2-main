@@ -7624,6 +7624,8 @@ export const translationsEn: Record<string, string> = {
   "lsh.cc.sub.survivorTribes": "Tribes and assignment",
   "lsh.cc.nav.ai": "League Chimmy",
   "lsh.cc.sub.ai": "Helpers and intelligence",
+  "lsh.cc.nav.deleteLeague": "Delete league",
+  "lsh.cc.sub.deleteLeague": "Remove it for every member",
   "lsh.cc.paneFallback": "Settings",
   "lsh.cc.unavailable": "This section is not available for this league.",
   "lsh.cc.tools.title": "More commissioner tools",
