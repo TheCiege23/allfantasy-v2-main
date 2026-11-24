@@ -316,7 +316,9 @@ describe('sticky totals and the meter', () => {
   it('shows priced totals, "You get" first, and an em dash — never 0 — for an empty side', () => {
     const { container } = render(<TradeCenter league={LEAGUE} />)
     const totals = () => container.querySelector('.af-tc-stepbar-totals')!.textContent
-    expect(totals()).toBe('Get —Send —')
+    // 2026-11-23: an empty deal draws no totals at all — only the bar's button ("Add what you get").
+    expect(container.querySelector('.af-tc-stepbar-totals')).toBeNull()
+    expect(primary().textContent).toBe('Add what you get')
     fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
     expect(totals()).toBe('Get —Send 5,000')
     chooseMatt()
