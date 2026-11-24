@@ -11,6 +11,12 @@
  * gets a verify email; tapping it opened Safari, so the account was verified in a browser while the
  * app still showed "verify your email". Claiming more paths would also pull ordinary allfantasy.ai
  * links out of Safari for everyone with the app installed — a separate decision, not a side effect.
+ *
+ * `webcredentials` (2026-11-24) is a DIFFERENT claim and opens no links: it lets the app use this
+ * site's passkeys (Face ID sign-in, lib/auth/passkeys.ts — rpID www.allfantasy.ai), so a passkey
+ * made on the website signs in inside the app and the reverse. The app asks for it with
+ * `webcredentials:www.allfantasy.ai` in its associated-domains entitlement (ios-testflight.yml,
+ * `passkeys` input). Serving it to a build that does not ask is harmless.
  */
 
 const IOS_APP_BUNDLE_ID = 'ai.allfantasy.app'
@@ -24,11 +30,13 @@ export function isAppleTeamId(v: string | null | undefined): v is string {
 }
 
 export function appSiteAssociation(teamId: string) {
+  const appId = `${teamId.trim()}.${IOS_APP_BUNDLE_ID}`
   return {
+    webcredentials: { apps: [appId] },
     applinks: {
       details: [
         {
-          appIDs: [`${teamId.trim()}.${IOS_APP_BUNDLE_ID}`],
+          appIDs: [appId],
           components: IOS_APP_LINK_PATHS.map((path) => ({
             '/': path,
             comment: 'Email verification links reopen the app that asked for them.',

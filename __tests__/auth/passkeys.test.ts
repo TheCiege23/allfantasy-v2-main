@@ -104,6 +104,12 @@ import {
   startPasskeySignIn,
 } from "@/lib/auth/passkeys"
 import { biometricName, passkeyDevice, passkeyLabel, passkeyRelyingParty } from "@/lib/auth/passkeyConfig"
+import {
+  authenticationMessage,
+  registrationMessage,
+  toAuthenticationResponseJSON,
+  toRegistrationResponseJSON,
+} from "@/lib/auth/native-passkey-bridge"
 
 // ── A software authenticator: what a phone's secure chip does, in ~60 lines ─────────────────
 const b64u = (b: Uint8Array | Buffer) => Buffer.from(b).toString("base64url")
@@ -372,5 +378,58 @@ describe("settings", () => {
     expect(db.passkeys).toHaveLength(2)
     expect(await removePasskey("user-1", added.passkey.id)).toBe(true)
     expect(db.passkeys).toHaveLength(1)
+  })
+})
+
+describe("an answer from the iOS app (PasskeyHandler.swift)", () => {
+  // The app hands back the raw base64url fields Apple gives it; the bridge rebuilds the JSON the
+  // browser would have sent. These run that JSON through the REAL server checks.
+  it("asks the app for the server's own challenge, site and account", async () => {
+    const start = await startPasskeyRegistration("user-1", SITE)
+    if (!start.ok) throw new Error()
+    expect(registrationMessage(start.options)).toEqual({
+      action: "register",
+      challenge: start.options.challenge,
+      rpId: "www.allfantasy.ai",
+      userId: start.options.user.id,
+      userName: "linda@example.com",
+    })
+    const signin = await startPasskeySignIn(SITE)
+    if (!signin.ok) throw new Error()
+    expect(authenticationMessage(signin.options)).toEqual({ action: "authenticate", challenge: signin.options.challenge, rpId: "www.allfantasy.ai" })
+  })
+
+  it("adds a passkey and then signs in with it, through the app's answer shape", async () => {
+    const auth = new SoftAuthenticator()
+    const start = await startPasskeyRegistration("user-1", SITE)
+    if (!start.ok) throw new Error()
+    const made = auth.register(start.options, SITE)
+    const registration = toRegistrationResponseJSON({
+      requestId: "r1",
+      kind: "registration",
+      credentialId: made.id,
+      clientDataJSON: made.response.clientDataJSON,
+      attestationObject: made.response.attestationObject,
+    })
+    expect(await finishPasskeyRegistration("user-1", registration, SITE, IPHONE_UA)).toMatchObject({ ok: true, passkey: { label: "iPhone" } })
+
+    const signin = await startPasskeySignIn(SITE)
+    if (!signin.ok) throw new Error()
+    const used = auth.assert(signin.options, SITE)
+    const assertion = toAuthenticationResponseJSON({
+      requestId: "r2",
+      kind: "assertion",
+      credentialId: used.id,
+      clientDataJSON: used.response.clientDataJSON,
+      authenticatorData: used.response.authenticatorData,
+      signature: used.response.signature,
+      userHandle: used.response.userHandle,
+    })
+    expect(await authorizePasskey(JSON.stringify(assertion), SITE)).toMatchObject({ id: "user-1" })
+  })
+
+  it("an incomplete answer from the app is not turned into anything", () => {
+    expect(toRegistrationResponseJSON({ requestId: "r", credentialId: "x", clientDataJSON: "y" })).toBeNull()
+    expect(toAuthenticationResponseJSON({ requestId: "r", credentialId: "x", clientDataJSON: "y", authenticatorData: "z" })).toBeNull()
   })
 })

@@ -14,7 +14,8 @@ export function UnlockIcon({ name, size = 18 }: { name: string; size?: number })
 
 /**
  * "Sign in with Face ID" (or fingerprint / Windows Hello) on /login. Renders nothing on a device
- * that cannot do it, and nothing in the iOS app (lib/auth/passkey-client explains why).
+ * that cannot do it — including an iOS app build without native passkeys (lib/auth/passkey-client).
+ * Not marked data-hide-in-ios-app: whether it shows is canUsePasskeys()'s call, not the CSS's.
  */
 export default function PasskeySignInButton({ callbackUrl }: { callbackUrl: string }) {
   const [unlock, setUnlock] = useState<string | null>(null)
@@ -47,7 +48,7 @@ export default function PasskeySignInButton({ callbackUrl }: { callbackUrl: stri
   }
 
   return (
-    <div data-testid="passkey-signin" data-hide-in-ios-app style={{ display: 'grid', gap: 8 }}>
+    <div data-testid="passkey-signin" style={{ display: 'grid', gap: 8 }}>
       <button
         type="button"
         className="af-au-oauth-btn"

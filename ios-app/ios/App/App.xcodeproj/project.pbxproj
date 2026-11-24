@@ -21,6 +21,7 @@
 		AF0CA1000000000000000003 /* CareerWidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0CA1000000000000000013 /* CareerWidgetShared.swift */; };
 		AF0CA1000000000000000004 /* AppleIAPHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0CA1000000000000000014 /* AppleIAPHandler.swift */; };
 		AF0CA1000000000000000005 /* AppleSignInHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0CA1000000000000000015 /* AppleSignInHandler.swift */; };
+		AF0CA1000000000000000006 /* PasskeyHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0CA1000000000000000016 /* PasskeyHandler.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		AF0CA1000000000000000013 /* CareerWidgetShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CareerWidgetShared.swift; sourceTree = "<group>"; };
 		AF0CA1000000000000000014 /* AppleIAPHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIAPHandler.swift; sourceTree = "<group>"; };
 		AF0CA1000000000000000015 /* AppleSignInHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInHandler.swift; sourceTree = "<group>"; };
+		AF0CA1000000000000000016 /* PasskeyHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyHandler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -80,6 +82,7 @@
 				AF0CA1000000000000000013 /* CareerWidgetShared.swift */,
 				AF0CA1000000000000000014 /* AppleIAPHandler.swift */,
 				AF0CA1000000000000000015 /* AppleSignInHandler.swift */,
+				AF0CA1000000000000000016 /* PasskeyHandler.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -180,6 +183,7 @@
 				AF0CA1000000000000000003 /* CareerWidgetShared.swift in Sources */,
 				AF0CA1000000000000000004 /* AppleIAPHandler.swift in Sources */,
 				AF0CA1000000000000000005 /* AppleSignInHandler.swift in Sources */,
+				AF0CA1000000000000000006 /* PasskeyHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

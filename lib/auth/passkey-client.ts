@@ -8,20 +8,51 @@ import {
 
 import { isInIosAppClient } from "@/lib/platform/iosApp"
 import { biometricName, passkeyDevice } from "@/lib/auth/passkeyConfig"
+import {
+  askNativePasskey,
+  authenticationMessage,
+  hasNativePasskeys,
+  registrationMessage,
+  toAuthenticationResponseJSON,
+  toRegistrationResponseJSON,
+  type NativeAssertion,
+  type NativeRegistration,
+} from "@/lib/auth/native-passkey-bridge"
 
 /**
  * The page half of passkeys (server: lib/auth/passkeys.ts).
  *
- * NOT IN THE iOS APP, YET. The app is a WKWebView, which can only use a passkey for a domain the
- * app is entitled to (`webcredentials:`), and that needs native code and a new build. iPhone app
- * users already have Face ID through "Continue with Apple". The website on an iPhone, the Android
- * app (Chrome) and computers all work today.
+ * IN THE iOS APP the browser's WebAuthn API does not reach Face ID, so every call goes to the app's
+ * native handler instead (lib/auth/native-passkey-bridge → ios-app/ PasskeyHandler.swift). It exists
+ * only in a build made with the `passkeys` input (which signs in `webcredentials:www.allfantasy.ai`);
+ * an older build has no handler, so the app shows no Face ID button rather than a broken one. The
+ * server sees the same JSON either way. The website on any phone or computer, and the Android app
+ * (Chrome), use the browser API.
  */
+
+/** Inside the iOS app: Face ID through the app. Throws a `{ name: 'NotAllowedError' }` on cancel, like the browser. */
+async function nativeAuthentication(options: Parameters<typeof authenticationMessage>[0]) {
+  const answer = await askNativePasskey<NativeAssertion>(authenticationMessage(options))
+  if (answer.cancelled) throw Object.assign(new Error("cancelled"), { name: "NotAllowedError" })
+  const json = toAuthenticationResponseJSON(answer)
+  if (answer.error || !json) throw new Error(answer.error || "Face ID didn't work.")
+  return json
+}
+
+async function nativeRegistration(options: Parameters<typeof registrationMessage>[0]) {
+  const answer = await askNativePasskey<NativeRegistration>(registrationMessage(options))
+  if (answer.cancelled) throw Object.assign(new Error("cancelled"), { name: "NotAllowedError" })
+  const json = toRegistrationResponseJSON(answer)
+  if (answer.error || !json) throw new Error(answer.error || "Face ID didn't work.")
+  return json
+}
+
+const useNativePasskeys = () => isInIosAppClient() && hasNativePasskeys()
 
 /** True when this device can sign in with Face ID / a fingerprint / Windows Hello. */
 export async function canUsePasskeys(): Promise<boolean> {
   if (typeof window === "undefined") return false
-  if (isInIosAppClient()) return false
+  if (isInIosAppClient()) return hasNativePasskeys()
   if (!browserSupportsWebAuthn()) return false
   try {
     return await platformAuthenticatorIsAvailable()
@@ -62,7 +93,9 @@ export async function signInWithPasskey(): Promise<PasskeyResult> {
     }
     let response
     try {
-      response = await startAuthentication({ optionsJSON: start.data.options as never })
+      response = useNativePasskeys()
+        ? await nativeAuthentication(start.data.options as never)
+        : await startAuthentication({ optionsJSON: start.data.options as never })
     } catch (error) {
       if (cancelled(error)) return { ok: false, cancelled: true }
       throw error
@@ -90,7 +123,9 @@ export async function addPasskey(): Promise<PasskeyResult> {
     }
     let response
     try {
-      response = await startRegistration({ optionsJSON: start.data.options as never })
+      response = useNativePasskeys()
+        ? await nativeRegistration(start.data.options as never)
+        : await startRegistration({ optionsJSON: start.data.options as never })
     } catch (error) {
       if ((error as { name?: string })?.name === "InvalidStateError") {
         return { ok: false, error: "This device is already set up." }
