@@ -23,6 +23,11 @@ const body = {
     teamsAlive: 3,
     scoredThisWeek: 3,
   },
+  outlook: {
+    '1': { playersLeft: 0, starters: 9, gamesLeft: 0, remainingProjection: 0, partial: false },
+    '2': { playersLeft: 3, starters: 9, gamesLeft: 3, remainingProjection: 25, partial: false },
+    '3': { playersLeft: 1, starters: 9, gamesLeft: 1, remainingProjection: 6, partial: false },
+  },
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -34,9 +39,13 @@ describe('imported Guilly matchup tab', () => {
     const open = vi.fn()
     render(<ImportedGuillyMatchup leagueId="L1" onOpenGuilly={open} />)
     expect((await screen.findByTestId('gsb-headline')).textContent).toBe('Safe by 2.9')
-    expect(calls).toEqual(['/api/leagues/L1/guillotine/imported'])
+    expect(calls).toEqual(['/api/leagues/L1/guillotine/imported?outlook=1'])
     expect(screen.getByTestId('gsb-chop-line').parentElement?.textContent).toContain('HoldtheDoor')
     expect(screen.getByText(/Scores from Sleeper, which runs the chop/)).toBeTruthy()
+    // % safe and players left, from the provider-scores outlook.
+    expect(screen.getByTestId('gsb-my-left').textContent).toContain('3')
+    expect(screen.getByTestId('gsb-my-odds').textContent).toMatch(/\d+%/)
+    expect(screen.getByTestId('gsb-left-3').textContent).toContain('1 to play')
     expect(screen.getByTestId('gsb-graveyard').textContent).toContain('Team JukeyDukey86')
     fireEvent.click(screen.getByRole('button', { name: 'Guilly details' }))
     expect(open).toHaveBeenCalled()
