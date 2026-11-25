@@ -157,11 +157,66 @@ export function autopilotFaabBid(args: {
   remaining: number | null
   minBid: number | null
   allowZero: boolean
+  /** An upgrade pickup is optional, so it only ever bids the least the league allows. */
+  minimumOnly?: boolean
 }): number | null | 'unaffordable' {
   if (!args.faab) return null
   const remaining = Math.max(0, Math.floor(args.remaining ?? 0))
   const floor = Math.max(Math.ceil(args.minBid ?? 0), args.allowZero ? 0 : 1)
   if (remaining < floor) return 'unaffordable'
+  if (args.minimumOnly) return floor
   const budget = args.budget != null && args.budget > 0 ? args.budget : remaining
   return Math.min(remaining, Math.max(floor, Math.round(budget * AUTOPILOT_FAAB_SHARE[args.style])))
+}
+
+/**
+ * UPGRADE PICKUPS (docs/chimmy-manager/IN_SEASON_MANAGER_PLAN.md, phase 5). A team with no hole to
+ * fill may still make ONE optional claim a week: a free agent who is clearly better than a bench player
+ * at the same position, swapped for him. An active manager does this; an unattended roster otherwise
+ * never improves.
+ *
+ * Kept deliberately small, because nothing forces the move:
+ *   - same position in, same position out, so the bench keeps its shape and no depth is lost;
+ *   - the free agent must beat the player he replaces by the manager's margin (a busier manager acts on
+ *     a smaller edge) AND by `UPGRADE_MIN_POINTS`, so noise in two low projections is not an upgrade;
+ *   - a starter is never dropped, and neither is a young player the style protects;
+ *   - among everything that qualifies, the biggest gain wins.
+ * The hourly run allows one a week per team and bids the league minimum for it.
+ */
+export const UPGRADE_SLOT = 'Upgrade'
+export const UPGRADE_MIN_POINTS = 2
+/** How much better the free agent must project than the bench player he replaces, by manager activity. */
+export const UPGRADE_MARGIN: Record<'quiet' | 'normal' | 'busy', number> = { quiet: 0.4, normal: 0.25, busy: 0.15 }
+
+export function planUpgradePickup(args: {
+  style: AutopilotStyle
+  activity: 'quiet' | 'normal' | 'busy'
+  bench: string[]
+  players: Record<string, AutopilotPlayer | undefined>
+  freeAgents: AutopilotPlayer[]
+  pendingAddIds?: readonly string[]
+}): AutopilotClaim | null {
+  const { players } = args
+  const taken = new Set(args.pendingAddIds ?? [])
+  const protectAge = PROTECT_YOUNG[args.style]
+  const margin = UPGRADE_MARGIN[args.activity]
+  const posOf = (p: AutopilotPlayer | undefined) => String(p?.position ?? '').toUpperCase()
+  const droppable = args.bench
+    .filter(Boolean)
+    .filter((id) => players[id] && posOf(players[id]) !== '')
+    .filter((id) => !(protectAge != null && isYoung(players[id], protectAge)))
+
+  let best: { claim: AutopilotClaim; gain: number } | null = null
+  for (const add of args.freeAgents) {
+    if (taken.has(add.id) || !playable(add) || proj(add) <= 0 || posOf(add) === '') continue
+    // The weakest bench player at his position is the one he would replace.
+    const drop = droppable.filter((id) => posOf(players[id]) === posOf(add)).sort((a, b) => proj(players[a]) - proj(players[b]) || a.localeCompare(b))[0]
+    if (!drop) continue
+    const gain = proj(add) - proj(players[drop])
+    if (gain < UPGRADE_MIN_POINTS || proj(add) < proj(players[drop]) * (1 + margin)) continue
+    if (!best || gain > best.gain || (gain === best.gain && add.id < best.claim.addPlayerId)) {
+      best = { claim: { slot: UPGRADE_SLOT, addPlayerId: add.id, dropPlayerId: drop }, gain }
+    }
+  }
+  return best?.claim ?? null
 }

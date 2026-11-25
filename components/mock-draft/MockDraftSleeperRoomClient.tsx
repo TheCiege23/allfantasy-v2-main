@@ -266,6 +266,12 @@ interface AvailablePlayer {
    */
   display?: { stats?: Record<string, number> | null } | null
   nflDraftProjectionSplits?: DraftStatPlayerSource['nflDraftProjectionSplits']
+  /*
+   * The season the stat columns are from, and whether that is LAST season (the player has no game
+   * this season yet). The live room tags such a row; so does this one. Optional for older saved mocks.
+   */
+  statSeason?: string | null
+  statSeasonIsPrevious?: boolean
   /* Optional so a mock saved before headshots existed still restores. */
   headshotUrl?: string | null
   teamLogoUrl?: string | null
@@ -886,6 +892,10 @@ export default function MockDraftSleeperRoomClient({
   // AF ADP's lock (components/app/draft-room/afAdpLock.tsx), read off the pool response.
   const [afAdpLock, setAfAdpLock] = useState<ReturnType<typeof afAdpLockOf>>(null)
   const afAdpTitle = afAdpLockedTitle(useOptionalLanguage().language)
+  // The live room's own words for a stat line from the season before (SleeperPoolTable).
+  const { t: tPool } = useOptionalLanguage()
+  const lastSeasonLabel = tPool('draftRoom.pool.lastSeasonStats')
+  const lastSeasonTooltip = tPool('draftRoom.pool.lastSeasonStatsTooltip')
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -1651,6 +1661,8 @@ export default function MockDraftSleeperRoomClient({
           isRookie: raw.isRookie === true,
           byeWeek: numberFromUnknown(raw.byeWeek) ?? numberFromUnknown(raw.bye),
           display: { stats: numericStatsFromUnknown(recordFromUnknown(raw.display)?.stats) },
+          statSeason: stringFromUnknown(raw.statSeason),
+          statSeasonIsPrevious: raw.statSeasonIsPrevious === true,
           nflDraftProjectionSplits:
             (recordFromUnknown(raw.nflDraftProjectionSplits) as DraftStatPlayerSource['nflDraftProjectionSplits']) ?? null,
           age: numberFromUnknown(raw.age),
@@ -2608,6 +2620,15 @@ export default function MockDraftSleeperRoomClient({
                       {player.team || 'FA'} · {player.posRank}
                       {sportHasByeWeeks(sport) && player.byeWeek != null ? (
                         <span data-testid={`mock-draft-player-bye-${player.id}`}> · BYE {player.byeWeek}</span>
+                      ) : null}
+                      {player.statSeason && player.statSeasonIsPrevious ? (
+                        <span
+                          className="ml-1 rounded border border-amber-300/35 bg-amber-500/12 px-1 py-px font-semibold text-amber-100"
+                          title={lastSeasonTooltip}
+                          data-testid={`mock-draft-player-last-season-${player.id}`}
+                        >
+                          {player.statSeason} · {lastSeasonLabel}
+                        </span>
                       ) : null}
                     </div>
                   </div>

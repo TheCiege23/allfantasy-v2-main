@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, MoreHorizontal, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, MoreHorizontal, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX, Zap } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { formatTimerRemaining } from '@/lib/live-draft-engine/DraftTimerService'
 import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
@@ -12,7 +12,7 @@ import { resolveScheduledStartCountdown, SCHEDULED_START_GRACE_MS } from '@/lib/
 import type { TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import './af-draft-room.css'
 import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
-import { effectiveDueAt, formatClockTime, isLongPickClock, type QuietWindow } from '@/lib/draft-room/pickClockPlanning'
+import { resolvePickDueTime, type QuietWindow } from '@/lib/draft-room/pickClockPlanning'
 import { useMessages } from '@/components/i18n/useMessages'
 import { pickClockPlannerMessages } from '@/lib/core-app/messages/pickClockPlanner'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
@@ -164,6 +164,12 @@ type DraftTopBarProps = {
    * the room never promises a start the commissioner has to press.
    */
   scheduledStartAutoStarts?: boolean
+  /**
+   * An auto draft (execution mode `auto`): the server makes every pick. The pick clock, its beeps
+   * and the "you're on the clock" call to act are all off; the middle slot reads "Auto-drafting"
+   * with how far along the board is.
+   */
+  autoDraft?: boolean
 }
 
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {
@@ -256,7 +262,7 @@ export function DraftTopBar({
   isCurrentUserOnClock = false,
   pickLabel,
   overallPickNumber,
-  timerStatus,
+  timerStatus: timerStatusProp,
   timerRemainingSeconds,
   timerEndAtIso = null,
   timerSeconds = null,
@@ -317,7 +323,11 @@ export function DraftTopBar({
   showInvite = true,
   scheduledStartIso = null,
   scheduledStartAutoStarts = false,
+  autoDraft = false,
 }: DraftTopBarProps) {
+  // Nobody is on a clock in an auto draft, so no countdown, urgency styling or beeps.
+  const timerStatus: DraftTopBarProps['timerStatus'] = autoDraft ? 'none' : timerStatusProp
+  const autoDraftLive = autoDraft && (draftStatus === 'in_progress' || draftStatus === 'paused')
   const { t, tInterpolate, language } = useLanguage()
   const pickClockCopy = useMessages(pickClockPlannerMessages)
   const headerCopy = useMessages(draftRoomHeaderMessages)
@@ -476,13 +486,25 @@ export function DraftTopBar({
   // On a long pick clock (10+ minutes) a countdown alone is hard to plan around — "3h 11m" means
   // working out the time. Show the wall-clock deadline beside it. Not a mode: any draft type.
   // Quiet hours freeze the clock server-side, so the deadline is the effective one, not timerEndAt.
+  // ⚠ Not read during the server or hydration render: those run seconds apart and in different time
+  // zones, so the time would differ and React would discard the tree. Until mount the label keeps
+  // its place with an invisible placeholder; the mount effect fills in the viewer's local time.
+  const [dueClockMounted, setDueClockMounted] = useState(false)
+  useEffect(() => {
+    setDueClockMounted(true)
+  }, [])
   const dueLabel = useMemo(() => {
-    if (timerStatus !== 'running' || !isLongPickClock(timerSeconds) || !timerEndAtIso) return null
-    const endMs = Date.parse(timerEndAtIso)
-    if (!Number.isFinite(endMs)) return null
-    const due = effectiveDueAt(Date.now(), endMs, quietWindow ?? null)
-    return pickClockCopy.dueAt(formatClockTime(due, language === 'es' ? 'es-US' : 'en-US'))
-  }, [timerStatus, timerSeconds, timerEndAtIso, quietWindow, pickClockCopy, language])
+    const due = resolvePickDueTime({
+      timerStatus,
+      timerSeconds,
+      timerEndAtIso,
+      quietWindow,
+      locale: language === 'es' ? 'es-US' : 'en-US',
+      nowMs: dueClockMounted ? Date.now() : null,
+    })
+    if (!due) return null
+    return { text: due.time == null ? null : pickClockCopy.dueAt(due.time), placeholder: pickClockCopy.dueAt(due.placeholder) }
+  }, [timerStatus, timerSeconds, timerEndAtIso, quietWindow, pickClockCopy, language, dueClockMounted])
 
   const timerSummary = useMemo(() => formatTimerSummary(timerSeconds, t), [timerSeconds, t])
   const clockProgress = timerStatus === 'running' ? clockProgressPercent(effectiveRemaining, timerSeconds) : null
@@ -614,6 +636,31 @@ export function DraftTopBar({
      * The legacy "RESUME DRAFT" button-shaped CTA is gone; the clock is the focal
      * point and replaces it. Keeps the resume action one-click for commissioners.
      */
+    if (autoDraftLive) {
+      const totalPicks = Math.max(0, Math.trunc(rounds) * Math.trunc(teamCount))
+      const paused = draftStatus === 'paused'
+      return (
+        <div
+          data-testid="draft-topbar-auto-drafting"
+          data-paused={paused ? 'true' : 'false'}
+          title={headerCopy.autoDraftTitle}
+          className={`inline-flex min-h-[36px] items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-bold ${
+            paused
+              ? 'border-amber-400/45 bg-amber-500/15 text-amber-50'
+              : 'border-cyan-400/40 bg-gradient-to-br from-cyan-500/22 to-violet-600/15 text-cyan-50'
+          }`}
+        >
+          <Zap className="h-4 w-4 shrink-0" aria-hidden />
+          <span>{paused ? t('draftRoom.topBar.timerPaused') : headerCopy.autoDrafting}</span>
+          {overallPickNumber != null && totalPicks > 0 ? (
+            <span className="whitespace-nowrap text-[12px] font-semibold tabular-nums text-white/75" data-testid="draft-topbar-auto-progress">
+              {headerCopy.autoDraftProgress(Math.min(overallPickNumber, totalPicks), totalPicks)}
+            </span>
+          ) : null}
+        </div>
+      )
+    }
+
     const showLiveTimer =
       timerStatus === 'running' || timerStatus === 'paused' || timerStatus === 'expired'
     /*
@@ -636,8 +683,17 @@ export function DraftTopBar({
           <Clock className="h-5 w-5 shrink-0 opacity-90" />
           <span data-testid="draft-topbar-timer-value">{timerDisplay}</span>
           {dueLabel ? (
-            <span className="whitespace-nowrap text-[11px] font-semibold text-cyan-100/80 max-sm:hidden" data-testid="draft-topbar-timer-due">
-              {dueLabel}
+            // One grid cell holding both: the invisible placeholder sets the width before mount and
+            // keeps it after, so the pill does not resize when the real time arrives.
+            <span className="inline-grid whitespace-nowrap text-[11px] font-semibold text-cyan-100/80 max-sm:hidden" data-testid="draft-topbar-timer-due-slot">
+              <span className="invisible col-start-1 row-start-1" aria-hidden>
+                {dueLabel.placeholder}
+              </span>
+              {dueLabel.text ? (
+                <span className="col-start-1 row-start-1" data-testid="draft-topbar-timer-due">
+                  {dueLabel.text}
+                </span>
+              ) : null}
             </span>
           ) : null}
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
@@ -913,7 +969,7 @@ export function DraftTopBar({
                     <span className="text-white/24" aria-hidden>·</span>
                   </>
                 ) : null}
-                <span>{timerSummary}</span>
+                <span data-testid="draft-topbar-timer-summary">{autoDraft ? headerCopy.autoDrafting : timerSummary}</span>
                 <span className="text-white/24" aria-hidden>·</span>
                 <span>{withCount(t('draftRoom.topBar.teamsCount'), teamCount)}</span>
                 <span className="text-white/24" aria-hidden>·</span>
@@ -1060,11 +1116,11 @@ export function DraftTopBar({
             */
             <div
               className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 ${
-                isCurrentUserOnClock
+                isCurrentUserOnClock && !autoDraft
                   ? 'animate-pulse bg-amber-500/18 ring-1 ring-amber-400/45'
                   : 'md:bg-transparent max-md:border max-md:border-violet-400/25 max-md:bg-violet-500/[0.12]'
               }`}
-              data-on-clock-self={isCurrentUserOnClock ? 'true' : undefined}
+              data-on-clock-self={isCurrentUserOnClock && !autoDraft ? 'true' : undefined}
             >
               {currentManagerAvatarUrl ? (
                 <Image
@@ -1082,7 +1138,7 @@ export function DraftTopBar({
               ) : (
                 <User
                   className={`h-4 w-4 shrink-0 ${
-                    isCurrentUserOnClock ? 'text-amber-300' : 'text-violet-300'
+                    isCurrentUserOnClock && !autoDraft ? 'text-amber-300' : 'text-violet-300'
                   }`}
                 />
               )}
@@ -1097,10 +1153,12 @@ export function DraftTopBar({
                    on the clock, because this span otherwise renders "You're on the clock". */
                 data-testid={isOrphanOnClock ? 'draft-topbar-orphan-mode-label' : undefined}
                 className={`shrink-0 text-[11px] font-semibold uppercase tracking-wide ${
-                  isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
+                  isCurrentUserOnClock && !autoDraft ? 'text-amber-100' : 'text-violet-200/75'
                 }`}
               >
-                {isOrphanOnClock && chimmyManagerOnClock
+                {autoDraft
+                  ? isCurrentUserOnClock ? headerCopy.yourAutoPick : headerCopy.autoPick
+                  : isOrphanOnClock && chimmyManagerOnClock
                   ? t('draftRoom.topBarHint.chimmyPicking')
                   : isOrphanOnClock
                   ? orphanModeLabel

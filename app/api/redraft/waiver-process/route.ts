@@ -541,12 +541,35 @@ export async function GET(request: Request) {
         rowsRead: r.offers,
         rowsWritten: r.accepted + r.rejected,
         errors: r.failures.map((f) => `${f.leagueId}/${f.proposalId}: ${f.error}`),
-        metadata: { accepted: r.accepted, rejected: r.rejected, skipped: r.skipped },
+        metadata: { accepted: r.accepted, rejected: r.rejected, countered: r.countered, skipped: r.skipped },
       }),
     )
   } catch (e) {
     console.error('[redraft/waiver-process] chimmy autopilot trades failed', e)
     autopilotTrades = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Chimmy autopilot sends a trade offer for a team whose commissioner switched that on: at most one
+   * a day per team, in the team's own hour (lib/inactive-manager/autopilotTradeOffers.ts). Guarded and
+   * on its own job identity.
+   */
+  let autopilotOffers: unknown = null
+  try {
+    const { runAutopilotTradeOffers } = await import('@/lib/inactive-manager/autopilotTradeService')
+    autopilotOffers = await withSyncJobRun(
+      { jobName: 'cron-chimmy-autopilot-offers', trigger: 'cron' },
+      () => runAutopilotTradeOffers(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.sent,
+        errors: r.failures.map((f) => `${f.leagueId}/${f.rosterId}: ${f.error}`),
+        metadata: { skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] chimmy autopilot offers failed', e)
+    autopilotOffers = { error: e instanceof Error ? e.message : String(e) }
   }
 
   /*
@@ -690,5 +713,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, byeStarterSweep, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, autopilotTrades, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, byeStarterSweep, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, autopilotTrades, autopilotOffers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

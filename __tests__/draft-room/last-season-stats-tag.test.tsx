@@ -33,6 +33,27 @@ describe('last season\'s stats are marked as last season\'s', () => {
     expect(stats.get('171')).toMatchObject({ statSeason: '2026–27', statSeasonIsPrevious: false })
   })
 
+  it('measures "previous" against the newest season on file, not the calendar year the caller passes', async () => {
+    // A mock draft has no league and passes the calendar year. An NBA season is stored under the year
+    // it starts in, so from January that year is one more than every row on file. Compared with it,
+    // the whole league's current numbers would read as last season's.
+    findMany.mockResolvedValue([
+      { playerId: '170', season: '2025', gamesPlayed: 39, position: 'SF', stats: { games_played: 39, points: 760 } },
+      { playerId: '171', season: '2026', gamesPlayed: 40, position: 'PG', stats: { games_played: 40, points: 900 } },
+    ])
+    const january = await loadStoredDraftSeasonStats('NBA', ['170', '171'], 2027)
+    expect(january.get('171')).toMatchObject({ statSeason: '2026–27', statSeasonIsPrevious: false })
+    // Two seasons are read, the one asked for and the one before: a 2025 line is out of reach of 2027.
+    expect(january.get('170')).toBeUndefined()
+    // Before a new season's first game every line is the same season: nothing to set apart.
+    findMany.mockResolvedValue([
+      { playerId: '170', season: '2026', gamesPlayed: 60, position: 'SF', stats: { games_played: 60, points: 1200 } },
+      { playerId: '171', season: '2026', gamesPlayed: 70, position: 'PG', stats: { games_played: 70, points: 1400 } },
+    ])
+    const offseason = await loadStoredDraftSeasonStats('NBA', ['170', '171'], 2027)
+    expect([...offseason.values()].map((s) => s.statSeasonIsPrevious)).toEqual([false, false])
+  })
+
   it('carries the mark onto the pool entry, and only with a season to mark', () => {
     expect(lastSeason().display.stats.seasonIsPrevious).toBe(true)
     expect(thisSeason().display.stats.seasonIsPrevious).toBeUndefined()

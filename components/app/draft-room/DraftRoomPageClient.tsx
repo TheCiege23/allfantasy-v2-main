@@ -67,6 +67,7 @@ import { PickClockPlanner } from '@/components/app/draft-room/PickClockPlanner'
 import { isLongPickClock, nextPickLabel, normalizeQuietWindow } from '@/lib/draft-room/pickClockPlanning'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
+import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 
 const DraftPickTradePanel = dynamic(() => import('@/components/app/draft-room/DraftPickTradePanel'), { ssr: false })
 const CommissionerControlCenterModal = dynamic(
@@ -1020,6 +1021,12 @@ export function DraftRoomPageClient({
   const rosterConfigBlocked = Boolean(session?.rosterConfigurationIncomplete)
 
   const commissionerOfflinePick = Boolean(draftUISettings?.executionMode === 'offline' && isCommissioner)
+  /**
+   * Auto draft: the server makes every pick, for every team. Nobody is on a clock, so the room shows
+   * no countdown, no "You're up" alert and no pick planner (reported from a live auto draft,
+   * 2026-11-25: "the timer is still showing").
+   */
+  const isAutoDraft = draftUISettings?.executionMode === 'auto'
   const draftRoomMode = resolveDraftRoomMode({
     executionMode: draftUISettings?.executionMode ?? null,
     // The full-width "Auto-pick is on" banner is gone from the live room (2026-11-19): the seat's
@@ -1119,7 +1126,9 @@ export function DraftRoomPageClient({
     ],
   )
 
-  const canDraft = draftRoomState.canDraft
+  // An auto draft takes no pick by hand: the Draft buttons go, and the banner above the board says why.
+  // The server refuses the pick too (lib/live-draft-engine/autoDraftPickRule.ts).
+  const canDraft = draftRoomState.canDraft && !isAutoDraft
 
   // Relocated below draftRoomState: this render-time const reads draftRoomState.canStart,
   // so it must be evaluated after the useMemo above to avoid a temporal-dead-zone crash
@@ -3144,6 +3153,22 @@ export function DraftRoomPageClient({
     if (overall == null) return null
     return { overall, label: formatPickLabel(overall, Math.max(1, session?.teamCount ?? 1)) }
   }, [intelLookahead?.viewerNextOverall, session?.teamCount])
+  /**
+   * The line in the player list at the viewer's next pick ("there is no line in the player pool that
+   * tells me when my next pick is", 2026-11-25). From the live session, never the Chimmy intel copy.
+   */
+  const draftRoomHeaderCopy = useMessages(draftRoomHeaderMessages)
+  const nextPickLine = useMemo(() => {
+    const overall = session?.currentPick?.overall
+    if (ribbonPicksUntilUser == null || ribbonPicksUntilUser < 1 || overall == null) return null
+    const label = nextPickLabel(overall, ribbonPicksUntilUser, Math.max(1, session?.teamCount ?? 1))
+    if (!label) return null
+    return {
+      picksAway: ribbonPicksUntilUser,
+      text: draftRoomHeaderCopy.nextPickLine(label, ribbonPicksUntilUser),
+      title: draftRoomHeaderCopy.nextPickLineTitle,
+    }
+  }, [ribbonPicksUntilUser, session?.currentPick?.overall, session?.teamCount, draftRoomHeaderCopy])
   /** Player card "draft outlook" — survival to the next pick, falling, who's circling. */
   const getDraftOutlook = useCallback(
     (player: PlayerEntry) =>
@@ -3996,6 +4021,7 @@ export function DraftRoomPageClient({
         aiRowBadges={aiRowBadges}
         aiOverlaySignals={aiOverlaySignals}
         leftAtPick={leftAtPick}
+        nextPickLine={nextPickLine}
         getDraftOutlook={getDraftOutlook}
         showAiOverlays={showAiOverlays}
         onShowAiOverlaysChange={setShowAiOverlays}
@@ -4018,6 +4044,7 @@ export function DraftRoomPageClient({
       draftedPlayerIds,
       queue,
       leftAtPick,
+      nextPickLine,
       getDraftOutlook,
       effectiveDraftSport,
       draftRoomState.isAuction,
@@ -4185,12 +4212,14 @@ export function DraftRoomPageClient({
           presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
           leftAtPick={leftAtPick}
           mirroredFromSleeper={Boolean(session?.sleeperDraftId)}
+          autoDraft={isAutoDraft}
         />
       </div>
     },
     [
       players,
       leftAtPick,
+      isAutoDraft,
       session?.sleeperDraftId,
       presentationVariant,
       draftIntelLoading,
@@ -4520,8 +4549,9 @@ export function DraftRoomPageClient({
           {/* Who is on the clock and the live timer are in the header, which never scrolls
               away on phones; this bar only adds what the header leaves out. So no "You are on the
               clock" here (2026-11-25, the simplify pass): the header's "You · On the clock" chip, the
-              board's own tile and the You're-up card already said it three times. */}
-          {!isCurrentUserOnClock && presentationVariant === 'redraft_snake' && ribbonPicksUntilUser != null && ribbonPicksUntilUser > 0 ? (
+              board's own tile and the You're-up card already said it three times. An auto draft (no
+              pick clock, nothing for a manager to do) still gets the picks-until line, as before. */}
+          {(!isCurrentUserOnClock || isAutoDraft) && (presentationVariant === 'redraft_snake' || isAutoDraft) && ribbonPicksUntilUser != null && ribbonPicksUntilUser > 0 ? (
             <span className="af-dr-clockbar-status" data-testid="draft-mobile-picks-until-you">
               ~{draftRoomCopy.clockBarPicksUntil(ribbonPicksUntilUser)}
             </span>
@@ -4904,6 +4934,7 @@ export function DraftRoomPageClient({
       />
     ) : null}
     {isCurrentUserOnClock &&
+    !isAutoDraft &&
     !draftRoomState.isAuction &&
     session.status === 'in_progress' &&
     currentPick?.overall != null &&
@@ -5309,6 +5340,7 @@ export function DraftRoomPageClient({
             picksUntilUser={ribbonPicksUntilUser}
             scheduledStartIso={scheduledStart.iso}
             scheduledStartAutoStarts={scheduledStart.autoStarts}
+            autoDraft={isAutoDraft}
             controlsSlot={
               leagueId ? <DraftRoomMusicBar compact leagueId={leagueId} draftStatus={session.status} livePlaylist={livePlaylist} /> : null
             }
@@ -5464,6 +5496,7 @@ export function DraftRoomPageClient({
         // bordered strip, so an element that renders nothing still costs ~17px of height — enough
         // to push the player list off a 1280x720 screen (e2e draft-room-visual pool-height test).
         !isDraftCompleted &&
+        !isAutoDraft &&
         (session.status === 'in_progress' || session.status === 'paused') &&
         (isLongPickClock(session.timerSeconds) || pickClockQuietWindow) ? (
           <PickClockPlanner

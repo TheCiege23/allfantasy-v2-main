@@ -470,12 +470,32 @@ describe('Guilly full regression matrix', () => {
       prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotineFaabOnChop: 'split' } })
       redistributeChoppedFaabMock.mockResolvedValue({ pool: 60, perTeam: 30, survivors: 2, shares: new Map([['r-mid', 30], ['r-top', 30]]), taken: new Map([['r-low', 60]]) })
       await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, season: 2026, systemUserId: 'system' })
-      expect(redistributeChoppedFaabMock).toHaveBeenCalledWith({ choppedRosterIds: ['r-low'], survivorRosterIds: ['r-mid', 'r-top'] })
+      // The rule, the share, the chop's own scores (for the scorer rules) and the chop it belongs to (paid once).
+      expect(redistributeChoppedFaabMock).toHaveBeenCalledWith({
+        choppedRosterIds: ['r-low'],
+        survivorRosterIds: ['r-mid', 'r-top'],
+        policy: 'split',
+        percent: 100,
+        weekPoints: new Map([['r-low', 77], ['r-mid', 100], ['r-top', 120]]),
+        record: { leagueId: 'league-1', key: 'season:2026:3', weekOrPeriod: 3 },
+      })
       // `taken` is what an undone chop gives back (lib/guillotine/chopUndo.ts).
       expect(appendEventMock).toHaveBeenCalledWith('league-1', 'faab_split', expect.objectContaining({ pool: 60, taken: { 'r-low': 60 } }))
       expect(createLeagueChatMessageMock).toHaveBeenCalledWith('league-1', 'system', expect.stringContaining('$60'), expect.objectContaining({
         idempotencyKey: 'guillotine-faab-split:league-1:2026:w3',
       }))
+    })
+
+    it('🛑 the highest-scorer rule passes the rule and the share on, and the chat names who was paid', async () => {
+      chopLowOfTwo()
+      prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotineFaabOnChop: 'top_scorer', guillotineFaabOnChopPercent: 50 } })
+      // The payout recorded itself (its marker is what makes a share pay once), so the engine writes no second event.
+      redistributeChoppedFaabMock.mockResolvedValue({ pool: 30, perTeam: 15, survivors: 2, shares: new Map([['r-top', 30]]), taken: new Map([['r-low', 30]]), applied: 'top_scorer', recorded: true })
+      await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, season: 2026, systemUserId: 'system' })
+      expect(redistributeChoppedFaabMock).toHaveBeenCalledWith(expect.objectContaining({ policy: 'top_scorer', percent: 50 }))
+      expect(appendEventMock).not.toHaveBeenCalledWith('league-1', 'faab_split', expect.anything())
+      const faabPost = createLeagueChatMessageMock.mock.calls.find((c) => String(c[2]).includes('unspent FAAB'))
+      expect(String(faabPost?.[2])).toMatch(/^💰 The chopped team's \$30 of unspent FAAB went to .+, for the week's highest score\.$/)
     })
 
     it('by default (keep), moves nothing', async () => {

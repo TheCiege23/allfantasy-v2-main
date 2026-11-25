@@ -12,11 +12,23 @@ import {
   type GuillotineRules,
 } from '@/lib/guillotine/guillotineRules'
 import { DEFAULT_ADVANCED, MAX_CHOPS_PER_WEEK, MAX_FAAB_AMOUNT, isDefault, type FaabAfterChop, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
-import { FAAB_ON_CHOP_OPTIONS, type FaabOnChop } from '@/lib/guillotine/faabOnChop'
+import { DEFAULT_FAAB_ON_CHOP_PERCENT, FAAB_ON_CHOP_OPTIONS, FAAB_ON_CHOP_PERCENT_CHOICES, movesChoppedFaab, type FaabOnChop } from '@/lib/guillotine/faabOnChop'
 import { CHOP_LIST_ORDER_OPTIONS, DEFAULT_CHOP_LIST_ORDER, type ChopListOrder } from '@/lib/guillotine/chopListOrder'
 import { CHOP_PATTERN_OPTIONS, applyChopPattern, chopPatternWeeks, describeWeeks, type ChopPatternKind } from '@/lib/guillotine/chopPatterns'
 import { calendarFitMessage, guillotineSeasonPreview, type CalendarFitInput } from '@/lib/guillotine/calendarFit'
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
+import {
+  MAX_ROSTER_CHANGES,
+  MAX_SPOTS_PER_CHANGE,
+  ROSTER_CHANGE_OPTIONS,
+  describeLayout,
+  describeRosterChange,
+  rosterChangeNeedsSlot,
+  walkRosterSchedule,
+  type RosterChange,
+  type RosterChangeKind,
+  type RosterScheduleView,
+} from '@/lib/guillotine/rosterSchedule'
 import { SettingsSubPageFooter } from './LeagueSettingsHome'
 
 /**
@@ -29,12 +41,13 @@ import { SettingsSubPageFooter } from './LeagueSettingsHome'
  *
  *   1. When teams get chopped    first and last week, teams a week, later changes, special weeks, the season preview
  *   2. After a chop              when players are released, the chopped team's FAAB, the survivors' FAAB
+ *   +  Roster changes            starting or bench spots added on a set week (lib/guillotine/rosterSchedule.ts)
  *   3. Ties and fairness         tiebreak order, the stat-correction wait, top-scorer immunity
  *   4. How the season ends       last team standing or a Final N
  *   5. Lineups and the page      best ball, Chimmy's recap, the danger margin, the Chop page's list order
  *
- * ONE Save. The server keeps its three writers — each with its own lock, plan check and "What changed" event
- * (app/api/leagues/[leagueId]/guillotine/summary PATCH: `{ eliminationStartWeek }`, `{ rules }`, `{ advanced }`)
+ * ONE Save. The server keeps its writers — each with its own lock and plan check (app/api/leagues/[leagueId]/
+ * guillotine/summary PATCH: `{ eliminationStartWeek }`, `{ rules }`, `{ advanced }`, `{ rosterSchedule }`)
  * — and this page sends only the ones that changed, in that order, stopping at the first refusal and saying what
  * was and was not saved. Nothing about who may change what is decided here: every refusal is the server's.
  *
@@ -55,6 +68,8 @@ type RulesView = {
   /** Absent from an older server: the schedule then reads as the standard one and is not sent back. */
   advanced?: GuillotineAdvanced
   teamCount?: number
+  /** Scheduled roster changes. Absent or null (an older server, a failed read): the section is hidden. */
+  roster?: RosterScheduleView | null
 }
 
 type SavedParts = { rules: GuillotineRules; advanced: GuillotineAdvanced; firstChopWeek: number; scheduleLines?: string[] }
@@ -88,6 +103,9 @@ export function GuillotineRulesPage({
   const [ok, setOk] = useState(false)
   const [pattern, setPattern] = useState<{ kind: ChopPatternKind; from: number | null; to: number | null; chops: number }>({ kind: 'every_other_week', from: null, to: null, chops: 2 })
   const scheduleLines = useRef<string[] | undefined>(undefined)
+  // Scheduled roster changes that have not run yet. The ones that have are history and are only shown.
+  const [rosterChanges, setRosterChanges] = useState<RosterChange[]>([])
+  const [savedRoster, setSavedRoster] = useState('[]')
 
   useEffect(() => {
     let cancelled = false
@@ -106,6 +124,9 @@ export function GuillotineRulesPage({
         setAdvanced(adv)
         setSavedAdvanced(JSON.stringify(adv))
         setFirstWeek(v.startWeek)
+        const waiting = waitingRosterChanges(v.roster)
+        setRosterChanges(waiting)
+        setSavedRoster(JSON.stringify(waiting))
       })
       .catch(() => {
         if (!cancelled) setLoadError('Could not reach the server. Try again.')
@@ -160,17 +181,56 @@ export function GuillotineRulesPage({
   const changedRules = (Object.keys(rules) as GuillotineRuleField[]).filter((k) => JSON.stringify(rules[k]) !== JSON.stringify(view.rules[k]))
   const firstDirty = firstWeek !== view.startWeek
   const advancedDirty = JSON.stringify(advanced) !== savedAdvanced
-  const dirty = firstDirty || changedRules.length > 0 || advancedDirty
+  const roster = view.roster && view.roster.supported ? view.roster : null
+  const rosterDirty = roster != null && JSON.stringify(rosterChanges) !== savedRoster
+  const dirty = firstDirty || changedRules.length > 0 || advancedDirty || rosterDirty
   // The schedule, special weeks, immunity and FAAB after a chop are AF Commissioner as a block. Without it the
   // controls are locked, except the one that puts the league back on the standard schedule.
   const scheduleLocked = !paid
   const weeks = Array.from({ length: Math.max(1, rules.eliminationEndWeek - firstWeek + 1) }, (_, i) => firstWeek + i)
   const overrides = Object.entries(advanced.overrides).map(([w, n]) => ({ week: Number(w), chops: n })).sort((a, b) => a.week - b.week)
   const listOrder: ChopListOrder = rules.chopListOrder ?? DEFAULT_CHOP_LIST_ORDER
+  // Absent from an older server = all of it. A stored share that is not one of the offered ones is still shown.
+  const faabPercent = rules.faabOnChopPercent ?? DEFAULT_FAAB_ON_CHOP_PERCENT
+  const faabPercentChoices = [...new Set([...FAAB_ON_CHOP_PERCENT_CHOICES, faabPercent])].sort((a, b) => b - a)
   const patternFrom = pattern.from != null && weeks.includes(pattern.from) ? pattern.from : weeks[0]!
   const patternTo = pattern.to != null && weeks.includes(pattern.to) && pattern.to >= patternFrom ? pattern.to : weeks[weeks.length - 1]!
   const patternWeeks = chopPatternWeeks({ kind: pattern.kind, fromWeek: patternFrom, toWeek: patternTo }, { startWeek: firstWeek, periodWeeks: rules.periodWeeks })
   const firstWeekValid = Number.isInteger(firstWeek) && firstWeek >= 1 && firstWeek <= rules.eliminationEndWeek
+  // Roster changes: the list as it would run from today's roster, by the save's own walk.
+  const rosterWeeks = roster ? Array.from({ length: Math.max(0, roster.toWeek - roster.fromWeek + 1) }, (_, i) => roster.fromWeek + i) : []
+  const rosterWalk = roster ? walkRosterSchedule(roster.layout, rosterChanges, roster.spots) : null
+  const rosterBlocked = rosterWalk?.steps.find((s) => !s.ok)
+  const rosterByWeek: Array<{ week: number; text: string }> = []
+  if (roster && rosterWalk && !rosterBlocked) {
+    for (const s of rosterWalk.steps) {
+      if (!s.ok) continue
+      const text = describeLayout(s.slots, roster.spots)
+      const last = rosterByWeek[rosterByWeek.length - 1]
+      if (last && last.week === s.change.week) last.text = text
+      else rosterByWeek.push({ week: s.change.week, text })
+    }
+  }
+  const rosterDone = roster ? roster.changes.filter((c) => roster.done.includes(c.id)) : []
+  const rosterSkipped = new Map((roster?.skipped ?? []).map((s) => [s.id, s.reason]))
+  const updateRoster = (next: RosterChange[]) => {
+    touch()
+    setRosterChanges(next)
+  }
+  const editRoster = (id: string, next: Partial<RosterChange>) =>
+    updateRoster(
+      rosterChanges.map((c) => {
+        if (c.id !== id) return c
+        const merged = { ...c, ...next }
+        const needsSlot = rosterChangeNeedsSlot(merged.kind)
+        return { ...merged, slot: needsSlot ? (merged.slot ?? defaultStarterSpot(roster)) : null }
+      }),
+    )
+  const addRoster = () => {
+    if (!roster || rosterWeeks.length === 0) return
+    const id = `rc_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    updateRoster([...rosterChanges, { id, week: rosterWeeks[0]!, kind: 'add_starter', slot: defaultStarterSpot(roster), count: 1 }])
+  }
 
   const patch = async (body: unknown): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> => {
     try {
@@ -209,7 +269,8 @@ export function GuillotineRulesPage({
       const r = await patch({ rules: Object.fromEntries(changedRules.map((k) => [k, rules[k]])) })
       if (!r.ok) return fail('league rules', r.error)
       const next = r.data as unknown as RulesView
-      current = { ...current, ...next, startWeek: next.startWeek ?? savedFirst }
+      // The rules answer carries no roster schedule; keep the one this page loaded.
+      current = { ...current, ...next, startWeek: next.startWeek ?? savedFirst, roster: current.roster }
       setView(current)
       setRules(next.rules)
       done.push('league rules')
@@ -225,6 +286,18 @@ export function GuillotineRulesPage({
       setSavedAdvanced(JSON.stringify(nextAdvanced))
       done.push('chop schedule')
     }
+    // 4. Scheduled roster changes.
+    if (rosterDirty) {
+      const r = await patch({ rosterSchedule: rosterChanges })
+      if (!r.ok) return fail('roster changes', r.error)
+      const nextRoster = (r.data.roster as RosterScheduleView | undefined) ?? null
+      current = { ...current, roster: nextRoster }
+      setView(current)
+      const waiting = waitingRosterChanges(nextRoster)
+      setRosterChanges(waiting)
+      setSavedRoster(JSON.stringify(waiting))
+      done.push('roster changes')
+    }
     setSaving(false)
     setOk(true)
     onSaved?.({ rules: current.rules, advanced: nextAdvanced, firstChopWeek: savedFirst, scheduleLines: scheduleLines.current })
@@ -232,7 +305,7 @@ export function GuillotineRulesPage({
 
   const endgameHelp = ENDGAME_OPTIONS.find((o) => o.value === rules.endgame)?.help
   const releaseHelp = RELEASE_OPTIONS.find((o) => o.value === rules.rosterReleaseTiming)?.help
-  const faabHelp = `${FAAB_ON_CHOP_OPTIONS.find((o) => o.value === rules.faabOnChop)?.help ?? ''} Only matters if your league uses FAAB bidding.`
+  const faabHelp = `${FAAB_ON_CHOP_OPTIONS.find((o) => o.value === rules.faabOnChop)?.help ?? ''}${movesChoppedFaab(rules.faabOnChop) && faabPercent < 100 ? ` ${100 - faabPercent}% of it leaves with the chopped team.` : ''} Only matters if your league uses FAAB bidding.`
   const week = rules.periodWeeks === 2 ? 'period' : 'week'
 
   return (
@@ -473,20 +546,30 @@ export function GuillotineRulesPage({
         </Field>
 
         <Field label="A chopped team's unspent FAAB" help={faabHelp} paid={paidLocked('faabOnChop')}>
-          <select className={inputClass} value={rules.faabOnChop} onChange={(e) => update({ faabOnChop: e.target.value as FaabOnChop })} data-testid="guillotine-rules-faab-on-chop">
-            {FAAB_ON_CHOP_OPTIONS.map((o) => {
-              // Without AF Commissioner only "keep" is selectable — and the current value, so the page still shows it.
-              const locked = paidLocked('faabOnChop') && o.value !== 'keep' && o.value !== rules.faabOnChop
-              return (
-                <option key={o.value} value={o.value} disabled={locked}>
-                  {o.label}{paidLocked('faabOnChop') && o.value !== 'keep' ? ' · AF Commissioner' : ''}
-                </option>
-              )
-            })}
-          </select>
+          <div className="grid items-end gap-2 sm:grid-cols-[2fr_1fr]">
+            <select className={inputClass} value={rules.faabOnChop} onChange={(e) => update({ faabOnChop: e.target.value as FaabOnChop })} data-testid="guillotine-rules-faab-on-chop">
+              {FAAB_ON_CHOP_OPTIONS.map((o) => {
+                // Without AF Commissioner only "keep" is selectable — and the current value, so the page still shows it.
+                const locked = paidLocked('faabOnChop') && o.value !== 'keep' && o.value !== rules.faabOnChop
+                return (
+                  <option key={o.value} value={o.value} disabled={locked}>
+                    {o.label}{paidLocked('faabOnChop') && o.value !== 'keep' ? ' · AF Commissioner' : ''}
+                  </option>
+                )
+              })}
+            </select>
+            {/* How much of it moves; the rest leaves with the team. Only asked when a rule moves it at all. */}
+            {movesChoppedFaab(rules.faabOnChop) ? (
+              <label className="text-[11px] text-white/50">How much of it
+                <select className={inputClass} value={faabPercent} disabled={paidLocked('faabOnChopPercent')} onChange={(e) => update({ faabOnChopPercent: Number(e.target.value) })} data-testid="guillotine-rules-faab-percent">
+                  {faabPercentChoices.map((p) => <option key={p} value={p}>{p === 100 ? 'All of it' : `${p}%`}</option>)}
+                </select>
+              </label>
+            ) : null}
+          </div>
         </Field>
 
-        <Field label="Survivors' FAAB after a chop" paid={scheduleLocked} help="What every surviving team's FAAB becomes once a team is chopped, so the released players are worth bidding on. Cannot be on together with splitting the chopped team's FAAB.">
+        <Field label="Survivors' FAAB after a chop" paid={scheduleLocked} help="What every surviving team's FAAB becomes once a team is chopped, so the released players are worth bidding on. Cannot be on together with passing the chopped team's FAAB to survivors.">
           <div className="grid grid-cols-[1fr_1fr] items-end gap-2">
             <select className={inputClass} value={advanced.faab.mode} disabled={scheduleLocked} data-testid="guillotine-faab-mode"
               onChange={(e) => {
@@ -504,6 +587,68 @@ export function GuillotineRulesPage({
           </div>
         </Field>
       </Group>
+
+      {/* ---------- Roster changes during the season ---------- */}
+      {roster && (
+        <Group id="roster" title="Roster changes during the season" sub="Add starting or bench spots on a set week. AllFantasy changes every team's roster for you.">
+          <Field label="Scheduled changes" paid={scheduleLocked} help="A new starting spot stays empty until its manager fills it. Nobody's lineup is changed for them.">
+            <p className="text-[12px] text-white/60" data-testid="guillotine-roster-now">Right now every team has {describeLayout(roster.layout, roster.spots)}.</p>
+            {rosterDone.map((c) => (
+              <p key={c.id} className="rounded-lg border border-white/10 px-3 py-2 text-[12px] text-white/50" data-testid={`guillotine-roster-done-${c.id}`}>
+                Week {c.week}: {describeRosterChange(c, roster.spots)}. {rosterSkipped.has(c.id) ? `Not made: ${rosterSkipped.get(c.id)}` : 'Done.'}
+              </p>
+            ))}
+            {rosterChanges.map((c) => (
+              <div key={c.id} className="grid grid-cols-2 items-end gap-2 rounded-lg border border-white/10 p-3 sm:grid-cols-[0.7fr_1.5fr_1.9fr_0.7fr_auto]" data-testid="guillotine-roster-change">
+                <label className="order-1 text-[11px] text-white/50 sm:order-none">Week
+                  <select className={inputClass} value={c.week} disabled={scheduleLocked} onChange={(e) => editRoster(c.id, { week: Number(e.target.value) })} data-testid="guillotine-roster-week">
+                    {[...new Set([...rosterWeeks, c.week])].sort((a, b) => a - b).map((w) => <option key={w} value={w}>{w}</option>)}
+                  </select>
+                </label>
+                <label className="order-3 col-span-2 text-[11px] text-white/50 sm:order-none sm:col-span-1">What happens
+                  <select className={inputClass} value={c.kind} disabled={scheduleLocked} onChange={(e) => editRoster(c.id, { kind: e.target.value as RosterChangeKind })} data-testid="guillotine-roster-kind">
+                    {ROSTER_CHANGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </label>
+                {rosterChangeNeedsSlot(c.kind) ? (
+                  <label className="order-4 col-span-2 text-[11px] text-white/50 sm:order-none sm:col-span-1">Starting spot
+                    <select className={inputClass} value={c.slot ?? ''} disabled={scheduleLocked} onChange={(e) => editRoster(c.id, { slot: e.target.value })} data-testid="guillotine-roster-slot">
+                      {roster.spots.starters.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                    </select>
+                  </label>
+                ) : (
+                  <span className="hidden sm:block" aria-hidden />
+                )}
+                <label className="order-2 text-[11px] text-white/50 sm:order-none">How many
+                  <select className={inputClass} value={c.count} disabled={scheduleLocked} onChange={(e) => editRoster(c.id, { count: Number(e.target.value) })} data-testid="guillotine-roster-count">
+                    {Array.from({ length: MAX_SPOTS_PER_CHANGE }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+                {/* Removing is never locked: a lapsed plan must still be able to cancel a change. */}
+                <button type="button" className={`${ghostBtn} order-5 col-span-2 sm:order-none sm:col-span-1`} onClick={() => updateRoster(rosterChanges.filter((x) => x.id !== c.id))} data-testid="guillotine-roster-remove">
+                  Remove
+                </button>
+              </div>
+            ))}
+            {rosterWeeks.length === 0 ? (
+              <p className="text-[12px] text-white/50" data-testid="guillotine-roster-closed">The season is in its last week, so there is no later week to schedule a change for.</p>
+            ) : (
+              <button type="button" className={ghostBtn} disabled={scheduleLocked || rosterChanges.length >= MAX_ROSTER_CHANGES} onClick={addRoster} data-testid="guillotine-roster-add">
+                Add a roster change
+              </button>
+            )}
+            {rosterBlocked && !rosterBlocked.ok ? (
+              <p role="alert" className="text-[12px] text-red-300" data-testid="guillotine-roster-result">
+                Week {rosterBlocked.change.week}: {rosterBlocked.reason}
+              </p>
+            ) : rosterByWeek.length > 0 ? (
+              <ul className="space-y-0.5 text-[12px] text-white/60" data-testid="guillotine-roster-result">
+                {rosterByWeek.map((w) => <li key={w.week}>From week {w.week}: {w.text}.</li>)}
+              </ul>
+            ) : null}
+          </Field>
+        </Group>
+      )}
 
       {/* ---------- 3. Ties and fairness ---------- */}
       <Group id="fairness" title="Ties and fairness" sub="How a tie at the bottom is settled, and what protects a team.">
@@ -593,12 +738,25 @@ export function GuillotineRulesPage({
       {error && <p role="alert" className="text-[12px] text-red-300" data-testid="guillotine-rules-error">{error}</p>}
       {ok && <p role="status" className="text-[12px] text-emerald-300" data-testid="guillotine-rules-saved">✓ Saved. These rules apply from the next chop.</p>}
       <SettingsSubPageFooter>
-        <button type="button" className="lsh-primary" disabled={!dirty || saving || !firstWeekValid} onClick={() => void submit()} data-testid="lsh-save">
+        <button type="button" className="lsh-primary" disabled={!dirty || saving || !firstWeekValid || Boolean(rosterBlocked)} onClick={() => void submit()} data-testid="lsh-save">
           {saving ? 'Saving…' : 'Save Guilly rules'}
         </button>
       </SettingsSubPageFooter>
     </div>
   )
+}
+
+/** The changes a commissioner can still edit: stored, and not yet run. */
+function waitingRosterChanges(roster: RosterScheduleView | null | undefined): RosterChange[] {
+  if (!roster || !roster.supported) return []
+  const ran = new Set(roster.done)
+  return roster.changes.filter((c) => !ran.has(c.id))
+}
+
+/** Flex when the sport has one, else its first starting spot. */
+function defaultStarterSpot(roster: RosterScheduleView | null): string | null {
+  const starters = roster?.spots.starters ?? []
+  return (starters.find((s) => s.key === 'FLEX') ?? starters[0])?.key ?? null
 }
 
 function Group({ id, title, sub, children }: { id: string; title: string; sub?: string; children: ReactNode }) {

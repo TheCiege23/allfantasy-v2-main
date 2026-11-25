@@ -18,22 +18,31 @@ const m = vi.hoisted(() => {
     prisma: {
       $queryRaw: vi.fn(async () => [{ id: 'L' }]),
       league: { findUnique: vi.fn(async () => ({ id: 'L', userId: 'owner', settings: state.settings })) },
-      redraftTradeProposal: { findMany: vi.fn(async () => state.proposals) },
+      redraftTradeProposal: { findMany: vi.fn(async () => state.proposals), count: vi.fn(async () => 0) },
+      redraftSeason: { findFirst: vi.fn(async () => ({ id: 's', sport: 'NFL', season: 2026, league: { leagueVariant: null } })) },
       roster: {
+        findFirst: vi.fn(async () => ({ playerData: { lineup_sections: { starters: [{ id: 'os1', position: 'WR' }], bench: [{ id: 'ob1', position: 'WR', name: 'Other Bench' }, { id: 'ob2', position: 'WR', name: 'Big Bench' }], ir: [], taxi: [], devy: [] } } })),
         findMany: vi.fn(async () => [
           { id: 'r1', platformUserId: state.rosterOwner, redraftRosterId: 'rr-chimmy', playerData: { lineup_sections: { starters: [{ id: 's1', position: 'WR' }], bench: [{ id: 'b1', position: 'WR' }], ir: [], taxi: [], devy: [] } } },
         ]),
       },
-      redraftRoster: { findMany: vi.fn(async () => [{ id: 'rr-chimmy', ownerId: 'orphan-r1' }, { id: 'rr-other', ownerId: 'uA' }]) },
+      redraftRoster: { findMany: vi.fn(async () => [{ id: 'rr-chimmy', ownerId: 'orphan-r1', teamName: 'Ghosts' }, { id: 'rr-other', ownerId: 'uA', teamName: 'Dana' }]) },
     },
     accept: vi.fn(async () => ({ status: 200, body: { resolved: false } })),
     reject: vi.fn(async () => ({ status: 200, body: { resolved: true } })),
     log: vi.fn(async () => ({ id: 'a' })),
+    create: vi.fn(async () => ({ ok: true, created: { id: 'p-counter' } })),
+    price: vi.fn(async () => ({ sides: [{ assets: [
+      { playerId: 'ob1', playerName: 'Other Bench', position: 'WR', valuationBasis: 'market', internalValue: 150 },
+      { playerId: 'ob2', playerName: 'Big Bench', position: 'WR', valuationBasis: 'market', internalValue: 900 },
+    ] }] })),
   }
 })
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.log }))
 vi.mock('@/lib/redraft/tradeDecision', () => ({ acceptRedraftTrade: m.accept, rejectRedraftTrade: m.reject }))
+vi.mock('@/lib/redraft/createTradeProposal', () => ({ createRedraftTradeProposal: m.create }))
+vi.mock('@/lib/trade-value/captureSnapshot', () => ({ computeRedraftTradeValueSnapshot: m.price }))
 vi.mock('@/lib/subscription/EntitlementResolver', () => ({
   EntitlementResolver: class {
     resolveForUser = vi.fn(async () => ({ hasAccess: m.state.ownerHasPlan }))
@@ -43,6 +52,8 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
 import {
   CHIMMY_TRADE_ACTOR,
   TRADE_ACCEPT_ACTION,
+  TRADE_COUNTER_ACTION,
+  MAX_COUNTERS_PER_WEEK,
   TRADE_REJECT_ACTION,
   runAutopilotTradeAnswers,
 } from '@/lib/inactive-manager/autopilotTradeService'
@@ -96,6 +107,58 @@ describe('runAutopilotTradeAnswers', () => {
     expect(m.accept).not.toHaveBeenCalled()
     expect(m.reject).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: CHIMMY_TRADE_ACTOR, reason: expect.stringMatching(/a bit more/) }))
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TRADE_REJECT_ACTION }))
+  })
+
+  describe('counter-offers', () => {
+    // Gives 1000, gets 950: balanced needs 130 more. The other team's bench has a 150 and a 900.
+    const close = () => { m.state.proposals = [offer(1000, 950, { assets: [
+      { fromRosterId: 'rr-chimmy', toRosterId: 'rr-other', assetType: 'player', playerId: 'b1', playerName: 'Mine', metadata: {} },
+      { fromRosterId: 'rr-other', toRosterId: 'rr-chimmy', assetType: 'player', playerId: 'in1', playerName: 'Theirs', metadata: {} },
+    ] })] }
+
+    it('declines a close offer with a counter: the same deal plus the smallest bench player that closes it', async () => {
+      close()
+      const r = await runAutopilotTradeAnswers()
+      expect(r).toMatchObject({ accepted: 0, rejected: 1, countered: 1 })
+      const made = (m.create.mock.calls[0] as unknown as [Record<string, any>])[0]
+      // From the Chimmy team to the team that made the offer, as Chimmy.
+      expect(made).toMatchObject({ proposer: { id: 'rr-chimmy' }, receiver: { id: 'rr-other' }, actorUserId: CHIMMY_TRADE_ACTOR, proposerName: 'Chimmy (Ghosts)', additionalRosterIds: [] })
+      expect(made.assets.map((a: { playerId: string }) => a.playerId)).toEqual(['b1', 'in1', 'ob1'])
+      expect(made.assets[2]).toMatchObject({ fromRosterId: 'rr-other', toRosterId: 'rr-chimmy', assetType: 'player' })
+      // Only the other team's BENCH was priced.
+      expect((m.price.mock.calls[0] as unknown as [{ assets: Array<{ playerId: string }> }])[0].assets.map((a) => a.playerId)).toEqual(['ob1', 'ob2'])
+      expect(m.reject).toHaveBeenCalledWith(expect.objectContaining({ reason: 'Chimmy would do this deal with Other Bench added. It sent you a counter-offer.' }))
+      expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TRADE_COUNTER_ACTION, metadata: expect.objectContaining({ counterProposalId: 'p-counter', counter: 'add_on' }) }))
+    })
+
+    it('just declines when the weekly limit is reached, an offer of its own is waiting, or the counter cannot be made', async () => {
+      close()
+      m.prisma.redraftTradeProposal.count.mockResolvedValueOnce(MAX_COUNTERS_PER_WEEK)
+      expect(await runAutopilotTradeAnswers()).toMatchObject({ rejected: 1, countered: 0 })
+      m.prisma.redraftTradeProposal.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1)
+      expect(await runAutopilotTradeAnswers()).toMatchObject({ rejected: 1, countered: 0 })
+      expect(m.create).not.toHaveBeenCalled()
+      m.create.mockResolvedValueOnce({ ok: false, status: 400, body: { error: 'no' } } as never)
+      expect(await runAutopilotTradeAnswers()).toMatchObject({ rejected: 1, countered: 0 })
+      expect(m.reject).toHaveBeenLastCalledWith(expect.objectContaining({ reason: expect.stringMatching(/a bit more/) }))
+      m.price.mockRejectedValueOnce(new Error('pricing down'))
+      expect(await runAutopilotTradeAnswers()).toMatchObject({ rejected: 1, countered: 0, failures: [] })
+    })
+
+    it('does not counter an offer that is nowhere near', async () => {
+      m.state.proposals = [offer(2000, 500)]
+      expect(await runAutopilotTradeAnswers()).toMatchObject({ rejected: 1, countered: 0 })
+      expect(m.create).not.toHaveBeenCalled()
+    })
+  })
+
+  it('declines any offer involving a team that is out of the league, and sends no counter', async () => {
+    m.prisma.redraftRoster.findMany.mockResolvedValueOnce([{ id: 'rr-chimmy', ownerId: 'orphan-r1', isEliminated: true }, { id: 'rr-other', ownerId: 'uA' }] as never)
+    const r = await runAutopilotTradeAnswers()
+    expect(r).toMatchObject({ accepted: 0, rejected: 1, countered: 0 })
+    expect(m.accept).not.toHaveBeenCalled()
+    expect(m.reject).toHaveBeenCalledWith(expect.objectContaining({ reason: 'One of these teams is out of the league, so Chimmy passed.' }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ code: 'eliminated' }) }))
   })
 
   it('only looks at pending, unaccepted offers old enough to have been withdrawn', async () => {

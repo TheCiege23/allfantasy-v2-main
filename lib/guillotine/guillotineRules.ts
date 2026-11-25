@@ -23,7 +23,7 @@
 import type { GuillotineEndgameFormat } from './endgameRules'
 import type { TiebreakStep } from './types'
 import { MAX_CHOPS_PER_WEEK } from './chopSchedule'
-import { FAAB_ON_CHOP_OPTIONS, type FaabOnChop } from './faabOnChop'
+import { DEFAULT_FAAB_ON_CHOP_PERCENT, FAAB_ON_CHOP_OPTIONS, isFaabOnChopPercent, type FaabOnChop } from './faabOnChop'
 import { isChopListOrder, type ChopListOrder } from './chopListOrder'
 
 export type GuillotineRules = {
@@ -38,6 +38,11 @@ export type GuillotineRules = {
   aiRecapAuto: boolean
   /** What happens to a chopped team's unspent FAAB. Stored in League.settings (FAAB_ON_CHOP_KEY). */
   faabOnChop: FaabOnChop
+  /**
+   * The share of a chopped team's FAAB that `faabOnChop` passes on, 1 to 100; the rest leaves with the team.
+   * Stored in League.settings (FAAB_ON_CHOP_PERCENT_KEY); absent = 100.
+   */
+  faabOnChopPercent: number
   /**
    * Lineups set themselves: every team is scored on its best possible lineup each week. Stored as
    * League.settings.best_ball (./guillotineBestBall.ts); changeable only before the draft.
@@ -76,6 +81,7 @@ export const GUILLOTINE_PAID_RULE_FIELDS: ReadonlySet<GuillotineRuleField> = new
   // Owner's call, 2026-10-25: sharing a chopped team's FAAB is an AF Commissioner rule. Gating the
   // setting rather than the chop means a lapsed plan never changes a league's rules mid-season.
   'faabOnChop',
+  'faabOnChopPercent',
 ])
 
 export const ENDGAME_OPTIONS: ReadonlyArray<{ value: GuillotineEndgameFormat; label: string; help: string }> = [
@@ -114,10 +120,11 @@ export const RULE_LIMITS = {
 } as const
 
 /** Values a lapsed plan may always return to, so a league is never stuck on rules it cannot edit. */
-export const RULE_DEFAULTS: Pick<GuillotineRules, 'teamsPerChop' | 'tiebreakerOrder' | 'statCorrectionHours' | 'dangerMarginPoints' | 'faabOnChop'> = {
+export const RULE_DEFAULTS: Pick<GuillotineRules, 'teamsPerChop' | 'tiebreakerOrder' | 'statCorrectionHours' | 'dangerMarginPoints' | 'faabOnChop' | 'faabOnChopPercent'> = {
   teamsPerChop: 1,
   // Anyone may put the FAAB rule back to "keep", so a league left on "split" by a lapsed plan can undo it.
   faabOnChop: 'keep',
+  faabOnChopPercent: DEFAULT_FAAB_ON_CHOP_PERCENT,
   tiebreakerOrder: ['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'],
   statCorrectionHours: 48,
   dangerMarginPoints: 10,
@@ -207,6 +214,13 @@ export function normalizeGuillotineRulesPatch(
       return { ok: false, error: { field: 'faabOnChop', message: "Pick what happens to a chopped team's FAAB." } }
     }
     out.faabOnChop = r.faabOnChop as FaabOnChop
+  }
+  if ('faabOnChopPercent' in r) {
+    const n = int(r.faabOnChopPercent)
+    if (!isFaabOnChopPercent(n)) {
+      return { ok: false, error: { field: 'faabOnChopPercent', message: "The share of a chopped team's FAAB must be a whole number from 1 to 100." } }
+    }
+    out.faabOnChopPercent = n
   }
   if ('bestBall' in r) {
     if (typeof r.bestBall !== 'boolean') return { ok: false, error: { field: 'bestBall', message: 'Turn best ball lineups on or off.' } }

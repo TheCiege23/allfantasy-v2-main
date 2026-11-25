@@ -22,6 +22,7 @@ const RULES: GuillotineRules = {
   rosterReleaseTiming: 'next_waiver_run',
   aiRecapAuto: true,
   faabOnChop: 'keep',
+  faabOnChopPercent: 100,
   bestBall: false,
   periodWeeks: 1,
   chopListOrder: 'chop_top',
@@ -287,6 +288,55 @@ describe('what a commissioner cannot change is locked, not hidden', () => {
     expect((screen.getByTestId('lsh-first-chop-input') as HTMLSelectElement).disabled).toBe(true)
     expect((screen.getByTestId('guillotine-rules-endgame') as HTMLSelectElement).disabled).toBe(true)
     expect(screen.getAllByText('Fixed for this season: the first chop has happened.').length).toBe(2)
+  })
+})
+
+describe('a chopped team’s FAAB: who gets it, and how much', () => {
+  it('🛑 offers the five rules, and asks "how much" only when a rule moves the money', async () => {
+    mount(view())
+    await ready()
+    const select = screen.getByTestId('guillotine-rules-faab-on-chop') as HTMLSelectElement
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      'It leaves with the team',
+      'Split it among the survivors',
+      "To the week's highest scorer",
+      "To the week's lowest surviving scorer",
+      'One team at a time, in waiver order',
+    ])
+    expect(screen.queryByTestId('guillotine-rules-faab-percent')).toBeNull()
+    set('guillotine-rules-faab-on-chop', 'top_scorer')
+    const percent = screen.getByTestId('guillotine-rules-faab-percent') as HTMLSelectElement
+    expect([...percent.options].map((o) => o.textContent)).toEqual(['All of it', '75%', '50%', '25%'])
+    expect(percent.value).toBe('100')
+  })
+
+  it('saves the rule and the share together, as one rules request', async () => {
+    const { patches } = mount(view())
+    await ready()
+    set('guillotine-rules-faab-on-chop', 'waiver_order')
+    set('guillotine-rules-faab-percent', 50)
+    expect(within(screen.getByTestId('guillotine-group-after')).getByText(/50% of it leaves with the chopped team\./)).toBeTruthy()
+    fireEvent.click(save())
+    await screen.findByTestId('guillotine-rules-saved')
+    expect(patches()).toEqual([{ rules: { faabOnChop: 'waiver_order', faabOnChopPercent: 50 } }])
+  })
+
+  it('a stored share that is not one of the offered ones is still shown, not silently changed', async () => {
+    mount(view({ rules: { ...RULES, faabOnChop: 'split', faabOnChopPercent: 40 } }))
+    await ready()
+    const percent = screen.getByTestId('guillotine-rules-faab-percent') as HTMLSelectElement
+    expect(percent.value).toBe('40')
+    expect([...percent.options].map((o) => o.value)).toEqual(['100', '75', '50', '40', '25'])
+    expect(save().disabled).toBe(true)
+  })
+
+  it('without AF Commissioner the new rules are shown locked, and the share cannot be changed', async () => {
+    mount(view({ canEditPaid: false, rules: { ...RULES, faabOnChop: 'top_scorer', faabOnChopPercent: 50 } }))
+    await ready()
+    const select = screen.getByTestId('guillotine-rules-faab-on-chop') as HTMLSelectElement
+    // The league's current rule stays selectable so the page shows it; the others it cannot move to are disabled.
+    expect([...select.options].filter((o) => o.disabled).map((o) => o.value)).toEqual(['split', 'low_scorer', 'waiver_order'])
+    expect((screen.getByTestId('guillotine-rules-faab-percent') as HTMLSelectElement).disabled).toBe(true)
   })
 })
 

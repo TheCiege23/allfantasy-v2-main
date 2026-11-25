@@ -45,7 +45,7 @@ import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform
 import { AUTO_HANDOVER_KEY, parseAutoHandover, readAutoHandover, teamsToHandOver, type AutoHandoverRule } from './autoHandover'
 import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
 import { isNpcDraftPersonalityId } from '@/lib/live-draft-engine/npcDraftPersonalityTypes'
-import { resolveManagerProfile } from './managerProfile'
+import { MANAGER_PERSONALITY_OPTIONS, resolveManagerProfile } from './managerProfile'
 
 /**
  * Inactive manager mode (./inactiveManagerMode.ts): the commissioner's view and switch, the owner's
@@ -126,9 +126,9 @@ function chimmyViewFor(rosterId: string, entry: ManagedLineup | undefined): Inac
 
 export async function readInactiveManagerView(
   leagueId: string,
-): Promise<{ native: boolean; autopilotEntitled: boolean; draftAsMe: boolean; autoHandover: AutoHandoverRule | null; chimmyLimit: number; chimmyFreeTeams: number; chimmyReports: ChimmyReportEntry[]; teams: InactiveManagerTeam[] }> {
+): Promise<{ native: boolean; autopilotEntitled: boolean; draftAsMe: boolean; autoHandover: AutoHandoverRule | null; chimmyLimit: number; chimmyFreeTeams: number; chimmyReports: ChimmyReportEntry[]; chimmyPersonalities: ReadonlyArray<{ id: string; label: string }>; teams: InactiveManagerTeam[] }> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, userId: true } })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return { native: false, autopilotEntitled: false, draftAsMe: false, autoHandover: null, chimmyLimit: CHIMMY_MANAGER_LIMIT, chimmyFreeTeams: CHIMMY_FREE_TEAMS, chimmyReports: [], teams: [] }
+  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return { native: false, autopilotEntitled: false, draftAsMe: false, autoHandover: null, chimmyLimit: CHIMMY_MANAGER_LIMIT, chimmyFreeTeams: CHIMMY_FREE_TEAMS, chimmyReports: [], chimmyPersonalities: [], teams: [] }
   const managed = readManagedLineups(league.settings)
   const health = await getLeagueManagerHealth(leagueId)
   const owners = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
@@ -142,6 +142,8 @@ export async function readInactiveManagerView(
     chimmyLimit: await chimmyTeamLimitFor(league.userId),
     chimmyFreeTeams: CHIMMY_FREE_TEAMS,
     chimmyReports: await readChimmyReports(leagueId),
+    // Commissioner-only, like the rest of this view.
+    chimmyPersonalities: MANAGER_PERSONALITY_OPTIONS.map(({ id, label }) => ({ id, label })),
     teams: health.rows.map((r) => ({
       rosterId: r.rosterId,
       teamName: r.teamName,
@@ -531,6 +533,32 @@ export async function setChimmyTradeMode(leagueId: string, userId: string, roste
   return { ok: true, trades: mode }
 }
 
+export const PERSONALITY_ACTION = 'chimmy_autopilot.personality'
+
+/**
+ * Commissioner or co-commissioner: choose who Chimmy is for a team it runs (./managerProfile.ts). The
+ * choice is saved on the team and wins over the one it drafted with; it changes how Chimmy weighs
+ * trades and how often it makes moves from the next hourly run, and nothing already done.
+ */
+export async function setChimmyPersonality(leagueId: string, userId: string, rosterId: unknown, personality: unknown): Promise<{ ok: true; personality: string } | { ok: false; status: number; error: string }> {
+  if (!(await isElevatedCommissioner(leagueId, userId))) return { ok: false, status: 403, error: 'Forbidden' }
+  if (typeof rosterId !== 'string' || !rosterId) return { ok: false, status: 400, error: 'Name a team.' }
+  if (!isNpcDraftPersonalityId(personality)) return { ok: false, status: 400, error: 'Choose a manager style from the list.' }
+  let found = false
+  let changed = false
+  await updateManaged(leagueId, (current) => {
+    const entry = current[rosterId]
+    if (!entry?.autopilot) return null
+    found = true
+    if (entry.autopilot.personality === personality) return null
+    changed = true
+    return { ...current, [rosterId]: { ...entry, autopilot: { ...entry.autopilot, personality } } }
+  })
+  if (!found) return { ok: false, status: 409, error: 'Chimmy is not running that team.' }
+  if (changed) await logAction({ leagueId, userId, actionType: PERSONALITY_ACTION, entityType: 'roster', entityId: rosterId, metadata: { rosterId, personality } })
+  return { ok: true, personality }
+}
+
 export const NEW_OWNER_ENDED_ACTION = 'inactive_manager_mode.ended_new_owner'
 
 /**
@@ -824,7 +852,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
     WHERE settings ? ${AF_MANAGED_LINEUPS_KEY} AND settings -> ${AF_MANAGED_LINEUPS_KEY} <> '{}'::jsonb
     ORDER BY id LIMIT ${Math.max(1, Math.min(opts?.limit ?? DEFAULT_LEAGUE_LIMIT, 100))}`
 
-  const { planAutopilotWaivers, autopilotFaabBid } = await import('./autopilotWaivers')
+  const { planAutopilotWaivers, planUpgradePickup, autopilotFaabBid, UPGRADE_SLOT } = await import('./autopilotWaivers')
   const { getEffectiveLeagueWaiverSettings } = await import('@/lib/waiver-wire/settings-service')
   const { createClaim, getClaimsByRoster } = await import('@/lib/waiver-wire/claim-service')
   const { buildLineupListsFromPlayerData } = await import('@/lib/league/lineup-swap')
@@ -906,6 +934,20 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
           const pending = ((await getClaimsByRoster(rosterId, 'pending')) as Array<{ addPlayerId: string }>).map((c) => String(c.addPlayerId))
           const style = managed[rosterId]!.autopilot!.style
           const plan = planAutopilotWaivers({ style, slots, starters: lists.starters, bench: lists.bench, players, freeAgents, benchCapacity, pendingAddIds: pending })
+          /*
+           * Nothing to fill: one optional upgrade pickup a week (./autopilotWaivers.ts `planUpgradePickup`).
+           * The week is counted from the audit log; if that read fails, no upgrade is made.
+           */
+          if (plan.claims.length === 0 && plan.unfilled.length === 0) {
+            const upgradesThisWeek = await prisma.leagueAuditLog
+              .count({ where: { leagueId, entityId: rosterId, actionType: AUTOPILOT_CLAIM_ACTION, createdAt: { gt: new Date(Date.now() - 7 * 24 * 3600_000) }, metadata: { path: ['slot'], equals: UPGRADE_SLOT } } })
+              .catch(() => 1)
+            if (upgradesThisWeek === 0) {
+              const profile = resolveManagerProfile({ rosterId, style, savedPersonality: managed[rosterId]!.autopilot!.personality })
+              const upgrade = planUpgradePickup({ style, activity: profile.activity, bench: lists.bench, players, freeAgents, pendingAddIds: pending })
+              if (upgrade) plan.claims.push(upgrade)
+            }
+          }
           if (plan.claims.length === 0) {
             skip(plan.unfilled.length ? 'no_fitting_free_agent' : 'no_holes')
             continue
@@ -920,6 +962,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
               remaining: faabLeft,
               minBid: waiverSettings.faabMinBid,
               allowZero: waiverSettings.allowZeroFaabBid,
+              minimumOnly: c.slot === UPGRADE_SLOT,
             })
             if (bid === 'unaffordable') {
               skip('faab_unaffordable')

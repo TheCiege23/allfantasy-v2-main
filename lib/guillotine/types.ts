@@ -133,3 +133,5 @@ export type GuillotineEventType =
   | 'stat_correction'
   /** The commissioner undid a chop (./chopUndo.ts): the team is back, its players restored. */
   | 'chop_undone'
+  /** A scheduled roster change ran (./rosterScheduleApply.ts): what changed, and the layout it left. */
+  | 'roster_change'

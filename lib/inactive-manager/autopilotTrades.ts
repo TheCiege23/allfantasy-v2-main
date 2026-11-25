@@ -38,6 +38,8 @@ export type TradeAnswerCode =
   | 'lineup_hole'
   | 'too_many_starters'
   | 'nothing_offered'
+  /** Set by the hourly run, not by `decideTradeOffer`: a team in the trade is out of the league. */
+  | 'eliminated'
 
 export type TradeAnswer = {
   decision: 'accept' | 'reject'
@@ -57,6 +59,7 @@ const REASONS: Record<TradeAnswerCode, string> = {
   lineup_hole: 'This would leave the team short a starter, so Chimmy passed.',
   too_many_starters: 'That is too many starters to give up in one deal.',
   nothing_offered: 'Nothing was offered to the team.',
+  eliminated: 'One of these teams is out of the league, so Chimmy passed.',
 }
 
 const answer = (decision: TradeAnswer['decision'], code: TradeAnswerCode, give = 0, get = 0): TradeAnswer => ({
@@ -105,4 +108,69 @@ export function decideTradeOffer(args: {
 
   if (get <= 0) return answer('reject', 'cannot_value', give, get)
   return get >= give * (1 + profile.fairness) ? answer('accept', 'accepted', give, get) : answer('reject', 'not_enough', give, get)
+}
+
+/**
+ * COUNTER-OFFERS. When an offer is close but not enough, Chimmy says what would make it work instead
+ * of only declining. Two shapes, tried in this order, and never more than one change:
+ *
+ *   add_on     the same deal plus ONE bench player from the other team. Chimmy never asks for a
+ *              starter: a counter should be an easy yes, not a new negotiation.
+ *   keep_back  the same deal with ONE of the players Chimmy was asked for left out.
+ *
+ * In both, the piece is the SMALLEST that closes the gap, and never one worth far more than the gap
+ * (`COUNTER_OVERASK`) — Chimmy asks for what it needs, not for whatever it can get. An offer that is
+ * not close (`COUNTER_GAP_LIMIT`) is simply declined.
+ */
+export const COUNTER_GAP_LIMIT = 0.35
+export const COUNTER_OVERASK = 2.5
+
+export type AskablePlayer = { playerId: string; playerName: string | null; position: string | null; value: number }
+
+export type CounterPlan =
+  | { kind: 'add_on'; add: AskablePlayer; reason: string }
+  | { kind: 'keep_back'; keepPlayerId: string; keepPlayerName: string | null; reason: string }
+
+export function planCounterOffer(args: {
+  profile: ManagerProfile
+  snapshot: TradeValueSnapshot | null | undefined
+  rosterId: string
+  /** The other team's bench players Chimmy may ask for, already priced on the snapshot's scale. */
+  askable: ReadonlyArray<AskablePlayer>
+}): CounterPlan | null {
+  const { profile, snapshot, rosterId } = args
+  if (!snapshot) return null
+  const assets = (snapshot.sides ?? []).flatMap((s) => s.assets ?? [])
+  const giving = assets.filter((a) => a.fromRosterId === rosterId)
+  const getting = assets.filter((a) => a.toRosterId === rosterId)
+  const give = giving.reduce((sum, a) => sum + weighedValue(a, profile), 0)
+  const get = getting.reduce((sum, a) => sum + weighedValue(a, profile), 0)
+  const need = give * (1 + profile.fairness) - get
+  if (give <= 0 || get <= 0 || need <= 0 || need > give * COUNTER_GAP_LIMIT) return null
+
+  const inDeal = new Set(assets.map((a) => String(a.playerId ?? '')))
+  const addOn = args.askable
+    .filter((p) => p.playerId && !inDeal.has(p.playerId))
+    .map((p) => ({ p, worth: Math.max(0, p.value) * Math.max(0, 1 + positionBiasFor(profile, p.position)) }))
+    .filter((x) => x.worth >= need && x.worth <= need * COUNTER_OVERASK)
+    .sort((a, b) => a.worth - b.worth || a.p.playerId.localeCompare(b.p.playerId))[0]
+  if (addOn) {
+    const who = addOn.p.playerName?.trim() || 'one more player'
+    return { kind: 'add_on', add: addOn.p, reason: `Chimmy would do this deal with ${who} added.` }
+  }
+
+  // Leaving out a player worth v needs: get >= (give - v) * (1 + fairness).
+  const keepNeed = give - get / (1 + profile.fairness)
+  const keep = giving.length > 1
+    ? giving
+        .filter(isPlayer)
+        .map((a) => ({ a, worth: weighedValue(a, profile) }))
+        .filter((x) => x.worth >= keepNeed && x.worth <= keepNeed * COUNTER_OVERASK)
+        .sort((x, y) => x.worth - y.worth || String(x.a.playerId).localeCompare(String(y.a.playerId)))[0]
+    : undefined
+  if (keep) {
+    const who = keep.a.playerName?.trim() || 'one of those players'
+    return { kind: 'keep_back', keepPlayerId: String(keep.a.playerId), keepPlayerName: keep.a.playerName ?? null, reason: `Chimmy would do this deal if it keeps ${who}.` }
+  }
+  return null
 }
