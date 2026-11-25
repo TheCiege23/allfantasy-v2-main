@@ -24,6 +24,7 @@ export function ChimmyManagerTradesPreview() {
       }
       return new Response(JSON.stringify({
         native: true, autopilotEntitled: true, draftAsMe: true, autoHandover: null, chimmyLimit: 4, chimmyFreeTeams: 1, chimmyReports: [],
+        chimmyPersonalities: [{ id: 'BALANCED', label: 'Balanced' }, { id: 'ADP_VALUE_HUNTER', label: 'Value hunter' }, { id: 'RB_HEAVY', label: 'Running backs' }, { id: 'FLOOR_SAFE', label: 'Plays it safe' }, { id: 'UPSIDE_SWINGER', label: 'Swings for upside' }],
         teams: [
           { rosterId: 'r1', teamName: null, managerName: null, status: 'unknown', suggested: false, emptySeat: true, managed: autopilot('dynasty_owner'),
             chimmy: { personality: 'ADP_VALUE_HUNTER', label: 'Value hunter', summary: 'Hunts bargains and rarely overpays.', trades: trades.r1 } },

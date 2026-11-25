@@ -16,7 +16,9 @@
  *     in total for the better single player; the other team gets depth.
  * Among every offer that fits, it takes the biggest upgrade, with a player on the trade block counting
  * for `BLOCK_BONUS` more — he is the one most likely to be said yes to — and more again when the
- * listing asks for a position Chimmy is giving. Ties break on ids, so a run is repeatable.
+ * listing asks for a position Chimmy is giving. A manager who has said, where the league can see it,
+ * that he is interested in one of Chimmy's bench players is offered THAT player where it is fair, and
+ * the offer counts for `INTEREST_BONUS` more. Ties break on ids, so a run is repeatable.
  *
  * WHEN it may send (`sendsThisHour`) is decided here too, so the timing is testable without a clock:
  * each team has its own hour of the day, fixed by its roster id, and acts once in that hour — a league
@@ -37,12 +39,17 @@ export const BLOCK_BONUS = 1.25
 /** …and this much more again when his listing asks for a position Chimmy is giving. */
 export const BLOCK_ASK_BONUS = 1.1
 
+/** An offer that gives a manager a player he has shown interest in counts this much more. */
+export const INTEREST_BONUS = 1.15
+
 export type BlockPlayer = PricedPlayer & { askingForPositions?: ReadonlyArray<string> }
 export type OtherTeam = {
   rosterId: string
   bench: ReadonlyArray<PricedPlayer>
   /** Players this team's manager has listed on the trade block (starters included), priced. */
   block?: ReadonlyArray<BlockPlayer>
+  /** Chimmy's players this team's manager has a league-visible interest in. Private interest is never used. */
+  wants?: ReadonlyArray<string>
 }
 
 export type TradeOfferPlan = {
@@ -52,6 +59,8 @@ export type TradeOfferPlan = {
   get: PricedPlayer
   /** The player asked for is on the other team's trade block. */
   onBlock: boolean
+  /** The offer gives the other manager a player he has shown interest in. */
+  wanted: boolean
   /** The starter the incoming player would replace. */
   replaces: PricedPlayer
   reason: string
@@ -79,11 +88,11 @@ export function planTradeOffer(args: {
   if (weakest.size === 0 || giveable.length === 0) return null
 
   /** The cheapest fair way to pay for `get`: one bench player if any is enough, else two. */
-  const payFor = (get: PricedPlayer): PricedPlayer[] | null => {
+  const payFor = (get: PricedPlayer, wants: ReadonlySet<string>): PricedPlayer[] | null => {
     const one = giveable
       .filter((g) => g.value >= get.value * FAIR_FLOOR && g.value <= get.value && weighed(get, profile) >= weighed(g, profile))
-      // Give up as little as the deal allows.
-      .sort((x, y) => x.value - y.value || x.playerId.localeCompare(y.playerId))[0]
+      // A player this manager asked about first; then give up as little as the deal allows.
+      .sort((x, y) => Number(wants.has(y.playerId)) - Number(wants.has(x.playerId)) || x.value - y.value || x.playerId.localeCompare(y.playerId))[0]
     if (one) return [one]
     let pair: { players: PricedPlayer[]; sum: number } | null = null
     for (let i = 0; i < giveable.length; i += 1) {
@@ -107,24 +116,30 @@ export function planTradeOffer(args: {
   let best: (TradeOfferPlan & { score: number }) | null = null
   for (const team of args.others) {
     const onBlock = new Map((team.block ?? []).filter(usable).map((p) => [p.playerId, p]))
+    const wants = new Set(team.wants ?? [])
     const candidates = new Map<string, PricedPlayer>()
     for (const p of [...team.bench.filter(usable), ...onBlock.values()]) candidates.set(p.playerId, p)
     for (const get of candidates.values()) {
       if (mine.has(get.playerId)) continue
       const replaces = weakest.get(pos(get))
       if (!replaces || get.value < replaces.value * (1 + UPGRADE_MARGIN)) continue
-      const give = payFor(get)
+      const give = payFor(get, wants)
       if (!give) continue
       const listing = onBlock.get(get.playerId)
       const asked = new Set((listing?.askingForPositions ?? []).map((x) => String(x).toUpperCase()))
-      const score = (get.value - replaces.value) * (listing ? BLOCK_BONUS : 1) * (listing && give.some((g) => asked.has(pos(g))) ? BLOCK_ASK_BONUS : 1)
+      const wanted = give.find((g) => wants.has(g.playerId))
+      const score = (get.value - replaces.value) * (listing ? BLOCK_BONUS : 1) * (listing && give.some((g) => asked.has(pos(g))) ? BLOCK_ASK_BONUS : 1) * (wanted ? INTEREST_BONUS : 1)
       const better = !best || score > best.score
         || (score === best.score && `${team.rosterId}:${get.playerId}` < `${best.toRosterId}:${best.get.playerId}`)
       if (better) {
         const getName = get.playerName?.trim() || 'your player'
         const giveNames = give.map((g) => g.playerName?.trim() || 'one of its players').join(' and ')
-        const why = listing ? `you have him on the trade block, and it needs help at ${pos(get)}` : `it needs help at ${pos(get)}`
-        best = { toRosterId: team.rosterId, give, get, replaces, onBlock: Boolean(listing), score, reason: `Chimmy is offering ${giveNames} for ${getName}: ${why}.` }
+        const why = [
+          wanted ? `you were interested in ${wanted.playerName?.trim() || 'one of them'}` : null,
+          listing ? `you have him on the trade block` : null,
+          `it needs help at ${pos(get)}`,
+        ].filter(Boolean).join(', and ').replace(/, and (?=.*, and )/, ', ')
+        best = { toRosterId: team.rosterId, give, get, replaces, onBlock: Boolean(listing), wanted: Boolean(wanted), score, reason: `Chimmy is offering ${giveNames} for ${getName}: ${why}.` }
       }
     }
   }

@@ -151,12 +151,15 @@ export async function runAutopilotTradeAnswers(opts?: { now?: Date; deadline?: n
 
       const owners = await prisma.redraftRoster.findMany({
         where: { id: { in: tradeParticipantRosterIds(proposal) } },
-        select: { id: true, ownerId: true },
+        select: { id: true, ownerId: true, isEliminated: true },
       })
       const ownerOf = (id: string) => owners.find((o) => o.id === id)?.ownerId ?? undefined
+      // A team that is out of the league (Guillotine, Survivor) does not trade: decline, whatever the value.
+      const eliminated = owners.some((o) => o.isEliminated)
+      if (eliminated) Object.assign(verdict, { decision: 'reject', code: 'eliminated', reason: 'One of these teams is out of the league, so Chimmy passed.' })
       // Close but not enough: say what would make it work. Any failure here falls back to a plain decline.
       const chimmyTeams = (await leagueCtx(proposal.leagueId)).teams
-      const counter = verdict.code === 'not_enough' && !multiTeam && !chimmyTeams.has(proposal.proposerRosterId)
+      const counter = verdict.code === 'not_enough' && !eliminated && !multiTeam && !chimmyTeams.has(proposal.proposerRosterId)
         ? await sendCounterOffer({ proposal: proposal as PendingTradeProposal, snapshot: (valueSnapshot?.payload ?? null) as TradeValueSnapshot | null, profile, now }).catch((e) => {
             console.warn('[chimmy-autopilot] counter-offer skipped', { proposalId: proposal.id, error: String(e) })
             return null
@@ -352,7 +355,12 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
     const senders = Object.keys(playable).filter((id) => autopilotTradeMode(playable[id]) === 'answer_and_send' && sendsThisHour(id, now))
     if (senders.length === 0) continue
     const status = String(league.status ?? league.lifecycleState ?? '').toLowerCase()
-    const blocked = resolveWriteAuthority(league.platform) !== 'NATIVE' ? 'not_native' : !['active', 'in_season'].includes(status) ? 'not_in_season' : league.lockAllMoves ? 'moves_locked' : null
+    // Best Ball and Guillotine leagues trade only when their settings say so (the offer would be refused
+    // at creation anyway — lib/redraft/tradeProposalValidation.ts — so nothing is priced for them).
+    const formatTradesOff = (league.bestBallMode || league.guillotineMode)
+      ? !(await import('@/lib/league-trade-engine/tradeSettingsResolver')).resolveLeagueTradeSettings(league).tradesAllowed
+      : false
+    const blocked = resolveWriteAuthority(league.platform) !== 'NATIVE' ? 'not_native' : !['active', 'in_season'].includes(status) ? 'not_in_season' : league.lockAllMoves ? 'moves_locked' : formatTradesOff ? 'trades_disabled' : null
     if (blocked) {
       for (const _ of senders) skip(blocked)
       continue
@@ -381,11 +389,14 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
         const myRow = await prisma.redraftRoster.findFirst({ where: { id: myId, leagueId } })
         const season = myRow ? await prisma.redraftSeason.findFirst({ where: { id: myRow.seasonId, leagueId }, include: { league: { select: { leagueVariant: true } } } }) : null
         if (!myRow || !season) { skip('no_season'); continue }
+        // A team that is out (Guillotine, Survivor) makes no offers, and nobody is offered to a team that is out.
+        if (myRow.isEliminated) { skip('eliminated'); continue }
+        const out = new Set((await prisma.redraftRoster.findMany({ where: { seasonId: season.id, leagueId, isEliminated: true }, select: { id: true } })).map((r) => r.id))
         if (season.playoffStartWeek > 0 && season.currentWeek >= season.playoffStartWeek) { skip('playoffs'); continue }
         const ctx: SeasonCtx = { leagueId, seasonId: season.id, sport: season.sport, season: season.season ?? null }
 
         const targets = rosters
-          .filter((o) => o.id !== rosterId && o.redraftRosterId && !chimmyRosters.has(o.id) && o.platformUserId && !isSeatPlaceholderUserId(o.platformUserId))
+          .filter((o) => o.id !== rosterId && o.redraftRosterId && !out.has(o.redraftRosterId) && !chimmyRosters.has(o.id) && o.platformUserId && !isSeatPlaceholderUserId(o.platformUserId))
           .map((o) => ({ rosterId: o.redraftRosterId!, playerData: o.playerData }))
         const shop = teamsToShopToday(targets, rosterId, now, MAX_TEAMS_SHOPPED)
         if (shop.length === 0) { skip('nobody_to_trade_with'); continue }
@@ -399,6 +410,13 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
           .findMany({
             where: { leagueId, rosterId: { in: shop.map((t) => t.rosterId) }, status: 'active', visibility: 'league', OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
             select: { rosterId: true, playerId: true, playerName: true, askingForPositions: true },
+          })
+          .catch(() => [])
+        // Managers who have said, where the league can see it, that they want one of this team's players.
+        const interests = await prisma.redraftTradeInterest
+          .findMany({
+            where: { leagueId, fromRosterId: { in: shop.map((t) => t.rosterId) }, status: 'active', visibility: 'league', interestType: 'player_interest', playerId: { in: myPriced.map((p) => p.playerId) } },
+            select: { fromRosterId: true, playerId: true },
           })
           .catch(() => [])
         const others = []
@@ -415,6 +433,7 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
               const p = priced.find((x) => x.playerId === l.playerId)
               return p ? [{ ...p, askingForPositions: Array.isArray(l.askingForPositions) ? l.askingForPositions.map(String) : [] }] : []
             }),
+            wants: interests.filter((i) => i.fromRosterId === team.rosterId && i.playerId).map((i) => String(i.playerId)),
           })
         }
         const plan = planTradeOffer({
@@ -455,7 +474,7 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
           actionType: TRADE_SEND_ACTION,
           entityType: 'roster',
           entityId: rosterId,
-          metadata: { rosterId, proposalId: made.created.id, toRosterId: plan.toRosterId, give: plan.give.map((g) => g.playerId), get: plan.get.playerId, onBlock: plan.onBlock, replaces: plan.replaces.playerId, personality: profile.personality, style: profile.style },
+          metadata: { rosterId, proposalId: made.created.id, toRosterId: plan.toRosterId, give: plan.give.map((g) => g.playerId), get: plan.get.playerId, onBlock: plan.onBlock, wanted: plan.wanted, replaces: plan.replaces.playerId, personality: profile.personality, style: profile.style },
         }).catch((e) => console.warn('[chimmy-autopilot] trade audit failed', { rosterId, error: String(e) }))
       } catch (e) {
         result.failures.push({ leagueId, rosterId, error: e instanceof Error ? e.message : String(e) })

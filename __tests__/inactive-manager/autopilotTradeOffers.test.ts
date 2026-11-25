@@ -3,7 +3,7 @@
  * and its timing. One bench player for one bench player, a clear upgrade, fair to the other side.
  */
 import { describe, expect, it } from 'vitest'
-import { BLOCK_BONUS, FAIR_FLOOR, TWO_FOR_ONE_PREMIUM, offerHourFor, planTradeOffer, sendsThisHour, teamsToShopToday, type OtherTeam, type PricedPlayer } from '@/lib/inactive-manager/autopilotTradeOffers'
+import { BLOCK_BONUS, FAIR_FLOOR, INTEREST_BONUS, TWO_FOR_ONE_PREMIUM, offerHourFor, planTradeOffer, sendsThisHour, teamsToShopToday, type OtherTeam, type PricedPlayer } from '@/lib/inactive-manager/autopilotTradeOffers'
 import { resolveManagerProfile } from '@/lib/inactive-manager/managerProfile'
 
 const p = (playerId: string, position: string, value: number): PricedPlayer => ({ playerId, playerName: `P ${playerId}`, position, value })
@@ -139,5 +139,34 @@ describe('two for one', () => {
     // 1300 + 1200 = 2500: short of 2600, and more than 20% over 2000 is 2400.
     expect(plan([{ rosterId: 't2', bench: [p('xrb', 'RB', 2600)] }], { bench: twoBench })).toBeNull()
     expect(plan([{ rosterId: 't2', bench: [p('xrb', 'RB', 2050)] }], { bench: [p('b1', 'WR', 1300), p('b2', 'TE', 1200)] })).toBeNull()
+  })
+})
+
+describe('interest lists', () => {
+  const twoGives = [p('b1', 'WR', 1850), p('b2', 'WR', 1900)]
+
+  it('gives the player the other manager asked about, when he is a fair price', () => {
+    // Either receiver is fair for a 2000 back. Without interest Chimmy gives the cheaper one.
+    expect(plan([{ rosterId: 't2', bench: [p('xrb', 'RB', 2000)] }], { bench: twoGives })!.give[0]!.playerId).toBe('b1')
+    const o = plan([{ rosterId: 't2', bench: [p('xrb', 'RB', 2000)], wants: ['b2'] }], { bench: twoGives })!
+    expect(o).toMatchObject({ give: [{ playerId: 'b2' }], wanted: true })
+    expect(o.reason).toBe('Chimmy is offering P b2 for P xrb: you were interested in P b2, and it needs help at RB.')
+  })
+
+  it('leans to the manager who wants what Chimmy is giving, and names every reason', () => {
+    const o = plan([
+      { rosterId: 't2', bench: [p('arb', 'RB', 2000)] },
+      { rosterId: 't3', bench: [], block: [p('brb', 'RB', 2000)], wants: ['bwr'] },
+    ])!
+    expect(o).toMatchObject({ toRosterId: 't3', onBlock: true, wanted: true })
+    expect(o.reason).toBe('Chimmy is offering P bwr for P brb: you were interested in P bwr, you have him on the trade block, and it needs help at RB.')
+    expect(INTEREST_BONUS).toBeGreaterThan(1)
+  })
+
+  it('interest never makes an unfair or pointless offer', () => {
+    // He wants the 600 tight end, but that is nowhere near a fair price for a 2000 back.
+    expect(plan([{ rosterId: 't2', bench: [p('xrb', 'RB', 2000)], wants: ['bte'] }])).toMatchObject({ give: [{ playerId: 'bwr' }], wanted: false })
+    // Wanting a player does not create an offer when Chimmy has nothing to gain.
+    expect(plan([{ rosterId: 't2', bench: [p('xrb', 'RB', 1050)], wants: ['bwr'] }])).toBeNull()
   })
 })
