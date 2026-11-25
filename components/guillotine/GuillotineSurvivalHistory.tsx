@@ -54,7 +54,9 @@ export function GuillotineSurvivalHistory({
   const weeks = history?.weeks.filter((w) => w.chopLine != null) ?? []
   const teams = history?.teams ?? []
   if (weeks.length === 0) return <p className="gl gl-muted text-sm" data-testid="guillotine-history-empty">No chops yet. Each week’s chop and every team’s path show here once the first chop is in.</p>
-  const shown = showAllWeeks ? weeks : weeks.slice(0, 4)
+  // The latest chop only, the rest one tap away (2026-11-24): three or four week cards came before the table
+  // that already shows every team's path through them.
+  const shown = showAllWeeks ? weeks : weeks.slice(0, 1)
 
   return (
     <div className="gl space-y-5" data-testid="guillotine-survival-history">
@@ -83,9 +85,9 @@ export function GuillotineSurvivalHistory({
           </li>
         ))}
       </ul>
-      {weeks.length > 4 ? (
+      {weeks.length > 1 ? (
         <button type="button" onClick={() => setShowAllWeeks((v) => !v)} className="gl-accent-text text-xs hover:underline" data-testid="guillotine-history-all-weeks">
-          {showAllWeeks ? 'Show the latest weeks' : `Show all ${weeks.length} weeks`}
+          {showAllWeeks ? 'Show the latest week' : `Show all ${weeks.length} weeks`}
         </button>
       ) : null}
 
