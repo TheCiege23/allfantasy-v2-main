@@ -13,6 +13,7 @@
  */
 import { buildChopLine, type DangerTierRow } from '@/components/guillotine/guillotineHomeModel'
 import type { ImportedGuillyViewData } from './importedGuillyView'
+import { survivalOdds, type TeamOutlook } from './survivalOutlook'
 
 export type BoardTier = 'safe' | 'danger' | 'chop_zone'
 
@@ -29,6 +30,13 @@ export type BoardRow = {
   cutAbove: boolean
   /** 0–100 along the score strip; null until the field has scores. */
   trackPct: number | null
+  /** Starters with a game still to play this week, and those games added up; null when unknown. */
+  playersLeft: number | null
+  gamesLeft: number | null
+  /** Score so far plus the projection for the games left; null without a projection. */
+  projectedFinish: number | null
+  /** Chance of surviving this week's chop, 0–100; null when the odds cannot be made honestly. */
+  safePct: number | null
 }
 
 export type BoardStatus = 'pre_scores' | 'safe' | 'danger' | 'chop_zone' | 'immune' | 'chopped' | 'spectator'
@@ -60,6 +68,10 @@ export type SurvivalBoard = {
   graveyard: Array<{ rosterId: string; name: string; week: number | null; isMe: boolean }>
   /** "By Wednesday 7:00 AM ET"-style label for when the chop runs; null when unknown. */
   chopLabel: string | null
+  /** True when the rows carry % safe. */
+  hasOdds: boolean
+  /** True when the rows carry players / games left. */
+  hasPlayersLeft: boolean
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -69,7 +81,9 @@ type Shared = {
   source: SurvivalBoard['source']
   week: number | null
   chopCount: number
-  rows: Array<Omit<BoardRow, 'cutAbove' | 'trackPct'>>
+  rows: Array<Omit<BoardRow, 'cutAbove' | 'trackPct' | 'playersLeft' | 'gamesLeft' | 'projectedFinish' | 'safePct'>>
+  /** Per team, keyed by rosterId (native only, from ./survivalOutlookLoad.ts). */
+  outlook?: Record<string, TeamOutlook> | null
   myRosterId: string | null
   graveyard: SurvivalBoard['graveyard']
   chopLabel: string | null
@@ -78,7 +92,11 @@ type Shared = {
 function finish(s: Shared): SurvivalBoard {
   // Highest score first; a team with no score yet sits below every scored team. The engine's tier decides
   // which side of the line a row is on, so the line is drawn above the first chop-zone row.
-  const rows0 = [...s.rows].sort((a, b) => (b.points ?? -Infinity) - (a.points ?? -Infinity) || a.name.localeCompare(b.name))
+  // Before any score, the field is ordered by projected finish when there is one (the race as it is expected
+  // to run), else by name.
+  const projOf = (id: string) => s.outlook?.[id]?.remainingProjection ?? null
+  const rows0 = [...s.rows].sort((a, b) =>
+    (b.points ?? -Infinity) - (a.points ?? -Infinity) || (projOf(b.rosterId) ?? -Infinity) - (projOf(a.rosterId) ?? -Infinity) || a.name.localeCompare(b.name))
   // Chop-zone rows go last so the line sits between the field and the zone, whatever the order of scores.
   const ordered = [...rows0.filter((r) => r.tier !== 'chop_zone'), ...rows0.filter((r) => r.tier === 'chop_zone')]
   const scoredPts = ordered.map((r) => r.points).filter((p): p is number => p != null)
@@ -90,8 +108,18 @@ function finish(s: Shared): SurvivalBoard {
     const cutAbove = scored && r.tier === 'chop_zone' && !cutDrawn
     if (cutAbove) cutDrawn = true
     const trackPct = scored && r.points != null ? (hi > lo ? ((r.points - lo) / (hi - lo)) * 100 : 50) : null
-    return { ...r, cutAbove, trackPct }
+    const o = s.outlook?.[r.rosterId] ?? null
+    const projectedFinish = o?.remainingProjection != null ? round1((r.points ?? 0) + o.remainingProjection) : null
+    return { ...r, cutAbove, trackPct, playersLeft: o ? o.playersLeft : null, gamesLeft: o ? o.gamesLeft : null, projectedFinish, safePct: null as number | null }
   })
+  // % safe: only when every team alive has an outlook (./survivalOutlook.ts `survivalOdds`).
+  const odds = s.outlook && rows.every((r) => s.outlook?.[r.rosterId])
+    ? survivalOdds(
+        rows.map((r) => ({ rosterId: r.rosterId, current: r.points ?? 0, remainingProjection: s.outlook![r.rosterId]!.remainingProjection, immune: r.immune })),
+        s.chopCount,
+      )
+    : null
+  if (odds) for (const r of rows) r.safePct = odds.get(r.rosterId) ?? null
   const zone = rows.filter((r) => r.tier === 'chop_zone' && r.points != null)
   const safe = rows.filter((r) => r.tier !== 'chop_zone' && r.points != null)
   const cutScore = scored && zone.length ? Math.max(...zone.map((r) => r.points as number)) : null
@@ -154,6 +182,12 @@ function finish(s: Shared): SurvivalBoard {
       detail = `${Math.max(0, rows.length - 1 - idx)} ${rows.length - 1 - idx === 1 ? 'team is' : 'teams are'} below you. Chop line: ${fmtPts(cutScore)}.`
   }
 
+  // The race is decided by who still has games to play: say so where it matters.
+  if (me && me.playersLeft != null && (status === 'chop_zone' || status === 'danger')) {
+    const rival = status === 'chop_zone' ? above : below
+    detail += ` You have ${me.playersLeft} ${me.playersLeft === 1 ? 'player' : 'players'} left to play${rival && rival.playersLeft != null ? `; ${rival.name} has ${rival.playersLeft}` : ''}.`
+  }
+
   return {
     source: s.source,
     week: s.week,
@@ -173,6 +207,8 @@ function finish(s: Shared): SurvivalBoard {
     below,
     graveyard: [...s.graveyard].sort((a, b) => (a.week ?? 0) - (b.week ?? 0) || a.name.localeCompare(b.name)),
     chopLabel: s.chopLabel,
+    hasOdds: rows.some((r) => r.safePct != null),
+    hasPlayersLeft: rows.some((r) => r.playersLeft != null),
   }
 }
 
@@ -182,6 +218,7 @@ export type NativeBoardSummary = {
   myRosterId?: string | null
   dangerTiers?: DangerTierRow[] | null
   chopWatch?: { week: number; chopCount: number; chopLine: number | null } | null
+  outlook?: Record<string, TeamOutlook> | null
   home?: {
     scores?: Record<string, number> | null
     chopLabel?: string | null
@@ -200,6 +237,7 @@ export function boardFromNativeSummary(summary: NativeBoardSummary): SurvivalBoa
     myRosterId: me,
     graveyard: (summary.home?.chopped ?? []).map((c) => ({ rosterId: c.rosterId, name: c.name?.trim() || 'A team', week: c.week ?? null, isMe: !!me && c.rosterId === me })),
     chopLabel: summary.home?.chopLabel ?? null,
+    outlook: summary.outlook ?? null,
   })
 }
 

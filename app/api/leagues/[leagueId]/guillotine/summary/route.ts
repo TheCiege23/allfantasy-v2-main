@@ -35,6 +35,7 @@ import { MAX_FAAB_AMOUNT, describeSchedule } from '@/lib/guillotine/chopSchedule
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
 import { loadChopWatch } from '@/lib/guillotine/chopWatchLoad'
+import { loadSurvivalOutlook } from '@/lib/guillotine/survivalOutlookLoad'
 import { loadNextChopPickState, saveNextChopPick } from '@/lib/guillotine/nextChopPickStore'
 import { decideCommissionerTiebreak, loadCommissionerTiebreaks } from '@/lib/guillotine/commissionerTiebreakLoad'
 import { loadChopUndoState, undoLatestChop } from '@/lib/guillotine/chopUndoService'
@@ -126,7 +127,10 @@ export async function GET(
     ? Math.max(1, parseInt(weekParam, 10)) || 1
     : await resolveGuillotineLiveWeek(leagueId, config)
 
-  const [summary, myEscapes, myRosterId, home, advanced, watch] = await Promise.all([
+  // `?outlook=1` (the Matchup tab's survival board only): players and games left and the projection for
+  // them, per team (lib/guillotine/survivalOutlookLoad.ts). The current week only. Never fails the summary.
+  const wantOutlook = !weekParam && req.nextUrl.searchParams?.get('outlook') === '1'
+  const [summary, myEscapes, myRosterId, home, advanced, watch, outlook] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),
     // Your escapes from chops that happened — shareable moments (2026-09-14). Never fails the summary.
     getGuillotineEscapesForUser(leagueId, userId).catch(() => []),
@@ -142,6 +146,7 @@ export async function GET(
     // Chop Watch (lib/guillotine/chopWatch.ts): this week's chop line, live, by the chop's own rules.
     // The current week only — a past week's line is the one its chop already settled.
     weekParam ? Promise.resolve(null) : loadChopWatch(leagueId, weekOrPeriod),
+    wantOutlook ? loadSurvivalOutlook(leagueId, weekOrPeriod).catch(() => null) : Promise.resolve(null),
   ])
   // For the commissioner only: may they change the AF Commissioner guillotine rules? The SAME check
   // the chop-rules and league-rules saves enforce, so no page shows an editor the save will refuse.
@@ -163,6 +168,7 @@ export async function GET(
     chopWatch: watch ? { live: true, week: watch.week, chopCount: watch.chopCount, chopLine: watch.chopLine } : null,
     myEscapes,
     myRosterId,
+    ...(wantOutlook ? { outlook } : {}),
     home: home && watch ? { ...home, scores: watch.scores } : home,
     config: config
       ? {

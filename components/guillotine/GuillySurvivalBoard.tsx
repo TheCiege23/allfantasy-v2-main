@@ -17,6 +17,18 @@ import './guilly-survival-board.css'
 
 export type BoardAction = { label: string; onClick: () => void; primary?: boolean }
 
+function oddsBand(pct: number): 'safe' | 'danger' | 'chop_zone' {
+  return pct >= 80 ? 'safe' : pct >= 40 ? 'danger' : 'chop_zone'
+}
+
+/** "3 to play · 82% safe" — whichever parts this league can say. */
+function rowOutlook(r: BoardRow): string {
+  const parts: string[] = []
+  if (r.playersLeft != null) parts.push(r.playersLeft === 0 ? 'Done for the week' : `${r.playersLeft} to play`)
+  if (r.projectedFinish != null && r.playersLeft !== 0) parts.push(`proj ${fmtPts(r.projectedFinish)}`)
+  return parts.join(' · ')
+}
+
 function initials(name: string): string {
   const parts = name.replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return '?'
@@ -82,6 +94,16 @@ export function GuillySurvivalBoard({ board, actions = [], sourceNote, loading, 
           <h2 className="gsb-headline" data-testid="gsb-headline">{b.headline}</h2>
         </div>
         <p className="gsb-detail">{b.detail}</p>
+        {b.me && (b.scored || b.me.safePct != null || b.me.playersLeft != null) ? (
+          <div className="gsb-score-row">
+            {b.me.safePct != null ? (
+              <span className="gsb-odds" data-testid="gsb-my-odds" data-band={oddsBand(b.me.safePct)}><small>Chance safe</small><b>{b.me.safePct}%</b></span>
+            ) : null}
+            {b.me.playersLeft != null ? (
+              <span data-testid="gsb-my-left"><small>Players left</small><b>{b.me.playersLeft}<i> · {b.me.gamesLeft ?? 0} {b.me.gamesLeft === 1 ? 'game' : 'games'}</i></b></span>
+            ) : null}
+          </div>
+        ) : null}
         {b.me && b.scored ? (
           <div className="gsb-score-row">
             <span><small>Your score</small><b>{fmtPts(b.me.points)}</b></span>
@@ -128,16 +150,21 @@ export function GuillySurvivalBoard({ board, actions = [], sourceNote, loading, 
                   <span className="gsb-name">
                     <strong>{r.name}{r.isMe ? <em>You</em> : null}</strong>
                     <small>
-                      {r.immune ? 'Immune this week' : !b.scored ? 'Waiting for games' : r.tier === 'chop_zone' ? 'Chop zone' : r.tier === 'danger' ? 'In danger' : 'Safe'}
+                      {r.immune ? 'Immune this week' : !b.scored ? (r.playersLeft != null ? 'No scores yet' : 'Waiting for games') : r.tier === 'chop_zone' ? 'Chop zone' : r.tier === 'danger' ? 'In danger' : 'Safe'}
                       {b.scored && b.cutScore != null && r.points != null && r.tier !== 'chop_zone' ? ` · +${fmtPts(r.points - b.cutScore)}` : ''}
                     </small>
+                    {rowOutlook(r) ? <small className="gsb-row-left" data-testid={`gsb-left-${r.rosterId}`}>{rowOutlook(r)}</small> : null}
                   </span>
-                  <span className="gsb-pts">{fmtPts(r.points)}</span>
+                  <span className="gsb-pts">
+                    {fmtPts(r.points)}
+                    {r.safePct != null ? <small className="gsb-row-odds" data-band={oddsBand(r.safePct)} data-testid={`gsb-odds-${r.rosterId}`}>{r.safePct}% safe</small> : null}
+                  </span>
                 </div>
               </li>
             ))}
           </ol>
         )}
+        {b.hasOdds ? <p className="gsb-foot gsb-foot-note">% safe plays out the rest of the week 4,000 times from each team&apos;s score and the projection for the games it has left. It is a projection, not a promise.</p> : null}
         <p className="gsb-foot">
           {sourceNote ?? (b.chopLabel ? `Chop runs after stat corrections · ${b.chopLabel}` : 'Chop runs after stat corrections')}
         </p>

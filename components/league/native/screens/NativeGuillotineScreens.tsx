@@ -31,14 +31,14 @@ type Summary = {
 
 type Load = { summary: Summary | null; loading: boolean; error: string | null }
 
-function useGuillotineSummary(leagueId: string): Load {
+function useGuillotineSummary(leagueId: string, opts: { outlook?: boolean } = {}): Load {
   const [state, setState] = useState<Load>({ summary: null, loading: true, error: null })
   useEffect(() => {
     const ac = new AbortController()
     setState({ summary: null, loading: true, error: null })
     void (async () => {
       try {
-        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary`, { signal: ac.signal, cache: 'no-store' })
+        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary${opts.outlook ? '?outlook=1' : ''}`, { signal: ac.signal, cache: 'no-store' })
         if (!res.ok) throw new Error()
         setState({ summary: (await res.json()) as Summary, loading: false, error: null })
       } catch {
@@ -46,7 +46,7 @@ function useGuillotineSummary(leagueId: string): Load {
       }
     })()
     return () => ac.abort()
-  }, [leagueId])
+  }, [leagueId, opts.outlook])
   return state
 }
 
@@ -57,7 +57,7 @@ const pts = (v: number | null | undefined) => (typeof v === 'number' && Number.i
  * (components/guillotine/GuillySurvivalBoard.tsx — the same board an imported Guilly league shows).
  */
 export function GuillotineMatchupScreen({ league, onSelectTab }: { league: UserLeague; onSelectTab: (id: string) => void }) {
-  const { summary, loading, error } = useGuillotineSummary(league.id)
+  const { summary, loading, error } = useGuillotineSummary(league.id, { outlook: true })
   const board = useMemo(() => (summary ? boardFromNativeSummary(summary) : null), [summary])
   const alive = board?.status !== 'chopped' && board?.status !== 'spectator'
   return (

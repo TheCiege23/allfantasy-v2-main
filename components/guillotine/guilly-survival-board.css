@@ -114,3 +114,14 @@
   .gsb-strip-rail { margin: 0 20px; }
   .gsb-dot { width: 26px; height: 26px; margin: -13px 0 0 -13px; }
 }
+
+/* Outlook: % safe and players left */
+.gsb-odds b { color: var(--gsb-good); }
+.gsb-odds[data-band=danger] b { color: var(--gsb-warn); }
+.gsb-odds[data-band=chop_zone] b { color: var(--gsb-bad); }
+.gsb-pts { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.gsb-row-odds { padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--gsb-good) 14%, transparent); color: var(--gsb-good); font: 700 11px var(--gsb-mono); }
+.gsb-row-odds[data-band=danger] { background: color-mix(in srgb, var(--gsb-warn) 14%, transparent); color: var(--gsb-warn); }
+.gsb-row-odds[data-band=chop_zone] { background: color-mix(in srgb, var(--gsb-bad) 16%, transparent); color: var(--gsb-bad); }
+.gsb-name .gsb-row-left { color: var(--gsb-faint); }
+.gsb-foot-note { border-top: 0; padding-bottom: 0; }
