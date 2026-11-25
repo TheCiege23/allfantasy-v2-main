@@ -6,7 +6,9 @@
 import { prisma } from '@/lib/prisma'
 import { evaluateLegalityForProjectedRoster } from '@/lib/roster-legality/loadLegalityEvaluationContext'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
-import { computePerPlayerKickoffLocks } from '@/lib/roster-lineup-engine/lineupLockService'
+import { computePerPlayerKickoffLocks, resolveScheduleLockedPlayerIds } from '@/lib/roster-lineup-engine/lineupLockService'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
+import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import {
   addPlayerToRosterData,
   removePlayerFromRosterData,
@@ -132,6 +134,9 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
         leagueVariant: true,
         lockAllMoves: true,
         lifecycleState: true,
+        season: true,
+        name: true,
+        bestBallMode: true,
       },
     }),
     prisma.roster.findFirst({
@@ -225,7 +230,28 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
 
   const now = new Date()
   const kick = computePerPlayerKickoffLocks(roster.playerData, now)
-  if (dropId && kick.lockedPlayerIds.includes(dropId)) {
+  /*
+   * 🛑 A PLAYER WHOSE GAME HAD STARTED COULD BE DROPPED (2026-11-25). The only check here read the
+   * `gameTime` the CLIENT stored on its last lineup save — '—' when the screen had none, so it never
+   * locked. The lineup save locks from the schedule (`resolveFullLineupLockContext`); a drop is the same
+   * "moved out" under the owner's rule, so it locks from the same schedule. Best ball is exempt, as
+   * everywhere. A schedule read that fails keeps the old check rather than failing every claim.
+   */
+  const scheduleLocked =
+    dropId && !isBestBallLeagueRow(league)
+      ? await resolveScheduleLockedPlayerIds({
+          leagueId,
+          rosterId,
+          sport: String(league.sport ?? 'NFL'),
+          leagueVariant: league.leagueVariant,
+          settings: league.settings,
+          season: league.season ?? now.getFullYear(),
+          leagueWeek: leagueWeekFromSettings(league.settings) ?? 1,
+          now,
+        })
+      : null
+  const dropLocked = new Set([...kick.lockedPlayerIds, ...(scheduleLocked ?? [])])
+  if (dropId && dropLocked.has(dropId)) {
     const sec = sectionForPlayerId(roster.playerData, dropId)
     const canDropStarters = engineConfig.can_drop_starters_after_game_start === true
     const canDropBench = engineConfig.can_drop_bench_after_lock !== false

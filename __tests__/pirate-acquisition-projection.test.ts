@@ -8,7 +8,11 @@ vi.mock('@/lib/waiver-wire/settings-service', () => ({ getEffectiveLeagueWaiverS
 vi.mock('@/lib/waiver-wire/current-nba-player-pool', () => ({ assertCurrentNbaWaiverPlayer: async () => {} }))
 vi.mock('@/lib/league/commissioner-roster-lock', () => ({ isCommissionerRosterLocked: async () => false }))
 vi.mock('@/lib/roster-legality/loadLegalityEvaluationContext', () => ({ evaluateLegalityForProjectedRoster: h.legality }))
-vi.mock('@/lib/roster-lineup-engine/lineupLockService', () => ({ computePerPlayerKickoffLocks: () => ({ lockedPlayerIds: [] }) }))
+const sched = vi.hoisted(() => ({ locked: vi.fn() }))
+vi.mock('@/lib/roster-lineup-engine/lineupLockService', () => ({
+  computePerPlayerKickoffLocks: () => ({ lockedPlayerIds: [] }),
+  resolveScheduleLockedPlayerIds: (...a: unknown[]) => sched.locked(...a),
+}))
 import { previewWaiverClaimEligibility } from '@/lib/waiver-wire/transaction-eligibility'
 
 const input = { leagueId: 'L', rosterId: 'r1', addPlayerId: 'add-2', dropPlayerId: 'drop-2' }
@@ -19,6 +23,7 @@ beforeEach(() => {
   h.settings.mockResolvedValue({ waiverType: 'fcfs', maxDropsPerWeek: 2 })
   h.drops.mockResolvedValue(0); h.claims.mockResolvedValue(0)
   h.legality.mockResolvedValue({ result: { blockingReasons: [], irViolations: [], taxiViolations: [], devyViolations: [] } })
+  sched.locked.mockResolvedValue([])
 })
 
 describe('joint acquisition canonical simulation', () => {
@@ -43,5 +48,26 @@ describe('joint acquisition canonical simulation', () => {
     await expect(previewWaiverClaimEligibility(input, projection)).rejects.toThrow('unavailable')
     h.legality.mockResolvedValue({ result: { blockingReasons: [{ message: 'IR is ineligible' }], irViolations: [{}], taxiViolations: [], devyViolations: [] } })
     await expect(previewWaiverClaimEligibility(input, projection)).rejects.toThrow('IR, taxi, or devy')
+  })
+})
+
+describe('a drop is a move out: the schedule lock applies to it', () => {
+  // drop-2 is a STARTER on the projected roster and its game has started (per the schedule). The
+  // stored lineup carries no gameTime, so the old client-sent check alone never locked him.
+  const started = { playerData: { players: ['add-1', 'drop-2'], lineup_sections: { starters: [{ id: 'drop-2' }], bench: [{ id: 'add-1' }] } }, priorDrops: 0 }
+  it('🛑 refuses dropping a player whose game has started', async () => {
+    sched.locked.mockResolvedValue(['drop-2'])
+    await expect(previewWaiverClaimEligibility(input, started)).rejects.toThrow('This starter is locked because their game has started.')
+    expect(sched.locked).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L', rosterId: 'r1', sport: 'NFL' }))
+  })
+  it('a best ball league is exempt and never reads the schedule lock', async () => {
+    h.league.mockResolvedValue({ id: 'L', sport: 'NFL', platform: 'manual', rosterSize: 2, settings: {}, lifecycleState: 'active', bestBallMode: true })
+    sched.locked.mockResolvedValue(['drop-2'])
+    await expect(previewWaiverClaimEligibility(input, started)).resolves.toBeUndefined()
+    expect(sched.locked).not.toHaveBeenCalled()
+  })
+  it('a schedule that cannot be read keeps the old check (does not fail the claim)', async () => {
+    sched.locked.mockResolvedValue(null)
+    await expect(previewWaiverClaimEligibility(input, started)).resolves.toBeUndefined()
   })
 })
