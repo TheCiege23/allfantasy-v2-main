@@ -20,11 +20,12 @@ interface LeaderboardResult {
   generatedAt: string
 }
 
-const BOARDS: { id: BoardId; label: string; icon: typeof Trophy; valueLabel: string }[] = [
-  { id: "draft_grades", label: "Best draft grades", icon: Award, valueLabel: "Avg grade" },
-  { id: "championships", label: "Most championships", icon: Trophy, valueLabel: "Championships" },
-  { id: "win_pct", label: "Highest win %", icon: Target, valueLabel: "Win %" },
-  { id: "active", label: "Most active managers", icon: Zap, valueLabel: "Activity score" },
+/** `short` is the tab's label (2026-11-25): four tabs fit two across on a phone. `label` heads the list. */
+const BOARDS: { id: BoardId; label: string; short: string; icon: typeof Trophy; valueLabel: string }[] = [
+  { id: "draft_grades", label: "Best draft grades", short: "Draft grades", icon: Award, valueLabel: "Avg grade" },
+  { id: "championships", label: "Most championships", short: "Titles", icon: Trophy, valueLabel: "Championships" },
+  { id: "win_pct", label: "Highest win %", short: "Win %", icon: Target, valueLabel: "Win %" },
+  { id: "active", label: "Most active managers", short: "Most active", icon: Zap, valueLabel: "Activity score" },
 ]
 
 function formatValue(boardId: BoardId, value: number): string {
@@ -70,12 +71,11 @@ export default function LeaderboardsPage() {
         <h1 className="mt-2 text-2xl font-semibold text-white">
           Platform leaderboards
         </h1>
-        <p className="mt-1 text-sm text-white/60">
-          Best draft grades, most championships, highest win %, and most active managers.
-        </p>
+        {/* No intro line (2026-11-25, the simplify pass): it listed the four tabs right below it. */}
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
+      {/* Two across on a phone, one row from sm (2026-11-25): the long labels wrapped onto three rows. */}
+      <div className="grid grid-cols-2 gap-2 border-b border-white/10 pb-3 sm:flex sm:flex-wrap" data-testid="leaderboards-tabs">
         {BOARDS.map((b) => {
           const Icon = b.icon
           return (
@@ -84,14 +84,14 @@ export default function LeaderboardsPage() {
               type="button"
               onClick={() => setActiveBoard(b.id)}
               data-testid={`leaderboards-tab-${b.id}`}
-              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors sm:justify-start ${
                 activeBoard === b.id
                   ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-200"
                   : "border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
               }`}
             >
-              <Icon className="h-4 w-4" />
-              {b.label}
+              <Icon className="h-4 w-4 shrink-0" />
+              {b.short}
             </button>
           )
         })}
@@ -128,7 +128,7 @@ export default function LeaderboardsPage() {
                 <li
                   key={`${e.managerId}-${e.rank}`}
                   data-testid={`leaderboards-row-${e.rank}`}
-                  className="flex items-center gap-4 py-3 first:pt-0"
+                  className="flex items-center gap-3 py-2.5 first:pt-0"
                 >
                   <span
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
@@ -143,19 +143,27 @@ export default function LeaderboardsPage() {
                   >
                     {e.rank}
                   </span>
+                  {/*
+                    Name on one line, its detail on one line under it (2026-11-25, the simplify pass): run
+                    together, "(3 seasons) Grade: A" wrapped every row onto two ragged lines on a phone.
+                    A manager with no name reads "Unnamed manager", not the first 12 characters of an id.
+                  */}
                   <div className="min-w-0 flex-1">
-                    <span className="font-medium text-white">
-                      {e.displayName || e.managerId.slice(0, 12) + "…"}
-                    </span>
-                    {e.extra?.count != null && e.extra.count > 0 && (
-                      <span className="ml-2 text-xs text-white/50">
-                        ({e.extra.count} {activeBoard === "active" ? "actions" : activeBoard === "championships" ? "titles" : "seasons"})
-                      </span>
-                    )}
-                    {e.extra?.grade && (
-                      <span className="ml-2 text-xs text-cyan-300">
-                        {activeBoard === "draft_grades" ? `Grade: ${e.extra.grade}` : e.extra.grade}
-                      </span>
+                    <p className="truncate font-medium text-white">
+                      {e.displayName || "Unnamed manager"}
+                    </p>
+                    {(e.extra?.grade || (e.extra?.count != null && e.extra.count > 0)) && (
+                      <p className="truncate text-xs text-white/50" data-testid={`leaderboards-row-detail-${e.rank}`}>
+                        {e.extra?.grade ? (
+                          <span className="text-cyan-300">
+                            {activeBoard === "draft_grades" ? `Grade ${e.extra.grade}` : e.extra.grade}
+                          </span>
+                        ) : null}
+                        {e.extra?.grade && e.extra?.count != null && e.extra.count > 0 ? " · " : null}
+                        {e.extra?.count != null && e.extra.count > 0
+                          ? `${e.extra.count} ${activeBoard === "active" ? "actions" : activeBoard === "championships" ? "titles" : "seasons"}`
+                          : null}
+                      </p>
                     )}
                   </div>
                   <span className="shrink-0 font-semibold text-cyan-300">
@@ -169,8 +177,7 @@ export default function LeaderboardsPage() {
       </section>
 
       <p className="mt-4 text-center text-xs text-white/40">
-        Deterministic metrics from draft grades, season outcomes, and manager activity events.
-        Link and sync your leagues to improve leaderboard coverage.
+        Link and sync your leagues to show up here.
       </p>
     </main>
   )
