@@ -13,7 +13,13 @@ import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageServ
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { normalizeRosterSlots } from '@/lib/league-rules-explainer/snapshot'
+import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { lineupSetsItself } from './guillotineBestBall'
+import { planBenchForRemovedSeats, withoutStarterSeats, type BenchedPlayer } from './rosterBenchRemovedSeats'
 import { remapStarterSeats } from './rosterSeatRemap'
+import { readRosterScheduleRan, rosterChangesInEventLog } from './rosterScheduleRan'
 import {
   ROSTER_SCHEDULE_STATE_KEY,
   describeLayout,
@@ -21,6 +27,7 @@ import {
   dueRosterChanges,
   readRosterSchedule,
   readRosterScheduleState,
+  rosterChangeMovesPlayers,
   rosterSpotsFromDefinitions,
   walkRosterSchedule,
   type RosterChange,
@@ -61,8 +68,17 @@ import {
  *     cleared, never run again. That covers a writer this lock does not know about, such as a commissioner
  *     saving another setting in the same second.
  *
- * Nothing here moves a player in or out of anyone's lineup. See ./rosterSchedule.ts for why the kinds of
- * change are limited to ones where that is never needed.
+ * 🛑 ONE KIND OF CHANGE MOVES A PLAYER, AND ONLY BETWEEN WEEKS. Taking a starting spot away benches whoever
+ * sits in it (./rosterBenchRemovedSeats.ts says why it must). It runs only when the pass says the week's games
+ * are over (`betweenWeeks`), so the lineup it touches is next week's and nobody who has played is moved. A
+ * take-away whose week arrives mid-week WAITS for the week to end; every other kind runs at once. The move is
+ * the lineup engine's own save, so the lineup, the scoring slot and the week's record all change together.
+ *
+ * 🛑 AND THE WEEK JUST FINISHED IS FROZEN FIRST. A team's scoring slot is current state: a week with no saved
+ * lineup of its own is scored from it (lib/redraft/weekLineupSlots.ts), and the chop for the week just played
+ * can run a day or more after its last game. Benching a starter for next week would reach back and take his
+ * points away from the week he just played, in a league where the lowest score is cut. So before a team's
+ * player is moved, that team's lineup for the finished week is written down as it stands, unless it has one.
  */
 
 export type RosterScheduleRun = {
@@ -72,41 +88,13 @@ export type RosterScheduleRun = {
   slots: Record<string, number>
   /** True when this pass finished a run an earlier pass recorded. */
   resumed: boolean
+  /** Players moved to the bench because their starting spot was taken away, by team. */
+  benched: Array<{ rosterId: string; players: BenchedPlayer[] }>
+  /** Teams whose player could not be moved, with the lineup engine's reason. */
+  benchFailures: Array<{ rosterId: string; error: string }>
 }
-
-type Db = Pick<Prisma.TransactionClient, 'guillotineEventLog'>
 
 const record = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
-
-/** Every change a `roster_change` event names: the durable record of what has run. */
-export async function rosterChangesInEventLog(db: Db, leagueId: string): Promise<{ done: string[]; skipped: Array<{ id: string; reason: string }> }> {
-  const rows = await db.guillotineEventLog.findMany({ where: { leagueId, eventType: 'roster_change' }, select: { metadata: true } })
-  const done: string[] = []
-  const skipped: Array<{ id: string; reason: string }> = []
-  for (const row of rows) {
-    const m = record(row.metadata)
-    for (const a of Array.isArray(m.applied) ? m.applied : []) {
-      const id = record(a).id
-      if (typeof id === 'string') done.push(id)
-    }
-    for (const s of Array.isArray(m.skipped) ? m.skipped : []) {
-      const x = record(s)
-      if (typeof x.id === 'string') {
-        done.push(x.id)
-        skipped.push({ id: x.id, reason: typeof x.reason === 'string' ? x.reason : '' })
-      }
-    }
-  }
-  return { done, skipped }
-}
-
-/** What has run: the event log, plus whatever settings also says. */
-export async function readRosterScheduleRan(db: Db, leagueId: string, settings: unknown): Promise<{ done: string[]; skipped: Array<{ id: string; reason: string }> }> {
-  const state = readRosterScheduleState(settings)
-  const logged = await rosterChangesInEventLog(db, leagueId)
-  const skipped = new Map([...state.skipped, ...logged.skipped].map((s) => [s.id, s]))
-  return { done: [...new Set([...state.done, ...logged.done])], skipped: [...skipped.values()] }
-}
 
 async function starterSeatLabels(leagueId: string): Promise<string[]> {
   const league = await prisma.league.findUnique({ where: { id: leagueId } })
@@ -116,13 +104,45 @@ async function starterSeatLabels(leagueId: string): Promise<string[]> {
   return resolveLineupStarterSlots(league as never, template).map((s) => s.label)
 }
 
+/** Due now: every due change, except one that moves players while a week is being played. */
+function dueNow(schedule: RosterChange[], done: ReadonlyArray<string>, week: number, betweenWeeks: boolean): RosterChange[] {
+  return dueRosterChanges(schedule, done, week).filter((c) => betweenWeeks || !rosterChangeMovesPlayers(c.kind))
+}
+
+/**
+ * A team's lineup for a finished week, written down as scoring reads it today, unless that week already has
+ * one. Scoring then reads the week from this record and a later move cannot change it.
+ */
+async function freezeWeekLineup(args: { leagueId: string; rosterId: string; redraftRosterId: string | null; season: number; week: number }): Promise<void> {
+  if (!args.redraftRosterId || args.week < 1) return
+  const redraftRosterId = args.redraftRosterId
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM rosters WHERE id = ${args.rosterId} FOR UPDATE`
+    const existing = await tx.afRosterLineupAssignment.count({ where: { rosterId: args.rosterId, season: args.season, week: args.week } })
+    if (existing > 0) return
+    const players = await tx.redraftRosterPlayer.findMany({ where: { rosterId: redraftRosterId, droppedAt: null }, select: { playerId: true, slotType: true }, orderBy: { playerId: 'asc' } })
+    const order = new Map<string, number>()
+    const rows = players.map((p) => {
+      const category = slotCategory(p.slotType)
+      const section = category === 'starter' ? 'starters' : category
+      const slotIndex = order.get(section) ?? 0
+      order.set(section, slotIndex + 1)
+      return { leagueId: args.leagueId, rosterId: args.rosterId, season: args.season, week: args.week, section, slotIndex, playerId: p.playerId }
+    })
+    if (rows.length > 0) await tx.afRosterLineupAssignment.createMany({ data: rows, skipDuplicates: true })
+  })
+}
+
 /**
  * Apply every scheduled change due by `week`. Null when there is nothing to do, which is almost every call,
  * and when another pass is already doing it. Throws only when a write fails; the record it left makes the
  * next pass finish the job.
+ *
+ * `week` is the week whose lineups are open, and `betweenWeeks` says the games before it are over.
  */
-export async function applyDueRosterChanges(input: { leagueId: string; week: number }): Promise<RosterScheduleRun | null> {
+export async function applyDueRosterChanges(input: { leagueId: string; week: number; betweenWeeks?: boolean }): Promise<RosterScheduleRun | null> {
   const { leagueId, week } = input
+  const betweenWeeks = input.betweenWeeks === true
   if (!Number.isInteger(week) || week < 1) return null
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
   if (!league) return null
@@ -133,13 +153,13 @@ export async function applyDueRosterChanges(input: { leagueId: string; week: num
     const schedule = readRosterSchedule(league.settings)
     if (schedule.length === 0) return null
     const ran = await readRosterScheduleRan(prisma, leagueId, league.settings)
-    if (dueRosterChanges(schedule, ran.done, week).length === 0) return null
+    if (dueNow(schedule, ran.done, week, betweenWeeks).length === 0) return null
   }
-  const locked = await withAutomationLock(`guillotine:roster-schedule:${leagueId}`, { owner: randomUUID(), ttlMs: 120_000 }, () => runLocked(leagueId, week))
+  const locked = await withAutomationLock(`guillotine:roster-schedule:${leagueId}`, { owner: randomUUID(), ttlMs: 120_000 }, () => runLocked(leagueId, week, betweenWeeks))
   return locked.ok ? locked.value : null
 }
 
-async function runLocked(leagueId: string, week: number): Promise<RosterScheduleRun | null> {
+async function runLocked(leagueId: string, week: number, betweenWeeks: boolean): Promise<RosterScheduleRun | null> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, userId: true } })
   if (!league) return null
   const sport = String(league.sport ?? '').toUpperCase()
@@ -172,7 +192,7 @@ async function runLocked(leagueId: string, week: number): Promise<RosterSchedule
       }
       return { ...state.pending, resumed: true }
     }
-    const due = dueRosterChanges(readRosterSchedule(row.settings), ran.done, week)
+    const due = dueNow(readRosterSchedule(row.settings), ran.done, week, betweenWeeks)
     if (due.length === 0) return null
     const walk = walkRosterSchedule(layoutNow, due, spots)
     const next: NonNullable<RosterScheduleState['pending']> = {
@@ -180,7 +200,9 @@ async function runLocked(leagueId: string, week: number): Promise<RosterSchedule
       ids: walk.steps.flatMap((s) => (s.ok ? [s.change.id] : [])),
       skipped: walk.steps.flatMap((s) => (s.ok ? [] : [{ id: s.change.id, reason: s.reason }])),
       slots: walk.slots,
+      slotsBefore: layoutNow,
       seatsBefore: seatsNow,
+      startedAt: new Date().toISOString(),
     }
     await settle(next)
     return { ...next, resumed: false }
@@ -193,10 +215,66 @@ async function runLocked(leagueId: string, week: number): Promise<RosterSchedule
   }
   const seatsAfter = pending.ids.length > 0 ? await starterSeatLabels(leagueId) : pending.seatsBefore
 
-  // 3. FINISH: seats, event, done, record cleared. All or nothing.
   const byId = new Map(schedule.map((c) => [c.id, c]))
   const applied = pending.ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))
   const skipped = pending.skipped.flatMap((s) => (byId.has(s.id) ? [{ change: byId.get(s.id)!, reason: s.reason }] : []))
+  const startedAt = pending.startedAt ? new Date(pending.startedAt) : null
+  // A roster changed since the run was recorded may already be in the new layout's terms.
+  const untouchedSince = (updatedAt: Date) => !startedAt || updatedAt.getTime() <= startedAt.getTime()
+
+  // 2b. BENCH the player in a starting spot that was taken away. Each team's move is decided from its lineup
+  // as it stands, so a pass that repeats this finds nothing left to move.
+  const benched: RosterScheduleRun['benched'] = []
+  const benchFailures: RosterScheduleRun['benchFailures'] = []
+  const owners = new Map<string, string>()
+  /** Rosters this pass saved through the lineup engine: their seats are already the new layout's. */
+  const seated = new Set<string>()
+  if (applied.some((c) => rosterChangeMovesPlayers(c.kind)) && pending.seatsBefore.length > 0 && seatsAfter.length > 0) {
+    const now = await prisma.league.findUnique({ where: { id: leagueId } })
+    // A best ball league sets its own lineup from the layout: there is no saved starter to move.
+    if (now && !lineupSetsItself(now)) {
+      const capacities = resolveRedraftRosterConfig(sport, now.settings).starterCapacities
+      const capacitiesBefore = resolveRedraftRosterConfig(sport, { roster: { config: { sections: [{ key: 'primary', slots: pending.slotsBefore }] } } }).starterCapacities
+      const season = (await prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { season: true } }))?.season ?? now.season
+      const rosters = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, playerData: true, updatedAt: true, redraftRosterId: true, platformUserId: true } })
+      // Loaded here, where a player is about to be moved, and nowhere else: the lineup engine brings every
+      // league format's rules with it, and the passes that move nobody (nearly all of them) do not need it.
+      const { persistRosterLineupWithEngine } = await import('@/lib/roster-lineup-engine/lineupService')
+      for (const roster of rosters) {
+        const plan = planBenchForRemovedSeats({
+          playerData: roster.playerData,
+          sport,
+          seatsBefore: pending.seatsBefore,
+          seatsAfter,
+          capacities,
+          capacitiesBefore,
+          trustSavedSeats: untouchedSince(roster.updatedAt),
+        })
+        if (!plan) continue
+        if (season != null) await freezeWeekLineup({ leagueId, rosterId: roster.id, redraftRosterId: roster.redraftRosterId, season, week: pending.week - 1 })
+        const saved = await persistRosterLineupWithEngine({
+          leagueId,
+          rosterId: roster.id,
+          actorUserId: league.userId,
+          nextPlayerData: plan.playerData,
+          season: season ?? new Date().getFullYear(),
+          week: pending.week,
+          // The commissioner's own scheduled rule: it is not stopped by a roster lock or a move freeze.
+          source: 'commissioner_override',
+          skipLockCheck: true,
+        })
+        if (saved.ok) {
+          seated.add(roster.id)
+          benched.push({ rosterId: roster.id, players: plan.benched })
+          if (roster.platformUserId) owners.set(roster.id, roster.platformUserId)
+        } else {
+          benchFailures.push({ rosterId: roster.id, error: saved.error })
+        }
+      }
+    }
+  }
+
+  // 3. FINISH: seats, event, done, record cleared. All or nothing.
   const finished = await prisma.$transaction(
     async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
@@ -210,10 +288,14 @@ async function runLocked(leagueId: string, week: number): Promise<RosterSchedule
         if (pending.ids.length > 0 && pending.seatsBefore.length > 0 && seatsAfter.length > 0) {
           const rosters = await tx.roster.findMany({ where: { leagueId }, select: { id: true } })
           for (const { id } of rosters) {
+            if (seated.has(id)) continue
             await tx.$queryRaw`SELECT id FROM rosters WHERE id = ${id} FOR UPDATE`
-            const roster = await tx.roster.findUnique({ where: { id }, select: { playerData: true } })
+            const roster = await tx.roster.findUnique({ where: { id }, select: { playerData: true, updatedAt: true } })
             if (!roster) continue
-            const next = remapStarterSeats(roster.playerData, pending.seatsBefore, seatsAfter)
+            // Untouched since the run was recorded: each saved seat follows its seat. Changed since (a
+            // manager's save against the new layout, or this run's own save on an earlier pass): the saved
+            // positions may be in either layout's terms, so they are dropped and the screen seats the lineup.
+            const next = untouchedSince(roster.updatedAt) ? remapStarterSeats(roster.playerData, pending.seatsBefore, seatsAfter) : withoutStarterSeats(roster.playerData)
             if (next !== roster.playerData) await tx.roster.update({ where: { id }, data: { playerData: next as Prisma.InputJsonValue } })
           }
         }
@@ -226,6 +308,8 @@ async function runLocked(leagueId: string, week: number): Promise<RosterSchedule
               applied: applied.map((c) => ({ id: c.id, week: c.week, text: describeRosterChange(c, spots) })),
               skipped: skipped.map((s) => ({ id: s.change.id, week: s.change.week, text: describeRosterChange(s.change, spots), reason: s.reason })),
               slots: pending.slots,
+              benched,
+              benchFailures,
             } as Prisma.InputJsonValue,
           },
         })
@@ -251,7 +335,31 @@ async function runLocked(leagueId: string, week: number): Promise<RosterSchedule
   }
   if (applied.length > 0) {
     const lines = applied.map((c) => describeRosterChange(c, spots))
-    await post(`Roster change for week ${pending.week}: ${lines.join('; ')}. Every team now has ${describeLayout(pending.slots, spots)}. Check your lineup before the week locks.`)
+    const moved = benched.length > 0 ? ' The player in a spot that was taken away moved to the bench.' : ''
+    await post(`Roster change for week ${pending.week}: ${lines.join('; ')}. Every team now has ${describeLayout(pending.slots, spots)}.${moved} Check your lineup before the week locks.`)
+    if (benchFailures.length > 0) {
+      await post(`Commissioner: ${benchFailures.length === 1 ? 'one team still has' : `${benchFailures.length} teams still have`} a starter in a spot that was taken away, because the move could not be saved. Fix ${benchFailures.length === 1 ? 'that lineup' : 'those lineups'} in the roster tools before the week locks.`)
+    }
+    // Each manager whose player moved is told directly, once.
+    for (const team of benched) {
+      const userId = owners.get(team.rosterId)
+      if (!userId) continue
+      const names = team.players.map((p) => p.name).filter((n): n is string => Boolean(n))
+      const who = names.length > 0 ? names.join(' and ') : team.players.length === 1 ? 'One of your starters' : `${team.players.length} of your starters`
+      await dispatchNotification({
+        userIds: [userId],
+        category: 'league_announcements',
+        type: 'guillotine_roster_change_benched',
+        title: `Week ${pending.week} roster change`,
+        body: `${who} moved to your bench: the league took away a starting spot this week. Set your lineup before it locks.`,
+        actionHref: `/core/my-team?league=${encodeURIComponent(leagueId)}`,
+        actionLabel: 'Open roster',
+        leagueId,
+        severity: 'medium',
+        dedupePrefix: `guillotine-roster-change:${leagueId}:${team.rosterId}:${pending.week}`,
+        meta: { week: pending.week, rosterId: team.rosterId, playerIds: team.players.map((p) => p.id) },
+      }).catch((e) => console.warn('[roster-schedule] notification failed', e instanceof Error ? e.message : 'unknown error'))
+    }
     await publishRuleChangesEvent({
       leagueId,
       actorUserId: league.userId,
@@ -259,5 +367,5 @@ async function runLocked(leagueId: string, week: number): Promise<RosterSchedule
       changes: diffRuleSnapshots({ rosterSlots: normalizeRosterSlots(layoutNow) }, { rosterSlots: normalizeRosterSlots(pending.slots) }),
     })
   }
-  return { week: pending.week, applied, skipped, slots: pending.slots, resumed: pending.resumed }
+  return { week: pending.week, applied, skipped, slots: pending.slots, resumed: pending.resumed, benched, benchFailures }
 }

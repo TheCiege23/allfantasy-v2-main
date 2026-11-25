@@ -17,7 +17,7 @@
  * Runs only when RUN_GUILLOTINE_ROSTER_SCHEDULE_DB=1 and DATABASE_URL names the disposable local `chopweek`
  * database (the same one __tests__/guillotine/chop-week-db.test.ts uses); skipped everywhere else.
  */
-import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
 
 const enabled = process.env.RUN_GUILLOTINE_ROSTER_SCHEDULE_DB === '1'
@@ -33,6 +33,7 @@ const edges = vi.hoisted(() => ({
   /** 'before': the writer throws without writing. 'after': it writes, then throws. */
   crash: null as null | 'before' | 'after',
   chat: [] as string[],
+  notified: [] as Array<{ userIds: string[]; type: string; body: string }>,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -50,6 +51,12 @@ vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({
   }),
 }))
 vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: vi.fn(async () => {}) }))
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({
+  dispatchNotification: vi.fn(async (p: { userIds: string[]; type: string; body: string }) => {
+    edges.notified.push({ userIds: p.userIds, type: p.type, body: p.body })
+    return { requested: 1, suppressed: 0, delivered: 1, failed: 0 }
+  }),
+}))
 vi.mock('@/lib/roster-engine/RosterEngineRegistry', async () => {
   const roster = await import('@/lib/nfl-roster')
   const nfl = {
@@ -95,6 +102,8 @@ import { resolveLineupStarterSlots } from '@/lib/league/lineupStarterSlots'
 import { applyDueRosterChanges } from '@/lib/guillotine/rosterScheduleApply'
 import { readRosterScheduleView, saveRosterSchedule } from '@/lib/guillotine/rosterScheduleSave'
 import { ROSTER_SCHEDULE_STATE_KEY, readRosterScheduleState } from '@/lib/guillotine/rosterSchedule'
+import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
+import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
 
 const SEASON = 2026
 const LAYOUT = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 6, IR: 1 }
@@ -108,7 +117,7 @@ const THIRD_WR = [{ id: 'w10wr', week: 10, kind: 'add_starter', slot: 'WR', coun
 
 const created = { leagueIds: [] as string[], userIds: [] as string[] }
 
-async function league(opts: { platform?: string; currentWeek?: number } = {}) {
+async function league(opts: { platform?: string; currentWeek?: number; bestBall?: boolean } = {}) {
   const tag = randomUUID().slice(0, 8)
   const owner = await prisma.appUser.create({ data: { email: `roster-${tag}@chopweek.invalid`, username: `roster-${tag}` } })
   created.userIds.push(owner.id)
@@ -117,13 +126,14 @@ async function league(opts: { platform?: string; currentWeek?: number } = {}) {
     data: {
       userId: owner.id, platform: opts.platform ?? 'allfantasy', platformLeagueId: `roster-${tag}`, name: `Roster Schedule ${tag}`,
       season: SEASON, sport: 'NFL', leagueType: 'guillotine', leagueVariant: 'guillotine', guillotineMode: true,
+      ...(opts.bestBall ? { bestBallMode: true } : {}),
     },
   })
   created.leagueIds.push(lg.id)
   await prisma.guillotineLeagueConfig.create({
     data: { leagueId: lg.id, eliminationStartWeek: 1, eliminationEndWeek: 17, teamsPerChop: 1, correctionWindow: 'after_stat_corrections', statCorrectionHours: 24, rosterReleaseTiming: 'next_waiver_run' },
   })
-  await prisma.redraftSeason.create({
+  const season = await prisma.redraftSeason.create({
     data: { leagueId: lg.id, sport: 'NFL', season: SEASON, status: 'active', totalWeeks: 17, playoffStartWeek: 15, currentWeek: opts.currentWeek ?? 3 },
   })
   await writeLeagueRosterConfig(lg.id, { templateKey: 'custom', slots: LAYOUT }, { userId: owner.id, auditAction: 'updated' })
@@ -142,7 +152,73 @@ async function league(opts: { platform?: string; currentWeek?: number } = {}) {
       },
     },
   })
-  return { leagueId: lg.id, ownerId: owner.id, rosterId: roster.id }
+  return { leagueId: lg.id, ownerId: owner.id, rosterId: roster.id, seasonId: season.id }
+}
+
+/** The real seat order of LAYOUT, and a full lineup saved in it: every seat filled, a receiver in the Flex. */
+const SEATS = ['K', 'QB', 'RB1', 'RB2', 'TE', 'WR1', 'WR2', 'DEF', 'FLEX']
+const LINEUP: Array<{ id: string; position: string }> = [
+  { id: 'k', position: 'K' }, { id: 'qb', position: 'QB' }, { id: 'rb1', position: 'RB' }, { id: 'rb2', position: 'RB' }, { id: 'te', position: 'TE' },
+  { id: 'wr1', position: 'WR' }, { id: 'wr2', position: 'WR' }, { id: 'def', position: 'DEF' }, { id: 'flex', position: 'WR' },
+]
+
+/**
+ * A second team in the league, the way a drafted team is stored: the lineup the screen saves (`playerData`),
+ * its scoring slots (`RedraftRosterPlayer.slotType`), and the link between them. `starters` leaves seats empty.
+ */
+async function team(lg: Awaited<ReturnType<typeof league>>, opts: { starters?: string[] } = {}) {
+  const tag = randomUUID().slice(0, 8)
+  const user = await prisma.appUser.create({ data: { email: `team-${tag}@chopweek.invalid`, username: `team-${tag}` } })
+  created.userIds.push(user.id)
+  const starting = LINEUP.filter((p) => !opts.starters || opts.starters.includes(p.id))
+  const bench = [...LINEUP.filter((p) => !starting.includes(p)), { id: 'bn1', position: 'WR' }]
+  const pid = (id: string) => `${tag}-${id}`
+  const rr = await prisma.redraftRoster.create({ data: { seasonId: lg.seasonId, leagueId: lg.leagueId, ownerId: user.id, ownerName: user.username, teamName: `Team ${tag}` } })
+  await prisma.redraftRosterPlayer.createMany({
+    data: [
+      ...starting.map((p) => ({ rosterId: rr.id, playerId: pid(p.id), playerName: `${p.id} name`, position: p.position, sport: 'NFL', slotType: p.position })),
+      ...bench.map((p) => ({ rosterId: rr.id, playerId: pid(p.id), playerName: `${p.id} name`, position: p.position, sport: 'NFL', slotType: 'BN' })),
+    ],
+  })
+  const row = (p: { id: string; position: string }) => ({ id: pid(p.id), position: p.position, name: `${p.id} name` })
+  const roster = await prisma.roster.create({
+    data: {
+      leagueId: lg.leagueId, platformUserId: user.id, redraftRosterId: rr.id, waiverPriority: 2,
+      playerData: {
+        players: [...starting, ...bench].map((p) => pid(p.id)),
+        starters: starting.map((p) => pid(p.id)),
+        lineup_sections: {
+          starters: starting.map((p) => ({ ...row(p), slotIndex: LINEUP.indexOf(p) })),
+          bench: bench.map(row), ir: [], taxi: [], devy: [],
+        },
+      },
+    },
+  })
+  /** What every reader of this team's lineup sees, straight from the tables. */
+  const read = async () => {
+    const r = await prisma.roster.findUniqueOrThrow({ where: { id: roster.id }, select: { playerData: true } })
+    const data = r.playerData as { starters: string[]; lineup_sections: { starters: Array<{ id: string; slotIndex?: number }>; bench: Array<{ id: string }> } }
+    const players = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: rr.id, droppedAt: null }, select: { rosterId: true, playerId: true, slotType: true, position: true } })
+    const short = (id: string) => id.replace(`${tag}-`, '')
+    const full = await prisma.league.findUniqueOrThrow({ where: { id: lg.leagueId } })
+    const template = await getRosterTemplateForLeague('NFL' as never, getFormatTypeForVariant('NFL', full.leagueVariant ?? undefined), lg.leagueId)
+    const labels = resolveLineupStarterSlots(full as never, template).map((x) => x.label)
+    /** Who scores as a starter in `week`, by the functions weekly scoring itself uses. */
+    const scoringStarters = async (week: number) => {
+      const lineups = await loadWeekLineups(prisma, { redraftRosterIds: [rr.id], season: SEASON, week })
+      return players.filter((p) => slotCategory(weekSlotType(p, lineups)) === 'starter').map((p) => short(p.playerId)).sort()
+    }
+    return {
+      starters: data.lineup_sections.starters.map((s) => short(s.id)),
+      bench: data.lineup_sections.bench.map((s) => short(s.id)),
+      drawnIn: Object.fromEntries(data.lineup_sections.starters.map((s) => [short(s.id), s.slotIndex == null ? null : labels[s.slotIndex] ?? null])),
+      /** Current state: what a week with no saved lineup of its own is scored from. */
+      scoringSlots: Object.fromEntries(players.map((p) => [short(p.playerId), slotCategory(p.slotType)])),
+      scoringStarters,
+      savedWeeks: [...new Set((await prisma.afRosterLineupAssignment.findMany({ where: { rosterId: roster.id }, select: { week: true } })).map((a) => a.week))].sort((a, b) => a - b),
+    }
+  }
+  return { rosterId: roster.id, userId: user.id, redraftRosterId: rr.id, read, pid }
 }
 
 type League = Awaited<ReturnType<typeof league>>
@@ -178,6 +254,7 @@ async function clean() {
   edges.entitled = true
   edges.crash = null
   edges.chat.length = 0
+  edges.notified.length = 0
   for (const id of created.leagueIds.splice(0)) {
     await prisma.guillotineEventLog.deleteMany({ where: { leagueId: id } })
     await prisma.automationLock.deleteMany({ where: { lockKey: { contains: id } } })
@@ -187,6 +264,11 @@ async function clean() {
 }
 
 describe.skipIf(!enabled)('scheduled roster changes on a real database', () => {
+  // The weekly run loads the lineup engine only when it is about to move a player. Load it once here, so the
+  // first test that benches someone is not timed on compiling every league format's rules.
+  beforeAll(async () => {
+    await import('@/lib/roster-lineup-engine/lineupService')
+  }, 180_000)
   afterEach(clean)
   afterAll(async () => {
     await prisma.$disconnect()
@@ -428,6 +510,155 @@ describe.skipIf(!enabled)('scheduled roster changes on a real database', () => {
     edges.crash = 'before'
     await applyDueRosterChanges({ leagueId: lg.leagueId, week: 10 }).catch(() => null)
     expect(await saveRosterSchedule(lg.leagueId, lg.ownerId, [WEEK_11])).toMatchObject({ ok: false, error: 'busy' })
+  })
+
+  describe('"week 7 a starter is taken away"', () => {
+    const TAKE_FLEX = [{ id: 'w7flex', week: 7, kind: 'starter_to_bench', slot: 'FLEX', count: 1 }]
+    const ALL = ['def', 'flex', 'k', 'qb', 'rb1', 'rb2', 'te', 'wr1', 'wr2']
+    const WITHOUT_FLEX = ALL.filter((id) => id !== 'flex')
+
+    it('the fixture team starts as a full, legal lineup that scores nine starters', async () => {
+      const lg = await league()
+      const t = await team(lg)
+      const s = await t.read()
+      expect(s.starters).toHaveLength(9)
+      expect(s.drawnIn).toEqual(Object.fromEntries(LINEUP.map((p, i) => [p.id, SEATS[i]])))
+      expect(await s.scoringStarters(6)).toEqual(ALL)
+      expect(s.savedWeeks).toEqual([])
+    })
+
+    it('waits while a week is being played, then runs between weeks', async () => {
+      const lg = await league()
+      const t = await team(lg)
+      expect(await saveRosterSchedule(lg.leagueId, lg.ownerId, TAKE_FLEX)).toMatchObject({ ok: true })
+
+      // Week 7 has arrived with a game already under way: nobody is moved, and nothing is marked done.
+      expect(await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: false })).toBeNull()
+      expect((await seen(lg)).engine).toMatchObject(LAYOUT)
+      expect((await t.read()).starters).toHaveLength(9)
+      expect((await seen(lg)).state.done).toEqual([])
+
+      // Week 6 is over and week 7 has not started.
+      const run = await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })
+      expect(run?.applied.map((c) => c.id)).toEqual(['w7flex'])
+      expect(run?.benched).toEqual([{ rosterId: t.rosterId, players: [{ id: t.pid('flex'), name: 'flex name' }] }])
+      expect(run?.benchFailures).toEqual([])
+      expect((await seen(lg)).engine).toMatchObject({ ...LAYOUT, FLEX: 0, BN: 7 })
+    })
+
+    it('the player in the Flex seat is benched everywhere a lineup is read', async () => {
+      const lg = await league()
+      const t = await team(lg)
+      await saveRosterSchedule(lg.leagueId, lg.ownerId, TAKE_FLEX)
+      await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })
+      const s = await t.read()
+      // The lineup screen.
+      expect(s.starters.sort()).toEqual(WITHOUT_FLEX)
+      expect(s.bench).toContain('flex')
+      // Everyone else is still drawn in his own seat.
+      expect(s.drawnIn).toEqual({ k: 'K', qb: 'QB', rb1: 'RB1', rb2: 'RB2', te: 'TE', wr1: 'WR1', wr2: 'WR2', def: 'DEF' })
+      // Scoring's current state, and week 7's own record.
+      expect(s.scoringSlots.flex).toBe('bench')
+      expect(await s.scoringStarters(7)).toEqual(WITHOUT_FLEX)
+      // Told once, by name; and the league is told a player moved.
+      expect(edges.notified).toEqual([{ userIds: [t.userId], type: 'guillotine_roster_change_benched', body: 'flex name moved to your bench: the league took away a starting spot this week. Set your lineup before it locks.' }])
+      expect(edges.chat).toEqual([
+        'Roster change for week 7: Take away 1 Flex starting spot. Every team now has 8 starters, 7 bench. The player in a spot that was taken away moved to the bench. Check your lineup before the week locks.',
+      ])
+    })
+
+    it('🛑 the week just played still scores him: his points are not taken back', async () => {
+      const lg = await league()
+      const t = await team(lg)
+      await saveRosterSchedule(lg.leagueId, lg.ownerId, TAKE_FLEX)
+      // This team never saved a lineup for week 6, so week 6 is scored from its current slots.
+      expect((await t.read()).savedWeeks).toEqual([])
+      await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })
+      const s = await t.read()
+      // Week 6 was written down before he was moved, so its chop, which can run a day later, still counts him.
+      expect(s.savedWeeks).toEqual([6, 7])
+      expect(await s.scoringStarters(6)).toEqual(ALL)
+      expect(await s.scoringStarters(7)).toEqual(WITHOUT_FLEX)
+    })
+
+    it('a lineup already saved for the week just played is left exactly as saved', async () => {
+      const lg = await league()
+      const t = await team(lg)
+      // In week 6 this manager had benched the tight end and saved it.
+      await prisma.afRosterLineupAssignment.createMany({
+        data: [...LINEUP, { id: 'bn1', position: 'WR' }].map((p, i) => ({ leagueId: lg.leagueId, rosterId: t.rosterId, season: SEASON, week: 6, section: p.id === 'te' || p.id === 'bn1' ? 'bench' : 'starters', slotIndex: i, playerId: t.pid(p.id) })),
+      })
+      await saveRosterSchedule(lg.leagueId, lg.ownerId, TAKE_FLEX)
+      await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })
+      expect(await (await t.read()).scoringStarters(6)).toEqual(ALL.filter((id) => id !== 'te'))
+    })
+
+    it('an empty Flex seat taken away moves nobody', async () => {
+      const lg = await league()
+      const t = await team(lg, { starters: WITHOUT_FLEX })
+      await saveRosterSchedule(lg.leagueId, lg.ownerId, TAKE_FLEX)
+      const run = await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })
+      expect(run?.benched).toEqual([])
+      expect((await t.read()).starters.sort()).toEqual(WITHOUT_FLEX)
+      expect(edges.notified).toEqual([])
+    })
+
+    it('every later pass leaves the lineup alone', async () => {
+      const lg = await league()
+      const t = await team(lg)
+      await saveRosterSchedule(lg.leagueId, lg.ownerId, TAKE_FLEX)
+      await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })
+      const first = await t.read()
+      for (const between of [true, false, true]) expect(await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: between })).toBeNull()
+      const again = await t.read()
+      expect(again.starters).toEqual(first.starters)
+      expect(again.bench).toEqual(first.bench)
+      expect(again.drawnIn).toEqual(first.drawnIn)
+      expect(edges.notified).toHaveLength(1)
+    })
+
+    it('a crash after the roster is written still benches him once, and keeps week 6', async () => {
+      const lg = await league()
+      const t = await team(lg)
+      await saveRosterSchedule(lg.leagueId, lg.ownerId, TAKE_FLEX)
+      edges.crash = 'after'
+      await expect(applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })).rejects.toThrow('crash after')
+      // The spot is gone and he is still starting: exactly the state that must not last.
+      expect((await seen(lg)).engine).toMatchObject({ FLEX: 0, BN: 7 })
+      expect((await t.read()).starters).toHaveLength(9)
+
+      edges.crash = null
+      const run = await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })
+      expect(run).toMatchObject({ resumed: true })
+      const s = await t.read()
+      expect(s.starters.sort()).toEqual(WITHOUT_FLEX)
+      expect(s.bench.filter((id) => id === 'flex')).toHaveLength(1)
+      expect(await s.scoringStarters(6)).toEqual(ALL)
+      expect(s.drawnIn).toEqual({ k: 'K', qb: 'QB', rb1: 'RB1', rb2: 'RB2', te: 'TE', wr1: 'WR1', wr2: 'WR2', def: 'DEF' })
+    })
+
+    it('a second back loses his seat when RB goes from two to one', async () => {
+      const lg = await league()
+      const t = await team(lg)
+      await saveRosterSchedule(lg.leagueId, lg.ownerId, [{ id: 'w7rb', week: 7, kind: 'starter_to_bench', slot: 'RB', count: 1 }])
+      const run = await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })
+      expect(run?.benched.flatMap((b) => b.players.map((p) => p.name))).toEqual(['rb2 name'])
+      const s = await t.read()
+      expect(s.drawnIn).toEqual({ k: 'K', qb: 'QB', rb1: 'RB', te: 'TE', wr1: 'WR1', wr2: 'WR2', def: 'DEF', flex: 'FLEX' })
+      expect(await s.scoringStarters(7)).toEqual(ALL.filter((id) => id !== 'rb2'))
+    })
+
+    it('a best ball league has no saved starter to move: the layout changes and that is all', async () => {
+      const lg = await league({ bestBall: true })
+      const t = await team(lg)
+      await saveRosterSchedule(lg.leagueId, lg.ownerId, TAKE_FLEX)
+      const run = await applyDueRosterChanges({ leagueId: lg.leagueId, week: 7, betweenWeeks: true })
+      expect(run?.applied.map((c) => c.id)).toEqual(['w7flex'])
+      expect(run?.benched).toEqual([])
+      expect((await seen(lg)).engine).toMatchObject({ FLEX: 0, BN: 7 })
+      expect(edges.notified).toEqual([])
+      expect((await t.read()).savedWeeks).toEqual([])
+    })
   })
 
   it('never touches an imported league', async () => {

@@ -12,6 +12,7 @@ import {
   normalizeRosterSchedule,
   readRosterSchedule,
   readRosterScheduleState,
+  rosterChangeMovesPlayers,
   rosterSpotsFromDefinitions,
   startingSpots,
   walkRosterSchedule,
@@ -40,10 +41,18 @@ describe('roster spots a schedule can change', () => {
     expect(nba.starters.map((s) => s.key)).not.toContain('IL')
   })
 
-  it('offers no change that takes a spot away from a team', () => {
-    // Deliberate (see the file header): scoring counts whoever is stored as a starter, so a spot can only be
-    // taken away once AllFantasy also benches the player in it.
-    expect(ROSTER_CHANGE_OPTIONS.map((o) => o.value)).toEqual(['add_starter', 'add_bench', 'bench_to_starter'])
+  it('offers four changes, and none that makes the roster smaller', () => {
+    expect(ROSTER_CHANGE_OPTIONS.map((o) => o.value)).toEqual(['add_starter', 'add_bench', 'bench_to_starter', 'starter_to_bench'])
+    // Deliberate (see the file header): a smaller roster leaves full teams unable to save any lineup.
+    const size = (l: Record<string, number>) => startingSpots(l, spots) + benchSpots(l, spots)
+    for (const option of ROSTER_CHANGE_OPTIONS) {
+      const r = applyRosterChange(LAYOUT, change({ kind: option.value, slot: option.needsSlot ? 'WR' : null }), spots)
+      expect(r.ok && size(r.slots) >= size(LAYOUT)).toBe(true)
+    }
+  })
+
+  it('only taking a spot away moves a player', () => {
+    expect(ROSTER_CHANGE_OPTIONS.filter((o) => rosterChangeMovesPlayers(o.value)).map((o) => o.value)).toEqual(['starter_to_bench'])
   })
 })
 
@@ -71,11 +80,19 @@ describe('one change', () => {
     expect(run(change({ kind: 'add_bench', count: 3 }))).toBe(3)
   })
 
-  it('no change ever lowers the number of starting spots', () => {
-    for (const option of ROSTER_CHANGE_OPTIONS) {
-      const r = applyRosterChange(LAYOUT, change({ kind: option.value, slot: option.needsSlot ? 'WR' : null }), spots)
-      expect(r.ok && startingSpots(r.slots, spots) >= startingSpots(LAYOUT, spots)).toBe(true)
-    }
+  it('"week 7 a starter is taken away": the spot becomes a bench spot', () => {
+    const r = applyRosterChange(LAYOUT, change({ kind: 'starter_to_bench', slot: 'FLEX' }), spots)
+    expect(r.ok && [r.slots.FLEX, r.slots.BN]).toEqual([0, 7])
+    expect(r.ok && [startingSpots(r.slots, spots), benchSpots(r.slots, spots)]).toEqual([8, 7])
+  })
+
+  it('refuses to take away a spot the league does not have, or its last starter', () => {
+    const none = applyRosterChange(LAYOUT, change({ kind: 'starter_to_bench', slot: 'SUPERFLEX' }), spots)
+    expect(!none.ok && none.reason).toBe('the league has no Super Flex (QB/WR/RB/TE) starting spot to take away.')
+    const tooMany = applyRosterChange(LAYOUT, change({ kind: 'starter_to_bench', slot: 'RB', count: 3 }), spots)
+    expect(!tooMany.ok && tooMany.reason).toBe('the league has 2 Running Back starting spots, so 3 cannot be taken away.')
+    const last = applyRosterChange({ QB: 1, BN: 5 }, change({ kind: 'starter_to_bench', slot: 'QB' }), spots)
+    expect(!last.ok && last.reason).toBe('a league needs at least one starting spot.')
   })
 
   it('never mutates the layout it was given', () => {
@@ -154,8 +171,9 @@ describe('saving a list', () => {
     ['a count of 0', { id: 'a', week: 5, kind: 'add_bench', count: 0 }, 'bad_change'],
     ['a count of 4', { id: 'a', week: 5, kind: 'add_bench', count: 4 }, 'bad_change'],
     ['an unknown type', { id: 'a', week: 5, kind: 'double_roster', count: 1 }, 'bad_change'],
-    ['taking a starting spot away', { id: 'a', week: 5, kind: 'remove_starter', slot: 'FLEX', count: 1 }, 'bad_change'],
+    ['a starter gone with no bench spot in return', { id: 'a', week: 5, kind: 'remove_starter', slot: 'FLEX', count: 1 }, 'bad_change'],
     ['taking a bench spot away', { id: 'a', week: 5, kind: 'remove_bench', count: 1 }, 'bad_change'],
+    ['taking away a spot the league does not have', { id: 'a', week: 5, kind: 'starter_to_bench', slot: 'SUPERFLEX', count: 1 }, 'bad_layout'],
     ['a bench spot as a starter', { id: 'a', week: 5, kind: 'add_starter', slot: 'BN', count: 1 }, 'unknown_spot'],
     ['an injured-list spot', { id: 'a', week: 5, kind: 'add_starter', slot: 'IR', count: 1 }, 'unknown_spot'],
     ['a week already played', { id: 'a', week: 1, kind: 'add_bench', count: 1 }, 'bad_week'],
@@ -226,7 +244,7 @@ describe('reading what is stored', () => {
     })
     expect(state.done).toEqual(['a'])
     expect(state.skipped).toEqual([{ id: 'z', reason: 'why' }])
-    expect(state.pending).toEqual({ week: 10, ids: ['b'], skipped: [{ id: 'c', reason: 'no bench' }], slots: { QB: 1, BN: 5 }, seatsBefore: [] })
+    expect(state.pending).toEqual({ week: 10, ids: ['b'], skipped: [{ id: 'c', reason: 'no bench' }], slots: { QB: 1, BN: 5 }, slotsBefore: { QB: 1, BN: 5 }, seatsBefore: [], startedAt: null })
     // No layout recorded = nothing to resume.
     expect(readRosterScheduleState({ [ROSTER_SCHEDULE_STATE_KEY]: { pending: { week: 10, ids: ['b'] } } }).pending).toBeNull()
   })
@@ -239,6 +257,8 @@ describe('the words', () => {
     expect(describeRosterChange(change({ kind: 'add_bench', count: 2 }), spots)).toBe('Add 2 bench spots')
     expect(describeRosterChange(change({ kind: 'bench_to_starter', slot: 'WR' }), spots)).toBe('Turn 1 bench spot into a Wide Receiver starting spot')
     expect(describeRosterChange(change({ kind: 'bench_to_starter', slot: 'RB', count: 2 }), spots)).toBe('Turn 2 bench spots into 2 Running Back starting spots')
+    expect(describeRosterChange(change({ kind: 'starter_to_bench', slot: 'FLEX' }), spots)).toBe('Take away 1 Flex starting spot')
+    expect(describeRosterChange(change({ kind: 'starter_to_bench', slot: 'RB', count: 2 }), spots)).toBe('Take away 2 Running Back starting spots')
   })
 
   it('sums a layout', () => {

@@ -113,11 +113,11 @@ describe('where it lives', () => {
     expect(screen.queryByTestId('guillotine-group-roster')).toBeNull()
   })
 
-  it('offers only changes that never force a move: no way to take a spot away', async () => {
+  it('offers four changes, and none that makes the roster smaller', async () => {
     mount(view())
     await ready()
     add()
-    expect([...inRow(0, 'guillotine-roster-kind').options].map((o) => o.textContent)).toEqual(['Add a starting spot', 'Add bench spots', 'Turn a bench spot into a starter'])
+    expect([...inRow(0, 'guillotine-roster-kind').options].map((o) => o.textContent)).toEqual(['Add a starting spot', 'Add bench spots', 'Turn a bench spot into a starter', 'Take away a starting spot'])
     expect([...inRow(0, 'guillotine-roster-slot').options].map((o) => o.value)).not.toEqual(expect.arrayContaining(['BN', 'IR', 'TAXI']))
   })
 })
@@ -166,6 +166,30 @@ describe('setting a change', () => {
     set(inRow(0, 'guillotine-roster-kind'), 'bench_to_starter')
     set(inRow(0, 'guillotine-roster-slot'), 'WR')
     expect(result()).toBe('From week 11: 10 starters, 5 bench.')
+  })
+
+  it('"week 7 a starter is taken away": one fewer starter, one more bench spot, and the page says who moves', async () => {
+    const { patches } = mount(view())
+    await ready()
+    add()
+    set(inRow(0, 'guillotine-roster-week'), 7)
+    set(inRow(0, 'guillotine-roster-kind'), 'starter_to_bench')
+    expect(inRow(0, 'guillotine-roster-slot').value).toBe('FLEX')
+    expect(result()).toBe('From week 7: 8 starters, 7 bench.')
+    expect(screen.getByTestId('guillotine-group-roster').textContent).toContain('the player in it moves to the bench between weeks')
+    fireEvent.click(save())
+    await waitFor(() => expect(patches).toHaveLength(1))
+    expect(patches[0]!.rosterSchedule).toEqual([expect.objectContaining({ week: 7, kind: 'starter_to_bench', slot: 'FLEX', count: 1 })])
+  })
+
+  it('taking away a spot the league does not have is said on the page', async () => {
+    mount(view())
+    await ready()
+    add()
+    set(inRow(0, 'guillotine-roster-kind'), 'starter_to_bench')
+    set(inRow(0, 'guillotine-roster-slot'), 'SUPERFLEX')
+    expect(screen.getByRole('alert').textContent).toBe('Week 4: the league has no Super Flex (QB/WR/RB/TE) starting spot to take away.')
+    expect(save().disabled).toBe(true)
   })
 
   it('says what each week leaves, in week order, whatever order the rows are in', async () => {
