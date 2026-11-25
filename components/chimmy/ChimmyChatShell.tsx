@@ -1337,14 +1337,17 @@ export default function ChimmyChatShell({
         </div>
 
         {/* text-white/60, not /40: at 11px, /40 measured 3.81:1 on this panel, under the 4.5:1 AA floor
-            for small text. Hover goes one step brighter so it still reads as a change. */}
+            for small text. Hover goes one step brighter so it still reads as a change.
+            On a touch screen (pointer: coarse) each control is 44px tall rather than its 18px line box.
+            The row sits below the input row in normal flow, so the taller boxes push the composer down
+            by the difference instead of overlapping the input; a mouse keeps the compact 18px row. */}
         <div className="flex items-center justify-between text-[11px] text-white/60 flex-wrap gap-2">
           <div className="flex items-center gap-3">
             {startSitDecisionHref ? (
               <Link
                 href={startSitDecisionHref}
                 data-testid="chimmy-start-sit-tool-link"
-                className="text-cyan-300/90 hover:text-cyan-100 underline underline-offset-2"
+                className="inline-flex items-center text-cyan-300/90 hover:text-cyan-100 underline underline-offset-2 [@media(pointer:coarse)]:min-h-[44px]"
               >
                 Start A vs B tool
               </Link>
@@ -1353,7 +1356,7 @@ export default function ChimmyChatShell({
               type="button"
               onClick={handleCopyResponse}
               data-testid="chimmy-copy-response-button"
-              className="hover:text-white/85"
+              className="inline-flex items-center hover:text-white/85 [@media(pointer:coarse)]:min-h-[44px]"
               aria-label="Copy response"
             >
               Copy response
@@ -1364,7 +1367,7 @@ export default function ChimmyChatShell({
                 onClick={handleRetry}
                 disabled={retryLoading}
                 data-testid="chimmy-retry-button"
-                className="inline-flex items-center gap-1 hover:text-white/85 disabled:opacity-50"
+                className="inline-flex items-center gap-1 hover:text-white/85 disabled:opacity-50 [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px]"
                 aria-label="Retry"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${retryLoading ? 'animate-spin' : ''}`} />
@@ -1377,7 +1380,7 @@ export default function ChimmyChatShell({
               type="button"
               onClick={onSaveConversation}
               data-testid="chimmy-save-conversation-button"
-              className="hover:text-white/85"
+              className="inline-flex items-center hover:text-white/85 [@media(pointer:coarse)]:min-h-[44px]"
             >
               Save conversation
             </button>
