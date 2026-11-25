@@ -35,6 +35,7 @@ import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, optimalLineupListsRespectingLocks, ordinal, projectedTotal } from '@/lib/league/native/nativeScreenModels'
 import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
 import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupView'
+import { lockRowLabel } from '@/lib/league/native/lockRowLabel'
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
 import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { MyTeamAutomations } from './MyTeamAutomations'
@@ -807,10 +808,16 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         <span className="nls-lrow-action">
           {editable ? (
             isLocked ? (
-              <>
-                <button type="button" className="nls-btn" data-size="sm" disabled aria-describedby={reasonId}>Locked</button>
-                {reason ? <small className="nls-lock-reason" id={reasonId}>{reason}</small> : null}
-              </>
+              // A short "until when" on the row; the full sentence is the tooltip and the screen-reader text
+              // (lib/league/native/lockRowLabel.ts).
+              <span className="nls-lock" title={reason} data-testid={`lineup-lock-${id}`}>
+                <button type="button" className="nls-lock-pill" disabled aria-describedby={reasonId}>
+                  <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg>
+                  Locked
+                </button>
+                <small className="nls-lock-when" aria-hidden="true">{lockRowLabel(reason)}</small>
+                {reason ? <span className="nls-sr-only" id={reasonId}>{reason}</span> : null}
+              </span>
             ) : kind === 'ir' || kind === 'taxi' ? (
               <button type="button" className="nls-btn" data-size="sm" disabled={saving} aria-label={`Move ${p?.name ?? 'player'} to bench`} onClick={() => doMove(id, { kind: 'bench' })}>
                 To bench
