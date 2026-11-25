@@ -35,6 +35,7 @@ import { MAX_FAAB_AMOUNT, describeSchedule } from '@/lib/guillotine/chopSchedule
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
 import { loadChopWatch } from '@/lib/guillotine/chopWatchLoad'
+import { loadGuillotineField } from '@/lib/guillotine/guillotineField'
 import { loadSurvivalOutlook } from '@/lib/guillotine/survivalOutlookLoad'
 import { loadNextChopPickState, saveNextChopPick } from '@/lib/guillotine/nextChopPickStore'
 import { decideCommissionerTiebreak, loadCommissionerTiebreaks } from '@/lib/guillotine/commissionerTiebreakLoad'
@@ -156,6 +157,11 @@ export async function GET(
 
   if (!summary) return NextResponse.json({ error: 'Summary not available' }, { status: 500 })
 
+  // Who is in the field when there is no chop line yet (lib/guillotine/guillotineField.ts): after the draft
+  // and before anyone scores, so no surface reads "no chop line" as "no season". Empty before the draft.
+  const noLine = !(watch?.dangerTiers?.length) && !((summary as { dangerTiers?: unknown[] }).dangerTiers?.length)
+  const field = noLine ? await loadGuillotineField(leagueId) : null
+
   // "Who's next?" for chopped managers. Never fails the summary.
   const nextChopPick = await loadNextChopPickState(leagueId, myRosterId).catch(() => null)
   // 2 in an MLB two-week league (lib/guillotine/eliminationPeriods.ts): the home's tiebreak copy says "last period".
@@ -168,6 +174,7 @@ export async function GET(
     chopWatch: watch ? { live: true, week: watch.week, chopCount: watch.chopCount, chopLine: watch.chopLine } : null,
     myEscapes,
     myRosterId,
+    ...(field ? { field } : {}),
     ...(wantOutlook ? { outlook } : {}),
     home: home && watch ? { ...home, scores: watch.scores } : home,
     config: config

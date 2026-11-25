@@ -104,3 +104,12 @@ describe('survival board (imported)', () => {
     expect(b.rows.every((r) => r.points == null)).toBe(true)
   })
 })
+
+describe('after the draft, before anyone scores', () => {
+  it('🛑 lists the field from `field` when there is no chop line yet, instead of "appears once the season has started"', () => {
+    const b = boardFromNativeSummary({ weekOrPeriod: 6, myRosterId: 'me', dangerTiers: [], field: [{ rosterId: 'me', displayName: 'Mine' }, { rosterId: 'x', displayName: 'Other' }], home: { scores: {} } })
+    expect(b.rows.map((r) => r.name).sort()).toEqual(['Mine', 'Other'])
+    expect(b.status).toBe('pre_scores')
+    expect(b.rows.some((r) => r.cutAbove)).toBe(false)
+  })
+})

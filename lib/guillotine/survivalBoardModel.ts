@@ -217,6 +217,8 @@ export type NativeBoardSummary = {
   weekOrPeriod?: number | null
   myRosterId?: string | null
   dangerTiers?: DangerTierRow[] | null
+  /** The teams alive when there is no chop line yet (after the draft, before a point): ./guillotineField.ts. */
+  field?: ReadonlyArray<{ rosterId: string; displayName: string }> | null
   chopWatch?: { week: number; chopCount: number; chopLine: number | null } | null
   outlook?: Record<string, TeamOutlook> | null
   home?: {
@@ -228,7 +230,12 @@ export type NativeBoardSummary = {
 
 export function boardFromNativeSummary(summary: NativeBoardSummary): SurvivalBoard {
   const me = summary.myRosterId ?? null
-  const line = buildChopLine(summary.dangerTiers ?? [], me, summary.home?.scores ?? null)
+  // Before anyone scores there is no chop line on purpose (./chopWatch.ts), but the field is known: list it,
+  // every team level, rather than "the chop line appears once the season has started" after a draft.
+  const tiers: DangerTierRow[] = summary.dangerTiers?.length
+    ? summary.dangerTiers
+    : (summary.field ?? []).map((t) => ({ rosterId: t.rosterId, displayName: t.displayName, tier: 'safe', pointsFromChopZone: 0 }))
+  const line = buildChopLine(tiers, me, summary.home?.scores ?? null)
   return finish({
     source: 'native',
     week: summary.chopWatch?.week ?? summary.weekOrPeriod ?? null,
