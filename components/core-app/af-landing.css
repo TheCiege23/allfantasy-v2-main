@@ -857,6 +857,19 @@
   }
 }
 
+/*
+ * The Clubhouse link (2026-11-25) is the sixth text link, and the row has no room for it near the
+ * bottom of the wide-bar range: measured at 1200px the Spanish bar wrapped Sign in and the primary
+ * CTA onto a second row (one row without the link, 106px spare at 1280px), and English wrapped at
+ * 1101px. So it shows from 1240px, with margin for both languages. Below that it stays in the
+ * footer, and under 1100px in the phone menu too — never at the cost of the buttons' row.
+ */
+@media (max-width: 1239px) {
+  .af-lp-nav-links .af-lp-nav-clubhouse {
+    display: none;
+  }
+}
+
 @media (max-width: 1080px) {
   .af-lp-cap-grid {
     grid-template-columns: repeat(2, 1fr);
