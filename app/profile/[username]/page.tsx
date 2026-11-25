@@ -26,21 +26,19 @@ export default async function PublicProfilePage({
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 mode-readable">
-        <div className="mb-6">
+        <div className={isOwnProfile ? "mb-6" : "mb-3"}>
           <Link
             href={isOwnProfile ? "/dashboard" : "/"}
             className="inline-flex text-xs font-medium mode-muted hover:underline"
           >
             ← Back
           </Link>
-          <h1 className="text-2xl font-semibold mode-text">
-            {isOwnProfile ? "Your profile" : `@${username}`}
-          </h1>
-          <p className="mt-2 text-sm mode-muted">
-            {isOwnProfile
-              ? "Your identity and preferences. Edit below or open Settings."
-              : "Public profile view."}
-          </p>
+          {/*
+            Someone else's profile has no page heading (2026-11-25, the simplify pass): the card's name
+            and @handle right below said "@username" twice more.
+          */}
+          {isOwnProfile ? <h1 className="text-2xl font-semibold mode-text">Your profile</h1> : null}
+          {/* No intro line (2026-11-25, the simplify pass): the heading or the card names whose profile it is. */}
         </div>
         <ProfilePageClient
           isOwnProfile={isOwnProfile}

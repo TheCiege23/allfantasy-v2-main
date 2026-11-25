@@ -31,6 +31,19 @@ describe('AlertSettingsClient', () => {
     })
 
     expect(screen.getByTestId('chimmy-alert-preferences-panel')).toBeInTheDocument()
-    expect(screen.getByText(/Fine-tune Chimmy frequency/i)).toBeInTheDocument()
+    // One closed row since 2026-11-25 (the simplify pass): the panel is inside it, with no second
+    // description line, and the "notification bell" fine print joined the page intro.
+    const fold = screen.getByTestId('alerts-chimmy-fold')
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.hasAttribute('open')).toBe(false)
+    expect(fold.contains(screen.getByTestId('chimmy-alert-preferences-panel'))).toBe(true)
+    expect(screen.queryByText(/Fine-tune Chimmy frequency/i)).toBeNull()
+    expect(screen.queryByText(/Alerts appear in the notification bell/i)).toBeNull()
+  })
+
+  it('gives each alert switch a 48px row', async () => {
+    render(<AlertSettingsClient />)
+    const row = await screen.findByTestId('sports-alert-toggle-injury')
+    expect(row.className).toMatch(/(^|\s)min-h-\[48px\](\s|$)/)
   })
 })
