@@ -2698,6 +2698,7 @@ async function buildResolvedDraftPoolForLeague(
         undefined,
       nbaDraftStats: sport === 'NBA' ? (storedSeason?.nbaDraftStats ?? sprAug?.nbaDraftStats ?? null) : null,
       statSeason: observedNfl?.season ?? storedSeason?.statSeason ?? null,
+      statSeasonIsPrevious: !observedNfl?.season && storedSeason?.statSeasonIsPrevious === true,
       seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (storedSeason?.seasonStatLine ?? sprAug?.seasonStatLine ?? null) : null,
       afProjectionPerGame: afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null,
       lifetimeValue:
