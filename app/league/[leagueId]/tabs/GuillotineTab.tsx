@@ -26,7 +26,11 @@ export function GuillotineTab({ leagueId, sport, leagueName }: GuillotineTabProp
     if (sub === 'board') return
     const id = SCROLL_ANCHORS[sub]
     const t = requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      const el = document.getElementById(id)
+      // A folded target (Guilly Chimmy is a closed row since 2026-11-24) opens on the way there.
+      const fold = el instanceof HTMLDetailsElement ? el : el?.querySelector('details')
+      if (fold) fold.open = true
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
     return () => cancelAnimationFrame(t)
   }, [sub])
