@@ -48,6 +48,8 @@ import {
   AUTOPILOT_ON_ACTION,
   applyChimmyAutopilot,
   setChimmyTradeMode,
+  setChimmyPersonality,
+  PERSONALITY_ACTION,
   TRADES_MODE_ACTION,
   isOwnerOnAutopilot,
   DRAFT_AS_ME_ACTION,
@@ -113,6 +115,25 @@ describe('how many teams Chimmy may run', () => {
     m.prisma.appUser.findUnique.mockRejectedValue(new Error('db down'))
     const results = await hand(5)
     expect(results[4]).toMatchObject({ ok: false, status: 409 })
+  })
+})
+
+describe('setChimmyPersonality', () => {
+  it('the commissioner chooses who Chimmy is for a team; it replaces the drafted one and survives a style change', async () => {
+    await applyChimmyAutopilot('L', 'commish', 'r1', undefined, { personality: 'ZERO_RB' })
+    expect(await setChimmyPersonality('L', 'commish', 'r1', 'FLOOR_SAFE')).toEqual({ ok: true, personality: 'FLOOR_SAFE' })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'dynasty_owner', personality: 'FLOOR_SAFE' } })
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: PERSONALITY_ACTION, metadata: { rosterId: 'r1', personality: 'FLOOR_SAFE' } }))
+    await setChimmyAutopilot('L', 'commish', 'r1', 'rebuild')
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'rebuild', personality: 'FLOOR_SAFE' } })
+  })
+
+  it('refuses a non-commissioner, an unknown style, and a team Chimmy is not running', async () => {
+    await setChimmyAutopilot('L', 'commish', 'r1', undefined)
+    expect(await setChimmyPersonality('L', 'commish', 'r1', 'TANK')).toMatchObject({ ok: false, status: 400 })
+    expect(await setChimmyPersonality('L', 'commish', 'r9', 'BALANCED')).toMatchObject({ ok: false, status: 409 })
+    m.elevated.mockResolvedValueOnce(false)
+    expect(await setChimmyPersonality('L', 'member', 'r1', 'BALANCED')).toMatchObject({ ok: false, status: 403 })
   })
 })
 

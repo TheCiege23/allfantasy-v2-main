@@ -38,6 +38,7 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
   const [chimmyLimit, setChimmyLimit] = useState(4)
   const [chimmyFreeTeams, setChimmyFreeTeams] = useState(1)
   const [chimmyReports, setChimmyReports] = useState<ChimmyReport[]>([])
+  const [personalities, setPersonalities] = useState<Array<{ id: string; label: string }>>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState('')
 
@@ -45,11 +46,12 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
     try {
       const r = await fetch(url, { cache: 'no-store' })
       if (!r.ok) throw new Error(String(r.status))
-      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; draftAsMe?: boolean; autoHandover?: AutoHandover; chimmyLimit?: number; chimmyFreeTeams?: number; chimmyReports?: ChimmyReport[]; teams: Team[] }
+      const body = (await r.json()) as { native: boolean; autopilotEntitled?: boolean; draftAsMe?: boolean; autoHandover?: AutoHandover; chimmyLimit?: number; chimmyFreeTeams?: number; chimmyReports?: ChimmyReport[]; chimmyPersonalities?: Array<{ id: string; label: string }>; teams: Team[] }
       setNative(body.native)
       if (typeof body.chimmyLimit === 'number') setChimmyLimit(body.chimmyLimit)
       if (typeof body.chimmyFreeTeams === 'number') setChimmyFreeTeams(body.chimmyFreeTeams)
       setChimmyReports(Array.isArray(body.chimmyReports) ? body.chimmyReports : [])
+      setPersonalities(Array.isArray(body.chimmyPersonalities) ? body.chimmyPersonalities : [])
       setEntitled(Boolean(body.autopilotEntitled))
       setDraftAsMeState(body.draftAsMe !== false)
       setAutoHandoverState(body.autoHandover ? { days: body.autoHandover.days, to: body.autoHandover.to } : null)
@@ -108,15 +110,32 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       setBusy(null)
     }
   }
+  /** Who Chimmy is for a team: how it weighs trades and how often it makes moves. */
+  const setPersonality = async (team: Team, personality: string) => {
+    setBusy(team.rosterId)
+    setMessage('')
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterId: team.rosterId, personality }) })
+      const body = (await r.json().catch(() => ({}))) as { error?: string }
+      if (!r.ok) throw new Error(body.error || '')
+      setMessage(m.personalitySaved)
+      await load()
+    } catch (e) {
+      setMessage(e instanceof Error && e.message ? e.message : m.saveFailed)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   /** Whether a Chimmy team takes trade offers (it answers them itself) or refuses them all. */
-  const setTrades = async (team: Team, trades: 'off' | 'answer') => {
+  const setTrades = async (team: Team, trades: TradeMode) => {
     setBusy(team.rosterId)
     setMessage('')
     try {
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterId: team.rosterId, trades }) })
       const body = (await r.json().catch(() => ({}))) as { error?: string }
       if (!r.ok) throw new Error(body.error || '')
-      setMessage(trades === 'off' ? m.tradesOffSaved : m.tradesAnswerSaved)
+      setMessage(trades === 'off' ? m.tradesOffSaved : trades === 'answer_and_send' ? m.tradesSendSaved : m.tradesAnswerSaved)
       await load()
     } catch (e) {
       setMessage(e instanceof Error && e.message ? e.message : m.saveFailed)
@@ -221,19 +240,37 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
                   </label>
                   {running && team.chimmy ? (
                     <div className="af-tw-chimmy-profile" data-testid="chimmy-manager-profile">
+                      {personalities.length > 0 ? (
+                        <label>
+                          {m.managerStyle}{' '}
+                          <select
+                            data-testid="chimmy-manager-style"
+                            value={team.chimmy.personality}
+                            disabled={busy !== null}
+                            onChange={(e) => void setPersonality(team, e.target.value)}
+                          >
+                            {personalities.map((p) => (
+                              <option key={p.id} value={p.id}>{m.chimmyPersonalityLabel(p.id, p.label)}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
                       <p data-testid="chimmy-manager-personality">
-                        {m.chimmyPersonality(team.chimmy.personality, team.chimmy.label, team.chimmy.summary)}{' '}
+                        {personalities.length > 0
+                          ? m.chimmyPersonalitySummary(team.chimmy.personality, team.chimmy.summary)
+                          : m.chimmyPersonality(team.chimmy.personality, team.chimmy.label, team.chimmy.summary)}{' '}
                         <small>{m.chimmyPersonalityNote}</small>
                       </p>
                       <label>
                         {m.tradeOffers}{' '}
                         <select
                           data-testid="chimmy-manager-trades"
-                          value={team.chimmy.trades === 'off' ? 'off' : 'answer'}
+                          value={team.chimmy.trades}
                           disabled={busy !== null}
-                          onChange={(e) => void setTrades(team, e.target.value === 'off' ? 'off' : 'answer')}
+                          onChange={(e) => void setTrades(team, e.target.value === 'off' ? 'off' : e.target.value === 'answer_and_send' ? 'answer_and_send' : 'answer')}
                         >
                           <option value="answer">{m.tradesAnswer}</option>
+                          <option value="answer_and_send">{m.tradesAnswerAndSend}</option>
                           <option value="off">{m.tradesOff}</option>
                         </select>
                       </label>
