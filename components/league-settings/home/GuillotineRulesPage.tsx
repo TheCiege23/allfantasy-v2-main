@@ -442,15 +442,15 @@ export function GuillotineRulesPage({
                   key={w.week}
                   data-testid={`guillotine-preview-week-${w.week}`}
                   data-kind={w.kind}
-                  className={`flex w-[58px] flex-none flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 text-center ${
+                  className={`flex w-[62px] flex-none flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 text-center ${
                     w.kind === 'chop' ? (w.chops > 1 ? 'border-rose-400/60 bg-rose-500/15' : 'border-white/15 bg-white/[0.04]') : w.kind === 'final' ? 'border-amber-400/50 bg-amber-500/10' : 'border-dashed border-white/15'
                   }`}
                 >
-                  <span className="text-[10px] uppercase tracking-wide text-white/45">Wk {w.week}</span>
+                  <span className="text-[11px] uppercase tracking-wide text-white/45">Wk {w.week}</span>
                   <span className={`text-[13px] font-semibold ${w.kind === 'chop' ? (w.chops > 1 ? 'text-rose-200' : 'text-white') : 'text-white/55'}`}>
                     {w.kind === 'chop' ? `−${w.chops}` : w.kind === 'final' ? 'Final' : w.kind === 'waiting' ? '·' : 'None'}
                   </span>
-                  <span className="text-[10px] text-white/50">{w.aliveAfter} left</span>
+                  <span className="text-[11px] text-white/50">{w.aliveAfter} left</span>
                 </li>
               ))}
             </ol>
