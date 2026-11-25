@@ -491,6 +491,15 @@ export function DraftChatPanel({
                     </span>
                   ) : null}
                 </span>
+                {/* Why Chimmy took him: the queue, Draft like me, or best available (pickMetadata.autopick). */}
+                {isAi && meta?.autoPickReason ? (
+                  <span
+                    className="mt-0.5 block whitespace-normal break-words text-[11px] leading-snug text-violet-100/85"
+                    data-testid="draft-chat-pick-auto-reason"
+                  >
+                    {meta.autoPickReason}
+                  </span>
+                ) : null}
               </span>
               <span className="shrink-0 text-[11px] tabular-nums text-white/40">
                 {when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}

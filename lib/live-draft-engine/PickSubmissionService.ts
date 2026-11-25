@@ -55,6 +55,13 @@ import { createDraftCollegeRight } from '@/lib/devy/nbaDraftRights'
 import { isDevyLeague } from '@/lib/devy/DevyLeagueConfig'
 import { isC2CLeague } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 
+/** `pickMetadata.autopick.reason`, when an automatic pick recorded why it chose this player. */
+function autoPickReasonFrom(meta: unknown): string | null {
+  const auto = meta && typeof meta === 'object' ? (meta as { autopick?: unknown }).autopick : null
+  const reason = auto && typeof auto === 'object' ? (auto as { reason?: unknown }).reason : null
+  return typeof reason === 'string' && reason.trim() ? reason.trim() : null
+}
+
 /** How close to its deadline an automatic pick still counts as the clock having run out. */
 const TIMEOUT_AUTO_GRACE_MS = 3_000
 
@@ -814,6 +821,8 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
         headshotUrl: pick.playerImageUrl ?? input.playerImageUrl ?? null,
         // D.6.3 — flips the AI badge on the rendered card. Mutually exclusive with commissionerOverride below.
         aiManager: input.source === 'auto',
+        // Why it was auto-picked (queue / Draft like me / best available), shown under the pick in chat.
+        autoPickReason: autoPickReasonFrom(input.pickMetadata),
         // Commit T — flips the Commissioner badge on the rendered card.
         commissionerOverride: input.source === 'commissioner',
       }),
