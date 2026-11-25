@@ -76,6 +76,38 @@ const VERIFIED_MEDIA_ALIASES = [
     "secondaryName": "Tidjane Salaün"
   },
   {
+    "sport": "NBA",
+    "rollingId": "1888",
+    "secondaryId": "tsdb_34438110",
+    "dob": "2006-04-02",
+    "rollingName": "Christian Anderson Jr.",
+    "secondaryName": "Christian Anderson"
+  },
+  {
+    "sport": "NBA",
+    "rollingId": "1398",
+    "secondaryId": "tsdb_34217969",
+    "dob": "2002-01-15",
+    "rollingName": "Khalifa Ababaca Diop",
+    "secondaryName": "Khalifa Diop"
+  },
+  {
+    "sport": "NBA",
+    "rollingId": "1755",
+    "secondaryId": "tsdb_34394176",
+    "dob": "2003-03-14",
+    "rollingName": "Yanic Konan Niederhaeuser",
+    "secondaryName": "Yanic Niederhäuser"
+  },
+  {
+    "sport": "NBA",
+    "rollingId": "1950",
+    "secondaryId": "tsdb_34394176",
+    "dob": "2003-03-14",
+    "rollingName": "Yanic Konan Niederhauser",
+    "secondaryName": "Yanic Niederhäuser"
+  },
+  {
     "sport": "NHL",
     "rollingId": "2940",
     "secondaryId": "tsdb_34381700",

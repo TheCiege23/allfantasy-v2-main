@@ -3396,6 +3396,8 @@ export const translationsEn: Record<string, string> = {
 "draftRoom.playerPanel.noPicksYet": "No picks yet.",
 "draftRoom.pool.prospectBadge": "Prospect",
 "draftRoom.pool.prospectUnsigned": "Unsigned",
+"draftRoom.pool.lastSeasonStats": "last season",
+"draftRoom.pool.lastSeasonStatsTooltip": "No games played this season yet. These are last season's numbers.",
 "draftRoom.pool.prospectTooltip":
   "NHL prospect listed by Fantrax who is on no NHL roster in our data. The team shown is the NHL club that holds him. No age or draft year is available.",
 "waiverWire.prospects.sortNote":
