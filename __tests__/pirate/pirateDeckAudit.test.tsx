@@ -72,7 +72,11 @@ describe('A claim you must act on comes first (3)', () => {
 
 describe('Commissioner review folds away until it is needed (4)', () => {
   it('is closed on a claim with nothing flagged', async () => {
-    await deck(data([claim({ winnerRosterId: 'other', status: 'pending', playerId: 'q7', deadlineAt: '2026-11-25T20:00:00Z' })]))
+    // A deadline still ahead of the clock. A pending claim past its deadline is overdue, and overdue is
+    // something flagged: the review opens. This was the fixed instant 2026-11-25T20:00:00Z, so the test
+    // passed until that moment and has failed for every branch since.
+    const notYetDue = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    await deck(data([claim({ winnerRosterId: 'other', status: 'pending', playerId: 'q7', deadlineAt: notYetDue })]))
     const review = screen.getByTestId('pirate-commish-review-c') as HTMLDetailsElement
     expect(review.tagName).toBe('DETAILS')
     expect(review.open).toBe(false)
