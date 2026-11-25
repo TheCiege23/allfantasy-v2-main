@@ -230,3 +230,12 @@
   --sp-muted: initial; --sp-muted-soft: initial; --sp-prop: initial; --sp-prop-line: initial; --sp-blue: initial; --sp-blue-soft: initial;
   --gl-safe-big: initial; --gl-danger-big: initial; --gl-zone-big: initial; --gl-me-row: initial; --gl-me-line: initial;
 }
+
+/* A card that folds (SpecialtyCard `fold`, 2026-11-24): the label row is the summary, 44px tall at least,
+   with a chevron that turns. */
+.fold > .foldSummary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin: -8px 0; cursor: pointer; list-style: none; }
+.fold > .foldSummary::-webkit-details-marker { display: none; }
+.fold > .foldSummary::after { content: '\25BE'; color: var(--sp-t3, #7d84a3); font-size: 13px; transition: transform .15s ease; }
+.fold[open] > .foldSummary::after { transform: rotate(180deg); }
+.fold > .foldSummary:focus-visible { outline: 2px solid var(--sp-accent, currentColor); outline-offset: 3px; border-radius: 8px; }
+.fold[open] > .foldBody { margin-top: 14px; }
