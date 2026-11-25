@@ -55,6 +55,9 @@ const REMAINING_PROJECTION = [22.4, 31.0, 18.6, 27.3, 12.9, 24.1, 20.5, 9.8, 15.
 const FULL_WEEK_PROJECTION = [121.8, 118.2, 112.5, 110.9, 104.6, 108.3, 101.7, 97.4, 93.1]
 const PLAYERS_LEFT = [2, 3, 2, 3, 1, 2, 2, 1, 2]
 
+/** What this visit's eliminated viewer has written, so a save in the harness shows on the page. */
+let harnessLastWords: string | null = null
+
 export function guillotineSummary(mood: GuillotineHarnessMood, view: GuillotineHarnessView = DEFAULT_VIEW) {
   const week = GUILLOTINE_WEEK
   const alive = ids.filter((id) => CHOPPED[id] == null)
@@ -106,6 +109,17 @@ export function guillotineSummary(mood: GuillotineHarnessMood, view: GuillotineH
     ],
     assets: { leagueImage: '/guillotine/Guillotine.png', introVideo: '/guillotine/Guillotine.mp4' },
     myRosterId,
+    // Last words (lib/guillotine/lastWords.ts): two earlier chops left one; the eliminated viewer (r10, the latest
+    // chop) has the box open, with whatever this visit has written.
+    lastWords: {
+      entries: [
+        ...(harnessLastWords ? [{ rosterId: 'r10', week: 3, text: harnessLastWords }] : []),
+        { rosterId: 'r11', week: 2, text: 'Started my kicker over a healthy WR1. I deserve this.' },
+        { rosterId: 'r12', week: 1, text: 'See you all in the Graveyard.' },
+      ],
+      mine: mood === 'eliminated' ? { week: 3, text: harnessLastWords, window: 'open' as const } : null,
+      canRemove: false,
+    },
     nextChopPick: mood === 'eliminated'
       ? {
           week,
@@ -244,6 +258,14 @@ export function installGuillotineHarnessFetch(mood: GuillotineHarnessMood) {
     if (p === `/api/leagues/${GUILLOTINE_LEAGUE_ID}/guillotine/summary` && method === 'GET') {
       if (url.searchParams.get('view') === 'preview') return json({ error: 'Not part of this harness.' }, 409)
       return json(guillotineSummary(mood, readGuillotineHarnessView(window.location.search)))
+    }
+    // The one write the harness answers: an eliminated viewer's last words, kept for this visit only.
+    if (p === `/api/leagues/${GUILLOTINE_LEAGUE_ID}/guillotine/summary` && method === 'POST') {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { action?: string; text?: string }
+      if (body.action === 'last_words' && mood === 'eliminated' && typeof body.text === 'string') {
+        harnessLastWords = body.text.trim()
+        return json({ ok: true, lastWords: guillotineSummary(mood, readGuillotineHarnessView(window.location.search)).lastWords })
+      }
     }
     if (p === `/api/leagues/${GUILLOTINE_LEAGUE_ID}/guillotine-war-room` && method === 'GET') return json(guillotineWarRoomState(mood))
     if (p === '/api/subscription/entitlements') return json({ hasAccess: true, entitlement: { plans: ['pro'], status: 'active' } })

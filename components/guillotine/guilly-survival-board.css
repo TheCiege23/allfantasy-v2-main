@@ -106,6 +106,11 @@ a.gsb-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .gsb-grave li[data-me] { border-color: var(--gsb-accent); }
 .gsb-grave-week { color: var(--gsb-faint); font: 700 11px var(--gsb-mono); text-transform: uppercase; }
 .gsb-grave-icon { width: 18px; height: 18px; color: var(--gsb-bad); opacity: .8; }
+.gsb-words { display: grid; gap: 10px; margin: 0; padding: 0 18px 16px; list-style: none; }
+.gsb-words li { display: grid; gap: 3px; padding-top: 10px; border-top: 1px solid var(--gsb-line); }
+.gsb-words-who { color: var(--gsb-faint); font: 700 11px var(--gsb-mono); text-transform: uppercase; }
+.gsb-words blockquote { margin: 0; color: var(--gsb-muted); font-size: 14px; font-style: italic; overflow-wrap: anywhere; }
+.gsb-words-remove { justify-self: start; min-height: 36px; padding: 0 12px; border: 1px solid var(--gsb-line); border-radius: 8px; background: none; color: var(--gsb-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
 .gsb-grave-name { overflow: hidden; width: 100%; color: var(--gsb-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 560px) {

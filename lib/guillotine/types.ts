@@ -135,3 +135,5 @@ export type GuillotineEventType =
   | 'chop_undone'
   /** A scheduled roster change ran (./rosterScheduleApply.ts): what changed, and the layout it left. */
   | 'roster_change'
+  /** A chopped manager's parting message, or the commissioner taking one down (./lastWords.ts). */
+  | 'last_words'

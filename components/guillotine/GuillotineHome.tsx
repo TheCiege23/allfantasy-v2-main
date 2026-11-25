@@ -11,6 +11,8 @@ import { GuillotineChopExtras } from './GuillotineSpecialtyHome'
 import { GuillySurvivalBoard, type BoardAction, type BoardWeekPicker } from './GuillySurvivalBoard'
 import { GuillotineSurvivalHistory } from './GuillotineSurvivalHistory'
 import { GuillotineNextChopPick } from './GuillotineNextChopPick'
+import { GuillotineLastWords } from './GuillotineLastWords'
+import type { LastWordsState } from '@/lib/guillotine/lastWordsStore'
 import type { NextChopPickState } from '@/lib/guillotine/nextChopPickStore'
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import type { ChopListOrder } from '@/lib/guillotine/chopListOrder'
@@ -65,6 +67,8 @@ type Summary = {
   calendarWeek?: number | null
   /** "Who's next?" for chopped managers (lib/guillotine/nextChopPick.ts). */
   nextChopPick?: NextChopPickState | null
+  /** Chopped managers' last words (lib/guillotine/lastWords.ts). `canRemove`: the viewer is the commissioner. */
+  lastWords?: (LastWordsState & { canRemove?: boolean }) | null
   config?: {
     eliminationStartWeek: number
     eliminationEndWeek: number | null
@@ -121,6 +125,26 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
   }, [load])
 
   const liveBoard = useMemo(() => (summary ? boardFromNativeSummary(summary) : null), [summary])
+  // Last words just written or taken down show at once, without another summary request.
+  const keepLastWords = useCallback((next: LastWordsState) => {
+    setSummary((s) => (s ? { ...s, lastWords: { ...next, canRemove: s.lastWords?.canRemove } } : s))
+  }, [])
+  const removeLastWords = useCallback(
+    (rosterId: string) => {
+      void fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove_last_words', rosterId }),
+      })
+        .then(async (res) => (res.ok ? ((await res.json()) as { lastWords?: LastWordsState | null }).lastWords : null))
+        .then((next) => {
+          if (next) keepLastWords(next)
+        })
+        .catch(() => {})
+    },
+    [leagueId, keepLastWords],
+  )
   const liveWeek = liveBoard?.week ?? summary?.weekOrPeriod ?? null
   const history = summary?.home?.history ?? null
   // Weeks the chop has already scored, oldest first, then the week being played.
@@ -201,7 +225,8 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
         chopAt={pastWeek == null ? summary?.home?.nextChopAt ?? null : null}
         weekPicker={weekPicker}
         // The latest chop's moment sits with this week's list, not with a replayed one.
-        extra={pastWeek == null ? <GuillotineChopExtras leagueId={leagueId} home={summary?.home} /> : null}
+        extra={pastWeek == null ? <GuillotineChopExtras leagueId={leagueId} home={summary?.home} lastWords={summary?.lastWords?.entries} /> : null}
+        onRemoveLastWords={summary?.lastWords?.canRemove ? removeLastWords : undefined}
       />
 
       {/*
@@ -249,6 +274,9 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
           </button>
         </section>
       ) : null}
+
+      {/* A chopped manager's own box. Everyone reads the messages on the chop moment and in the Graveyard. */}
+      {summary?.lastWords?.mine ? <GuillotineLastWords leagueId={leagueId} state={summary.lastWords} onSaved={keepLastWords} /> : null}
 
       {summary?.nextChopPick ? <GuillotineNextChopPick leagueId={leagueId} state={summary.nextChopPick} /> : null}
 

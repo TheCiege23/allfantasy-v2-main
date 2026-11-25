@@ -20,6 +20,7 @@ import {
   usePrefersReducedMotion,
 } from '@/components/league/specialty/SpecialtyShell'
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
+import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import gl from './guillotine-specialty.module.css'
 
 const asset = (f: string) => specialtyAsset('guillotine', f)
@@ -46,12 +47,29 @@ function Avatar({ id, name, size = 34 }: { id: string; name: string; size?: numb
  * feed and a phone-only copy of all of it. The Chop page is one list now (owner's decision, 2026-11-25), drawn by
  * GuillySurvivalBoard, so those are gone rather than kept beside it.
  */
-export function GuillotineChopExtras({ leagueId, home }: { leagueId: string; home: GuillotineHomeExtras | null | undefined }) {
+export function GuillotineChopExtras({
+  leagueId,
+  home,
+  lastWords,
+}: {
+  leagueId: string
+  home: GuillotineHomeExtras | null | undefined
+  /** Each chopped team's last words (lib/guillotine/lastWords.ts); the moment shows the latest chop's. */
+  lastWords?: ReadonlyArray<{ rosterId: string; text: string }> | null
+}) {
   return (
     <SpecialtyShell format="guillotine" className={gl.home} testId="guillotine-chop-extras">
       {/* What do I need to avoid the chop — lib/scenario-explainer. Hidden until there are chop scores to model. */}
       <ChopExplainerBlock leagueId={leagueId} />
-      {home?.lastChop ? <GuillotineChopMoment leagueId={leagueId} lastChop={home.lastChop} aliveCount={home.aliveCount} waiverLabel={home.waiverLabel} /> : null}
+      {home?.lastChop ? (
+        <GuillotineChopMoment
+          leagueId={leagueId}
+          lastChop={home.lastChop}
+          aliveCount={home.aliveCount}
+          waiverLabel={home.waiverLabel}
+          lastWords={(lastWords ?? []).filter((w) => home.lastChop!.choppedRosterIds.includes(w.rosterId))}
+        />
+      ) : null}
     </SpecialtyShell>
   )
 }
@@ -76,12 +94,15 @@ export function GuillotineChopMoment({
   lastChop,
   aliveCount,
   waiverLabel,
+  lastWords,
   now = Date.now(),
 }: {
   leagueId: string
   lastChop: NonNullable<GuillotineHomeExtras['lastChop']>
   aliveCount: number
   waiverLabel?: string | null
+  /** The chopped teams' last words. Shown once the blade has dropped: they are the end of the moment. */
+  lastWords?: ReadonlyArray<{ rosterId: string; text: string }> | null
   now?: number
 }) {
   const reduced = usePrefersReducedMotion()
@@ -152,6 +173,14 @@ export function GuillotineChopMoment({
           ? `${cutName} is out${cut ? ` with ${fmt(cut.points)}` : ''}. ${aliveCount} teams remain. Their roster is on waivers.`
           : 'Scores are final. The lowest score is chopped when the blade drops.'}
       </p>
+      {done && lastWords?.length
+        ? lastWords.map((w) => (
+            <blockquote key={w.rosterId} className={sp.t2} style={{ margin: 0, fontSize: 15, fontStyle: 'italic', overflowWrap: 'anywhere' }} data-testid={`guillotine-chop-last-words-${w.rosterId}`}>
+              “{censorProfanity(w.text)}”
+              <span className={sp.t3} style={{ fontSize: 12, fontStyle: 'normal' }}> {lastChop.bottom.find((b) => b.rosterId === w.rosterId)?.name ?? cutName}&rsquo;s last words</span>
+            </blockquote>
+          ))
+        : null}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

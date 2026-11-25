@@ -33,6 +33,7 @@ import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstC
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
 import { readRosterScheduleView, saveRosterSchedule } from '@/lib/guillotine/rosterScheduleSave'
+import { loadLastWordsState, removeLastWords, saveLastWords } from '@/lib/guillotine/lastWordsStore'
 import { MAX_FAAB_AMOUNT, describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
@@ -174,6 +175,8 @@ export async function GET(
 
   // "Who's next?" for chopped managers. Never fails the summary.
   const nextChopPick = await loadNextChopPickState(leagueId, myRosterId).catch(() => null)
+  // Chopped managers' last words (lib/guillotine/lastWords.ts). Never fails the summary either.
+  const lastWords = await loadLastWordsState(leagueId, myRosterId).catch(() => null)
   // 2 in an MLB two-week league (lib/guillotine/eliminationPeriods.ts): the home's tiebreak copy says "last period".
   const leagueSettings = (await (async () => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))().catch(() => null))?.settings
   const periodWeeks = readPeriodWeeks(leagueSettings)
@@ -181,6 +184,8 @@ export async function GET(
   return NextResponse.json({
     ...summary,
     nextChopPick,
+    // `canRemove`: the commissioner can take one down. The POST checks again; this only draws the button.
+    lastWords: lastWords ? { ...lastWords, canRemove: canEditPaidRules !== null } : null,
     ...(watch ? { dangerTiers: watch.dangerTiers } : {}),
     chopWatch: watch ? { live: true, week: watch.week, chopCount: watch.chopCount, chopLine: watch.chopLine } : null,
     myEscapes,
@@ -227,7 +232,23 @@ export async function POST(
   if (!(await canAccessLeagueDraft(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!(await isGuillotineLeague(leagueId))) return NextResponse.json({ error: 'Not a Guilly league' }, { status: 404 })
 
-  const body = (await req.json().catch(() => null)) as { action?: unknown; week?: unknown; rosterId?: unknown; key?: unknown; rosterIds?: unknown; chopInstead?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { action?: unknown; week?: unknown; rosterId?: unknown; key?: unknown; rosterIds?: unknown; chopInstead?: unknown; text?: unknown } | null
+  // A chopped manager's last words (`{ action: 'last_words', text }`, lib/guillotine/lastWordsStore.ts).
+  if (body?.action === 'last_words') {
+    const viewerRosterId = await findViewerRosterId(leagueId, userId).catch(() => null)
+    const saved = await saveLastWords({ leagueId, viewerRosterId, userId, text: body.text })
+    if (!saved.ok) return NextResponse.json({ error: saved.error, code: saved.code }, { status: saved.status })
+    return NextResponse.json({ ok: true, lastWords: await loadLastWordsState(leagueId, viewerRosterId) })
+  }
+  // The commissioner takes a team's last words down (`{ action: 'remove_last_words', rosterId }`).
+  if (body?.action === 'remove_last_words') {
+    if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
+      return NextResponse.json({ error: 'Only the commissioner can remove last words.' }, { status: 403 })
+    }
+    const removed = await removeLastWords({ leagueId, rosterId: body.rosterId, userId })
+    if (!removed.ok) return NextResponse.json({ error: removed.error }, { status: removed.status })
+    return NextResponse.json({ ok: true, lastWords: await loadLastWordsState(leagueId, await findViewerRosterId(leagueId, userId).catch(() => null)) })
+  }
   // The commissioner picks who goes in a tied chop (`{ action: 'commissioner_tiebreak', key, rosterIds }`).
   if (body?.action === 'commissioner_tiebreak') {
     if (!(await canCommissionerAct(leagueId, userId, 'league'))) {

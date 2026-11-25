@@ -86,7 +86,8 @@ export type SurvivalBoard = {
   above: BoardRow | null
   below: BoardRow | null
   /** Chopped teams, oldest chop first. */
-  graveyard: Array<{ rosterId: string; name: string; week: number | null; isMe: boolean }>
+  /** `lastWords`: the chopped manager's parting message, when they left one (./lastWords.ts). */
+  graveyard: Array<{ rosterId: string; name: string; week: number | null; isMe: boolean; lastWords?: string | null }>
   /** "By Wednesday 7:00 AM ET"-style label for when the chop runs; null when unknown. */
   chopLabel: string | null
   /** True when the rows carry % safe. */
@@ -323,6 +324,14 @@ export type NativeBoardSummary = {
    * the league's list order (./chopListOrder.ts; absent = the default).
    */
   config?: { eliminationStartWeek?: number | null; chopListOrder?: ChopListOrder | null } | null
+  /** Each chopped team's last words (the summary's `lastWords`, ./lastWordsStore.ts). */
+  lastWords?: { entries?: ReadonlyArray<{ rosterId: string; text: string }> | null } | null
+}
+
+/** `{ lastWords }` for a chopped team that left a message; nothing at all for one that did not. */
+function lastWordsOf(summary: NativeBoardSummary, rosterId: string): { lastWords?: string } {
+  const text = summary.lastWords?.entries?.find((w) => w.rosterId === rosterId)?.text
+  return text ? { lastWords: text } : {}
 }
 
 export function boardFromNativeSummary(summary: NativeBoardSummary, opts: { order?: ChopListOrder } = {}): SurvivalBoard {
@@ -339,7 +348,13 @@ export function boardFromNativeSummary(summary: NativeBoardSummary, opts: { orde
     chopCount: summary.chopWatch?.chopCount ?? 1,
     rows: line.rows.map((r) => ({ rosterId: r.rosterId, name: r.name, points: r.points, tier: r.tier, isMe: r.isMe, immune: r.immune })),
     myRosterId: me,
-    graveyard: (summary.home?.chopped ?? []).map((c) => ({ rosterId: c.rosterId, name: c.name?.trim() || 'A team', week: c.week ?? null, isMe: !!me && c.rosterId === me })),
+    graveyard: (summary.home?.chopped ?? []).map((c) => ({
+      rosterId: c.rosterId,
+      name: c.name?.trim() || 'A team',
+      week: c.week ?? null,
+      isMe: !!me && c.rosterId === me,
+      ...lastWordsOf(summary, c.rosterId),
+    })),
     chopLabel: summary.home?.chopLabel ?? null,
     outlook: summary.outlook ?? null,
     order: opts.order ?? summary.config?.chopListOrder ?? undefined,
