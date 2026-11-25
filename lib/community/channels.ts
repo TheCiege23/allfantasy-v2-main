@@ -51,7 +51,7 @@ export const COMMUNITY_CHANNELS: readonly CommunityChannel[] = [
     slug: 'league-lab',
     label: 'League Lab',
     emoji: '🧪',
-    blurb: 'League formats and wild ideas. Pitch one, poke holes in one, steal one.',
+    blurb: 'League formats and wild ideas. Pitch one, poke holes in one, build on one.',
     sportTags: true,
   },
   {
@@ -72,7 +72,7 @@ export const COMMUNITY_CHANNELS: readonly CommunityChannel[] = [
     slug: 'other-apps',
     label: 'Other Apps',
     emoji: '📱',
-    blurb: 'Sleeper, ESPN, Yahoo, anything. What works there, what does not, what we should steal.',
+    blurb: 'Sleeper, ESPN, Yahoo, anything. Where they fall short, and how AllFantasy can improve on what they made.',
   },
   {
     slug: 'ask-the-founder',

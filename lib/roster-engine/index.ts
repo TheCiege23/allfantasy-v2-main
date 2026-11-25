@@ -17,6 +17,7 @@ export {
   resolveDefaultRosterTemplate,
   getLeagueRosterConfig,
   updateLeagueRosterConfig,
+  writeLeagueRosterConfig,
   resetLeagueRosterToDefault,
   createDefaultLeagueRosterConfig,
   getAvailableRosterSlots,

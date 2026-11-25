@@ -852,7 +852,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
     WHERE settings ? ${AF_MANAGED_LINEUPS_KEY} AND settings -> ${AF_MANAGED_LINEUPS_KEY} <> '{}'::jsonb
     ORDER BY id LIMIT ${Math.max(1, Math.min(opts?.limit ?? DEFAULT_LEAGUE_LIMIT, 100))}`
 
-  const { planAutopilotWaivers, autopilotFaabBid } = await import('./autopilotWaivers')
+  const { planAutopilotWaivers, planUpgradePickup, autopilotFaabBid, UPGRADE_SLOT } = await import('./autopilotWaivers')
   const { getEffectiveLeagueWaiverSettings } = await import('@/lib/waiver-wire/settings-service')
   const { createClaim, getClaimsByRoster } = await import('@/lib/waiver-wire/claim-service')
   const { buildLineupListsFromPlayerData } = await import('@/lib/league/lineup-swap')
@@ -934,6 +934,20 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
           const pending = ((await getClaimsByRoster(rosterId, 'pending')) as Array<{ addPlayerId: string }>).map((c) => String(c.addPlayerId))
           const style = managed[rosterId]!.autopilot!.style
           const plan = planAutopilotWaivers({ style, slots, starters: lists.starters, bench: lists.bench, players, freeAgents, benchCapacity, pendingAddIds: pending })
+          /*
+           * Nothing to fill: one optional upgrade pickup a week (./autopilotWaivers.ts `planUpgradePickup`).
+           * The week is counted from the audit log; if that read fails, no upgrade is made.
+           */
+          if (plan.claims.length === 0 && plan.unfilled.length === 0) {
+            const upgradesThisWeek = await prisma.leagueAuditLog
+              .count({ where: { leagueId, entityId: rosterId, actionType: AUTOPILOT_CLAIM_ACTION, createdAt: { gt: new Date(Date.now() - 7 * 24 * 3600_000) }, metadata: { path: ['slot'], equals: UPGRADE_SLOT } } })
+              .catch(() => 1)
+            if (upgradesThisWeek === 0) {
+              const profile = resolveManagerProfile({ rosterId, style, savedPersonality: managed[rosterId]!.autopilot!.personality })
+              const upgrade = planUpgradePickup({ style, activity: profile.activity, bench: lists.bench, players, freeAgents, pendingAddIds: pending })
+              if (upgrade) plan.claims.push(upgrade)
+            }
+          }
           if (plan.claims.length === 0) {
             skip(plan.unfilled.length ? 'no_fitting_free_agent' : 'no_holes')
             continue
@@ -948,6 +962,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
               remaining: faabLeft,
               minBid: waiverSettings.faabMinBid,
               allowZero: waiverSettings.allowZeroFaabBid,
+              minimumOnly: c.slot === UPGRADE_SLOT,
             })
             if (bid === 'unaffordable') {
               skip('faab_unaffordable')
