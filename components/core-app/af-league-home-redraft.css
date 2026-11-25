@@ -115,3 +115,15 @@
   /* Three cells in half the width: the matchup line wraps rather than ending in "…". */
   .af-core .af-lh-rd-grid[data-has-race]>.af-lh-rd-recap .af-lh-rd-recap-grid dd span{white-space:normal;overflow-wrap:anywhere}
 }
+
+/* Phone recap: three compact rows, not three boxes (2026-11-24, the simplify pass). The label and the
+   number share a line; who it was sits under them. */
+@media (max-width:720px){
+  .af-core .af-lh-rd-recap-grid{grid-template-columns:minmax(0,1fr);gap:0}
+  .af-core .af-lh-rd-recap-grid>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;column-gap:10px;row-gap:2px;padding:10px 0;border:0;border-top:1px solid var(--line);border-radius:0;background:none}
+  .af-core .af-lh-rd-recap-grid>div:first-child{border-top:0;padding-top:4px}
+  .af-core .af-lh-rd-recap-grid dd{display:contents}
+  .af-core .af-lh-rd-recap-grid dt{grid-column:1;grid-row:1}
+  .af-core .af-lh-rd-recap-grid dd strong{grid-column:2;grid-row:1;font-size:18px}
+  .af-core .af-lh-rd-recap-grid dd span{grid-column:1/-1;grid-row:2}
+}

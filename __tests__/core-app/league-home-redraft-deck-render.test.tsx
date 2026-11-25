@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -44,6 +46,28 @@ describe('LeagueHome redraft deck', () => {
     expect(text(container.querySelector('[data-testid=redraft-recap]'))).toContain('Top score')
     // The deck's track replaces the timeline panel.
     expect(container.querySelector('.af-lh-timeline-panel')).toBeNull()
+  })
+
+  it('lists the teams once: the playoff race replaces the Standings panel (2026-11-24)', () => {
+    const { data } = homeFixture('nfl', { identity: true })
+    const { container } = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />)
+    expect(container.querySelector('[data-testid=redraft-playoff-race]')).not.toBeNull()
+    expect(container.querySelector('[data-testid=league-home-standings-all]')).toBeNull()
+    expect(container.querySelector('.af-standings-wrap')).toBeNull()
+    // Without the deck the Standings panel is still there.
+    const { container: plain } = render(<LeagueHome data={{ ...data, redraft: null }} otherLeagueIssueCount={0} identityInShell />)
+    expect(plain.querySelector('[data-testid=league-home-standings-all]')).not.toBeNull()
+  })
+
+  it('on a phone the recap is three rows and "This week" keeps its two cells side by side (2026-11-24)', () => {
+    const strip = (f: string) => readFileSync(join(process.cwd(), f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    const rd = strip('components/core-app/af-league-home-redraft.css')
+    const phone = rd.slice(rd.lastIndexOf('@media (max-width:720px)'))
+    expect(phone).toMatch(/\.af-lh-rd-recap-grid\{grid-template-columns:minmax\(0,1fr\)/)
+    expect(phone).toMatch(/\.af-lh-rd-recap-grid dd\{display:contents\}/)
+    const og = strip('components/core-app/af-league-overview-guide.css')
+    const narrow = og.slice(og.indexOf('@media (max-width: 800px)'))
+    expect(narrow.slice(0, narrow.indexOf('}\n}'))).not.toContain('grid-template-columns: minmax(0, 1fr)')
   })
 
   it('puts the page tools at the foot of a redraft Home in the shell, and names the platform properly', () => {
