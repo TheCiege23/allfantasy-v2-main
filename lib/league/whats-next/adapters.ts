@@ -288,7 +288,25 @@ export function guillotineFacts(payload: unknown, now = Date.now()): WhatsNextFa
   const perChop = Math.max(1, num(config?.teamsPerChop) ?? 1)
   const alive = num(home?.aliveCount) ?? (standings.length || null)
 
-  if (tiers.length === 0 && standings.length === 0) return { format: 'guillotine', phase: 'pre_season', week }
+  // No chop line and no standings is not "no season": between the draft and the first point there is no
+  // line on purpose (lib/guillotine/chopWatch.ts). `field` (lib/guillotine/guillotineField.ts) says whether
+  // the draft is done; only an empty field is pre-season.
+  const field = arr(s.field)
+  if (tiers.length === 0 && standings.length === 0) {
+    if (field.length === 0) return { format: 'guillotine', phase: 'pre_season', week }
+    if (startWeek != null && week != null && week < startWeek) {
+      return { format: 'guillotine', phase: 'before_chops', week, vars: { chopStartWeek: String(startWeek) }, deadlineIso: null, deadlineLabel: null }
+    }
+    const nextChop = future(str(home?.nextChopAt), now)
+    return {
+      format: 'guillotine',
+      phase: 'chop_week',
+      week,
+      vars: { teamsLeft: String(field.length), chopAdvice: 'No scores yet this week. Set your lineup: the lowest score when the week ends is chopped.' },
+      deadlineIso: nextChop,
+      deadlineLabel: nextChop ? str(home?.chopLabel) ?? 'Chop' : null,
+    }
+  }
   if (alive != null && alive <= 1) return { format: 'guillotine', phase: 'complete', week }
 
   const deadlineIso = future(str(home?.nextChopAt), now)
