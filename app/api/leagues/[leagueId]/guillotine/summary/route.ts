@@ -3,7 +3,8 @@
  * Returns 404 when league is not a guillotine league.
  *
  * PATCH: commissioner-only edit of the first chop week (`{ eliminationStartWeek }`), of the chop
- * schedule and immunity (`{ advanced }`, AF Commissioner — lib/guillotine/chopSchedule.ts), or of the
+ * schedule and immunity (`{ advanced }`, AF Commissioner — lib/guillotine/chopSchedule.ts), of the scheduled
+ * roster changes (`{ rosterSchedule }`, AF Commissioner — lib/guillotine/rosterSchedule.ts), or of the
  * league rules (`{ rules }`, lib/guillotine/guillotineRules.ts; `GET ?view=rules` reads them). It lives on
  * this existing path rather than its own route file because the app is at the route-count ceiling
  * (too_many_routes — see app/api/leagues/join/route.ts). Rules in lib/guillotine/guillotineFirstChopWeek.ts.
@@ -31,6 +32,7 @@ import { findViewerRosterId, resolveGuillotineCalendarWeek, resolveGuillotineLiv
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
+import { readRosterScheduleView, saveRosterSchedule } from '@/lib/guillotine/rosterScheduleSave'
 import { MAX_FAAB_AMOUNT, describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
@@ -86,7 +88,10 @@ export async function GET(
       return NextResponse.json({ error: 'Only the commissioner can edit league rules.' }, { status: 403 })
     }
     const view = await readGuillotineRules(leagueId, userId)
-    return view ? NextResponse.json(view) : NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+    if (!view) return NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+    // Scheduled roster changes ride along so the page needs one request. A failed read hides the section.
+    const roster = await bestEffort(() => readRosterScheduleView(leagueId))
+    return NextResponse.json({ ...view, roster })
   }
 
   // `?view=tiebreak`: chop ties left to the commissioner (lib/guillotine/commissionerTiebreak.ts). Free — the step
@@ -281,7 +286,21 @@ export async function PATCH(
 
   const formatLocked = await formatRulesLockedResponse(leagueId)
   if (formatLocked) return formatLocked
-  const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown; rules?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown; rules?: unknown; rosterSchedule?: unknown } | null
+  if (body && 'rosterSchedule' in body) {
+    try {
+      const saved = await saveRosterSchedule(leagueId, userId, body.rosterSchedule)
+      if (!saved.ok) {
+        const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : saved.error === 'busy' ? 409 : 400
+        return NextResponse.json({ error: saved.message, code: saved.error }, { status })
+      }
+      await logFormatRulesChange({ leagueId, userId, format: 'guillotine', fields: ['rosterSchedule'] })
+      return NextResponse.json({ ok: true, roster: saved.view })
+    } catch (e) {
+      console.error('[guillotine/summary PATCH rosterSchedule]', e instanceof Error ? e.message : 'unknown error')
+      return NextResponse.json({ error: 'Could not save the roster changes' }, { status: 500 })
+    }
+  }
   if (body && 'rules' in body) {
     try {
       const before = await bestEffort(() => readGuillotineRules(leagueId, userId))

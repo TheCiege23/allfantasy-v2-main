@@ -17,7 +17,8 @@ export type RosterSource =
 export interface RosterAuditEntry {
   timestamp: string
   userId: string | null
-  action: 'created' | 'updated' | 'reset' | 'import'
+  /** `scheduled`: AllFantasy applied a change the commissioner scheduled (lib/guillotine/rosterSchedule.ts). */
+  action: 'created' | 'updated' | 'reset' | 'import' | 'scheduled'
   templateKey: string
   changedKeys?: string[]
 }
