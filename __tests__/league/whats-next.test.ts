@@ -224,6 +224,12 @@ describe('Zombie, Guillotine, Pirate', () => {
     // Before chops start it says when they do.
     expect(guillotineFacts({ weekOrPeriod: 3, dangerTiers: [], field, config: { eliminationStartWeek: 6 } }, NOW)!.phase).toBe('before_chops')
   })
+  it('🛑 a drafted league whose calendar week is before the first chop week is "chops start", not "Week 7: 4 teams left"', () => {
+    const field = [{ rosterId: 'me', displayName: 'Mine' }, { rosterId: 'x', displayName: 'X' }]
+    const facts = guillotineFacts({ weekOrPeriod: 7, calendarWeek: 6, dangerTiers: [], field, config: { eliminationStartWeek: 7 } }, NOW)!
+    expect(facts.phase).toBe('before_chops')
+    expect(facts.week).toBe(6)
+  })
   it('[control] with no field (no draft yet) it is still pre-season', () => {
     expect(guillotineFacts({ weekOrPeriod: 1, dangerTiers: [], survivalStandings: [], config: { eliminationStartWeek: 1 } }, NOW)!.phase).toBe('pre_season')
   })

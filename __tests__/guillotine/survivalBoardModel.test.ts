@@ -256,3 +256,28 @@ describe('after the draft, before anyone scores', () => {
     expect(b.rows.some((r) => r.cutAbove)).toBe(false)
   })
 })
+
+describe('a calendar week before the first chop week', () => {
+  const base = {
+    weekOrPeriod: 7,
+    myRosterId: 'me',
+    dangerTiers: [],
+    field: [{ rosterId: 'me', displayName: 'Mine' }, { rosterId: 'x', displayName: 'Other' }],
+    home: { scores: {} },
+    config: { eliminationStartWeek: 7 },
+  }
+  it('🛑 says the week being played does not count, and when chops start', () => {
+    const b = boardFromNativeSummary({ ...base, calendarWeek: 6 })
+    expect(b.notCountingWeek).toBe(6)
+    expect(b.headline).toBe('Chops start in week 7')
+    expect(b.detail).toBe("Week 6 doesn't count toward a chop. The lowest score in week 7 is the first one chopped.")
+  })
+  it('[control] in the first chop week itself it is the ordinary board', () => {
+    const b = boardFromNativeSummary({ ...base, calendarWeek: 7 })
+    expect(b.notCountingWeek).toBeNull()
+    expect(b.headline).toBe("Don't finish last this week")
+  })
+  it('without a calendar week (an older payload) nothing changes', () => {
+    expect(boardFromNativeSummary(base).notCountingWeek).toBeNull()
+  })
+})

@@ -61,6 +61,8 @@ type Summary = {
   chopWatch?: { live: true; week: number; chopCount: number; chopLine: number | null } | null
   /** Players and games left and the projection for them, per team (`?outlook=1`). */
   outlook?: Record<string, TeamOutlook> | null
+  /** The league's calendar week; behind `weekOrPeriod` before chops start, when the week being played does not count. */
+  calendarWeek?: number | null
   /** "Who's next?" for chopped managers (lib/guillotine/nextChopPick.ts). */
   nextChopPick?: NextChopPickState | null
   config?: {

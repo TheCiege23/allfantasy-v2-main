@@ -93,6 +93,8 @@ export type SurvivalBoard = {
   hasOdds: boolean
   /** True when the rows carry players / games left. */
   hasPlayersLeft: boolean
+  /** The calendar week being played when it does not count toward a chop (chops start later); else null. */
+  notCountingWeek: number | null
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -116,6 +118,8 @@ type Shared = {
   order?: ChopListOrder
   /** A week already chopped (./survivalHistory.ts): final scores, past-tense copy, no projection. */
   final?: boolean
+  /** The calendar week is before the first chop week (./guillotineCurrentWeek.ts): it does not count. */
+  notCounting?: { calendarWeek: number; startWeek: number } | null
 }
 
 function finish(s: Shared): SurvivalBoard {
@@ -240,6 +244,19 @@ function finish(s: Shared): SurvivalBoard {
       detail = `${Math.max(0, best.length - 1 - idx)} ${best.length - 1 - idx === 1 ? 'team is' : 'teams are'} below you. Chop line: ${fmtPts(cutScore)}.`
   }
 
+  /*
+   * 🛑 A WEEK THAT DOES NOT COUNT LOOKED LIKE ONE THAT DOES (owner, 2026-11-25). A league that drafts mid-week
+   * has its first chop moved to the next full week (lib/guillotine/draftWeekFloor.ts), and a commissioner can
+   * set a later first chop. The board then previews the first chop week while the calendar week is still
+   * being played, so a manager watching tonight's games saw "No scores yet" for a week that had not started,
+   * with nothing saying the current week is a free one.
+   */
+  const notCountingWeek = s.notCounting && status !== 'chopped' && status !== 'spectator' ? s.notCounting.calendarWeek : null
+  if (s.notCounting && notCountingWeek != null) {
+    headline = `Chops start in week ${s.notCounting.startWeek}`
+    detail = `Week ${s.notCounting.calendarWeek} doesn't count toward a chop. The lowest score in week ${s.notCounting.startWeek} is the first one chopped.`
+  }
+
   // The race is decided by who still has games to play: say so where it matters.
   if (me && me.playersLeft != null && (status === 'chop_zone' || status === 'danger')) {
     const rival = status === 'chop_zone' ? above : below
@@ -281,6 +298,7 @@ function finish(s: Shared): SurvivalBoard {
     chopLabel: s.chopLabel,
     hasOdds: best.some((r) => r.safePct != null),
     hasPlayersLeft: best.some((r) => r.playersLeft != null),
+    notCountingWeek,
   }
 }
 
@@ -293,13 +311,18 @@ export type NativeBoardSummary = {
   field?: ReadonlyArray<{ rosterId: string; displayName: string }> | null
   chopWatch?: { week: number; chopCount: number; chopLine: number | null } | null
   outlook?: Record<string, TeamOutlook> | null
+  /** The league's calendar week (the summary's `calendarWeek`); behind `weekOrPeriod` before chops start. */
+  calendarWeek?: number | null
   home?: {
     scores?: Record<string, number> | null
     chopLabel?: string | null
     chopped?: ReadonlyArray<{ rosterId: string; name: string; week: number | null; points: number | null }> | null
   } | null
-  /** The league's list order (./chopListOrder.ts), served in `config`; absent = the default. */
-  config?: { chopListOrder?: ChopListOrder | null } | null
+  /**
+   * The summary's `config`: the first chop week (with `calendarWeek`, whether the week being played counts), and
+   * the league's list order (./chopListOrder.ts; absent = the default).
+   */
+  config?: { eliminationStartWeek?: number | null; chopListOrder?: ChopListOrder | null } | null
 }
 
 export function boardFromNativeSummary(summary: NativeBoardSummary, opts: { order?: ChopListOrder } = {}): SurvivalBoard {
@@ -320,6 +343,10 @@ export function boardFromNativeSummary(summary: NativeBoardSummary, opts: { orde
     chopLabel: summary.home?.chopLabel ?? null,
     outlook: summary.outlook ?? null,
     order: opts.order ?? summary.config?.chopListOrder ?? undefined,
+    notCounting:
+      summary.calendarWeek != null && summary.config?.eliminationStartWeek != null && summary.calendarWeek < summary.config.eliminationStartWeek
+        ? { calendarWeek: summary.calendarWeek, startWeek: summary.config.eliminationStartWeek }
+        : null,
   })
 }
 

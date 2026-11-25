@@ -27,7 +27,7 @@ import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryService'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
-import { findViewerRosterId, resolveGuillotineLiveWeek } from '@/lib/guillotine/guillotineCurrentWeek'
+import { findViewerRosterId, resolveGuillotineCalendarWeek, resolveGuillotineLiveWeek } from '@/lib/guillotine/guillotineCurrentWeek'
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
@@ -132,7 +132,7 @@ export async function GET(
   // `?outlook=1` (the Matchup tab's survival board only): players and games left and the projection for
   // them, per team (lib/guillotine/survivalOutlookLoad.ts). The current week only. Never fails the summary.
   const wantOutlook = !weekParam && req.nextUrl.searchParams?.get('outlook') === '1'
-  const [summary, myEscapes, myRosterId, home, advanced, watch, outlook] = await Promise.all([
+  const [summary, myEscapes, myRosterId, home, advanced, watch, outlook, calendarWeek] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),
     // Your escapes from chops that happened — shareable moments (2026-09-14). Never fails the summary.
     getGuillotineEscapesForUser(leagueId, userId).catch(() => []),
@@ -149,6 +149,10 @@ export async function GET(
     // The current week only — a past week's line is the one its chop already settled.
     weekParam ? Promise.resolve(null) : loadChopWatch(leagueId, weekOrPeriod),
     wantOutlook ? loadSurvivalOutlook(leagueId, weekOrPeriod).catch(() => null) : Promise.resolve(null),
+    // The league's calendar week (the native runner moves it with the sport). It differs from
+    // `weekOrPeriod` before chops start: a league that drafted mid-week, or whose commissioner set a later
+    // first chop, plays weeks that do not count, and a surface must be able to say so.
+    resolveGuillotineCalendarWeek(leagueId).catch(() => null),
   ])
   // For the commissioner only: may they change the AF Commissioner guillotine rules? The SAME check
   // the chop-rules and league-rules saves enforce, so no page shows an editor the save will refuse.
@@ -177,6 +181,7 @@ export async function GET(
     myEscapes,
     myRosterId,
     ...(field ? { field } : {}),
+    calendarWeek,
     ...(wantOutlook ? { outlook } : {}),
     home: home && watch ? { ...home, scores: watch.scores } : home,
     config: config

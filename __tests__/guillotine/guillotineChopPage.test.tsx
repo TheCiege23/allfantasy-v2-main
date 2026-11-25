@@ -159,11 +159,32 @@ describe('one list, full all week', () => {
   it('names the week of the season and counts down to the chop, once', async () => {
     mount(live())
     await screen.findByTestId('guilly-survival-board')
-    expect(document.querySelector('.gsb-eyebrow')?.textContent).toBe('Week 7 of 24 · You vs. the league')
+    expect(screen.getByTestId('gsb-eyebrow').textContent).toBe('Week 7 of 24 · You vs. the league')
     const clocks = screen.getAllByTestId('gsb-clock')
     expect(clocks.length).toBe(1)
     await waitFor(() => expect(clocks[0]!.textContent).toMatch(/^Chop locks in\d/))
     expect(clocks[0]!.textContent).toContain('By Wednesday 7:00 AM ET')
+  })
+})
+
+describe('a week that does not count toward a chop (chops start later)', () => {
+  // The owner's NBA league: week 6 is being played, the first chop is week 7, so the page previews week 7.
+  it('🛑 the Chop page says so: "Chops start in week 7", and the eyebrow keeps the week of the season and adds "preview"', async () => {
+    mount(beforeScores({ calendarWeek: 6, config: config({ eliminationStartWeek: 7 }) }))
+    await screen.findByTestId('guilly-survival-board')
+    expect(screen.getByTestId('gsb-headline').textContent).toBe('Chops start in week 7')
+    expect(screen.getByTestId('guilly-survival-board').textContent).toContain("Week 6 doesn't count toward a chop.")
+    expect(screen.getByTestId('gsb-eyebrow').textContent).toBe('Week 7 of 24 preview · You vs. the league')
+    // The list is still full, and still says it is a projection.
+    expect(screen.getAllByTestId(/^gsb-row-/).length).toBe(4)
+    expect(screen.getByTestId('gsb-list-note').textContent).toBe('Projected · no scores yet')
+  })
+
+  it('[control] once the calendar reaches the first chop week it is a normal week', async () => {
+    mount(beforeScores({ calendarWeek: 7, config: config({ eliminationStartWeek: 7 }) }))
+    await screen.findByTestId('guilly-survival-board')
+    expect(screen.getByTestId('gsb-headline').textContent).toBe("Don't finish last this week")
+    expect(screen.getByTestId('gsb-eyebrow').textContent).toBe('Week 7 of 24 · You vs. the league')
   })
 })
 

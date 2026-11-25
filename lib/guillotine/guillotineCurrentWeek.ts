@@ -85,3 +85,16 @@ export async function findViewerRosterId(leagueId: string, userId: string): Prom
     .catch(() => null)
   return row?.id ?? await acceptedCoOwnerRosterId(leagueId, userId)
 }
+
+/**
+ * The league's calendar week: the season's `currentWeek`, which the native runner moves with the sport
+ * (./nativeGuillotineWeek.ts). Before chops start it is behind `resolveGuillotineLiveWeek` (the first chop
+ * week), and that gap is how a surface says "this week does not count". Null when there is no season yet
+ * or the read fails.
+ */
+export async function resolveGuillotineCalendarWeek(leagueId: string): Promise<number | null> {
+  const season = await prisma.redraftSeason
+    .findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { currentWeek: true } })
+    .catch(() => null)
+  return typeof season?.currentWeek === 'number' && season.currentWeek >= 1 ? season.currentWeek : null
+}
