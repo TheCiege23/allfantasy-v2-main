@@ -960,7 +960,7 @@ function PlayerPanelInner({
                   <span>{opt.label}</span>
                   <span
                     className={`text-[11px] font-medium tabular-nums ${
-                      isActive ? 'opacity-70' : 'text-white/45'
+                      isActive ? 'opacity-70' : 'text-white/50'
                     }`}
                   >
                     {opt.drafted}/{opt.available}

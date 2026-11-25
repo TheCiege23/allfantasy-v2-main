@@ -528,7 +528,7 @@ function DraftBoardInner({
               with no roster has no such cells, and naming a state that cannot appear is noise.
             */}
             <span
-              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45 max-md:hidden"
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/50 max-md:hidden"
               data-testid="draft-board-legend"
             >
               {/* Each swatch is a miniature of the real cell: same tile, same ring. The old legend
