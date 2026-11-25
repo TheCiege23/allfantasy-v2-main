@@ -17,6 +17,7 @@ import {
 } from '@/lib/monetization-analytics'
 import { useLockUpgradeHref } from '@/hooks/useLockUpgradeHref'
 import { monthlyUpgradeHref } from '@/lib/monetization/upgradeDestination'
+import { useLockTrialOffer } from '@/lib/monetization/useLockTrialOffer'
 
 interface LockedFeatureCardProps {
   featureName: string
@@ -85,6 +86,13 @@ export function LockedFeatureCard({
   }, [entitlementStatus, featureId, featureName, requiredPlan])
 
   const targetPlan = resolvePlanTierFromSku(requiredPlan)
+  /*
+   * The AF Pro free trial, said on the button when the server calls this viewer eligible (2026-11-24,
+   * lib/monetization/lockTrialOffer.ts). Not to a guest (they have no account yet to be eligible), and
+   * never in an iOS app build or the Play TWA — the hook does not ask there.
+   */
+  const trial = useLockTrialOffer(requiredPlan, 'en', !isGuestLocked)
+  const unlockLabel = trial ? trial.cta : `Unlock with ${requiredPlan}`
 
   return (
     <div
@@ -150,7 +158,7 @@ export function LockedFeatureCard({
             data-testid="locked-feature-upgrade-button"
           >
             <Lock className="h-4 w-4" />
-            Unlock with {requiredPlan}
+            {unlockLabel}
           </button>
         ) : (
           <Link
@@ -173,9 +181,19 @@ export function LockedFeatureCard({
             data-testid="locked-feature-upgrade-link"
           >
             <Lock className="h-4 w-4" />
-            Unlock with {requiredPlan}
+            {unlockLabel}
           </Link>
         )}
+        {trial?.then ? (
+          <p
+            className="-mt-1 text-center text-xs text-white/55"
+            data-ios-purchase
+            data-hide-in-ios-app
+            data-testid="locked-feature-trial-then"
+          >
+            {trial.then}
+          </p>
+        ) : null}
         {showTokenFallback && (
           <Link
             href={tokenOfferHref}
