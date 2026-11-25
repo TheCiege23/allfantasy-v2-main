@@ -91,6 +91,9 @@ describe('What changed', () => {
     const card = await screen.findByTestId('league-rules-changes-card')
     expect(card.textContent).toContain('Trade deadline: Week 12 → Week 13 — trades are allowed one week longer.')
     expect(screen.queryByTestId('league-rules-modal')).toBeNull()
+    // One "League rules" button while the card is up: the card's own (2026-11-24).
+    expect(screen.getAllByTestId('league-rules-open')).toHaveLength(1)
+    expect(card.contains(screen.getByTestId('league-rules-open'))).toBe(true)
     fireEvent.click(screen.getByTestId('league-rules-changes-dismiss'))
     await waitFor(() => expect(posts).toEqual([{ kind: 'changes', eventId: 'e2' }]))
     expect(screen.queryByTestId('league-rules-changes-card')).toBeNull()
