@@ -292,10 +292,13 @@ export function guillotineFacts(payload: unknown, now = Date.now()): WhatsNextFa
   // line on purpose (lib/guillotine/chopWatch.ts). `field` (lib/guillotine/guillotineField.ts) says whether
   // the draft is done; only an empty field is pre-season.
   const field = arr(s.field)
+  // The calendar week, when the summary carries it: before chops start it is behind `weekOrPeriod`, which
+  // is the first chop week, and only it can say "this week does not count".
+  const calendarWeek = num(s.calendarWeek) ?? week
   if (tiers.length === 0 && standings.length === 0) {
     if (field.length === 0) return { format: 'guillotine', phase: 'pre_season', week }
-    if (startWeek != null && week != null && week < startWeek) {
-      return { format: 'guillotine', phase: 'before_chops', week, vars: { chopStartWeek: String(startWeek) }, deadlineIso: null, deadlineLabel: null }
+    if (startWeek != null && calendarWeek != null && calendarWeek < startWeek) {
+      return { format: 'guillotine', phase: 'before_chops', week: calendarWeek, vars: { chopStartWeek: String(startWeek) }, deadlineIso: null, deadlineLabel: null }
     }
     const nextChop = future(str(home?.nextChopAt), now)
     return {
@@ -311,8 +314,8 @@ export function guillotineFacts(payload: unknown, now = Date.now()): WhatsNextFa
 
   const deadlineIso = future(str(home?.nextChopAt), now)
   const deadlineLabel = deadlineIso ? str(home?.chopLabel) ?? 'Chop' : null
-  if (startWeek != null && week != null && week < startWeek) {
-    return { format: 'guillotine', phase: 'before_chops', week, vars: { chopStartWeek: String(startWeek) }, deadlineIso: null, deadlineLabel: null }
+  if (startWeek != null && calendarWeek != null && calendarWeek < startWeek) {
+    return { format: 'guillotine', phase: 'before_chops', week: calendarWeek, vars: { chopStartWeek: String(startWeek) }, deadlineIso: null, deadlineLabel: null }
   }
 
   let chopAdvice: string | null = null

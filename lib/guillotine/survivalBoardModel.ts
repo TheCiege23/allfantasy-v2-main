@@ -72,6 +72,8 @@ export type SurvivalBoard = {
   hasOdds: boolean
   /** True when the rows carry players / games left. */
   hasPlayersLeft: boolean
+  /** The calendar week being played when it does not count toward a chop (chops start later); else null. */
+  notCountingWeek: number | null
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -87,6 +89,8 @@ type Shared = {
   myRosterId: string | null
   graveyard: SurvivalBoard['graveyard']
   chopLabel: string | null
+  /** The calendar week is before the first chop week (./guillotineCurrentWeek.ts): it does not count. */
+  notCounting?: { calendarWeek: number; startWeek: number } | null
 }
 
 function finish(s: Shared): SurvivalBoard {
@@ -182,6 +186,19 @@ function finish(s: Shared): SurvivalBoard {
       detail = `${Math.max(0, rows.length - 1 - idx)} ${rows.length - 1 - idx === 1 ? 'team is' : 'teams are'} below you. Chop line: ${fmtPts(cutScore)}.`
   }
 
+  /*
+   * 🛑 A WEEK THAT DOES NOT COUNT LOOKED LIKE ONE THAT DOES (owner, 2026-11-25). A league that drafts mid-week
+   * has its first chop moved to the next full week (lib/guillotine/draftWeekFloor.ts), and a commissioner can
+   * set a later first chop. The board then previews the first chop week while the calendar week is still
+   * being played, so a manager watching tonight's games saw "No scores yet" for a week that had not started,
+   * with nothing saying the current week is a free one.
+   */
+  const notCountingWeek = s.notCounting && status !== 'chopped' && status !== 'spectator' ? s.notCounting.calendarWeek : null
+  if (s.notCounting && notCountingWeek != null) {
+    headline = `Chops start in week ${s.notCounting.startWeek}`
+    detail = `Week ${s.notCounting.calendarWeek} doesn't count toward a chop. The lowest score in week ${s.notCounting.startWeek} is the first one chopped.`
+  }
+
   // The race is decided by who still has games to play: say so where it matters.
   if (me && me.playersLeft != null && (status === 'chop_zone' || status === 'danger')) {
     const rival = status === 'chop_zone' ? above : below
@@ -209,6 +226,7 @@ function finish(s: Shared): SurvivalBoard {
     chopLabel: s.chopLabel,
     hasOdds: rows.some((r) => r.safePct != null),
     hasPlayersLeft: rows.some((r) => r.playersLeft != null),
+    notCountingWeek,
   }
 }
 
@@ -221,6 +239,9 @@ export type NativeBoardSummary = {
   field?: ReadonlyArray<{ rosterId: string; displayName: string }> | null
   chopWatch?: { week: number; chopCount: number; chopLine: number | null } | null
   outlook?: Record<string, TeamOutlook> | null
+  /** The league's calendar week (the summary's `calendarWeek`); behind `weekOrPeriod` before chops start. */
+  calendarWeek?: number | null
+  config?: { eliminationStartWeek?: number | null } | null
   home?: {
     scores?: Record<string, number> | null
     chopLabel?: string | null
@@ -245,6 +266,10 @@ export function boardFromNativeSummary(summary: NativeBoardSummary): SurvivalBoa
     graveyard: (summary.home?.chopped ?? []).map((c) => ({ rosterId: c.rosterId, name: c.name?.trim() || 'A team', week: c.week ?? null, isMe: !!me && c.rosterId === me })),
     chopLabel: summary.home?.chopLabel ?? null,
     outlook: summary.outlook ?? null,
+    notCounting:
+      summary.calendarWeek != null && summary.config?.eliminationStartWeek != null && summary.calendarWeek < summary.config.eliminationStartWeek
+        ? { calendarWeek: summary.calendarWeek, startWeek: summary.config.eliminationStartWeek }
+        : null,
   })
 }
 

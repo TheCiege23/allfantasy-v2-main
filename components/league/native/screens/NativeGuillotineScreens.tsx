@@ -27,6 +27,8 @@ type Summary = {
     chopped?: Array<{ rosterId: string; name: string; week: number | null; points: number | null }>
   } | null
   config?: { eliminationStartWeek?: number; eliminationEndWeek?: number | null } | null
+  /** The league's calendar week; behind the chop week before chops start (lib/guillotine/survivalBoardModel.ts). */
+  calendarWeek?: number | null
 }
 
 type Load = { summary: Summary | null; loading: boolean; error: string | null }

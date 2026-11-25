@@ -86,7 +86,9 @@ export function GuillySurvivalBoard({ board, actions = [], sourceNote, loading, 
     <div className="gsb" data-testid="guilly-survival-board" data-status={b.status} data-source={b.source}>
       <section className="gsb-hero" data-status={b.status}>
         <div className="gsb-hero-top">
-          <span className="gsb-eyebrow">{b.week != null ? `Week ${b.week}` : 'This week'} · You vs. the league</span>
+          <span className="gsb-eyebrow" data-testid="gsb-eyebrow">
+            {b.week != null ? `Week ${b.week}` : 'This week'}{b.notCountingWeek != null ? ' preview' : ''} · You vs. the league
+          </span>
           <span className="gsb-alive">{b.alive} alive{b.graveyard.length ? ` · ${b.graveyard.length} chopped` : ''}</span>
         </div>
         <div className="gsb-hero-main">
