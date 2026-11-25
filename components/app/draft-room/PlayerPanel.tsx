@@ -178,6 +178,8 @@ export type PlayerPanelProps = {
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
   /** Viewer's next pick — the pool table adds a LEFT @ survival column when set. */
   leftAtPick?: { overall: number; label: string } | null
+  /** The viewer's next pick, drawn as a line in the list when it is in its default order and unfiltered. */
+  nextPickLine?: { picksAway: number; text: string; title?: string } | null
   /** Player card "draft outlook" for the selected player; null when the draft is not running. */
   getDraftOutlook?: (player: PlayerEntry) => PlayerDraftOutlook | null
   /** Shared Chimmy overlay visibility state from parent surfaces (queue/helper/top bar). */
@@ -409,6 +411,7 @@ function PlayerPanelInner({
   aiRowBadges,
   aiOverlaySignals,
   leftAtPick = null,
+  nextPickLine = null,
   getDraftOutlook,
   showAiOverlays,
   onShowAiOverlaysChange,
@@ -1520,6 +1523,13 @@ function PlayerPanelInner({
                   sortState={{ key: sortBy, direction: sortDirection }}
                   onSortChange={handleColumnHeaderSort}
                   leftAtPick={leftAtPick}
+                  nextPickLine={
+                    // Only in the default order with nothing filtered out: "N players above the line"
+                    // means nothing in a position-filtered or re-sorted list.
+                    !hasSecondaryPoolFilters && sortDirection === 'asc' && (sortBy === 'adp' || sortBy === 'aiAdp')
+                      ? nextPickLine
+                      : null
+                  }
                   showExperienceLabel={isDynasty}
                 />
               </div>

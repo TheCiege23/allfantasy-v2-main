@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, MoreHorizontal, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, MoreHorizontal, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX, Zap } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { formatTimerRemaining } from '@/lib/live-draft-engine/DraftTimerService'
 import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
@@ -164,6 +164,12 @@ type DraftTopBarProps = {
    * the room never promises a start the commissioner has to press.
    */
   scheduledStartAutoStarts?: boolean
+  /**
+   * An auto draft (execution mode `auto`): the server makes every pick. The pick clock, its beeps
+   * and the "you're on the clock" call to act are all off; the middle slot reads "Auto-drafting"
+   * with how far along the board is.
+   */
+  autoDraft?: boolean
 }
 
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {
@@ -256,7 +262,7 @@ export function DraftTopBar({
   isCurrentUserOnClock = false,
   pickLabel,
   overallPickNumber,
-  timerStatus,
+  timerStatus: timerStatusProp,
   timerRemainingSeconds,
   timerEndAtIso = null,
   timerSeconds = null,
@@ -317,7 +323,11 @@ export function DraftTopBar({
   showInvite = true,
   scheduledStartIso = null,
   scheduledStartAutoStarts = false,
+  autoDraft = false,
 }: DraftTopBarProps) {
+  // Nobody is on a clock in an auto draft, so no countdown, urgency styling or beeps.
+  const timerStatus: DraftTopBarProps['timerStatus'] = autoDraft ? 'none' : timerStatusProp
+  const autoDraftLive = autoDraft && (draftStatus === 'in_progress' || draftStatus === 'paused')
   const { t, tInterpolate, language } = useLanguage()
   const pickClockCopy = useMessages(pickClockPlannerMessages)
   const headerCopy = useMessages(draftRoomHeaderMessages)
@@ -626,6 +636,31 @@ export function DraftTopBar({
      * The legacy "RESUME DRAFT" button-shaped CTA is gone; the clock is the focal
      * point and replaces it. Keeps the resume action one-click for commissioners.
      */
+    if (autoDraftLive) {
+      const totalPicks = Math.max(0, Math.trunc(rounds) * Math.trunc(teamCount))
+      const paused = draftStatus === 'paused'
+      return (
+        <div
+          data-testid="draft-topbar-auto-drafting"
+          data-paused={paused ? 'true' : 'false'}
+          title={headerCopy.autoDraftTitle}
+          className={`inline-flex min-h-[36px] items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-bold ${
+            paused
+              ? 'border-amber-400/45 bg-amber-500/15 text-amber-50'
+              : 'border-cyan-400/40 bg-gradient-to-br from-cyan-500/22 to-violet-600/15 text-cyan-50'
+          }`}
+        >
+          <Zap className="h-4 w-4 shrink-0" aria-hidden />
+          <span>{paused ? t('draftRoom.topBar.timerPaused') : headerCopy.autoDrafting}</span>
+          {overallPickNumber != null && totalPicks > 0 ? (
+            <span className="whitespace-nowrap text-[12px] font-semibold tabular-nums text-white/75" data-testid="draft-topbar-auto-progress">
+              {headerCopy.autoDraftProgress(Math.min(overallPickNumber, totalPicks), totalPicks)}
+            </span>
+          ) : null}
+        </div>
+      )
+    }
+
     const showLiveTimer =
       timerStatus === 'running' || timerStatus === 'paused' || timerStatus === 'expired'
     /*
@@ -934,7 +969,7 @@ export function DraftTopBar({
                     <span className="text-white/24" aria-hidden>·</span>
                   </>
                 ) : null}
-                <span>{timerSummary}</span>
+                <span data-testid="draft-topbar-timer-summary">{autoDraft ? headerCopy.autoDrafting : timerSummary}</span>
                 <span className="text-white/24" aria-hidden>·</span>
                 <span>{withCount(t('draftRoom.topBar.teamsCount'), teamCount)}</span>
                 <span className="text-white/24" aria-hidden>·</span>
@@ -1081,11 +1116,11 @@ export function DraftTopBar({
             */
             <div
               className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 ${
-                isCurrentUserOnClock
+                isCurrentUserOnClock && !autoDraft
                   ? 'animate-pulse bg-amber-500/18 ring-1 ring-amber-400/45'
                   : 'md:bg-transparent max-md:border max-md:border-violet-400/25 max-md:bg-violet-500/[0.12]'
               }`}
-              data-on-clock-self={isCurrentUserOnClock ? 'true' : undefined}
+              data-on-clock-self={isCurrentUserOnClock && !autoDraft ? 'true' : undefined}
             >
               {currentManagerAvatarUrl ? (
                 <Image
@@ -1103,7 +1138,7 @@ export function DraftTopBar({
               ) : (
                 <User
                   className={`h-4 w-4 shrink-0 ${
-                    isCurrentUserOnClock ? 'text-amber-300' : 'text-violet-300'
+                    isCurrentUserOnClock && !autoDraft ? 'text-amber-300' : 'text-violet-300'
                   }`}
                 />
               )}
@@ -1118,10 +1153,12 @@ export function DraftTopBar({
                    on the clock, because this span otherwise renders "You're on the clock". */
                 data-testid={isOrphanOnClock ? 'draft-topbar-orphan-mode-label' : undefined}
                 className={`shrink-0 text-[11px] font-semibold uppercase tracking-wide ${
-                  isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
+                  isCurrentUserOnClock && !autoDraft ? 'text-amber-100' : 'text-violet-200/75'
                 }`}
               >
-                {isOrphanOnClock && chimmyManagerOnClock
+                {autoDraft
+                  ? isCurrentUserOnClock ? headerCopy.yourAutoPick : headerCopy.autoPick
+                  : isOrphanOnClock && chimmyManagerOnClock
                   ? t('draftRoom.topBarHint.chimmyPicking')
                   : isOrphanOnClock
                   ? orphanModeLabel

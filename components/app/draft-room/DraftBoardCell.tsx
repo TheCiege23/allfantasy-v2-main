@@ -113,6 +113,11 @@ type DraftBoardCellProps = {
   isDevyRound?: boolean
   isCollegeRound?: boolean
   pickHighlight?: PickHighlightTone
+  /**
+   * Set on an empty slot the viewer's team owns: the tile is outlined in white and says so
+   * ("Your pick"), so a manager can see when they pick without counting columns.
+   */
+  viewerUpcomingLabel?: string | null
   /** When set, show a trade affordance (opens pick-trade flow from parent). */
   onTradeFromCell?: () => void
   /**
@@ -188,6 +193,7 @@ function DraftBoardCellInner({
   isDevyRound = false,
   isCollegeRound = false,
   pickHighlight = 'none',
+  viewerUpcomingLabel = null,
   emptyCellDirection = 'forward',
   onTradeFromCell,
   onViewTradeHistory,
@@ -308,7 +314,7 @@ function DraftBoardCellInner({
         isCurrentPick
           ? 'bg-[radial-gradient(120%_140%_at_0%_0%,color-mix(in_srgb,var(--af-league-accent,#22d3ee)_28%,transparent),#0d1020_62%)] ring-2 ring-[color:var(--af-league-accent,#67e8f9)]'
           : isEmpty
-            ? 'bg-[#2a2f45]'
+            ? `bg-[#2a2f45] ${viewerUpcomingLabel ? 'ring-2 ring-inset ring-white/80' : ''}`
             : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300 ring-offset-2 ring-offset-[#0b1428]' : ''} ${highlightClass(pickHighlight)}`
       }`}
       style={openPlayer ? { ...tileStyle, cursor: 'pointer' } : tileStyle}
@@ -450,6 +456,14 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-slot-salary-${pick.overall}`}
         >
           ${pick.slotSalary.salary}
+        </span>
+      ) : null}
+      {isEmpty && viewerUpcomingLabel && !isCurrentPick ? (
+        <span
+          className="mt-0.5 block truncate text-center text-[11px] font-bold leading-tight text-white"
+          data-testid={`draft-board-cell-your-pick-${pick.overall}`}
+        >
+          {viewerUpcomingLabel}
         </span>
       ) : null}
       {isEmpty ? (

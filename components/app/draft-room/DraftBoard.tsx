@@ -759,10 +759,17 @@ function DraftBoardInner({
           <div ref={teamGridRef} className="min-w-max sm:min-w-full max-md:[--af-board-col-max:84px]" data-testid="draft-board-grid">
             <div
               ref={teamHeaderRef}
-              className={`relative z-10 grid will-change-transform gap-[4px] border-b pb-0.5 backdrop-blur-md ${
+              /*
+               * Solid, not glass. This row is pinned over the rounds as the board scrolls, and with a
+               * 95% background plus `backdrop-blur` a manager's browser drew the tiles straight through
+               * it during a live draft (reported 2026-11-25: "the manager names have blended into the
+               * draft board"). An opaque fill has nothing to composite, and the rounds below sit in
+               * their own lower stacking context, so no tile can paint over a name.
+               */
+              className={`relative z-20 grid will-change-transform gap-[4px] border-b pb-0.5 ${
                 rs
-                  ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
-                  : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
+                  ? 'border-cyan-500/25 bg-[#070d1c] shadow-[0_16px_40px_rgba(0,0,0,0.6)]'
+                  : 'border-white/[0.12] bg-[#0b1428] shadow-[0_12px_32px_rgba(0,0,0,0.55)]'
               }`}
               style={{ gridTemplateColumns: `${ROUND_COLUMN} repeat(${teamCount}, ${BOARD_COLUMN})` }}
               data-testid="draft-board-team-header"
@@ -785,7 +792,8 @@ function DraftBoardInner({
                   title={[headerName, entry.tribe ? `${entry.tribe.name} tribe` : null, meta?.aiArchetypeLabel ?? null].filter(Boolean).join(' · ')}
                   className={`group relative flex h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 transition duration-150 ${
                     currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
-                  } ${isUser ? 'bg-white/[0.07]' : ''}`}
+                  } ${isUser ? 'bg-white/[0.16] ring-1 ring-inset ring-white/70' : ''}`}
+                  data-viewer={isUser ? 'true' : undefined}
                 >
                   <span
                     className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-bold uppercase tracking-[0.03em] shadow-sm ${
@@ -847,6 +855,14 @@ function DraftBoardInner({
                       AUTO
                     </span>
                   ) : null}
+                  {isUser ? (
+                    <span
+                      className={`absolute right-0.5 rounded-[3px] bg-white px-1 text-[11px] font-extrabold uppercase leading-[13px] tracking-[0.04em] text-[#0b1428] ${keeperCountByRoster.get(entry.rosterId) ? "top-[15px]" : "top-0"}`}
+                      data-testid="draft-board-team-header-you"
+                    >
+                      {headerCopy.you}
+                    </span>
+                  ) : null}
                   {currentOwnerSlot === entry.slot ? (
                     <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
                   ) : null}
@@ -875,7 +891,7 @@ function DraftBoardInner({
               })}
             </div>
 
-            <div className="space-y-[2px] pt-0.5">
+            <div className="relative z-0 isolate space-y-[2px] pt-0.5" data-testid="draft-board-rounds">
               {visibleRounds.map((round) => (
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
@@ -956,6 +972,11 @@ function DraftBoardInner({
                             isDevyRound={devyRounds.includes(round) && isPickDisplayEmpty}
                             isCollegeRound={c2cCollegeRounds.includes(round) && isPickDisplayEmpty}
                             pickHighlight={isCurrentPick ? 'none' : pickHighlight(existing)}
+                            viewerUpcomingLabel={
+                              isPickDisplayEmpty && Boolean(currentUserRosterId) && pick.ownerRosterId === currentUserRosterId
+                                ? headerCopy.yourPick
+                                : null
+                            }
                             emptyCellDirection={emptyCellDirection}
                             onTradeFromCell={
                               currentUserRosterId && onCellTrade && pick.ownerRosterId && typeof pick.slot === 'number'
