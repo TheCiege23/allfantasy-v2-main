@@ -20,6 +20,32 @@ describe('current pro roster reconciliation', () => {
     const other = row({ source: 'thesportsdb', status: 'Active' })
     expect(reconcileCurrentProRows('NBA', [ri], [other, other], true, now)).toHaveLength(0)
   })
+  it('keeps an INACT player whom two providers both confirm on a current roster', () => {
+    // Production 2026-11-25: RI INACT, Sleeper ACT (club code), TheSportsDB Active (club name).
+    const ri = row({ status: 'INACT', position: 'PF', dob: '1994-12-06' })
+    const sleeper = row({ id: 'sl:1', source: 'sleeper', status: 'ACT', team: 'CUR', position: 'PF', dob: '1994-12-06' })
+    const tsdb = row({ id: 'tsdb:1', source: 'thesportsdb', status: 'Active', position: 'Power Forward', dob: '1994-12-06' })
+    for (const sport of ['NBA', 'NHL', 'MLB']) {
+      const result = reconcileCurrentProRows(sport, [ri], [ri, sleeper, tsdb], true, now)
+      expect(result).toHaveLength(1); expect(result[0]?.id).toBe('ri:1')
+      // Membership only: with two providers matching, neither one rewrites the position.
+      expect(result[0]?.position).toBe('PF')
+    }
+    // One provider confirming is still enough, and it is the only case that supplies a position.
+    expect(reconcileCurrentProRows('NBA', [ri], [ri, tsdb], true, now)).toHaveLength(1)
+  })
+  it('still drops an INACT player when neither confirming provider has them on a roster', () => {
+    const ri = row({ status: 'INACT', dob: '1990-01-01' })
+    const sleeperFreeAgent = row({ source: 'sleeper', status: 'ACT', team: null, dob: '1990-01-01' })
+    const tsdbRetired = row({ source: 'thesportsdb', status: 'Retired', dob: '1990-01-01' })
+    expect(reconcileCurrentProRows('NBA', [ri], [ri, sleeperFreeAgent, tsdbRetired], true, now)).toHaveLength(0)
+  })
+  it('treats two matches from one provider as namesakes even when another provider also matches', () => {
+    const ri = row({ status: 'INACT' })
+    const tsdb = row({ source: 'thesportsdb', status: 'Active' })
+    const sleeper = row({ source: 'sleeper', status: 'ACT' })
+    expect(reconcileCurrentProRows('NBA', [ri], [tsdb, tsdb, sleeper], true, now)).toHaveLength(0)
+  })
   it('does not restore a free agent team or accept stale roster evidence', () => {
     const ri = row({ team: null, status: 'INACT' })
     const old = row({ source: 'thesportsdb', status: 'Active', fetchedAt: new Date(now - 4 * 86400000) })

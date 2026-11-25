@@ -49,7 +49,14 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
     if (currentOnly && hasSleeperRoster && (row.source !== 'sleeper' || !live(row, now))) continue
     const matches = (byName.get(normalizeMatchName(row.name)) ?? []).filter((other) => verifiedRosterMatch(row, other))
     const verified = matches.length === 1 ? matches[0] : undefined
-    if (currentOnly && !live(row, now) && !(verified && live(verified, now))) continue
+    // Two providers confirming one player is agreement, not ambiguity: at most one match per source.
+    // Two matches from ONE source are namesakes and prove nothing. Before, "exactly one match" meant
+    // a second source arriving (Sleeper's NBA rows, 2026-11-03) dropped every rostered player RI
+    // marks INACT from redraft pools: 125 of ~550 NBA players on 2026-11-25, among them Antetokounmpo,
+    // Curry, Wembanyama and Edwards. Roster membership only: `verified` still needs a single match,
+    // so a position or photo is never taken from one of two providers that may disagree.
+    const agreed = new Set(matches.map((other) => other.source)).size === matches.length ? matches : []
+    if (currentOnly && !live(row, now) && !agreed.some((other) => live(other, now))) continue
     const peerId = verifiedMediaAliasPeerId(sport, row)
     const peer = peerId ? byExternalId.get(peerId) : undefined
     const aliasPhoto = peer && verifiedMediaAliasMatches(sport, row, peer) ? peer.imageUrl : null
