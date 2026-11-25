@@ -3,7 +3,15 @@ import type { FantraxPlayerRef } from '@/lib/league-import/fantrax/fantraxApi'
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import { fantraxNflNameKey, looseNflNameKey, nflNameParts, planNflFantraxIdentityLinks } from './nflFantraxIdentityPlan'
 
-type LinkRow = { id: string; canonicalName: string; currentTeam: string | null; position: string | null; fantraxId: string | null }
+export type LinkRow = {
+  id: string
+  canonicalName: string
+  currentTeam: string | null
+  position: string | null
+  fantraxId: string | null
+  /** Read for the pasted-Yahoo resolver (`yahooSnapshotPlayerIds.ts`), which links to it; the Fantrax link ignores it. */
+  sleeperId: string | null
+}
 
 /**
  * NFL registry rows whose stored name equals one of `looseKeys` once punctuation and a trailing
@@ -14,10 +22,10 @@ type LinkRow = { id: string; canonicalName: string; currentTeam: string | null; 
  * staging, 2026-11-21. Neither pattern contains a backslash, so no layer between here and Postgres
  * can change it.
  */
-async function readRowsByLooseName(looseKeys: string[]): Promise<LinkRow[]> {
+export async function readRowsByLooseName(looseKeys: string[]): Promise<LinkRow[]> {
   try {
     const found = await prisma.$queryRaw<LinkRow[]>`
-      SELECT id, "canonicalName", "currentTeam", position, "fantraxId" FROM "PlayerIdentityMap"
+      SELECT id, "canonicalName", "currentTeam", position, "fantraxId", "sleeperId" FROM "PlayerIdentityMap"
       WHERE sport='NFL' AND regexp_replace(regexp_replace("normalizedName", '[^a-z0-9 ]', '', 'g'), ' (jr|sr|ii|iii|iv|v)$', '')
         = ANY(${looseKeys}::text[])
     `
@@ -36,7 +44,7 @@ async function readRowsBySurname(surnames: string[]): Promise<LinkRow[]> {
   try {
     const patterns = surnames.map((surname) => `% ${surname}`)
     const found = await prisma.$queryRaw<LinkRow[]>`
-      SELECT id, "canonicalName", "currentTeam", position, "fantraxId" FROM "PlayerIdentityMap"
+      SELECT id, "canonicalName", "currentTeam", position, "fantraxId", "sleeperId" FROM "PlayerIdentityMap"
       WHERE sport='NFL' AND regexp_replace(regexp_replace("normalizedName", '[^a-z0-9 ]', '', 'g'), ' (jr|sr|ii|iii|iv|v)$', '')
         LIKE ANY(${patterns}::text[])
     `
@@ -71,7 +79,7 @@ export async function linkNflFantraxIdentities(refs: FantraxPlayerRef[]) {
     const nameKeys = [...new Set(usable.map((r) => fantraxNflNameKey(r.name)).filter(Boolean))]
     const rows = await prisma.playerIdentityMap.findMany({
       where: { sport: 'NFL', OR: [{ fantraxId: { in: fantraxIds } }, { normalizedName: { in: nameKeys } }] },
-      select: { id: true, canonicalName: true, currentTeam: true, position: true, fantraxId: true },
+      select: { id: true, canonicalName: true, currentTeam: true, position: true, fantraxId: true, sleeperId: true },
     })
     /*
      * A second read, only for the players the read above found no name for: the registry rows whose
