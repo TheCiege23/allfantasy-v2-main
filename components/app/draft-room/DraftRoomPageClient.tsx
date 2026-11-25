@@ -4518,12 +4518,10 @@ export function DraftRoomPageClient({
             {currentPick?.overall != null ? <small>#{currentPick.overall}</small> : null}
           </span>
           {/* Who is on the clock and the live timer are in the header, which never scrolls
-              away on phones; this bar only adds what the header leaves out. */}
-          {isCurrentUserOnClock ? (
-            <span className="af-dr-clockbar-status" data-on-clock="true" data-testid="draft-mobile-you-on-clock">
-              {draftRoomCopy.clockBarYouOnClock}
-            </span>
-          ) : presentationVariant === 'redraft_snake' && ribbonPicksUntilUser != null && ribbonPicksUntilUser > 0 ? (
+              away on phones; this bar only adds what the header leaves out. So no "You are on the
+              clock" here (2026-11-25, the simplify pass): the header's "You · On the clock" chip, the
+              board's own tile and the You're-up card already said it three times. */}
+          {!isCurrentUserOnClock && presentationVariant === 'redraft_snake' && ribbonPicksUntilUser != null && ribbonPicksUntilUser > 0 ? (
             <span className="af-dr-clockbar-status" data-testid="draft-mobile-picks-until-you">
               ~{draftRoomCopy.clockBarPicksUntil(ribbonPicksUntilUser)}
             </span>

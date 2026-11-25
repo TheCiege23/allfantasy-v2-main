@@ -121,6 +121,13 @@ type DraftBoardCellProps = {
    * focusRound / focusOriginalRosterId so the relevant row highlights.
    */
   onViewTradeHistory?: () => void
+  /**
+   * The viewer owns this pick. On a phone the trade button shows only on these (2026-11-25, the simplify
+   * pass): with no hover there, every empty pick on the board carried one — ~40 icons on one screen.
+   * Anyone's pick can still be offered for from the Trades panel's "New offer", and on md+ every
+   * pick keeps its hover button.
+   */
+  isOwnPick?: boolean
   /** Snake: reversed rounds show a left arrow on empty cells; forward rounds show right. */
   emptyCellDirection?: 'forward' | 'reverse'
   presentationVariant?: 'default' | 'redraft_snake'
@@ -189,6 +196,7 @@ function DraftBoardCellInner({
   isCollegeRound = false,
   pickHighlight = 'none',
   emptyCellDirection = 'forward',
+  isOwnPick = false,
   onTradeFromCell,
   onViewTradeHistory,
   onCommissionerEditPick,
@@ -370,7 +378,8 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-trade-${pick.overall}`}
           title={t('draftRoom.board.offerPickTrade')}
           aria-label={t('draftRoom.board.offerPickTradeAria')}
-          className={`absolute ${tradeSpot} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
+          data-own-pick={isOwnPick ? 'true' : undefined}
+          className={`absolute ${tradeSpot} z-[1] ${isOwnPick ? 'inline-flex' : 'hidden md:inline-flex'} h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
         >
           <ArrowLeftRight className="h-3 w-3" />
         </button>
