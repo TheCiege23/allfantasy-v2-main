@@ -13,6 +13,8 @@ export const draftRoomRedesignMessages = defineMessages({
     modeOfflineCommissioner:
       'You are logging picks from an in-person draft. Selecting a player submits it for the team on the clock.',
     modeOfflineMember: 'The commissioner records each pick as it happens in the room. The board updates for everyone.',
+    modeAutoLabel: 'Auto draft',
+    modeAutoBody: 'Every pick in this draft is made automatically, for every team. Nobody picks by hand.',
     modeAutopickLabel: 'Auto-pick is on',
     modeAutopickBody: 'AllFantasy makes your pick as soon as you are on the clock, starting with your queue. Turn it off to pick yourself.',
     modeMockLabel: 'Mock draft',
@@ -114,6 +116,8 @@ export const draftRoomRedesignMessages = defineMessages({
     modeOfflineCommissioner:
       'Estás registrando las selecciones de un draft presencial. Al elegir un jugador, se envía para el equipo que está en el reloj.',
     modeOfflineMember: 'El comisionado registra cada selección a medida que ocurre en la sala. El tablero se actualiza para todos.',
+    modeAutoLabel: 'Draft automático',
+    modeAutoBody: 'Todas las selecciones de este draft se hacen automáticamente, para todos los equipos. Nadie elige a mano.',
     modeAutopickLabel: 'El auto-pick está activado',
     modeAutopickBody: 'AllFantasy hace tu selección en cuanto estás en el reloj, empezando por tu cola. Desactívalo para elegir tú.',
     modeMockLabel: 'Mock draft',

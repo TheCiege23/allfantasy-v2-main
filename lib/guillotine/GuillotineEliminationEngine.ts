@@ -25,7 +25,7 @@ import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
 import { applyImmunity, immuneRosterIds, readAdvanced, scheduledChops } from './chopSchedule'
 import { previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
-import { readFaabOnChop } from './faabOnChop'
+import { describeFaabPayout, movesChoppedFaab, readFaabOnChop, readFaabOnChopPercent } from './faabOnChop'
 import { redistributeChoppedFaab } from './faabOnChopApply'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { readCommissionerTiebreak, tiebreakKey, tiebreakState } from './commissionerTiebreak'
@@ -496,30 +496,46 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   })
 
   /*
-   * The chopped team's unspent FAAB, when the commissioner chose to split it (lib/guillotine/faabOnChop.ts).
-   * Idempotent on its own — the chopped balance is zeroed in the same transaction that pays it out — and
-   * best-effort: the chop is recorded, so a failure here is logged, never turned into a failed chop.
+   * The chopped team's unspent FAAB, when the commissioner chose to pass it on (lib/guillotine/faabOnChop.ts): split
+   * evenly, to the week's highest or lowest surviving scorer, or to the next team in waiver order, all of it or a
+   * share. Made once per chop — the payout writes its own `faab_split` marker in the transaction that moves the
+   * balances (./faabOnChopApply.ts) — and best-effort: the chop is recorded, so a failure here is logged, never
+   * turned into a failed chop.
    */
-  if (readFaabOnChop(endgameLeague?.settings) === 'split') {
+  const faabPolicy = readFaabOnChop(endgameLeague?.settings)
+  if (movesChoppedFaab(faabPolicy)) {
     try {
       const split = await redistributeChoppedFaab({
         choppedRosterIds,
         survivorRosterIds: evalResult.activeRosterIds.filter((id) => !chopSet.has(id)),
+        policy: faabPolicy,
+        percent: readFaabOnChopPercent(endgameLeague?.settings),
+        // The scores the chop itself ranked on, so "highest scorer" is the chop's own top score.
+        weekPoints: new Map(evalResult.scores.map((row) => [row.rosterId, row.periodPoints])),
+        record: { leagueId: input.leagueId, key: `${seasonId ?? `season:${input.season ?? 'unknown'}`}:${input.weekOrPeriod}`, weekOrPeriod: input.weekOrPeriod },
       })
       if (split) {
-        await appendEvent(input.leagueId, 'faab_split', {
-          weekOrPeriod: input.weekOrPeriod,
-          choppedRosterIds,
-          pool: split.pool,
-          shares: Object.fromEntries(split.shares),
-          taken: Object.fromEntries(split.taken),
-        })
+        const applied = split.applied ?? 'split'
+        // The payout records itself when it can; this is the older path (no marker written).
+        if (!split.recorded) {
+          await appendEvent(input.leagueId, 'faab_split', {
+            weekOrPeriod: input.weekOrPeriod,
+            choppedRosterIds,
+            pool: split.pool,
+            shares: Object.fromEntries(split.shares),
+            taken: Object.fromEntries(split.taken),
+            policy: faabPolicy,
+            applied,
+          })
+        }
         if (!input.skipChat && input.systemUserId) {
-          const whose = choppedRosterIds.length === 1 ? "The chopped team's" : "The chopped teams'"
+          const paid = [...split.shares].filter(([, amount]) => amount > 0).map(([rosterId]) => rosterId)
+          // An even split names nobody; the other rules name who was paid.
+          const names = applied === 'split' ? {} : await getDisplayNamesForRosters(input.leagueId, paid).catch(() => ({}) as Record<string, string>)
           await createLeagueChatMessage(
             input.leagueId,
             input.systemUserId,
-            `💰 ${whose} $${split.pool} of unspent FAAB was split among the ${split.survivors} teams still alive: about $${split.perTeam} each.`,
+            `💰 ${describeFaabPayout({ applied, pool: split.pool, recipients: paid.map((id) => names[id] ?? 'a surviving team'), survivors: split.survivors, choppedCount: choppedRosterIds.length })}`,
             {
               idempotencyKey: `guillotine-faab-split:${input.leagueId}:${input.season ?? 'na'}:w${input.weekOrPeriod}`,
               type: 'host_announcement',
@@ -530,7 +546,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
       }
     } catch (e) {
       console.warn(
-        '[guillotine] FAAB split after chop failed; the chop itself stands',
+        '[guillotine] FAAB payout after chop failed; the chop itself stands',
         JSON.stringify({ leagueId: input.leagueId, week: input.weekOrPeriod, error: e instanceof Error ? e.message : String(e) }),
       )
     }
