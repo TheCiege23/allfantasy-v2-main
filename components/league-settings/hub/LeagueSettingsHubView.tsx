@@ -737,17 +737,22 @@ function CommissionerHubTab({ data, cb, slots }: { data: HubViewData; cb: HubCal
       <Card id="season" title="Season controls" sub="Lineups, locks, members and points, for any team.">
         <HubLinks links={SEASON_LINKS} cb={cb} />
       </Card>
-      <Card id="schedule" title="Schedule" sub="Who plays whom each week.">
+      {/*
+        Below Season controls, one closed row each (2026-11-25, the simplify pass), as in League Setup:
+        open, the tab was ~2,700px on a phone. "Needs you" and Season controls — the queue and the tools
+        used week to week — stay open; the section chips open what they jump to.
+      */}
+      <Card id="schedule" fold="closed" title="Schedule" sub="Who plays whom each week.">
         <HubLinks links={SCHEDULE_LINKS} cb={cb} />
       </Card>
-      <Card id="rivalry" title="Rivalry Week" sub="Pick a week and pair each team with its biggest rival.">
+      <Card id="rivalry" fold="closed" title="Rivalry Week" sub="Pick a week and pair each team with its biggest rival.">
         {slots?.rivalryWeek ?? <HubLinks links={[{ label: 'Set up Rivalry Week', description: 'Preview the pairs, then apply them to that week.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-rivalry-open' }]} cb={cb} />}
       </Card>
-      <Card id="options" title="League options" sub="The same settings as League Setup, with the editors that change them.">
+      <Card id="options" fold="closed" title="League options" sub="The same settings as League Setup, with the editors that change them.">
         {data.afOptions === undefined ? <Loading lines={2} /> : data.afOptions.length ? <AfOptionRows options={data.afOptions} cb={cb} canOpen /> : null}
         <HubLinks links={withoutAfDuplicates(leagueOptionLinks(data.kind, data.leagueId), data.afOptions)} cb={cb} />
       </Card>
-      <Card id="storyline" title="Storyline" sub="How Chimmy tells your season in the league chat.">
+      <Card id="storyline" fold="closed" title="Storyline" sub="How Chimmy tells your season in the league chat.">
         {slots?.storyline ?? <p className="af-lsh-empty">{t('Storyline loads here on the league page.')}</p>}
       </Card>
     </div>
@@ -833,6 +838,24 @@ function MyTab({ data, cb, slots }: { data: HubViewData; cb: HubCallbacks; slots
                 <Switch on={n.leagueEnabled} label={t('Alerts for this league')} onChange={cb.onToggleLeagueNotifications} />
               </div>
             </div>
+            {/*
+              The per-category switches behind one row (2026-11-25, the simplify pass): ~14 rows open on a
+              phone, under the one switch most people want here. The row says how many are on.
+            */}
+            <details className="af-lsh-subfold" data-testid="league-settings-notification-categories">
+              <summary className="af-lsh-row">
+                <span className="af-lsh-row-copy">
+                  <span>{t('By category')}</span>
+                  <span data-testid="league-settings-notification-count">
+                    {(() => {
+                      const all = n.groups.flatMap((g) => g.rows)
+                      const on = n.leagueEnabled ? all.filter((r) => n.on[r.id] !== false).length : 0
+                      return `${on} / ${all.length} ${t('on')}`
+                    })()}
+                  </span>
+                </span>
+                <span aria-hidden="true" className="af-lsh-subfold-chev">▾</span>
+              </summary>
             <GroupGrid
               groups={n.groups.map((g) => ({
                 key: g.key,
@@ -842,6 +865,7 @@ function MyTab({ data, cb, slots }: { data: HubViewData; cb: HubCallbacks; slots
               canEdit={n.leagueEnabled}
               onToggle={(field, next) => cb.onToggleNotification(field as NotificationCategoryId, next)}
             />
+            </details>
             <p className="af-lsh-empty">
               {t('Delivery channels (push, email, SMS) and quiet hours apply to every league.')} <a href="/settings?tab=notifications">{t('Manage them in account settings')}</a>.
             </p>
@@ -1100,7 +1124,11 @@ function MembersTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
   const members = data.members
   return (
     <>
-      <Card id="commissioners" title="Set Commissioners" sub="Co-commissioners can make roster and lineup changes for any team and manage league settings">
+      {/*
+        Folded (2026-11-25, the simplify pass): it listed every manager with a switch, and "Manage Members"
+        right below lists them again with their role. Only the head commissioner changes it.
+      */}
+      <Card id="commissioners" fold="closed" title="Set Commissioners" sub="Co-commissioners can make roster and lineup changes for any team and manage league settings">
         <div className="af-lsh-card-body">
           {members === undefined ? <Loading /> : (
             <div className="af-lsh-table">
@@ -1298,7 +1326,13 @@ function RecordTab({ data }: { data: HubViewData }) {
   const wk = (season: number | null | undefined, week: number | null | undefined) => `${season ?? ''}${week ? ` ${t('Wk')} ${week}` : ''}`
   return (
     <>
-      <Card id="history" title="League History" sub="Draft results and every past season">
+      {/*
+        Record Book, folded like League Setup (2026-11-25, the simplify pass): League History open, the
+        other four one closed row each. Open, the tab was ~4,400px on a phone — two 8-row high-score tables,
+        three paragraphs on how corrections work and a colour legend under the history. The section chips
+        open what they jump to.
+      */}
+      <Card id="history" fold="open" title="League History" sub="Draft results and every past season">
         <div className="af-lsh-card-body">
           <div className="af-lsh-split" data-even="true">
             <div className="af-lsh-list">
@@ -1324,7 +1358,7 @@ function RecordTab({ data }: { data: HubViewData }) {
         </div>
       </Card>
 
-      <Card id="standings" title="All-Time Standings" sub="Every season this league has played, added up">
+      <Card id="standings" fold="closed" title="All-Time Standings" sub="Every season this league has played, added up">
         <div className="af-lsh-card-body">
           {data.standings === undefined ? <Loading /> : !data.standings?.length ? (
             <p className="af-lsh-note" style={{ marginTop: 0 }}>{t('All-time standings start after the first completed season.')}</p>
@@ -1346,7 +1380,7 @@ function RecordTab({ data }: { data: HubViewData }) {
         </div>
       </Card>
 
-      <Card id="highs" title="All-Time High Scores" sub="The league’s biggest weeks, by team and by player">
+      <Card id="highs" fold="closed" title="All-Time High Scores" sub="The league’s biggest weeks, by team and by player">
         <div className="af-lsh-card-body">
           <div className="af-lsh-split" data-even="true">
             <div className="af-lsh-list">
@@ -1395,7 +1429,7 @@ function RecordTab({ data }: { data: HubViewData }) {
         </div>
       </Card>
 
-      <Card id="corrections" title="Stat Corrections" sub="Corrections are applied retroactively to each player’s total">
+      <Card id="corrections" fold="closed" title="Stat Corrections" sub="Corrections are applied retroactively to each player’s total">
         <CorrectionWeeks data={data.correctionWeeks} />
         <div className="af-lsh-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, lineHeight: 1.55, color: 'var(--lsh-muted)' }}>
           <span>{t('Our stats feed updates live during games, then posts official corrections over the next few days.')}</span>
@@ -1405,7 +1439,7 @@ function RecordTab({ data }: { data: HubViewData }) {
         </div>
       </Card>
 
-      <Card id="legend" title="League Legend" sub="What the colors and tags mean">
+      <Card id="legend" fold="closed" title="League Legend" sub="What the colors and tags mean">
         <div className="af-lsh-card-body">
           <div className="af-lsh-legend">
             <div>
