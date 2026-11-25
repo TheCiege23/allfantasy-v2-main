@@ -110,6 +110,31 @@ describe('the commissioner card', () => {
     expect(selects().map((x) => x.disabled)).toEqual([false, true])
   })
 
+  it('a Chimmy team shows who its manager is and a trade-offer switch that saves', async () => {
+    const team = (trades: string) => ({ rosterId: 'r1', teamName: 'Alpha', managerName: null, status: 'inactive', suggested: false,
+      managed: { since: 's', byUserId: 'c', autopilot: { style: 'win_now', since: 's' } },
+      chimmy: { personality: 'ADP_VALUE_HUNTER', label: 'Value hunter', summary: 'Hunts bargains and rarely overpays.', trades } })
+    const plain = { rosterId: 'r2', teamName: 'Bravo', managerName: null, status: 'active', suggested: false, managed: null, chimmy: null }
+    let trades = 'answer'
+    const fetchMock = vi.fn(async (_u: string, init?: { method?: string; body?: string }) => {
+      if (init?.method === 'POST') { trades = JSON.parse(init.body ?? '{}').trades; return { ok: true, json: async () => ({ trades }) } }
+      return { ok: true, json: async () => ({ native: true, autopilotEntitled: true, chimmyLimit: 4, chimmyFreeTeams: 1, chimmyReports: [], teams: [team(trades), plain] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<InactiveManagerCommissioner leagueId="L" />)
+    const line = await screen.findByTestId('chimmy-manager-personality')
+    expect(line.textContent).toContain('Manager style: Value hunter. Hunts bargains and rarely overpays.')
+    expect(line.textContent).toContain('Only commissioners see this.')
+    // Only the team Chimmy runs gets the line and the switch.
+    expect(screen.getAllByTestId('chimmy-manager-profile')).toHaveLength(1)
+    const sw = screen.getByTestId('chimmy-manager-trades') as HTMLSelectElement
+    expect(sw.value).toBe('answer')
+    fireEvent.change(sw, { target: { value: 'off' } })
+    await screen.findByText('Saved. Offers to this team are refused.')
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'POST', body: JSON.stringify({ rosterId: 'r1', trades: 'off' }) }))
+    expect((screen.getByTestId('chimmy-manager-trades') as HTMLSelectElement).value).toBe('off')
+  })
+
   it('renders nothing for an imported league', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ native: false, teams: [] }) })))
     const { container } = render(<InactiveManagerCommissioner leagueId="L" />)

@@ -67,3 +67,7 @@
 .af-tw-group > .af-tw-panel li strong { font-size:14px; font-weight:700; line-height:1.35; }
 .af-tw-group > .af-tw-panel li p { margin:2px 0 0; font-size:13px; line-height:1.45; color:var(--muted); }
 .af-tw-group > .af-tw-panel > p { font-size:14px; color:var(--muted); }
+
+/* Chimmy as a manager: who it is for a team, and whether the team takes trade offers. */
+.af-tw-chimmy-profile { display:grid; gap:6px; margin:8px 0 14px; padding-left:12px; border-left:2px solid var(--line); }
+.af-tw-chimmy-profile p { margin:0; }
