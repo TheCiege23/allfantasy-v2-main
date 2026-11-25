@@ -20,6 +20,8 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: vi.fn(async (q: { select: Record<string, boolean> }) => (q.select.userId && !q.select.settings ? { userId: h.owner } : { settings: h.settings, userId: h.owner })) },
     roster: { findUnique: vi.fn(async () => ({ platformUserId: h.rosterOwner })) },
     liveDraftAutopickPreference: { findUnique: vi.fn(async () => null) },
+    // No automatic picks yet, so no seat is on auto for having missed its clock.
+    draftPick: { findFirst: vi.fn(async () => null) },
   },
 }))
 
