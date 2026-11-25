@@ -54,7 +54,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsh.cc.nav.chopRules": "Reglas de corte",
     "lsh.cc.sub.chopRules": "Calendario e inmunidad",
     "lsh.cc.nav.guillotineRules": "Reglas de la liga",
-    "lsh.cc.sub.guillotineRules": "Final y desempates",
+    "lsh.cc.sub.guillotineRules": "Semanas de corte, FAAB, desempates y final",
     "lsh.cc.nav.pirateRules": "Reglas pirata",
     "lsh.cc.sub.pirateRules": "Protecciones, robos y fechas límite",
     "lsh.cc.group.pirate": "Liga pirata",

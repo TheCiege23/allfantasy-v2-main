@@ -12,7 +12,6 @@ import {
   type BuildSettingsHomeInput,
 } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { LeagueSettingsHome } from '@/components/league-settings/home/LeagueSettingsHome'
-import { GuillotineFirstChopEditor } from '@/components/league-settings/home/GuillotineFirstChopEditor'
 
 const teams = Array.from({ length: 16 }, (_, i) => ({
   claimedByUserId: i < 2 ? `u${i}` : null,
@@ -83,9 +82,10 @@ describe('LeagueSettingsHome — list', () => {
     expect(rowValue('draft-autostart')).toBe('On')
     expect(rowValue('waivers')).toBe('FAAB · $1,000')
     expect(rowValue('trades')).toBe('Commissioner review · no deadline')
-    expect(rowValue('first-chop')).toBe('Week 10')
+    // One row for the one Guilly rules page (2026-11-25): it was five rows opening three pages.
+    expect(rowValue('guilly-rules')).toBe('First chop week 10 · One chop a week · Last team standing')
     expect(rowValue('chop-schedule')).toContain('Waivers Thursday 7:00 AM ET')
-    expect(rowValue('endgame')).toBe('Last team standing')
+    for (const gone of ['first-chop', 'chop-rules', 'league-rules', 'endgame']) expect(screen.queryByTestId(`lsh-row-${gone}`), gone).toBeNull()
     expect(rowValue('managers')).toBe('2 / 16 joined')
     expect(screen.getByTestId('lsh-copy-invite')).toBeTruthy()
   })
@@ -142,7 +142,7 @@ describe('LeagueSettingsHome — list', () => {
     expect(screen.getByTestId('lsh-readonly-note')).toBeTruthy()
     expect(rowValue('waivers')).toBe('FAAB · $1,000')
     expect(screen.queryByTestId('lsh-section-commissioner')).toBeNull()
-    for (const id of ['name', 'roster', 'draft-date', 'waivers', 'trades', 'first-chop', 'managers']) {
+    for (const id of ['name', 'roster', 'draft-date', 'waivers', 'trades', 'guilly-rules', 'managers']) {
       const row = screen.getByTestId(`lsh-row-${id}`)
       expect(row.tagName).toBe('DIV')
       expect(row.getAttribute('data-readonly')).toBe('true')
@@ -160,10 +160,14 @@ describe('LeagueSettingsHome — list', () => {
     expect(screen.getByTestId('league-settings-subpage').getAttribute('data-subpage')).toBe('divisions')
   })
 
-  it('a locked first chop week is display-only even for the commissioner', () => {
-    renderHome(input({ guillotine: { firstChopWeek: 10, endWeek: 24, locked: true } }))
-    expect(rowValue('first-chop')).toBe('Week 10 · locked')
-    expect(screen.getByTestId('lsh-row-first-chop').tagName).toBe('DIV')
+  it('the Guilly rules row opens the one page, and still does once the first chop week is locked', () => {
+    // The page holds every rule; a locked first chop week is one disabled field on it, not a dead row.
+    const { renderSubPage } = renderHome(input({ guillotine: { firstChopWeek: 10, endWeek: 24, locked: true, scheduleLines: ['From week 10: 2 teams a week.'] } }))
+    expect(rowValue('guilly-rules')).toBe('First chop week 10 · 2 teams a week · Last team standing')
+    const row = screen.getByTestId('lsh-row-guilly-rules')
+    expect(row.tagName).toBe('BUTTON')
+    fireEvent.click(row)
+    expect(renderSubPage).toHaveBeenLastCalledWith('guillotine-rules')
   })
 })
 
@@ -187,44 +191,6 @@ describe('LeagueSettingsHome — sub-pages', () => {
     const { renderSubPage } = renderHome(input())
     fireEvent.click(screen.getByTestId('lsh-row-draft-autostart'))
     expect(renderSubPage).toHaveBeenLastCalledWith('draft')
-  })
-})
-
-describe('GuillotineFirstChopEditor', () => {
-  it('saves the chosen week through the given save and reports it', async () => {
-    const save = vi.fn(async (week: number) => ({ ok: true as const, week }))
-    const onSaved = vi.fn()
-    render(<GuillotineFirstChopEditor initialWeek={10} endWeek={24} locked={false} save={save} onSaved={onSaved} />)
-    const saveBtn = screen.getByTestId('lsh-save') as HTMLButtonElement
-    expect(saveBtn.disabled).toBe(true) // nothing changed yet
-    fireEvent.click(screen.getByRole('button', { name: 'Later week' }))
-    expect(saveBtn.disabled).toBe(false)
-    fireEvent.click(saveBtn)
-    expect(save).toHaveBeenCalledWith(11)
-    expect(await screen.findByText('Saved — the first chop is week 11.')).toBeTruthy()
-    expect(onSaved).toHaveBeenCalledWith(11)
-  })
-
-  it('shows the server refusal', async () => {
-    const save = vi.fn(async () => ({ ok: false as const, error: 'The first chop has already happened' }))
-    render(<GuillotineFirstChopEditor initialWeek={10} endWeek={24} locked={false} save={save} />)
-    fireEvent.change(screen.getByTestId('lsh-first-chop-input'), { target: { value: '12' } })
-    fireEvent.click(screen.getByTestId('lsh-save'))
-    expect((await screen.findByRole('alert')).textContent).toContain('already happened')
-  })
-
-  it('refuses an out-of-range week before calling save', () => {
-    const save = vi.fn()
-    render(<GuillotineFirstChopEditor initialWeek={10} endWeek={24} locked={false} save={save as never} />)
-    fireEvent.change(screen.getByTestId('lsh-first-chop-input'), { target: { value: '30' } })
-    expect((screen.getByTestId('lsh-save') as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('Pick a week from 1 to 24.')).toBeTruthy()
-  })
-
-  it('locked: no input, no save', () => {
-    render(<GuillotineFirstChopEditor initialWeek={10} endWeek={24} locked save={vi.fn() as never} />)
-    expect((screen.getByTestId('lsh-first-chop-input') as HTMLInputElement).disabled).toBe(true)
-    expect(screen.queryByTestId('lsh-save')).toBeNull()
   })
 })
 
