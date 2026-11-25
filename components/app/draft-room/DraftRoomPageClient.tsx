@@ -5385,7 +5385,17 @@ export function DraftRoomPageClient({
                   />
                 </div>
               ) : null}
-              <div className="min-h-0 flex-1 overflow-auto overscroll-contain [overflow-anchor:none]">
+              {/*
+                🛑 NO `overscroll-contain` HERE (owner + a member report, 2026-11-24: "couldn't scroll the
+                draft board on phone or PC"). This box sits INSIDE the real scroller, the shell's
+                `draft-premium-board-zone`, and is exactly as tall as the board, so it never scrolls itself.
+                With `overscroll-contain` it still caught every wheel and swipe that started on the board
+                and refused to pass it up, so the zone never moved and rounds past the fold were
+                unreachable. Measured on production: 5 wheel ticks left the zone at scrollTop 0; with this
+                box's overscroll set to auto the same ticks scrolled it 404px, to round 9. The zone keeps
+                its own `overscroll-contain`, which is correct there because it does scroll.
+              */}
+              <div data-testid="draft-board-scroll-passthrough" className="min-h-0 flex-1 overflow-auto [overflow-anchor:none]">
                 <DraftBoard
                   picks={boardPicks}
                   slotOrder={slotOrder}
