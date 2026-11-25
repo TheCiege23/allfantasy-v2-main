@@ -51,16 +51,19 @@ export function GuillotineChopExtras({
   leagueId,
   home,
   lastWords,
+  boardHasOdds,
 }: {
   leagueId: string
   home: GuillotineHomeExtras | null | undefined
+  /** The list above already shows this week's survival odds, so the block below must not show a second, different one. */
+  boardHasOdds?: boolean
   /** Each chopped team's last words (lib/guillotine/lastWords.ts); the moment shows the latest chop's. */
   lastWords?: ReadonlyArray<{ rosterId: string; text: string }> | null
 }) {
   return (
     <SpecialtyShell format="guillotine" className={gl.home} testId="guillotine-chop-extras">
       {/* What do I need to avoid the chop — lib/scenario-explainer. Hidden until there are chop scores to model. */}
-      <ChopExplainerBlock leagueId={leagueId} />
+      <ChopExplainerBlock leagueId={leagueId} weekOdds={!boardHasOdds} />
       {home?.lastChop ? (
         <GuillotineChopMoment
           // A new chop is a new moment: it starts armed whatever the last one's state was.

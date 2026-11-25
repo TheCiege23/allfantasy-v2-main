@@ -230,7 +230,7 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
         chopAt={pastWeek == null ? summary?.home?.nextChopAt ?? null : null}
         weekPicker={weekPicker}
         // The latest chop's moment sits with this week's list, not with a replayed one.
-        extra={pastWeek == null ? <GuillotineChopExtras leagueId={leagueId} home={summary?.home} lastWords={summary?.lastWords?.entries} /> : null}
+        extra={pastWeek == null ? <GuillotineChopExtras leagueId={leagueId} home={summary?.home} lastWords={summary?.lastWords?.entries} boardHasOdds={liveBoard?.hasOdds} /> : null}
         onRemoveLastWords={summary?.lastWords?.canRemove ? removeLastWords : undefined}
       />
 
