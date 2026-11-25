@@ -480,8 +480,6 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
             team={player.team}
             imageUrl={player.imageUrl}
           />
-          {/* Dynasty leagues only: age on the career arc and ROOKIE (DynastyRosterMarkers.tsx). */}
-          <DynastyRowMarkers sleeperId={player.sleeperId} />
           {/*
             ⚠ BESIDE THE NAME, NOT IN THE META LINE. A bye is the single most
             important fact about a player this week — it is the difference
@@ -518,6 +516,12 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
           ) : null}
         </div>
         <div className="af-mt-player-meta">
+          {/*
+            Dynasty leagues only: age on the career arc and ROOKIE (DynastyRosterMarkers.tsx). On the game
+            line since 2026-11-24, not beside the name: there the chips took the name's room on a phone and
+            pushed each row to three lines.
+          */}
+          <DynastyRowMarkers sleeperId={player.sleeperId} />
           <GameContext text={player.gameContext} />
           {player.latestCollegeBoxScore ? (
             <span>{coreUiCopy('Last game', language)} {player.latestCollegeBoxScore.date} · {player.latestCollegeBoxScore.stats.map(({ key, value }) => `${value} ${key.toUpperCase()}`).join(' · ')}</span>
@@ -727,7 +731,7 @@ function ProjHeader() {
  * default so it costs one line; the definitions reuse this file's own explainer strings, so the
  * key cannot drift from the tooltips it stands in for.
  */
-function RosterKey() {
+function RosterKey({ children }: { children?: React.ReactNode }) {
   const sourceKind = useContext(ProjectionSourceContext)
   const afProvider = sourceKind === 'af'
   const { language } = useOptionalLanguage()
@@ -759,6 +763,7 @@ function RosterKey() {
           </dd>
         </div>
       </dl>
+      {children}
     </details>
   )
 }
@@ -2251,8 +2256,10 @@ export function MyTeam({ data }: MyTeamProps) {
           </span>
           <ProjHeader />
         </header>
-        <RosterKey />
-        <DynastyAgeKey />
+        {/* The dynasty age key folds in with the other abbreviations (2026-11-24): open, it was ~100px above every lineup. */}
+        <RosterKey>
+          <DynastyAgeKey />
+        </RosterKey>
 
         {data.starterGameDay ? <StarterGameDayLine summary={data.starterGameDay} /> : null}
 
