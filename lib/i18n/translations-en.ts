@@ -7695,7 +7695,7 @@ export const translationsEn: Record<string, string> = {
   "lsh.cc.nav.chopRules": "Chop rules",
   "lsh.cc.sub.chopRules": "Schedule and immunity",
   "lsh.cc.nav.guillotineRules": "League rules",
-  "lsh.cc.sub.guillotineRules": "Endgame and tiebreakers",
+  "lsh.cc.sub.guillotineRules": "Chop weeks, FAAB, tiebreakers and the endgame",
   "lsh.cc.nav.pirateRules": "Pirate rules",
   "lsh.cc.sub.pirateRules": "Protections, steals & deadlines",
   "lsh.cc.group.pirate": "Pirate league",
