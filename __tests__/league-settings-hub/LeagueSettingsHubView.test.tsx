@@ -191,3 +191,39 @@ describe('League Setup folds', () => {
     expect(fold('scoring').open).toBe(true)
   })
 })
+
+/*
+ * Record Book, Members and My Settings, folded like League Setup (2026-11-25, the simplify pass).
+ */
+describe('Record Book, Members and My Settings folds', () => {
+  const fold = (id: string) => document.querySelector<HTMLDetailsElement>(`[data-testid="league-settings-fold-${id}"]`)!
+
+  it('Record Book opens League History and closes the other four sections', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="record" />)
+    expect(fold('history').open).toBe(true)
+    for (const id of ['standings', 'highs', 'corrections', 'legend']) expect(fold(id).open).toBe(false)
+  })
+
+  it('a Record Book chip opens the section it jumps to', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="record" />)
+    fireEvent.click(document.querySelector('.af-lsh-chips a[href="#af-lsh-legend"]')!)
+    expect(fold('legend').open).toBe(true)
+  })
+
+  it('Members folds Set Commissioners and keeps Manage Members open', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="members" />)
+    expect(fold('commissioners').open).toBe(false)
+    expect(screen.queryByTestId('league-settings-fold-managers')).toBeNull()
+  })
+
+  it('My Settings keeps the league switch in view and folds the categories with a count', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="my" />)
+    expect(screen.getByRole('switch', { name: 'Alerts for this league' })).toBeTruthy()
+    const cats = screen.getByTestId('league-settings-notification-categories') as HTMLDetailsElement
+    expect(cats.open).toBe(false)
+    // trade_proposals is off in the fixture, so the count is one short of the total.
+    const m = screen.getByTestId('league-settings-notification-count').textContent!.match(/^(\d+) \/ (\d+) on$/)
+    expect(m).not.toBeNull()
+    expect(Number(m![1])).toBe(Number(m![2]) - 1)
+  })
+})
