@@ -46,6 +46,7 @@ vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({ getNormalizedPlaye
 import {
   AUTOPILOT_OFF_ACTION,
   AUTOPILOT_ON_ACTION,
+  applyChimmyAutopilot,
   isOwnerOnAutopilot,
   DRAFT_AS_ME_ACTION,
   setChimmyAutopilot,
@@ -114,6 +115,20 @@ describe('how many teams Chimmy may run', () => {
 })
 
 describe('setChimmyAutopilot', () => {
+  it('keeps the personality the team drafts with, through a later style change and a second handover', async () => {
+    expect(await applyChimmyAutopilot('L', 'commish', 'r1', undefined, { personality: 'ZERO_RB' })).toMatchObject({ ok: true })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'dynasty_owner', personality: 'ZERO_RB' } })
+    await setChimmyAutopilot('L', 'commish', 'r1', 'win_now')
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'win_now', personality: 'ZERO_RB' } })
+    await applyChimmyAutopilot('L', 'commish', 'r1', 'rebuild', { personality: 'RB_HEAVY' })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'rebuild', personality: 'ZERO_RB' } })
+  })
+
+  it('saves no personality when none is known or it is not one', async () => {
+    await applyChimmyAutopilot('L', 'commish', 'r1', undefined, { personality: 'TANK' })
+    expect(entry('r1')!.autopilot).not.toHaveProperty('personality')
+  })
+
   it('defaults to playing like a dynasty owner, turns lineup management on too, and logs it', async () => {
     expect(await setChimmyAutopilot('L', 'commish', 'r1', undefined)).toMatchObject({ ok: true, style: 'dynasty_owner' })
     expect(entry('r1')).toMatchObject({ byUserId: 'commish', autopilot: { style: 'dynasty_owner', byUserId: 'commish' } })
