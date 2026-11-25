@@ -121,6 +121,35 @@ export async function updateLeagueRosterConfig(
   const permission = await checkCommissionerPermission(userId, leagueId)
   if (!permission.isCommissioner) throw new Error(permission.reason ?? 'Commissioner only')
 
+  return writeRosterConfig(leagueId, league, config, { userId, auditAction: options?.auditAction ?? 'updated' })
+}
+
+/**
+ * The same write with no permission check: for AllFantasy acting on a rule the commissioner already saved
+ * (a scheduled roster change, lib/guillotine/rosterScheduleApply.ts). A request from a person goes through
+ * {@link updateLeagueRosterConfig}. Both end in one function, so there is one writer.
+ */
+export async function writeLeagueRosterConfig(
+  leagueId: string,
+  config: { templateKey: string; slots: Record<string, number> },
+  actor: { userId: string | null; auditAction: RosterAuditEntry['action'] },
+): Promise<UnifiedRosterConfig> {
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { sport: true, leagueType: true, settings: true },
+  })
+  if (!league) throw new Error('League not found')
+  return writeRosterConfig(leagueId, league, config, actor)
+}
+
+async function writeRosterConfig(
+  leagueId: string,
+  league: { sport: string; leagueType: string | null; settings: unknown },
+  config: { templateKey: string; slots: Record<string, number> },
+  actor: { userId: string | null; auditAction: RosterAuditEntry['action'] },
+): Promise<UnifiedRosterConfig> {
+  const userId = actor.userId
+
   const sport = league.sport as SupportedRosterSport
   const leagueType = league.leagueType ?? 'redraft'
   const service = getRosterEngineRegistry().getService(sport)
@@ -133,7 +162,7 @@ export async function updateLeagueRosterConfig(
     templateKey: config.templateKey,
     slots: config.slots,
     isCustom: config.templateKey === 'custom',
-    userId,
+    userId: userId ?? undefined,
   })
 
   const latest = await service.getConfig(leagueId)
@@ -153,7 +182,7 @@ export async function updateLeagueRosterConfig(
   const auditEntry: RosterAuditEntry = {
     timestamp: new Date().toISOString(),
     userId,
-    action: options?.auditAction ?? 'updated',
+    action: actor.auditAction,
     templateKey: latest.templateKey,
     changedKeys: compare.diff.changedKeys,
   }
