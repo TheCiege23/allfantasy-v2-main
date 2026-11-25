@@ -276,7 +276,8 @@ test.describe("@db @notifications notification preferences click audit", () => {
     // Back/help links in notification area
     await page.getByTestId("notifications-sports-alerts-link").click()
     await expect(page).toHaveURL(/\/alerts\/settings/, { timeout: 15_000 })
-    await expect(page.getByRole("heading", { name: "Chimmy alert controls" })).toBeVisible({ timeout: 15_000 })
+    // A closed row since 2026-11-25; its summary names it.
+    await expect(page.getByTestId("alerts-chimmy-fold")).toContainText("Chimmy alert controls", { timeout: 15_000 })
     // No "Back to profile" link since 2026-11-25: "All settings" at the top goes back.
 
     // Firefox intermittently stalls on runtime viewport resize in this long serial flow.
