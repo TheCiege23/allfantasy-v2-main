@@ -133,6 +133,10 @@ describe('the commissioner card', () => {
     await screen.findByText('Saved. Offers to this team are refused.')
     expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'POST', body: JSON.stringify({ rosterId: 'r1', trades: 'off' }) }))
     expect((screen.getByTestId('chimmy-manager-trades') as HTMLSelectElement).value).toBe('off')
+    // The third choice: Chimmy also sends offers of its own.
+    fireEvent.change(screen.getByTestId('chimmy-manager-trades'), { target: { value: 'answer_and_send' } })
+    await screen.findByText('Saved. Chimmy will also send an offer of its own now and then, at most one a day.')
+    expect((screen.getByTestId('chimmy-manager-trades') as HTMLSelectElement).value).toBe('answer_and_send')
   })
 
   it('renders nothing for an imported league', async () => {

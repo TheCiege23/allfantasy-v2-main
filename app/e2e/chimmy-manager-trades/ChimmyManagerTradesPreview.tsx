@@ -12,13 +12,13 @@ const autopilot = (style: string) => ({ since: '2026-11-01T00:00:00Z', byUserId:
 export function ChimmyManagerTradesPreview() {
   const [ready, setReady] = useState(false)
   useEffect(() => {
-    const trades: Record<string, Trades> = { r1: 'answer', r2: 'off' }
+    const trades: Record<string, string> = { r1: 'answer', r2: 'answer_and_send' }
     const real = window.fetch
     window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (!url.includes('/inactive-managers')) return real(input, init)
       if (init?.method === 'POST') {
-        const b = JSON.parse(String(init.body ?? '{}')) as { rosterId?: string; trades?: Trades }
+        const b = JSON.parse(String(init.body ?? '{}')) as { rosterId?: string; trades?: string }
         if (b.rosterId && b.trades) trades[b.rosterId] = b.trades
         return new Response(JSON.stringify({ trades: b.trades }), { status: 200 })
       }

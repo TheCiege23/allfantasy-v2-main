@@ -1,0 +1,140 @@
+/**
+ * The hourly run that SENDS a trade offer for a Chimmy team set to "answer and send": who it sends for,
+ * that it goes through the shared offer creation, and every reason it stands down.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('server-only', () => ({}))
+
+const m = vi.hoisted(() => {
+  const state = {
+    settings: {} as Record<string, unknown>,
+    status: 'in_season',
+    lockAllMoves: false,
+    currentWeek: 5,
+    counts: [0, 0] as number[],
+  }
+  const lineup = (starters: string[], bench: string[]) => ({ lineup_sections: { starters: starters.map((id) => ({ id, name: `N ${id}` })), bench: bench.map((id) => ({ id, name: `N ${id}` })), ir: [], taxi: [], devy: [] } })
+  const values: Record<string, [string, number]> = {
+    qb: ['QB', 3000], rb1: ['RB', 2500], rb2: ['RB', 1000], bwr: ['WR', 1900],
+    xrb: ['RB', 2000], xs: ['RB', 9000], crb: ['RB', 2000],
+  }
+  return {
+    state,
+    prisma: {
+      $queryRaw: vi.fn(async () => [{ id: 'L' }]),
+      league: { findUnique: vi.fn(async () => ({ id: 'L', userId: 'owner', platform: 'allfantasy', status: state.status, lifecycleState: state.status, lockAllMoves: state.lockAllMoves, settings: state.settings })) },
+      roster: {
+        findMany: vi.fn(async () => [
+          { id: 'r1', platformUserId: 'orphan-r1', redraftRosterId: 'rr-chimmy', playerData: lineup(['qb', 'rb1', 'rb2'], ['bwr']) },
+          { id: 'r2', platformUserId: 'uA', redraftRosterId: 'rr-other', playerData: lineup(['xs'], ['xrb']) },
+          // Another Chimmy team and an empty seat: never offered to.
+          { id: 'r3', platformUserId: 'orphan-r3', redraftRosterId: 'rr-chimmy2', playerData: lineup([], ['crb']) },
+          { id: 'r4', platformUserId: 'orphan-r4', redraftRosterId: 'rr-empty', playerData: lineup([], ['crb']) },
+        ]),
+      },
+      redraftTradeProposal: { count: vi.fn(async () => state.counts.shift() ?? 0) },
+      redraftRoster: { findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id, seasonId: 's', ownerId: where.id === 'rr-chimmy' ? 'orphan-r1' : 'uA', teamName: where.id === 'rr-chimmy' ? 'Ghosts' : 'Dana' })) },
+      redraftSeason: { findFirst: vi.fn(async () => ({ id: 's', sport: 'NFL', season: 2026, playoffStartWeek: 15, currentWeek: state.currentWeek, league: { leagueVariant: null } })) },
+    },
+    create: vi.fn(async () => ({ ok: true, created: { id: 'p-new' } })),
+    price: vi.fn(async (input: { assets: Array<{ playerId: string; playerName: string }> }) => ({
+      sides: [{ assets: input.assets.map((a) => ({ playerId: a.playerId, playerName: a.playerName, position: values[a.playerId]?.[0] ?? null, valuationBasis: 'market', internalValue: values[a.playerId]?.[1] ?? 0 })) }],
+    })),
+    log: vi.fn(async () => ({ id: 'a' })),
+  }
+})
+vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
+vi.mock('@/server/services/auditService', () => ({ logAction: m.log }))
+vi.mock('@/lib/redraft/tradeDecision', () => ({ acceptRedraftTrade: vi.fn(), rejectRedraftTrade: vi.fn() }))
+vi.mock('@/lib/redraft/createTradeProposal', () => ({ createRedraftTradeProposal: m.create }))
+vi.mock('@/lib/trade-value/captureSnapshot', () => ({ computeRedraftTradeValueSnapshot: m.price }))
+vi.mock('@/lib/subscription/EntitlementResolver', () => ({
+  EntitlementResolver: class {
+    resolveForUser = vi.fn(async () => ({ hasAccess: true }))
+  },
+}))
+
+import { CHIMMY_TRADE_ACTOR, TRADE_SEND_ACTION, runAutopilotTradeOffers } from '@/lib/inactive-manager/autopilotTradeService'
+import { offerHourFor } from '@/lib/inactive-manager/autopilotTradeOffers'
+import { WEEKLY_OFFER_LIMIT } from '@/lib/inactive-manager/managerProfile'
+
+const chimmy = (trades: string | undefined, personality = 'BALANCED') => ({
+  since: 's', byUserId: 'u', autopilot: { style: 'dynasty_owner', since: 's', byUserId: 'u', personality, ...(trades ? { trades } : {}) },
+})
+const settings = (trades: string | undefined) => ({ af_managed_lineups: { r1: { ...chimmy(trades), ownerUserId: 'orphan-r1' }, r3: { ...chimmy('off'), ownerUserId: 'orphan-r3' } } })
+/** A time inside r1's own hour. */
+const myHour = new Date(Date.UTC(2026, 10, 25, offerHourFor('r1'), 10))
+const otherHour = new Date(Date.UTC(2026, 10, 25, (offerHourFor('r1') + 1) % 24, 10))
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  m.state.settings = settings('answer_and_send')
+  m.state.status = 'in_season'
+  m.state.lockAllMoves = false
+  m.state.currentWeek = 5
+  m.state.counts = [0, 0]
+})
+
+describe('runAutopilotTradeOffers', () => {
+  it('sends one bench-for-bench offer in its hour, as Chimmy, through the shared offer creation', async () => {
+    const r = await runAutopilotTradeOffers({ now: myHour })
+    expect(r).toMatchObject({ teams: 1, sent: 1, failures: [] })
+    const made = (m.create.mock.calls[0] as unknown as [Record<string, any>])[0]
+    expect(made).toMatchObject({ leagueId: 'L', seasonId: 's', proposer: { id: 'rr-chimmy' }, receiver: { id: 'rr-other' }, actorUserId: CHIMMY_TRADE_ACTOR, proposerName: 'Chimmy (Ghosts)', additionalRosterIds: [] })
+    expect(made.assets).toEqual([
+      expect.objectContaining({ fromRosterId: 'rr-chimmy', toRosterId: 'rr-other', assetType: 'player', playerId: 'bwr' }),
+      expect.objectContaining({ fromRosterId: 'rr-other', toRosterId: 'rr-chimmy', assetType: 'player', playerId: 'xrb' }),
+    ])
+    expect(made.reason).toBe('Chimmy is offering N bwr for N xrb: it needs help at RB.')
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TRADE_SEND_ACTION, entityId: 'r1', metadata: expect.objectContaining({ proposalId: 'p-new', give: 'bwr', get: 'xrb', replaces: 'rb2' }) }))
+  })
+
+  it('never prices or asks for the other team\'s starters, another Chimmy team, or an empty seat', async () => {
+    await runAutopilotTradeOffers({ now: myHour })
+    const pricedIds = m.price.mock.calls.flatMap((c) => (c as unknown as [{ assets: Array<{ playerId: string }> }])[0].assets.map((a) => a.playerId))
+    expect(pricedIds).toContain('xrb')
+    expect(pricedIds).not.toContain('xs')
+    expect(pricedIds).not.toContain('crb')
+  })
+
+  it('sends nothing outside its hour, or when its trades are not set to send', async () => {
+    expect(await runAutopilotTradeOffers({ now: otherHour })).toMatchObject({ teams: 0, sent: 0 })
+    for (const mode of ['answer', 'off', undefined]) {
+      m.state.settings = settings(mode)
+      expect(await runAutopilotTradeOffers({ now: myHour })).toMatchObject({ teams: 0, sent: 0 })
+    }
+    expect(m.create).not.toHaveBeenCalled()
+    expect(m.price).not.toHaveBeenCalled()
+  })
+
+  it('stands down at its weekly limit, while an offer of its own is waiting, in the playoffs, and when moves are locked', async () => {
+    m.state.counts = [WEEKLY_OFFER_LIMIT.normal, 0]
+    expect(await runAutopilotTradeOffers({ now: myHour })).toMatchObject({ sent: 0, skipped: { weekly_limit: 1 } })
+    m.state.counts = [0, 1]
+    expect(await runAutopilotTradeOffers({ now: myHour })).toMatchObject({ sent: 0, skipped: { offer_waiting: 1 } })
+    m.state.counts = [0, 0]
+    m.state.currentWeek = 15
+    expect(await runAutopilotTradeOffers({ now: myHour })).toMatchObject({ sent: 0, skipped: { playoffs: 1 } })
+    m.state.currentWeek = 5
+    m.state.lockAllMoves = true
+    expect(await runAutopilotTradeOffers({ now: myHour })).toMatchObject({ sent: 0, skipped: { moves_locked: 1 } })
+    m.state.lockAllMoves = false
+    m.state.status = 'complete'
+    expect(await runAutopilotTradeOffers({ now: myHour })).toMatchObject({ sent: 0, skipped: { not_in_season: 1 } })
+    expect(m.create).not.toHaveBeenCalled()
+  })
+
+  it("counts an offer the league's rules refuse, and logs nothing as sent", async () => {
+    m.create.mockResolvedValueOnce({ ok: false, status: 400, body: { code: 'TRADE_DEADLINE_PASSED' } } as never)
+    expect(await runAutopilotTradeOffers({ now: myHour })).toMatchObject({ sent: 0, skipped: { TRADE_DEADLINE_PASSED: 1 } })
+    expect(m.log).not.toHaveBeenCalled()
+  })
+
+  it('a pricing failure is recorded for that team and does not throw', async () => {
+    m.price.mockRejectedValueOnce(new Error('pricing down'))
+    const r = await runAutopilotTradeOffers({ now: myHour })
+    expect(r.failures).toEqual([{ leagueId: 'L', rosterId: 'r1', error: 'pricing down' }])
+    expect(r.sent).toBe(0)
+  })
+})

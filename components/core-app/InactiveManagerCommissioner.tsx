@@ -109,14 +109,14 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
     }
   }
   /** Whether a Chimmy team takes trade offers (it answers them itself) or refuses them all. */
-  const setTrades = async (team: Team, trades: 'off' | 'answer') => {
+  const setTrades = async (team: Team, trades: TradeMode) => {
     setBusy(team.rosterId)
     setMessage('')
     try {
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterId: team.rosterId, trades }) })
       const body = (await r.json().catch(() => ({}))) as { error?: string }
       if (!r.ok) throw new Error(body.error || '')
-      setMessage(trades === 'off' ? m.tradesOffSaved : m.tradesAnswerSaved)
+      setMessage(trades === 'off' ? m.tradesOffSaved : trades === 'answer_and_send' ? m.tradesSendSaved : m.tradesAnswerSaved)
       await load()
     } catch (e) {
       setMessage(e instanceof Error && e.message ? e.message : m.saveFailed)
@@ -229,11 +229,12 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
                         {m.tradeOffers}{' '}
                         <select
                           data-testid="chimmy-manager-trades"
-                          value={team.chimmy.trades === 'off' ? 'off' : 'answer'}
+                          value={team.chimmy.trades}
                           disabled={busy !== null}
-                          onChange={(e) => void setTrades(team, e.target.value === 'off' ? 'off' : 'answer')}
+                          onChange={(e) => void setTrades(team, e.target.value === 'off' ? 'off' : e.target.value === 'answer_and_send' ? 'answer_and_send' : 'answer')}
                         >
                           <option value="answer">{m.tradesAnswer}</option>
+                          <option value="answer_and_send">{m.tradesAnswerAndSend}</option>
                           <option value="off">{m.tradesOff}</option>
                         </select>
                       </label>
