@@ -808,21 +808,21 @@ export function DraftTopBar({
                     >
                       {noteText}
                     </span>
-                    <span className="text-white/24">·</span>
+                    <span className="text-white/24" aria-hidden>·</span>
                   </>
                 ) : null}
                 <span>{timerSummary}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span>{withCount(t('draftRoom.topBar.teamsCount'), teamCount)}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span>{withCount(t('draftRoom.topBar.roundsCount'), rounds)}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span className="text-white/55">{sport}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span title={t('draftRoom.topBar.draftTypeTitle').replace('{{type}}', draftTypeLabel)}>{draftFormatLabel}</span>
                 {poolReadinessLabel ? (
                   <>
-                    <span className="text-white/24">·</span>
+                    <span className="text-white/24" aria-hidden>·</span>
                     <span
                       data-testid="draft-topbar-pool-readiness"
                       className={poolReadiness?.ready ? 'text-emerald-200' : 'text-amber-200'}
@@ -833,7 +833,7 @@ export function DraftTopBar({
                 ) : null}
                 {thirdRoundReversal ? (
                   <>
-                    <span className="text-white/24">·</span>
+                    <span className="text-white/24" aria-hidden>·</span>
                     <span
                       data-testid="draft-topbar-third-round-reversal-badge"
                       title={t('draftRoom.topBar.thirdRoundReversalTitle')}
@@ -845,7 +845,7 @@ export function DraftTopBar({
                 ) : null}
                 {showInvite ? (
                   <>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <button
                   type="button"
                   onClick={() => {

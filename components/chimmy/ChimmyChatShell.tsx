@@ -1127,7 +1127,7 @@ export default function ChimmyChatShell({
           onChange={handleAssistantModeChange}
         />
         <label className="flex flex-col gap-1 min-w-[120px] flex-1 sm:flex-none">
-          <span className="text-[11px] uppercase tracking-wide text-white/45">Sport</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/50">Sport</span>
           <select
             data-testid="chimmy-scope-sport"
             className="rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
@@ -1150,7 +1150,7 @@ export default function ChimmyChatShell({
           </select>
         </label>
         <label className="flex flex-col gap-1 min-w-[160px] flex-[2] sm:flex-none sm:min-w-[220px]">
-          <span className="text-[11px] uppercase tracking-wide text-white/45">League</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/50">League</span>
           <select
             data-testid="chimmy-scope-league"
             className="max-w-full rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
