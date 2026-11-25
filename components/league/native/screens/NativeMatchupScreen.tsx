@@ -612,7 +612,8 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
               <button type="button" className="nls-btn" data-variant="primary" data-block="true" onClick={() => onSelectTab('roster')}>Review lineup</button>
             </Card>
             {otherGames}
-            {view === 'mine' ? scoreboardGlance : null}
+            {/* The glance is for a wide screen's side column; on a phone "League scoreboard" is a tab at the top (2026-11-24). */}
+            {view === 'mine' ? <div className="nls-glance">{scoreboardGlance}</div> : null}
           </aside>
         </div>
       ) : null}

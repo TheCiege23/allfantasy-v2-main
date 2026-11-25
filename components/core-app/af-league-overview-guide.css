@@ -92,9 +92,13 @@
 }
 .af-core .af-lho-week:hover { border-color: var(--accent); }
 .af-core .af-lh-week-summary-grid[data-cells='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.af-core .af-lh-week-summary-grid[data-cells='1'] { grid-template-columns: minmax(0, 1fr); }
+/* 2026-11-24 (the simplify pass): the two cells stay side by side on a phone too; stacked, a card of two
+   short sentences was ~270px tall. Tighter padding keeps "Review your starters" to two lines at 390px. */
 @media (max-width: 800px) {
-  .af-core .af-lh-week-summary-grid[data-cells='2'] { grid-template-columns: minmax(0, 1fr); }
+  .af-core .af-lh-week-summary-grid[data-cells='2'] { gap: 8px; }
+  .af-core .af-lh-week-summary-grid[data-cells='2'] > a,
+  .af-core .af-lh-week-summary-grid[data-cells='2'] > .af-lh-week-summary-moves { padding: 11px; gap: 5px; }
+  .af-core .af-lh-week-summary-grid[data-cells='2'] strong { font-size: 15px; }
 }
 .af-core .af-lh-grid:not(:has(> .af-lh-side)) { grid-template-columns: minmax(0, 1fr); }
 .af-core .af-lh-standings-all {

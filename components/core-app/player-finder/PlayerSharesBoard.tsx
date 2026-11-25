@@ -1,5 +1,6 @@
 'use client'
 
+import '@/components/core-app/home/af-home-guide.css'
 import Link from 'next/link'
 import { useState } from 'react'
 import { useMessages } from '@/components/i18n/useMessages'
@@ -186,14 +187,19 @@ export function PlayerSharesBoard({
       )}
       {/* All leagues only: the split is across every roster, which a one-league view would misstate. */}
       {!league ? <TeamSplit data={state.data.teamSplit} /> : null}
-      <p className="af-pf-shares-foot">
-        {league ? t.sharesFootLeague(league.leagueName) : t.sharesFootAll}
-      </p>
-      {unsupportedLeagues > 0 || (state.data.unidentifiedPlayers ?? 0) > 0 ? (
-        <p className="af-pf-shares-foot" data-testid="pf-shares-not-counted">
-          {t.sharesNotCounted(unsupportedLeagues, state.data.unidentifiedPlayers ?? 0)}
-        </p>
-      ) : null}
+      {/*
+        One closed row (2026-11-24, the simplify pass): how the list is ranked and what it could not count were
+        two paragraphs under it on every visit. Same words, one tap away.
+      */}
+      <details className="af-hg-whyfold af-pf-shares-foot" data-testid="pf-shares-foot">
+        <summary>{t.sharesFootLabel}</summary>
+        <p>{league ? t.sharesFootLeague(league.leagueName) : t.sharesFootAll}</p>
+        {unsupportedLeagues > 0 || (state.data.unidentifiedPlayers ?? 0) > 0 ? (
+          <p data-testid="pf-shares-not-counted">
+            {t.sharesNotCounted(unsupportedLeagues, state.data.unidentifiedPlayers ?? 0)}
+          </p>
+        ) : null}
+      </details>
     </section>
   )
 }

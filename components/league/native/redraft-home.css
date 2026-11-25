@@ -163,7 +163,13 @@
   .rdh-bug-mid-note{display:none}
   .rdh-bug-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .rdh-bug-stats>div:last-child:nth-child(odd){grid-column:1/-1}
-  .rdh-recap-grid{grid-template-columns:minmax(0,1fr)}
+  .rdh-recap-grid{grid-template-columns:minmax(0,1fr);gap:0}
+  /* Three compact rows, not three stacked blocks (2026-11-24): label and number on one line, who under them. */
+  .rdh-recap-grid>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;column-gap:10px;row-gap:2px;padding:10px 0;border-top:1px solid var(--line)}
+  .rdh-recap-grid>div:first-child{border-top:0;padding-top:4px}
+  .rdh-recap-grid .rdh-recap-label{grid-column:1;grid-row:1}
+  .rdh-recap-grid .rdh-recap-value{grid-column:2;grid-row:1;font-size:18px}
+  .rdh-recap-grid .rdh-recap-team{grid-column:1/-1;grid-row:2}
   .rdh-grade-list{grid-template-columns:minmax(0,1fr)}
   .rdh-draftboard-title h2{font-size:22px}
   .rdh-countdown{gap:6px}

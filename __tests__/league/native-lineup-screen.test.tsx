@@ -160,6 +160,21 @@ describe('NativeLineupScreen', () => {
     expect(screen.queryByTestId('daily-day-picker')).toBeNull()
   })
 
+  it('reaches Trades from one place: "Propose trade", with no "Trade block" card repeating it (2026-11-24)', async () => {
+    stubFetch({
+      '/api/league/roster': roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4)]),
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Jalen Hurts')
+    expect(screen.getByText('Roster moves')).toBeTruthy()
+    expect(screen.queryByText('Trade block')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open trade block' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Propose trade' })).toBeTruthy()
+  })
+
   const saves = (calls: Array<{ url: string; init?: RequestInit }>) =>
     calls.filter((c) => c.url === '/api/leagues/roster/save').map((c) => JSON.parse(String(c.init!.body)) as { roster: Record<string, Array<{ id: string; status?: string }>> })
   const ids = (rows: Array<{ id: string }>) => rows.map((r) => r.id)

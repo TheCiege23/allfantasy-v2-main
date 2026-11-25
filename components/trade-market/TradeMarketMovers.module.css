@@ -180,3 +180,16 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/*
+ * The position / window segments are the only way to change what this card shows, and on a touch
+ * phone they measured 36px tall. `.segment` clips with `overflow: hidden` (it draws the pill), so an
+ * invisible ::after hit box would be cut off; the 44px thumb floor goes on the buttons themselves.
+ * Its own top-level @media at depth 0.
+ */
+@media (pointer: coarse) {
+  .segOn,
+  .segOff {
+    min-height: 44px;
+  }
+}

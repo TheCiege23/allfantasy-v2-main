@@ -104,6 +104,7 @@ function Side({
 export function LeagueScoreboardPanel({
   board,
   winProbability,
+  foldOthers = false,
 }: {
   board: LeagueScoreboard
   /**
@@ -117,9 +118,58 @@ export function LeagueScoreboardPanel({
    * the game.
    */
   winProbability?: { pWin: number; confidence: string } | null
+  /**
+   * League home only (2026-11-24, the simplify pass): your game shows, the rest of the league sits in
+   * one closed row under it. Six games were ~650px on a phone, most of a screen the headline had
+   * already summed up. The schedule's whole subject is every game, so it leaves this off.
+   */
+  foldOthers?: boolean
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const row = (g: LeagueScoreboard['games'][number]) => {
+    const yours = g.teams.some((t) => t.isYou)
+    return (
+    <li key={g.matchupId ?? 'x'} className="af-sb-game" data-yours={yours}>
+      <div className="af-sb-teams">
+        {g.teams.map((t, i) => (
+          <Side
+            key={t.rosterId}
+            team={t}
+            unplayed={g.unplayed}
+            side={i === 0 ? 'home' : 'away'}
+            winPct={
+              /*
+               * YOUR game uses the matchup engine's chance — the one the headline says ("54% to
+               * win") — never the board's own. Both used to show on your row, 64% beside your name
+               * and 54% at the end: two models, two answers, one game (found 2026-11-23).
+               */
+              yours && winProbability
+                ? Math.round((t.isYou ? winProbability.pWin : 1 - winProbability.pWin) * 100)
+                : g.winProbability == null
+                  ? null
+                  : // The stored probability is the FIRST team's, so the
+                    // second side is its complement.
+                    Math.round((i === 0 ? g.winProbability : 1 - g.winProbability) * 100)
+            }
+          />
+        ))}
+      </div>
+      {/* Your chance is on your team's line now (above), so this column is the lead for every game. */}
+      {g.margin != null ? (
+        <span className="af-sb-margin af-num">
+          {/* A 0–0 game has not started; "level" read as a result. A real tie says so. */}
+          {g.margin === 0
+            ? copy(g.teams.every((t) => (t.points ?? 0) === 0) ? 'Not started' : 'Tied')
+            : g.margin.toFixed(1)}
+        </span>
+      ) : null}
+    </li>
+    )
+  }
+  const mine = board.games.filter((g) => g.teams.some((t) => t.isYou))
+  const others = board.games.filter((g) => !g.teams.some((t) => t.isYou))
+  const fold = foldOthers && mine.length > 0 && others.length > 0
   return (
     <div className="af-sb">
       <div className="af-sb-head">
@@ -156,48 +206,17 @@ export function LeagueScoreboardPanel({
         <span className="af-label">{copy('Lead')}</span>
       </div>
 
-      <ul className="af-sb-list">
-        {board.games.map((g) => {
-          const yours = g.teams.some((t) => t.isYou)
-          return (
-          <li key={g.matchupId ?? 'x'} className="af-sb-game" data-yours={yours}>
-            <div className="af-sb-teams">
-              {g.teams.map((t, i) => (
-                <Side
-                  key={t.rosterId}
-                  team={t}
-                  unplayed={g.unplayed}
-                  side={i === 0 ? 'home' : 'away'}
-                  winPct={
-                    /*
-                     * YOUR game uses the matchup engine's chance — the one the headline says ("54% to
-                     * win") — never the board's own. Both used to show on your row, 64% beside your name
-                     * and 54% at the end: two models, two answers, one game (found 2026-11-23).
-                     */
-                    yours && winProbability
-                      ? Math.round((t.isYou ? winProbability.pWin : 1 - winProbability.pWin) * 100)
-                      : g.winProbability == null
-                        ? null
-                        : // The stored probability is the FIRST team's, so the
-                          // second side is its complement.
-                          Math.round((i === 0 ? g.winProbability : 1 - g.winProbability) * 100)
-                  }
-                />
-              ))}
-            </div>
-            {/* Your chance is on your team's line now (above), so this column is the lead for every game. */}
-            {g.margin != null ? (
-              <span className="af-sb-margin af-num">
-                {/* A 0–0 game has not started; "level" read as a result. A real tie says so. */}
-                {g.margin === 0
-                  ? copy(g.teams.every((t) => (t.points ?? 0) === 0) ? 'Not started' : 'Tied')
-                  : g.margin.toFixed(1)}
-              </span>
-            ) : null}
-          </li>
-          )
-        })}
-      </ul>
+      {fold ? (
+        <>
+          <ul className="af-sb-list">{mine.map(row)}</ul>
+          <details className="af-sb-more" data-testid="scoreboard-other-games">
+            <summary>{messagesFor(corePartsMessages, language).otherGames(others.length)}</summary>
+            <ul className="af-sb-list">{others.map(row)}</ul>
+          </details>
+        </>
+      ) : (
+        <ul className="af-sb-list">{board.games.map(row)}</ul>
+      )}
 
       {/*
         Teams the league recorded without pairing them into a game. Common

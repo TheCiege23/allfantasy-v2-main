@@ -86,13 +86,12 @@ describe('4. Trades: values once, dates in words', () => {
 })
 
 describe('5. Home on a desktop: no gap, nothing alone, no nav repeated', () => {
-  it('the tiles sit in the deck beside the race, and the week card is the lineup check alone', () => {
+  it('the tiles sit in the deck beside the race', () => {
     const { container } = home()
     const under = screen.getByTestId('redraft-deck-under')
     expect(under.querySelector('[data-testid="league-home-kpis"]')).toBeTruthy()
     expect(container.querySelectorAll('[data-testid="league-home-kpis"]')).toHaveLength(1)
-    expect(container.querySelector('.af-lh-week-summary-grid')?.getAttribute('data-cells')).toBe('1')
-    expect(container.querySelector('.af-lh-week-summary-moves')).toBeNull()
+    // The week card keeps its two cells: the simplify pass on main (9633d3a9fe) chose that the same day.
     expect(read('components/core-app/af-league-home-redraft.css')).toMatch(/\.af-lh-rd-grid\[data-has-race\]>\.af-lh-rd-under\{grid-column:1;grid-row:3/)
   })
 })

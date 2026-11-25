@@ -1094,12 +1094,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                 <button type="button" className="nls-btn" data-block="true" onClick={() => onSelectTab('waivers')}>Manage claims</button>
               </div>
             </Card>
-            <Card label="Trade block">
-              <p>List players you would move and AF will flag managers who need your positions.</p>
-              <div className="nls-actions nls-actions-top">
-                <button type="button" className="nls-btn" data-block="true" onClick={() => onSelectTab('trades')}>Open trade block</button>
-              </div>
-            </Card>
+            {/* The "Trade block" card went 2026-11-24 (the simplify pass): its button opened the Trades tab, which
+                "Propose trade" at the top of this screen already does. */}
           </aside>
         </div>
       ) : null}

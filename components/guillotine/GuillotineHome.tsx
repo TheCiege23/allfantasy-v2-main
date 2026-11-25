@@ -290,11 +290,16 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       </div>
 
       {/* Settings / Rules */}
-      <section data-testid="guillotine-rules" className="gl-card rounded-2xl border p-4 sm:p-6">
-        <h2 className="gl-text mb-4 flex items-center gap-2 text-lg font-semibold">
-          <Settings className="gl-muted h-5 w-5" />
-          Rules & Settings
-        </h2>
+      {/* Closed until asked for (2026-11-24): the rules are reference, read once, and open they were ~480px
+          at the foot of every visit. "Format rules FAQ" in the header carries them too. */}
+      <details data-testid="guillotine-rules" className="gl-fold gl-card rounded-2xl border p-4 sm:p-6">
+        <summary className="gl-fold-summary">
+          <h2 className="gl-text flex items-center gap-2 text-lg font-semibold">
+            <Settings className="gl-muted h-5 w-5" />
+            Rules & Settings
+          </h2>
+        </summary>
+        <div className="mt-4">
         {summary?.config ? (
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             {guillotineRuleRows(summary.config).map((row) => (
@@ -330,7 +335,8 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         >
           League Settings
         </Link>
-      </section>
+        </div>
+      </details>
     </div>
   )
 }
