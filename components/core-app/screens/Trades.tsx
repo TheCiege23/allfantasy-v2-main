@@ -165,11 +165,11 @@ function OfferColumn({
   )
 }
 
-/** "Oct 30" from the agent's "2026-10-30" run date (read as a calendar day, not a UTC instant). */
-function ideaDate(day: string, language: string | null | undefined): string {
+/** "Oct 30" from the agent's "2026-10-30" run date (read as a calendar day, not a UTC instant), in the app's locale. */
+function ideaDate(day: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day)
   if (!m) return day
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(language === 'es' ? 'es-US' : 'en-US', { month: 'short', day: 'numeric' })
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(getAppIntlLocale(), { month: 'short', day: 'numeric' })
 }
 
 const assetList = (assets: TradeAgentIdea['give']) => assets.map((a) => (a.position ? `${a.name} (${a.position})` : a.name)).join(', ')
@@ -201,7 +201,7 @@ function AgentIdeas({ state }: { state: NonNullable<TradesData['agentIdeas']> })
                 </span>{' '}
                 · {copy('your roster')} <span className="af-num">+{idea.viewerFitPct}%</span> · {copy('theirs')}{' '}
                 <span className="af-num">+{idea.partnerFitPct}%</span> · {copy('suggested')}{' '}
-                <time dateTime={idea.runDate}>{ideaDate(idea.runDate, language)}</time>
+                <time dateTime={idea.runDate}>{ideaDate(idea.runDate)}</time>
               </p>
             </li>
           ))}
