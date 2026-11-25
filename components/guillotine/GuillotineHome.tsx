@@ -19,7 +19,7 @@ import type { ChopListOrder } from '@/lib/guillotine/chopListOrder'
 import type { TeamOutlook } from '@/lib/guillotine/survivalOutlook'
 import { RELEASE_OPTIONS } from '@/lib/guillotine/guillotineRules'
 import { boardFromHistoryWeek, boardFromNativeSummary, historyWeeks } from '@/lib/guillotine/survivalBoardModel'
-import { guillotineRuleRows, guillotineWeekLabel } from './guillotineHomeModel'
+import { choppedTeamNames, guillotineRuleRows, guillotineWeekLabel } from './guillotineHomeModel'
 import './guillotine-identity.css'
 
 /**
@@ -125,6 +125,11 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
   }, [load])
 
   const liveBoard = useMemo(() => (summary ? boardFromNativeSummary(summary) : null), [summary])
+  // Who a replayed chop names. The overlay reads "Chopped @name"; it was handed "Week 3" and read "Chopped @Week 3".
+  const choppedNames = useCallback(
+    (week: number) => choppedTeamNames(summary?.home?.chopped, week),
+    [summary],
+  )
   // Last words just written or taken down show at once, without another summary request.
   const keepLastWords = useCallback((next: LastWordsState) => {
     setSummary((s) => (s ? { ...s, lastWords: { ...next, canRemove: s.lastWords?.canRemove } } : s))
@@ -296,7 +301,7 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
                 history={history}
                 myRosterId={summary?.myRosterId}
                 closeCallMargin={summary?.config?.dangerMarginPoints ?? 10}
-                onReplay={(week) => setReplayChop({ play: true, name: `Week ${week}` })}
+                onReplay={(week) => setReplayChop({ play: true, name: choppedNames(week) })}
               />
             ) : (
               <ul className="space-y-2">
@@ -311,7 +316,7 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setReplayChop({ play: true, name: `Week ${ev.weekOrPeriod}` })}
+                      onClick={() => setReplayChop({ play: true, name: choppedNames(ev.weekOrPeriod) })}
                       className="gl-accent-text text-xs hover:underline"
                     >
                       Replay animation

@@ -63,6 +63,8 @@ export function GuillotineChopExtras({
       <ChopExplainerBlock leagueId={leagueId} />
       {home?.lastChop ? (
         <GuillotineChopMoment
+          // A new chop is a new moment: it starts armed whatever the last one's state was.
+          key={home.lastChop.week}
           leagueId={leagueId}
           lastChop={home.lastChop}
           aliveCount={home.aliveCount}
@@ -72,6 +74,27 @@ export function GuillotineChopExtras({
       ) : null}
     </SpecialtyShell>
   )
+}
+
+/** localStorage key: the latest chop week this browser has watched in this league. */
+export const chopSeenKey = (leagueId: string) => `guillotine_chop_seen_${leagueId}`
+
+function chopSeenWeek(leagueId: string): number {
+  try {
+    const n = Number(window.localStorage.getItem(chopSeenKey(leagueId)))
+    return Number.isFinite(n) ? n : 0
+  } catch {
+    // No storage (private mode, blocked): the moment simply starts armed every time, as it always did.
+    return 0
+  }
+}
+
+function rememberChopSeen(leagueId: string, week: number): void {
+  try {
+    window.localStorage.setItem(chopSeenKey(leagueId), String(week))
+  } catch {
+    /* nothing to remember it in */
+  }
 }
 
 const BLADE_SVG = (
@@ -106,7 +129,15 @@ export function GuillotineChopMoment({
   now?: number
 }) {
   const reduced = usePrefersReducedMotion()
-  const [dropped, setDropped] = useState(false)
+  // Armed the first time a manager sees this week's chop; after they have dropped the blade once, later visits
+  // open on the result with Replay. It re-armed on every visit before, so the page's newest card always asked
+  // for a press to show something already seen. Read here and not in an effect: the Chop page fetches its
+  // summary in the browser, so this never renders on the server and an effect would replay the drop each visit.
+  const [dropped, setDropped] = useState(() => chopSeenWeek(leagueId) >= lastChop.week)
+  const drop = () => {
+    setDropped(true)
+    rememberChopSeen(leagueId, lastChop.week)
+  }
   const done = dropped || reduced
   const chopped = new Set(lastChop.choppedRosterIds)
   const cut = lastChop.bottom.find((b) => chopped.has(b.rosterId)) ?? lastChop.bottom[lastChop.bottom.length - 1] ?? null
@@ -129,7 +160,7 @@ export function GuillotineChopMoment({
         {done ? (
           <SpecialtyReplayButton onReplay={() => setDropped(false)} />
         ) : (
-          <button type="button" className={`${sp.btn} ${sp.btnP}`} onClick={() => setDropped(true)} data-testid="guillotine-drop-blade">
+          <button type="button" className={`${sp.btn} ${sp.btnP}`} onClick={drop} data-testid="guillotine-drop-blade">
             Drop the blade
           </button>
         )}
