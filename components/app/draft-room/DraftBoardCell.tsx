@@ -391,9 +391,10 @@ function DraftBoardCellInner({
         </button>
       ) : null}
 
-      {/* Pick number in the corner, as Sleeper does, so it never costs the name a line. */}
+      {/* Pick number in the corner, as Sleeper does, so it never costs the name a line.
+          /85 on a fill, not /70: at 11px, /70 measured 3.49:1 on the lightest position tints (AA is 4.5:1). */}
       <span
-        className={`pointer-events-none absolute right-1.5 top-1 tabular-nums text-[11px] font-bold leading-none ${onFill ? 'text-[#14172a]/70' : 'text-white/65'}`}
+        className={`pointer-events-none absolute right-1.5 top-1 tabular-nums text-[11px] font-bold leading-none ${onFill ? 'text-[#14172a]/85' : 'text-white/65'}`}
         aria-hidden
       >
         {compactLabel}
