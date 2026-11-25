@@ -4928,6 +4928,7 @@ export function DraftRoomPageClient({
           setYoureUpDismissedOverall(currentPick.overall)
           openMobilePlayerSearch()
         }}
+        playersOnScreen={mobileTab === 'players'}
         onDismiss={() => setYoureUpDismissedOverall(currentPick.overall)}
       />
     ) : null}

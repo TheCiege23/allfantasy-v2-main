@@ -254,8 +254,12 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
           ) : null}
           {/* How winners are decided (it read "Competition engine… Chimmy and Chimmy only narrate"). */}
           {summary.config.challengeMode ? (
-            <div className="rounded-xl border border-[var(--accent-line)] bg-[var(--surface2)] p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">How winners are decided</h3>
+            // Closed until asked for (2026-11-24, the simplify pass): it is the same every week.
+            <details className="rounded-xl border border-[var(--accent-line)] bg-[var(--surface2)] p-4" data-testid="bb-how-winners">
+              <summary className="flex min-h-[44px] cursor-pointer items-center">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">How winners are decided</h3>
+                <span className="ml-auto text-[13px] text-[var(--muted)]" aria-hidden>▾</span>
+              </summary>
               <p className="mt-2 text-sm text-[var(--text)]">
                 Mode:{' '}
                 <span className="font-medium text-[var(--accent)]">
@@ -271,7 +275,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
               <p className="mt-2 text-[12px] leading-relaxed text-[var(--muted)]">
                 HOH and Veto winners come from your lineups and the league’s rules. Chimmy only tells the story — it never picks a winner.
               </p>
-            </div>
+            </details>
           ) : null}
 
           {/* Countdowns */}

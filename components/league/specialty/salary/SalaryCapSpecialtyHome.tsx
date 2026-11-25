@@ -88,7 +88,8 @@ export function SalaryCapSpecialtyHome({
         // The league name is already in the workspace header (and a long one ran to five lines here).
         title="Your salary cap"
         headline={bar ? `${money(bar.committed)} of ${money(ceiling)} committed` : 'Join a team to see your cap.'}
-        blurb="Every player has a salary and a contract length. Stay under the cap, plan for next year, and pay dead money when you cut someone early."
+        // No blurb (2026-11-24, the simplify pass): the headline, the cap bar and the contracts under it say
+        // what a salary cap is with this team's own numbers. "Format rules FAQ" teaches the format.
         actions={[
           { label: 'Contracts', onClick: onOpenContracts, primary: true },
           { label: 'Free-agent bids', onClick: onOpenBid, testId: 'salary-open-bid' },
@@ -266,7 +267,8 @@ export function SalaryCapSpecialtyHome({
         }
         rail={
           <>
-            <SpecialtyCard label="Offseason calendar" testId="salary-offseason">
+            {/* In season the calendar is reference, so it folds (2026-11-24); in the offseason it is the live schedule and stays open. */}
+            <SpecialtyCard label="Offseason calendar" testId="salary-offseason" fold={phase === 'in_season'}>
               <ul className={spStyles.feed}>
                 {OFFSEASON_STEPS.filter(
                   (step) => (step.phase !== 'extension' || cfg.extensionsEnabled) && (step.phase !== 'tag' || cfg.franchiseTagEnabled) && (step.phase !== 'rollover' || cfg.rolloverEnabled),
@@ -288,9 +290,8 @@ export function SalaryCapSpecialtyHome({
                   </li>
                 ))}
               </ul>
-              {phase === 'in_season' ? <p className={spStyles.empty}>In season — the offseason steps run in this order.</p> : null}
             </SpecialtyCard>
-            <SpecialtyCard label="Cap rules">
+            <SpecialtyCard label="Cap rules" testId="salary-cap-rules" fold>
               <SpecialtyRules rules={rules} />
             </SpecialtyCard>
             <SpecialtyCard label="Latest">

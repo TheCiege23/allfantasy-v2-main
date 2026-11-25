@@ -209,7 +209,13 @@ export function SpecialtyCard({
   className,
   testId,
   id,
+  fold = false,
 }: {
+  /**
+   * A closed row until tapped (2026-11-24, the simplify pass): the label is the summary. For reference a
+   * manager reads once — a rules list, a calendar that only matters in the offseason — not for live state.
+   */
+  fold?: boolean
   label?: ReactNode
   /** Icon image src shown before the label (64px art rendered at 30px). */
   icon?: string
@@ -222,6 +228,26 @@ export function SpecialtyCard({
   testId?: string
   id?: string
 }) {
+  if (fold && label) {
+    return (
+      <details
+        id={id}
+        className={cx(variant === 2 ? styles.card2 : styles.card, styles.pad, styles.fold, className)}
+        style={borderColor ? { borderColor } : undefined}
+        data-testid={testId}
+      >
+        <summary className={styles.foldSummary}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {icon ? <img src={icon} alt="" aria-hidden style={{ width: 30, height: 30 }} /> : null}
+            <h2 className={styles.lbl} style={{ margin: 0 }}>{label}</h2>
+          </span>
+          {aside}
+        </summary>
+        <div className={styles.foldBody}>{children}</div>
+      </details>
+    )
+  }
   return (
     <section
       id={id}

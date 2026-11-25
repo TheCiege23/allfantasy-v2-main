@@ -126,12 +126,14 @@ export default function SurvivorChallengesPage() {
       {leagueId ? <RealGameChallengeCard leagueId={leagueId} /> : null}
       {leagueId ? <WeeklyCallCard leagueId={leagueId} /> : null}
 
+      {/* Past challenges: one closed row with the count (folded in #4213). Its summary is a 44px tap target, and
+          the count is the number listed, at most 12 (2026-11-24). */}
       <details className="mt-8" data-testid="survivor-past-challenges">
-        <summary className="sv-kicker mb-3 cursor-pointer text-[12px]">
-          Past challenges{past && past.length ? ` (${past.length})` : ''}
+        <summary className="sv-kicker flex min-h-[44px] cursor-pointer items-center text-[12px]">
+          Past challenges{past && past.length ? ` (${Math.min(past.length, 12)})` : ''}
         </summary>
-        {past && past.length === 0 ? <p className="text-[13px] text-white/50">No challenge results yet.</p> : null}
-        <div className="space-y-2">
+        {past && past.length === 0 ? <p className="mt-3 text-[13px] text-white/50">No challenge results yet.</p> : null}
+        <div className="mt-3 space-y-2">
           {(past ?? []).slice(0, 12).map((row) => (
             <div key={row.id} className="survivor-panel rounded-xl p-3">
               <p className="text-[13px] font-semibold text-white/85">Week {row.week} · {row.title || 'Challenge'}</p>
