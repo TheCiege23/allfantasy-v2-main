@@ -1116,7 +1116,9 @@ export function DraftRoomPageClient({
     ],
   )
 
-  const canDraft = draftRoomState.canDraft
+  // An auto draft takes no pick by hand: the Draft buttons go, and the banner above the board says why.
+  // The server refuses the pick too (lib/live-draft-engine/autoDraftPickRule.ts).
+  const canDraft = draftRoomState.canDraft && draftUISettings?.executionMode !== 'auto'
 
   // Relocated below draftRoomState: this render-time const reads draftRoomState.canStart,
   // so it must be evaluated after the useMemo above to avoid a temporal-dead-zone crash
