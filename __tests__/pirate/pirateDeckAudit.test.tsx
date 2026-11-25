@@ -10,7 +10,7 @@
  * 8 the banner repeated the league name the page header already shows.
  */
 import React from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 
 vi.mock('next/link', () => ({
@@ -39,6 +39,11 @@ function data(claims: unknown[], extra: Record<string, unknown> = {}) {
   }
 }
 
+// The fixtures carry fixed dates (deadline 2026-11-25T20:00Z, lock 2026-11-26), so the real clock turned
+// "nothing flagged" into "deadline passed" at 20:00Z on 2026-11-25 and the deck opened the review on its own.
+// Pin Date (only Date, so findBy* timers still run) to a moment those fixtures were written for.
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-23T12:00:00Z')) })
+afterAll(() => { vi.useRealTimers() })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 async function deck(payload: unknown, commissioner = true) {
