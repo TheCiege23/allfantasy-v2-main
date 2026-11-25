@@ -41,7 +41,28 @@ export function isAutopilotStyle(v: unknown): v is AutopilotStyle {
  * drafted with when that is known at the handover. Absent on older entries and on teams Chimmy did not
  * draft, which get theirs from the roster id.
  */
-export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: string; personality?: NpcDraftPersonalityId }
+export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: string; personality?: NpcDraftPersonalityId; trades?: AutopilotTradeMode }
+
+/**
+ * What a Chimmy team does about trades (owner decision 2026-11-25):
+ *   off              takes no offers — the offer is refused before it is made, as it always was.
+ *   answer           the default. Chimmy accepts or declines offers made to the team; it sends none.
+ *   answer_and_send  also sends offers of its own (not built yet; behaves as `answer` until it is).
+ * A team with nothing saved is `answer`.
+ */
+export const AUTOPILOT_TRADE_MODES = ['off', 'answer', 'answer_and_send'] as const
+export type AutopilotTradeMode = (typeof AUTOPILOT_TRADE_MODES)[number]
+export const DEFAULT_AUTOPILOT_TRADE_MODE: AutopilotTradeMode = 'answer'
+
+export function isAutopilotTradeMode(v: unknown): v is AutopilotTradeMode {
+  return typeof v === 'string' && (AUTOPILOT_TRADE_MODES as readonly string[]).includes(v)
+}
+
+/** How this Chimmy team handles trades; `off` for a team Chimmy is not running on autopilot. */
+export function autopilotTradeMode(entry: ManagedLineup | null | undefined): AutopilotTradeMode {
+  if (!entry?.autopilot) return 'off'
+  return entry.autopilot.trades ?? DEFAULT_AUTOPILOT_TRADE_MODE
+}
 
 /**
  * `ownerUserId` is who owned the team when the commissioner switched it on (phase 9, 2026-10-29). The
@@ -78,6 +99,7 @@ export function readManagedLineups(settings: unknown): ManagedLineups {
     if (ap && typeof ap.since === 'string' && typeof ap.byUserId === 'string') {
       entry.autopilot = { style: isAutopilotStyle(ap.style) ? ap.style : DEFAULT_AUTOPILOT_STYLE, since: ap.since, byUserId: ap.byUserId }
       if (isNpcDraftPersonalityId(ap.personality)) entry.autopilot.personality = ap.personality
+      if (isAutopilotTradeMode(ap.trades)) entry.autopilot.trades = ap.trades
     }
     out[rosterId] = entry
   }
