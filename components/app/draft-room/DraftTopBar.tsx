@@ -12,7 +12,7 @@ import { resolveScheduledStartCountdown, SCHEDULED_START_GRACE_MS } from '@/lib/
 import type { TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import './af-draft-room.css'
 import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
-import { effectiveDueAt, formatClockTime, isLongPickClock, type QuietWindow } from '@/lib/draft-room/pickClockPlanning'
+import { resolvePickDueTime, type QuietWindow } from '@/lib/draft-room/pickClockPlanning'
 import { useMessages } from '@/components/i18n/useMessages'
 import { pickClockPlannerMessages } from '@/lib/core-app/messages/pickClockPlanner'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
@@ -476,13 +476,25 @@ export function DraftTopBar({
   // On a long pick clock (10+ minutes) a countdown alone is hard to plan around — "3h 11m" means
   // working out the time. Show the wall-clock deadline beside it. Not a mode: any draft type.
   // Quiet hours freeze the clock server-side, so the deadline is the effective one, not timerEndAt.
+  // ⚠ Not read during the server or hydration render: those run seconds apart and in different time
+  // zones, so the time would differ and React would discard the tree. Until mount the label keeps
+  // its place with an invisible placeholder; the mount effect fills in the viewer's local time.
+  const [dueClockMounted, setDueClockMounted] = useState(false)
+  useEffect(() => {
+    setDueClockMounted(true)
+  }, [])
   const dueLabel = useMemo(() => {
-    if (timerStatus !== 'running' || !isLongPickClock(timerSeconds) || !timerEndAtIso) return null
-    const endMs = Date.parse(timerEndAtIso)
-    if (!Number.isFinite(endMs)) return null
-    const due = effectiveDueAt(Date.now(), endMs, quietWindow ?? null)
-    return pickClockCopy.dueAt(formatClockTime(due, language === 'es' ? 'es-US' : 'en-US'))
-  }, [timerStatus, timerSeconds, timerEndAtIso, quietWindow, pickClockCopy, language])
+    const due = resolvePickDueTime({
+      timerStatus,
+      timerSeconds,
+      timerEndAtIso,
+      quietWindow,
+      locale: language === 'es' ? 'es-US' : 'en-US',
+      nowMs: dueClockMounted ? Date.now() : null,
+    })
+    if (!due) return null
+    return { text: due.time == null ? null : pickClockCopy.dueAt(due.time), placeholder: pickClockCopy.dueAt(due.placeholder) }
+  }, [timerStatus, timerSeconds, timerEndAtIso, quietWindow, pickClockCopy, language, dueClockMounted])
 
   const timerSummary = useMemo(() => formatTimerSummary(timerSeconds, t), [timerSeconds, t])
   const clockProgress = timerStatus === 'running' ? clockProgressPercent(effectiveRemaining, timerSeconds) : null
@@ -636,8 +648,17 @@ export function DraftTopBar({
           <Clock className="h-5 w-5 shrink-0 opacity-90" />
           <span data-testid="draft-topbar-timer-value">{timerDisplay}</span>
           {dueLabel ? (
-            <span className="whitespace-nowrap text-[11px] font-semibold text-cyan-100/80 max-sm:hidden" data-testid="draft-topbar-timer-due">
-              {dueLabel}
+            // One grid cell holding both: the invisible placeholder sets the width before mount and
+            // keeps it after, so the pill does not resize when the real time arrives.
+            <span className="inline-grid whitespace-nowrap text-[11px] font-semibold text-cyan-100/80 max-sm:hidden" data-testid="draft-topbar-timer-due-slot">
+              <span className="invisible col-start-1 row-start-1" aria-hidden>
+                {dueLabel.placeholder}
+              </span>
+              {dueLabel.text ? (
+                <span className="col-start-1 row-start-1" data-testid="draft-topbar-timer-due">
+                  {dueLabel.text}
+                </span>
+              ) : null}
             </span>
           ) : null}
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
