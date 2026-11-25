@@ -236,6 +236,18 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
 - **Needed:** which view (or `mTransactions2` filter) returns pending offers and with whose cookies; then one
   capture via `scripts/probe.sh` from a league the owner chooses, with an offer open, redacted with
   `scripts/redact-fantasy.mjs`, committed with the ledger mapping. Not probed.
+- `T-03` DECISION (owner, 2026-11-25) — **whose offers:** AllFantasy may read pending trade offers but
+  must keep and show ONLY offers the signed-in user sent or received. An offer between two other teams
+  is never shown to or kept for anyone else. The same ruling answers Yahoo (`contracts/yahoo/GAPS.md`)
+  and Fleaflicker `G-07`'s "whose" question.
+- `T-03` CAPTURE PATH BUILT 2026-11-25, AWAITING OWNER CAPTURE: the owner-only admin button
+  (Admin → Data & reliability → Provider contract capture; `lib/league-import/espn/espnContractCapture.ts`)
+  reads the owner's own league with his own stored cookies: `mTeam`+`mTransactions2` (contract-named) and
+  ONE labelled candidate, `mPendingTransactions`, recording each request's HTTP status. The body is
+  redacted server-side (`lib/admin/contractCapture/redactContractCapture.ts`, the TS sibling of
+  `scripts/redact-fantasy.mjs`, same refuse-if-anything-survives rule) and downloaded; nothing is stored.
+  Open until that file is reviewed and committed. ⚠ If it shows offers between two OTHER teams, that is a
+  finding about ESPN's visibility — record it here and drop those entries before committing.
 
 ## Per-player weekly fantasy points, 2026-11-23 — recorded without probing
 
