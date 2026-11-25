@@ -740,6 +740,7 @@ export function LeagueHome({
             <LeagueScoreboardPanel
               board={board}
               winProbability={data.matchup.available ? data.matchup.data.winProbability : null}
+              foldOthers
             />
           </>
         )}

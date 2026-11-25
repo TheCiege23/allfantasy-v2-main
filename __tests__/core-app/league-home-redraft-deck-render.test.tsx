@@ -4,6 +4,7 @@ import { render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LeagueHome } from '@/components/core-app/screens/LeagueHome'
+import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
 import { homeFixture } from '@/app/e2e/redraft-core/home/fixture'
 
 /**
@@ -57,6 +58,29 @@ describe('LeagueHome redraft deck', () => {
     // Without the deck the Standings panel is still there.
     const { container: plain } = render(<LeagueHome data={{ ...data, redraft: null }} otherLeagueIssueCount={0} identityInShell />)
     expect(plain.querySelector('[data-testid=league-home-standings-all]')).not.toBeNull()
+  })
+
+  it('the league scoreboard shows your game, with the other games in one closed row (2026-11-24)', () => {
+    const { data } = homeFixture('nfl', { identity: true })
+    const { container } = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />)
+    const panel = container.querySelector('.af-lh-scoreboard-panel')!
+    const more = panel.querySelector('[data-testid=scoreboard-other-games]') as HTMLDetailsElement
+    expect(more).not.toBeNull()
+    expect(more.open).toBe(false)
+    const shown = [...panel.querySelectorAll('.af-sb-game')].filter((g) => !more.contains(g))
+    expect(shown.length).toBe(1)
+    expect(shown[0].getAttribute('data-yours')).toBe('true')
+    const folded = more.querySelectorAll('.af-sb-game').length
+    expect(folded).toBeGreaterThan(0)
+    expect(more.querySelector('summary')?.textContent).toBe(`The other ${folded} games`)
+  })
+
+  it('the scoreboard folds nothing unless asked: the schedule shows every game', () => {
+    const { data } = homeFixture('nfl', { identity: true })
+    if (!data.scoreboard.available) throw new Error('fixture has no scoreboard')
+    const { container } = render(<LeagueScoreboardPanel board={data.scoreboard.data} />)
+    expect(container.querySelector('[data-testid=scoreboard-other-games]')).toBeNull()
+    expect(container.querySelectorAll('.af-sb-game').length).toBe(data.scoreboard.data.games.length)
   })
 
   it('on a phone the recap is three rows and "This week" keeps its two cells side by side (2026-11-24)', () => {
