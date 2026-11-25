@@ -31,4 +31,10 @@ describe('native matchup rows on a phone', () => {
     expect(narrow).toMatch(/\.nls-trade-overview\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/)
     expect(narrow).toMatch(/\.nls-offer-out>\.nls-grow\{flex:1 1 100%\}/)
   })
+
+  it('standings: the playoff-format rows are 36px on a phone', () => {
+    const css = read('components/league/native/screens/native-screens.css')
+    const narrow = css.slice(css.lastIndexOf('@media(max-width:600px)'))
+    expect(narrow).toMatch(/\.nls-dl>div\{min-height:36px;font-size:14px\}/)
+  })
 })
