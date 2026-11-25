@@ -92,6 +92,7 @@
 }
 .af-core .af-lho-week:hover { border-color: var(--accent); }
 .af-core .af-lh-week-summary-grid[data-cells='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.af-core .af-lh-week-summary-grid[data-cells='1'] { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 800px) {
   .af-core .af-lh-week-summary-grid[data-cells='2'] { grid-template-columns: minmax(0, 1fr); }
 }

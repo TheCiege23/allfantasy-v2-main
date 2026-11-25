@@ -674,6 +674,8 @@ export function LeagueHome({
    * The deck's timeline is what this window is about.
    */
   const betweenSeasons = Boolean(data.dynasty?.offseason)
+  /** The redraft deck's playoff race lists every team: Home then carries no second standings table. */
+  const raceShown = Boolean(data.redraft?.playoffRace)
   const weekLine = betweenSeasons ? null : overviewWeekLine(head)
   const winPct = pWin != null ? Math.round(Math.max(0, Math.min(1, pWin)) * 100) : null
   const chips: Array<{ key: string; label: string; href: string }> = []
@@ -892,13 +894,20 @@ export function LeagueHome({
       <LeagueInvitePanel leagueId={league.id} leagueName={league.name} compact hideWhenFull />
 
       {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
-      {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}
+      {data.redraft ? (
+        <RedraftHomeDeck
+          deck={data.redraft}
+          leagueId={league.id}
+          season={league.season}
+          under={raceShown ? <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} /> : undefined}
+        />
+      ) : null}
 
       {/* Dynasty Era deck — dynasty leagues only (lib/core-app/dynastyLeagueHome.ts); absent otherwise. */}
       {data.dynasty ? <DynastyHomeDeck deck={data.dynasty} leagueId={league.id} /> : null}
 
       {/* The record tile only when the headline does not already say it ("say each number once"). */}
-      <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} />
+      {raceShown ? null : <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} />}
 
       {toolsAtFoot ? null : importedActions}
 
@@ -916,18 +925,18 @@ export function LeagueHome({
           <div><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
           <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
         </div>
-        <div className="af-lh-week-summary-grid" data-cells="2">
+        <div className="af-lh-week-summary-grid" data-cells={raceShown ? '1' : '2'}>
           <Link href={`/core/my-team?league=${league.id}`}>
             <span className="af-label">{g.lineup}</span>
             <strong>{data.preSeason && rosteredPlayerCount === 0 ? copy('Your roster is awaiting the draft') : g.reviewStarters}</strong>
             <span>{data.preSeason && rosteredPlayerCount === 0 ? `${teamDirectory.length} ${copy('teams imported')}` : g.checkKickoff} →</span>
           </Link>
           {/* The game and the cut are said once, under the headline (2026-11-14); this row is what to do. */}
-          <div className="af-lh-week-summary-moves">
+          {raceShown ? null : <div className="af-lh-week-summary-moves">
             <span className="af-label">{copy('Moves')}</span>
             <strong>{g.planMove}</strong>
             <span><Link href={`/core/trades?league=${league.id}`}>{copy('Trades')} →</Link><Link href={`/core/waivers?league=${league.id}`}>{copy('Waivers')} →</Link></span>
-          </div>
+          </div>}
         </div>
       </section></LeagueSection>}
 
@@ -988,8 +997,9 @@ export function LeagueHome({
             {showCommish ? commishSection : null}
           </div>
 
-          {/* Standings */}
-          <LeagueSection id="standings"><StatePanel title={copy('Standings')} state={data.standings}>
+          {/* Standings — not when the redraft deck's playoff race already lists every team (2026-11-24 audit:
+              a 12-row race and a 6-row table, each with its own "Full standings"). */}
+          {raceShown ? null : <LeagueSection id="standings"><StatePanel title={copy('Standings')} state={data.standings}>
             {(rows) => (
               <div className="af-standings-wrap" data-faab={data.faabEnabled === true}>
                 {/*
@@ -1034,7 +1044,7 @@ export function LeagueHome({
                 </Link>
               </div>
             )}
-          </StatePanel></LeagueSection>
+          </StatePanel></LeagueSection>}
         </div>
 
         {/*
