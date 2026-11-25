@@ -49,9 +49,10 @@ export default function DraftBoardCoveragePage() {
       </section>
     })}
     <section data-testid="coverage-narrow-dock" className="h-[420px] w-full max-w-[360px]">
-      <DraftRightDockTabs queueCount={2} queueBody={<QueuePanel
-        queue={[{ playerName: 'Example Guard', playerId: 'one', position: 'PG', team: 'FA' },
-          { playerName: 'Example Wing', playerId: 'two', position: 'SF', team: 'FA' }]}
+      {/* Six queued players: search and sort only appear for a queue long enough to need them. */}
+      <DraftRightDockTabs queueCount={6} queueBody={<QueuePanel
+        queue={['Guard', 'Wing', 'Forward', 'Center', 'Scorer', 'Passer'].map((role, i) => (
+          { playerName: `Example ${role}`, playerId: `q${i}`, position: i % 2 ? 'SF' : 'PG', team: 'FA' }))}
         canDraft onRemove={noop} onReorder={noop} autoPickFromQueue={false} onAutoPickFromQueueChange={noop}
         awayMode={false} onAwayModeChange={noop} presentationVariant="redraft_snake" />}
         chimmyBody={<div>Chimmy</div>} rosterBody={<div>Roster</div>} chatBody={<div>Chat</div>} />

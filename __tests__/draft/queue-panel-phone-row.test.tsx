@@ -37,8 +37,10 @@ describe('QueuePanel on a phone', () => {
   })
 
   it('puts search and sort side by side on a phone and scrolls the position pills', () => {
+    // Search, sort and positions only appear for a queue long enough to need them (2026-11-25).
+    const longQueue = Array.from({ length: 6 }, (_, i) => ({ ...queue[i % 2]!, playerName: `Example ${i}`, playerId: `p${i}` }))
     render(
-      <QueuePanel queue={queue} canDraft onRemove={() => {}} onReorder={() => {}} autoPickFromQueue={false}
+      <QueuePanel queue={longQueue} canDraft onRemove={() => {}} onReorder={() => {}} autoPickFromQueue={false}
         onAutoPickFromQueueChange={() => {}} awayMode={false} onAwayModeChange={() => {}} />,
     )
     const grid = screen.getByTestId('draft-queue-search').parentElement!

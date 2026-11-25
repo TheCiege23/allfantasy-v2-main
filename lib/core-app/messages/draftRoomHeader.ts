@@ -15,6 +15,19 @@ export const draftRoomHeaderMessages = defineMessages({
     soundOff: 'Off',
     soundHint: 'Beeps in the last 10 seconds of a pick',
     onTheClock: 'On the clock',
+    // Auto draft: every pick is made for the manager, so the room shows progress, not a pick clock.
+    autoDrafting: 'Auto-drafting',
+    autoDraftProgress: (pick: number, total: number): string => `Pick ${pick} of ${total}`,
+    autoDraftTitle: 'Every pick is made automatically, so there is no pick clock.',
+    autoPick: 'Auto pick',
+    yourAutoPick: 'Your auto pick',
+    // The line in the player list that marks the viewer's next pick.
+    nextPickLine: (label: string, picksAway: number): string =>
+      `Your pick ${label} · ${picksAway} ${picksAway === 1 ? 'pick' : 'picks'} before it`,
+    nextPickLineTitle: 'Players above this line are likely to be taken before your next pick.',
+    // The board: the viewer's own column and the picks still to come in it.
+    you: 'You',
+    yourPick: 'Your pick',
     // League notes beside the league-type chip (room v2 league signatures).
     noteGuillotine: (week: number, n: number): string =>
       `Chops start Week ${week} · ${n} ${n === 1 ? 'team' : 'teams'} a week`,
@@ -40,6 +53,16 @@ export const draftRoomHeaderMessages = defineMessages({
     soundOff: 'Desactivado',
     soundHint: 'Pitidos en los últimos 10 segundos de cada selección',
     onTheClock: 'En el reloj',
+    autoDrafting: 'Draft automático',
+    autoDraftProgress: (pick: number, total: number): string => `Selección ${pick} de ${total}`,
+    autoDraftTitle: 'Todas las selecciones se hacen automáticamente, así que no hay reloj.',
+    autoPick: 'Selección automática',
+    yourAutoPick: 'Tu selección automática',
+    nextPickLine: (label: string, picksAway: number): string =>
+      `Tu selección ${label} · ${picksAway} ${picksAway === 1 ? 'selección' : 'selecciones'} antes`,
+    nextPickLineTitle: 'Es probable que los jugadores sobre esta línea se vayan antes de tu próxima selección.',
+    you: 'Tú',
+    yourPick: 'Tu selección',
     noteGuillotine: (week: number, n: number): string =>
       `Eliminaciones desde la semana ${week} · ${n} ${n === 1 ? 'equipo' : 'equipos'} por semana`,
     notePirate: (n: number): string => `Protege ${n} ${n === 1 ? 'jugador' : 'jugadores'} por semana`,

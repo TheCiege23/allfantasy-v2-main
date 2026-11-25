@@ -85,6 +85,11 @@ interface SleeperPoolTableProps {
   /** Viewer's next pick — adds the LEFT @ column. Null for spectators / idle drafts. */
   leftAtPick?: { overall: number; label: string } | null
   /**
+   * A line across the list at the viewer's next pick: `picksAway` available players sit above it
+   * (the ones other teams take first, if the list holds its order). Null draws nothing.
+   */
+  nextPickLine?: { picksAway: number; text: string; title?: string } | null
+  /**
    * Dynasty only: show the shared Rookie / Prospect chip (`resolveDraftRoomPlayerLabel`) beside the
    * position. Off by default so redraft pools render exactly as before.
    */
@@ -646,6 +651,21 @@ function SleeperRow(props: SleeperRowProps) {
 
 const MemoSleeperRow = React.memo(SleeperRow)
 
+/**
+ * The row the next-pick line sits above: the one reached after `picksAway` still-available players.
+ * Null when the viewer is up now (nothing goes before them) or the list is too short to reach it.
+ */
+export function nextPickLineRowIndex<T>(rows: readonly T[], picksAway: number, isDrafted: (row: T) => boolean): number | null {
+  if (!Number.isFinite(picksAway) || picksAway < 1) return null
+  let available = 0
+  for (let i = 0; i < rows.length; i += 1) {
+    if (isDrafted(rows[i]!)) continue
+    if (available === Math.trunc(picksAway)) return i
+    available += 1
+  }
+  return null
+}
+
 export function SleeperPoolTable(props: SleeperPoolTableProps) {
   const {
     filtered,
@@ -670,6 +690,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
     onSortChange,
     aiOverlaySignals,
     leftAtPick = null,
+    nextPickLine = null,
     showExperienceLabel = false,
   } = props
 
@@ -699,6 +720,11 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
     overscan: 8,
     enabled: !disableVirtualization,
   })
+
+  const nextPickLineIndex = useMemo(
+    () => (nextPickLine ? nextPickLineRowIndex(filtered, nextPickLine.picksAway, isPlayerDrafted) : null),
+    [filtered, nextPickLine, isPlayerDrafted],
+  )
 
   const items = virtualizer.getVirtualItems()
   const totalSize = disableVirtualization ? filtered.length * rowHeight : virtualizer.getTotalSize()
@@ -787,6 +813,21 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
           position: 'relative',
         }}
       >
+        {nextPickLine && nextPickLineIndex != null ? (
+          <div
+            role="separator"
+            aria-label={nextPickLine.text}
+            title={nextPickLine.title}
+            data-testid="sleeper-pool-next-pick-line"
+            data-row-index={nextPickLineIndex}
+            className="pointer-events-none absolute left-0 z-[5] h-0 w-full border-t-2 border-cyan-300"
+            style={{ top: nextPickLineIndex * rowHeight }}
+          >
+            <span className="sticky left-2 inline-block -translate-y-1/2 whitespace-nowrap rounded-full bg-cyan-300 px-2 py-px text-[11px] font-extrabold leading-4 text-[#06121f]">
+              {nextPickLine.text}
+            </span>
+          </div>
+        ) : null}
         {disableVirtualization ? (
           filtered.map((p, idx) => {
             const k = rowKey(p)
