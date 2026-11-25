@@ -38,6 +38,8 @@ export type TradeAnswerCode =
   | 'lineup_hole'
   | 'too_many_starters'
   | 'nothing_offered'
+  /** Set by the hourly run, not by `decideTradeOffer`: a team in the trade is out of the league. */
+  | 'eliminated'
 
 export type TradeAnswer = {
   decision: 'accept' | 'reject'
@@ -57,6 +59,7 @@ const REASONS: Record<TradeAnswerCode, string> = {
   lineup_hole: 'This would leave the team short a starter, so Chimmy passed.',
   too_many_starters: 'That is too many starters to give up in one deal.',
   nothing_offered: 'Nothing was offered to the team.',
+  eliminated: 'One of these teams is out of the league, so Chimmy passed.',
 }
 
 const answer = (decision: TradeAnswer['decision'], code: TradeAnswerCode, give = 0, get = 0): TradeAnswer => ({

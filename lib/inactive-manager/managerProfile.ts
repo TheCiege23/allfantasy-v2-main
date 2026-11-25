@@ -86,6 +86,10 @@ const PERSONALITY_TRAITS: Record<NpcDraftPersonalityId, PersonalityTraits> = {
   IDP_SPECIALIST: t('Defense specialist', 'Values defensive players more than most.', 0, 'normal', FAIRNESS.even, { DL: 0.2, LB: 0.2, DB: 0.2 }),
 }
 
+/** Every manager style a commissioner can choose, in plain words, in a stable order. */
+export const MANAGER_PERSONALITY_OPTIONS: ReadonlyArray<{ id: NpcDraftPersonalityId; label: string; summary: string }> =
+  NPC_DRAFT_PERSONALITIES.map((id) => ({ id, label: PERSONALITY_TRAITS[id].label, summary: PERSONALITY_TRAITS[id].summary }))
+
 function hash(input: string): number {
   let h = 0
   for (let i = 0; i < input.length; i += 1) h = (h * 31 + input.charCodeAt(i)) >>> 0
