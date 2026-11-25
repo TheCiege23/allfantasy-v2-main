@@ -64,13 +64,14 @@ export function BoardHead({
 }: {
   eyebrow: string
   title: string
-  blurb: string
+  /** Optional (2026-11-24): a board whose headline and sections already say what it is shows none. */
+  blurb?: string
 }) {
   return (
     <header className="af-bd-head">
       <p className="af-bd-eyebrow">{eyebrow}</p>
       <h1 className="af-bd-title">{title}</h1>
-      <p className="af-bd-blurb">{blurb}</p>
+      {blurb ? <p className="af-bd-blurb">{blurb}</p> : null}
     </header>
   )
 }
