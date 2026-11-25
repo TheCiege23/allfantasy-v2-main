@@ -91,6 +91,29 @@ describe('current pro roster reconciliation', () => {
       const sleeper = row({ source: 'sleeper', name: 'Yanic Konan Niederhäuser', status: 'ACT', team: 'CUR', dob: '2003-03-17' })
       expect(ids(reconcileCurrentProRows('NBA', [current, spare], [current, spare, sleeper], true, now))).toEqual(['ri:1755'])
     })
+    describe('when both are in the feed and neither is live', () => {
+      const proof = (over: Record<string, unknown> = {}) => row({ source: 'thesportsdb', status: 'Active', dob: '2003-03-17', ...over })
+      const pair = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+        [row({ id: 'ri:a', externalId: 'a', status: 'INACT', dob: '2003-03-17', ...a }), row({ id: 'ri:b', externalId: 'b', status: 'INACT', dob: '2003-03-17', ...b })]
+      it('keeps the one with a game this season', () => {
+        const [a, b] = pair({}, {})
+        expect(ids(reconcileCurrentProRows('NHL', [a, b], [proof()], true, now, new Set(['b'])))).toEqual(['ri:b'])
+      })
+      it('keeps the one on the club the confirming provider has him on', () => {
+        // Production 2026-11-25: Ryan Ellis, ids 412 (San Jose) and 4660 (Chicago); TheSportsDB has Chicago.
+        const [a, b] = pair({ team: 'San Jose Sharks' }, { team: 'Chicago Blackhawks' })
+        expect(ids(reconcileCurrentProRows('NHL', [a, b], [proof({ team: 'Chicago Blackhawks' })], true, now))).toEqual(['ri:b'])
+      })
+      it('keeps the one at the confirming position when the clubs agree', () => {
+        // Production 2026-11-25: Alex Jefferies, ids 3371 (RW) and 3372 (LW), both Islanders; TheSportsDB has LW.
+        const [a, b] = pair({ position: 'RW' }, { position: 'LW' })
+        expect(ids(reconcileCurrentProRows('NHL', [a, b], [proof({ position: 'LW' })], true, now))).toEqual(['ri:b'])
+      })
+      it('keeps both when nothing tells them apart', () => {
+        const [a, b] = pair({}, {})
+        expect(reconcileCurrentProRows('NHL', [a, b], [proof()], true, now)).toHaveLength(2)
+      })
+    })
     it('never merges different people: a namesake, or a twin on the same club', () => {
       const current = row({ id: 'ri:1', dob: '2003-03-17' })
       const namesake = row({ id: 'ri:2', status: 'INACT', dob: '1980-01-01' })

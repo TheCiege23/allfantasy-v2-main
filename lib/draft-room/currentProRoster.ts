@@ -107,10 +107,26 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
     rollingByName.set(name, [...(rollingByName.get(name) ?? []), row])
   }
   const firstName = (row: CurrentProRow) => normalizeMatchName(row.name).split(' ')[0] ?? ''
+  /**
+   * Two profiles of one player, both in today's feed and neither live: which one is current? The one
+   * with a game this season; failing that, the one on the club a confirming provider has him on; failing
+   * that, the one at that provider's position. Measured 2026-11-25 on NHL: Ryan Ellis (ids 412 and 4660,
+   * San Jose and Chicago, TheSportsDB has Chicago) and Alex Jefferies (3371 and 3372, RW and LW,
+   * TheSportsDB has LW) were each listed twice. With nothing to tell them apart, both stay.
+   */
+  const outranks = (other: T, row: T) => {
+    const hasGame = (x: T) => Boolean(x.externalId) && playedThisSeason.has(x.externalId!)
+    if (hasGame(other) !== hasGame(row)) return hasGame(other)
+    const confirming = (byName.get(normalizeMatchName(row.name)) ?? []).filter((e) => verifiedRosterMatch(row, e) && live(e, now))
+    const onClub = (x: T) => confirming.some((e) => team(e.team) === team(x.team))
+    if (onClub(other) !== onClub(row)) return onClub(other)
+    const atPosition = (x: T) => confirming.some((e) => e.position === x.position)
+    return atPosition(other) !== atPosition(row) && atPosition(other)
+  }
   /** Another Rolling Insights profile of this same player is the current one. */
   const superseded = (row: T) => (rollingByBirthday.get(row.dob?.slice(0, 10) ?? '') ?? []).some((other) => other !== row && (
     normalizeMatchName(other.name) === normalizeMatchName(row.name)
-      ? live(other, now) || (fresh(other, now) && !fresh(row, now))
+      ? live(other, now) || (fresh(other, now) && !fresh(row, now)) || (fresh(other, now) && fresh(row, now) && outranks(other, row))
       // A second spelling: the same birthday, club, position and first name, beside a live profile.
       : live(other, now) && team(other.team) === team(row.team) && other.position === row.position && firstName(other) === firstName(row)))
     // The same name and position beside a live profile whose birthday is this one with day and month
