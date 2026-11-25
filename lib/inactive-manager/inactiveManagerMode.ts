@@ -47,7 +47,7 @@ export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: 
  * What a Chimmy team does about trades (owner decision 2026-11-25):
  *   off              takes no offers — the offer is refused before it is made, as it always was.
  *   answer           the default. Chimmy accepts or declines offers made to the team; it sends none.
- *   answer_and_send  also sends offers of its own (not built yet; behaves as `answer` until it is).
+ *   answer_and_send  also sends offers of its own: at most one a day (./autopilotTradeOffers.ts).
  * A team with nothing saved is `answer`.
  */
 export const AUTOPILOT_TRADE_MODES = ['off', 'answer', 'answer_and_send'] as const

@@ -152,6 +152,15 @@ describe('runAutopilotTradeAnswers', () => {
     })
   })
 
+  it('declines any offer involving a team that is out of the league, and sends no counter', async () => {
+    m.prisma.redraftRoster.findMany.mockResolvedValueOnce([{ id: 'rr-chimmy', ownerId: 'orphan-r1', isEliminated: true }, { id: 'rr-other', ownerId: 'uA' }] as never)
+    const r = await runAutopilotTradeAnswers()
+    expect(r).toMatchObject({ accepted: 0, rejected: 1, countered: 0 })
+    expect(m.accept).not.toHaveBeenCalled()
+    expect(m.reject).toHaveBeenCalledWith(expect.objectContaining({ reason: 'One of these teams is out of the league, so Chimmy passed.' }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ code: 'eliminated' }) }))
+  })
+
   it('only looks at pending, unaccepted offers old enough to have been withdrawn', async () => {
     const now = new Date('2026-11-25T12:00:00Z')
     await runAutopilotTradeAnswers({ now })
