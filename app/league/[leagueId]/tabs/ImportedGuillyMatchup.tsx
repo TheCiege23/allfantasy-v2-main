@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ImportedGuillyTabData } from '@/lib/guillotine/importedGuillyHealthLoad'
+import type { TeamOutlook } from '@/lib/guillotine/survivalOutlook'
 import { boardFromImportedView } from '@/lib/guillotine/survivalBoardModel'
 import { GuillySurvivalBoard } from '@/components/guillotine/GuillySurvivalBoard'
 
@@ -20,7 +21,7 @@ const PLATFORM_NAMES: Record<string, string> = {
   fleaflicker: 'Fleaflicker',
 }
 
-type Data = ImportedGuillyTabData & { myRosterId?: string | null }
+type Data = ImportedGuillyTabData & { myRosterId?: string | null; outlook?: Record<string, TeamOutlook> | null }
 
 export function ImportedGuillyMatchup({ leagueId, onOpenGuilly }: { leagueId: string; onOpenGuilly?: () => void }) {
   const [data, setData] = useState<Data | null>(null)
@@ -30,7 +31,7 @@ export function ImportedGuillyMatchup({ leagueId, onOpenGuilly }: { leagueId: st
     const ac = new AbortController()
     setData(null)
     setError(null)
-    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/imported`, { credentials: 'include', cache: 'no-store', signal: ac.signal })
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/imported?outlook=1`, { credentials: 'include', cache: 'no-store', signal: ac.signal })
       .then(async (res) => {
         const d = await res.json().catch(() => ({}))
         if (!res.ok) setError(typeof d?.error === 'string' ? d.error : 'Could not load the chop line.')
@@ -42,7 +43,7 @@ export function ImportedGuillyMatchup({ leagueId, onOpenGuilly }: { leagueId: st
     return () => ac.abort()
   }, [leagueId])
 
-  const board = useMemo(() => (data ? boardFromImportedView(data.view, data.myRosterId) : null), [data])
+  const board = useMemo(() => (data ? boardFromImportedView(data.view, data.myRosterId, data.outlook) : null), [data])
   const platform = data ? PLATFORM_NAMES[data.platform] ?? 'your platform' : null
 
   return (

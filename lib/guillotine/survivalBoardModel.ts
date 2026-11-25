@@ -241,7 +241,12 @@ export function boardFromNativeSummary(summary: NativeBoardSummary): SurvivalBoa
   })
 }
 
-export function boardFromImportedView(view: ImportedGuillyViewData, myRosterId: string | null | undefined): SurvivalBoard {
+export function boardFromImportedView(
+  view: ImportedGuillyViewData,
+  myRosterId: string | null | undefined,
+  /** Per provider roster id (./survivalOutlookLoad.ts `loadImportedSurvivalOutlook`); null = none. */
+  outlook?: Record<string, TeamOutlook> | null,
+): SurvivalBoard {
   const me = myRosterId ?? null
   return finish({
     source: 'imported',
@@ -258,5 +263,6 @@ export function boardFromImportedView(view: ImportedGuillyViewData, myRosterId: 
     myRosterId: me,
     graveyard: view.chopped.map((c) => ({ rosterId: c.rosterId, name: c.name, week: c.week, isMe: !!me && c.rosterId === me })),
     chopLabel: null,
+    outlook: outlook ?? null,
   })
 }
