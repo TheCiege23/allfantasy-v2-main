@@ -26,8 +26,15 @@ describe('teamLogoUrl', () => {
     expect(teamLogoUrl('NFL', '')).toBeNull()
   })
 
-  it('resolves other sports through the registry by abbreviation only', () => {
+  /*
+   * A full club name resolves too, since 2026-11-24 (lib/sport-teams/SportTeamMetadataRegistry.ts
+   * `codeForTeamName`): hosted NBA rosters store "Denver Nuggets", and an abbreviation-only lookup left
+   * every one of them without a crest. Null still beats a guess: a name that is not exactly one club gets none.
+   */
+  it('resolves other sports through the registry by abbreviation or full club name, and nothing ambiguous', () => {
     expect(teamLogoUrl('NBA', 'LAL')).toBe('https://a.espncdn.com/i/teamlogos/nba/500/lal.png')
-    expect(teamLogoUrl('NBA', 'Los Angeles Lakers')).toBeNull()
+    expect(teamLogoUrl('NBA', 'Los Angeles Lakers')).toBe('https://a.espncdn.com/i/teamlogos/nba/500/lal.png')
+    expect(teamLogoUrl('NBA', 'Los Angeles')).toBeNull()
+    expect(teamLogoUrl('NBA', 'Not A Real Club')).toBeNull()
   })
 })
