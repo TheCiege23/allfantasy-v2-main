@@ -13,7 +13,7 @@ import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { readInactiveManagerView, setAutoHandover, setChimmyAutopilot, setDraftAsMe, setInactiveManagerMode } from '@/lib/inactive-manager/inactiveManagerService'
+import { readInactiveManagerView, setAutoHandover, setChimmyAutopilot, setChimmyTradeMode, setDraftAsMe, setInactiveManagerMode } from '@/lib/inactive-manager/inactiveManagerService'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const { leagueId } = await ctx.params
   const userId = await sessionUserId()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const body = (await req.json().catch(() => null)) as { rosterId?: unknown; on?: unknown; autopilot?: unknown; draftAsMe?: unknown; autoHandover?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { rosterId?: unknown; on?: unknown; autopilot?: unknown; trades?: unknown; draftAsMe?: unknown; autoHandover?: unknown } | null
   if (body && 'autoHandover' in body) {
     const h = await setAutoHandover(leagueId, userId, body.autoHandover)
     return h.ok ? NextResponse.json({ autoHandover: h.rule }) : NextResponse.json({ error: h.error }, { status: h.status })
@@ -44,6 +44,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (body && 'draftAsMe' in body) {
     const d = await setDraftAsMe(leagueId, userId, body.draftAsMe)
     return d.ok ? NextResponse.json({ draftAsMe: d.on }) : NextResponse.json({ error: d.error }, { status: d.status })
+  }
+  if (body && 'trades' in body) {
+    const t = await setChimmyTradeMode(leagueId, userId, body.rosterId, body.trades)
+    return t.ok ? NextResponse.json({ trades: t.trades }) : NextResponse.json({ error: t.error }, { status: t.status })
   }
   if (body && 'autopilot' in body) {
     const a = await setChimmyAutopilot(leagueId, userId, body.rosterId, body.autopilot)

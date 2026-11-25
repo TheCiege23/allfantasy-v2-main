@@ -305,13 +305,24 @@ export async function POST(req: NextRequest) {
   if (proposer.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, proposerRosterId, userId)) {
     return NextResponse.json({ error: 'Only proposer roster owner can create trade' }, { status: 403 })
   }
-  // Chimmy autopilot (AF Pro / AF Supreme): a team nobody is running does not take trade offers.
-  // In a multi-team trade that holds for every team the offer is made to.
-  const { isOwnerOnAutopilot } = await import('@/lib/inactive-manager/inactiveManagerService')
+  /*
+   * A team Chimmy runs (lib/inactive-manager/autopilotTrades.ts). Its commissioner chooses whether it
+   * takes offers: `off` refuses the offer here, before anything is written; otherwise a two-team offer
+   * is made as normal and Chimmy answers it on the hourly run, through the same accept/decline rules a
+   * manager's click goes through. Chimmy does not join multi-team trades, so those are still refused.
+   */
+  const { autopilotTradeModeForOwner } = await import('@/lib/inactive-manager/inactiveManagerService')
   for (const party of [receiver, ...additionalRosters]) {
-    if (await isOwnerOnAutopilot(leagueId, party.ownerId).catch(() => false)) {
+    const chimmyTrades = await autopilotTradeModeForOwner(leagueId, party.ownerId).catch(() => null)
+    if (chimmyTrades === 'off') {
       return NextResponse.json(
         { error: 'Chimmy is running this team while its manager is away, and it is not taking trade offers.', code: 'RECEIVER_ON_AUTOPILOT' },
+        { status: 409 },
+      )
+    }
+    if (chimmyTrades && additionalRosters.length > 0) {
+      return NextResponse.json(
+        { error: 'Chimmy is running one of these teams, and it only takes two-team trade offers.', code: 'RECEIVER_ON_AUTOPILOT' },
         { status: 409 },
       )
     }

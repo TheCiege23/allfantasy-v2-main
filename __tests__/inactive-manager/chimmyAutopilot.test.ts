@@ -47,6 +47,8 @@ import {
   AUTOPILOT_OFF_ACTION,
   AUTOPILOT_ON_ACTION,
   applyChimmyAutopilot,
+  setChimmyTradeMode,
+  TRADES_MODE_ACTION,
   isOwnerOnAutopilot,
   DRAFT_AS_ME_ACTION,
   setChimmyAutopilot,
@@ -111,6 +113,26 @@ describe('how many teams Chimmy may run', () => {
     m.prisma.appUser.findUnique.mockRejectedValue(new Error('db down'))
     const results = await hand(5)
     expect(results[4]).toMatchObject({ ok: false, status: 409 })
+  })
+})
+
+describe('setChimmyTradeMode', () => {
+  it('a Chimmy team answers offers by default; the commissioner can switch that off and it is kept through a style change', async () => {
+    await setChimmyAutopilot('L', 'commish', 'r1', undefined)
+    expect(readManagedLineups(m.state.settings).r1.autopilot).not.toHaveProperty('trades')
+    expect(await setChimmyTradeMode('L', 'commish', 'r1', 'off')).toEqual({ ok: true, trades: 'off' })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'dynasty_owner', trades: 'off' } })
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TRADES_MODE_ACTION, metadata: { rosterId: 'r1', trades: 'off' } }))
+    await setChimmyAutopilot('L', 'commish', 'r1', 'win_now')
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'win_now', trades: 'off' } })
+  })
+
+  it('refuses a non-commissioner, an unknown mode, and a team Chimmy is not running', async () => {
+    await setChimmyAutopilot('L', 'commish', 'r1', undefined)
+    expect(await setChimmyTradeMode('L', 'commish', 'r1', 'sometimes')).toMatchObject({ ok: false, status: 400 })
+    expect(await setChimmyTradeMode('L', 'commish', 'r9', 'off')).toMatchObject({ ok: false, status: 409 })
+    m.elevated.mockResolvedValueOnce(false)
+    expect(await setChimmyTradeMode('L', 'member', 'r1', 'off')).toMatchObject({ ok: false, status: 403 })
   })
 })
 

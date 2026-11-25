@@ -31,6 +31,9 @@ import {
   chimmyManagerLimitReached,
   DEFAULT_AUTOPILOT_STYLE,
   isAutopilotStyle,
+  isAutopilotTradeMode,
+  autopilotTradeMode,
+  type AutopilotTradeMode,
   managedForOwner,
   planBestLineup,
   readManagedLineups,
@@ -42,6 +45,7 @@ import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform
 import { AUTO_HANDOVER_KEY, parseAutoHandover, readAutoHandover, teamsToHandOver, type AutoHandoverRule } from './autoHandover'
 import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
 import { isNpcDraftPersonalityId } from '@/lib/live-draft-engine/npcDraftPersonalityTypes'
+import { resolveManagerProfile } from './managerProfile'
 
 /**
  * Inactive manager mode (./inactiveManagerMode.ts): the commissioner's view and switch, the owner's
@@ -106,6 +110,18 @@ export type InactiveManagerTeam = {
   suggested: boolean
   /** No manager has this seat: Chimmy can still be handed it, to draft and run all season. */
   emptySeat: boolean
+  /**
+   * Who Chimmy is for this team and what it does about trades, for a team on autopilot; null otherwise.
+   * COMMISSIONER-ONLY (owner decision 2026-11-25): this view is only ever served behind
+   * `canCommissionerAct`, and the personality must not be added to any member-facing payload.
+   */
+  chimmy: { personality: string; label: string; summary: string; trades: AutopilotTradeMode } | null
+}
+
+function chimmyViewFor(rosterId: string, entry: ManagedLineup | undefined): InactiveManagerTeam['chimmy'] {
+  if (!entry?.autopilot) return null
+  const p = resolveManagerProfile({ rosterId, style: entry.autopilot.style, savedPersonality: entry.autopilot.personality })
+  return { personality: p.personality, label: p.label, summary: p.summary, trades: autopilotTradeMode(entry) }
 }
 
 export async function readInactiveManagerView(
@@ -135,6 +151,7 @@ export async function readInactiveManagerView(
       managed: managed[r.rosterId] ?? null,
       suggested: suggested.has(r.rosterId),
       emptySeat: emptySeats.has(r.rosterId),
+      chimmy: chimmyViewFor(r.rosterId, managed[r.rosterId]),
     })),
   }
 }
@@ -269,7 +286,7 @@ export async function applyChimmyAutopilot(
     const base = entry ?? { since: now, byUserId: userId, ownerUserId: roster.platformUserId ?? null }
     // A personality already on the team is kept: a later style change or handover never swaps the manager.
     const personality = entry?.autopilot?.personality ?? (isNpcDraftPersonalityId(opts?.personality) ? opts.personality : undefined)
-    return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId, ...(personality ? { personality } : {}) } } }
+    return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId, ...(personality ? { personality } : {}), ...(entry?.autopilot?.trades ? { trades: entry.autopilot.trades } : {}) } } }
   })
   if (overFree) {
     return { ok: false, status: 402, error: `Chimmy runs ${CHIMMY_FREE_TEAMS} team for free. AF Pro or AF Supreme lets it run up to ${CHIMMY_MANAGER_LIMIT}.` }
@@ -473,6 +490,45 @@ export async function isOwnerOnAutopilot(leagueId: string, ownerId: string): Pro
   const hit = await prisma.roster.findFirst({ where: { leagueId, id: { in: ids }, platformUserId: ownerId }, select: { id: true } })
   // Autopilot switched on for a previous owner does not speak for this one: their trades go through.
   return Boolean(hit) && managedForOwner(managed[hit!.id]!, ownerId) !== 'new_owner'
+}
+
+/**
+ * How the Chimmy team owned by `ownerId` handles trades, or null when Chimmy is not running that
+ * owner's team (./inactiveManagerMode.ts `autopilotTradeMode`). A team Chimmy runs but does not PLAY —
+ * the league's plan lapsed and it is not the free team — takes no offers: nobody would answer them.
+ */
+export async function autopilotTradeModeForOwner(leagueId: string, ownerId: string): Promise<AutopilotTradeMode | null> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { id: true, userId: true, settings: true } })
+  const managed = readManagedLineups(league?.settings)
+  const ids = autopilotRosterIds(managed)
+  if (!league || ids.length === 0) return null
+  const hit = await prisma.roster.findFirst({ where: { leagueId, id: { in: ids }, platformUserId: ownerId }, select: { id: true } })
+  // Autopilot switched on for a previous owner does not speak for this one: their trades go through.
+  if (!hit || managedForOwner(managed[hit.id]!, ownerId) === 'new_owner') return null
+  const { readPlayableChimmyLineups } = await import('./chimmyPlayable')
+  return autopilotTradeMode((await readPlayableChimmyLineups(league))[hit.id])
+}
+
+export const TRADES_MODE_ACTION = 'chimmy_autopilot.trades_mode'
+
+/** Commissioner or co-commissioner: whether a Chimmy team takes trade offers. */
+export async function setChimmyTradeMode(leagueId: string, userId: string, rosterId: unknown, mode: unknown): Promise<{ ok: true; trades: AutopilotTradeMode } | { ok: false; status: number; error: string }> {
+  if (!(await isElevatedCommissioner(leagueId, userId))) return { ok: false, status: 403, error: 'Forbidden' }
+  if (typeof rosterId !== 'string' || !rosterId) return { ok: false, status: 400, error: 'Name a team.' }
+  if (!isAutopilotTradeMode(mode)) return { ok: false, status: 400, error: 'Choose how this team handles trades: off, answer or answer_and_send.' }
+  let found = false
+  let changed = false
+  await updateManaged(leagueId, (current) => {
+    const entry = current[rosterId]
+    if (!entry?.autopilot) return null
+    found = true
+    if (autopilotTradeMode(entry) === mode) return null
+    changed = true
+    return { ...current, [rosterId]: { ...entry, autopilot: { ...entry.autopilot, trades: mode } } }
+  })
+  if (!found) return { ok: false, status: 409, error: 'Chimmy is not running that team.' }
+  if (changed) await logAction({ leagueId, userId, actionType: TRADES_MODE_ACTION, entityType: 'roster', entityId: rosterId, metadata: { rosterId, trades: mode } })
+  return { ok: true, trades: mode }
 }
 
 export const NEW_OWNER_ENDED_ACTION = 'inactive_manager_mode.ended_new_owner'

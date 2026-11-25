@@ -52,6 +52,8 @@ export type TradeDecisionInput = {
   proposal: PendingTradeProposal
   /** Who is deciding. The caller has already checked they run a team that may accept or decline. */
   actorUserId: string
+  /** A name for the DM line when the actor is not a person with an account (Chimmy running a team). */
+  actorName?: string
   reason?: string
   proposerOwnerId: string | undefined
   receiverOwnerId: string | undefined
@@ -327,6 +329,7 @@ export async function acceptRedraftTrade(input: TradeDecisionInput): Promise<Tra
     tradeId: proposal.id,
     status: 'accepted',
     actorUserId: userId,
+    actorName: input.actorName,
     detail: survivorHeld
       ? governanceCopy(await survivorLeagueLanguage(proposal.leagueId)).tradeHeldForCommissioner
       : held
@@ -374,6 +377,6 @@ export async function rejectRedraftTrade(input: TradeDecisionInput): Promise<Tra
     receiverUserId: receiverOwnerId,
     payload: { proposalId: proposal.id, source: 'redraft_trade_proposal' },
   })
-  queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'rejected', actorUserId: userId })
+  queueTradeStatusInDm({ source: 'redraft', tradeId: proposal.id, status: 'rejected', actorUserId: userId, actorName: input.actorName })
   return json({ proposal: updated, resolved: true })
 }

@@ -527,6 +527,29 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Chimmy autopilot answers trade offers made to the teams it runs (lib/inactive-manager/
+   * autopilotTradeService.ts): accept or decline, through the same rules a manager's click goes
+   * through. Guarded and on its own job identity, like the sweeps above.
+   */
+  let autopilotTrades: unknown = null
+  try {
+    const { runAutopilotTradeAnswers } = await import('@/lib/inactive-manager/autopilotTradeService')
+    autopilotTrades = await withSyncJobRun(
+      { jobName: 'cron-chimmy-autopilot-trades', trigger: 'cron' },
+      () => runAutopilotTradeAnswers(),
+      (r) => ({
+        rowsRead: r.offers,
+        rowsWritten: r.accepted + r.rejected,
+        errors: r.failures.map((f) => `${f.leagueId}/${f.proposalId}: ${f.error}`),
+        metadata: { accepted: r.accepted, rejected: r.rejected, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] chimmy autopilot trades failed', e)
+    autopilotTrades = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Lineup minimums for eliminated teams (lib/eliminated-lineups): an AF Commissioner rule. Fills only
    * the short slots of a team out of the race, from its bench, and tells its manager once a week what is
    * still short. Hourly for the same reason as inactive manager mode; guarded and on its own job identity.
@@ -667,5 +690,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, byeStarterSweep, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, byeStarterSweep, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, autopilotTrades, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }
