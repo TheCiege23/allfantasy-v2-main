@@ -24,4 +24,11 @@ describe('native matchup rows on a phone', () => {
     expect(base).toMatch(/\.nls-mrow \{ grid-template-columns: minmax\(0, 1fr\) 40px 40px 40px minmax\(0, 1fr\); gap: 4px; \}/)
     expect(redraft).toMatch(/\.nls-mrow \{ grid-template-columns: minmax\(0, 1fr\) 40px 40px 40px minmax\(0, 1fr\); gap: 4px;/)
   })
+
+  it('trades: the four counts are one row on a phone, and an open offer\'s sentence takes the full width', () => {
+    const css = read('components/league/native/screens/native-screens.css')
+    const narrow = css.slice(css.lastIndexOf('@media(max-width:600px)'))
+    expect(narrow).toMatch(/\.nls-trade-overview\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/)
+    expect(narrow).toMatch(/\.nls-offer-out>\.nls-grow\{flex:1 1 100%\}/)
+  })
 })
