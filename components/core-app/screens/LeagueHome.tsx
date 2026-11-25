@@ -674,6 +674,8 @@ export function LeagueHome({
    * The deck's timeline is what this window is about.
    */
   const betweenSeasons = Boolean(data.dynasty?.offseason)
+  /** The redraft deck's playoff race lists every team: Home then carries no second standings table. */
+  const raceShown = Boolean(data.redraft?.playoffRace)
   const weekLine = betweenSeasons ? null : overviewWeekLine(head)
   const winPct = pWin != null ? Math.round(Math.max(0, Math.min(1, pWin)) * 100) : null
   const chips: Array<{ key: string; label: string; href: string }> = []
@@ -893,13 +895,20 @@ export function LeagueHome({
       <LeagueInvitePanel leagueId={league.id} leagueName={league.name} compact hideWhenFull />
 
       {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
-      {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}
+      {data.redraft ? (
+        <RedraftHomeDeck
+          deck={data.redraft}
+          leagueId={league.id}
+          season={league.season}
+          under={raceShown ? <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} /> : undefined}
+        />
+      ) : null}
 
       {/* Dynasty Era deck — dynasty leagues only (lib/core-app/dynastyLeagueHome.ts); absent otherwise. */}
       {data.dynasty ? <DynastyHomeDeck deck={data.dynasty} leagueId={league.id} /> : null}
 
       {/* The record tile only when the headline does not already say it ("say each number once"). */}
-      <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} />
+      {raceShown ? null : <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} />}
 
       {toolsAtFoot ? null : importedActions}
 
