@@ -28,6 +28,7 @@ import { NflDraftPoolStatsGroupHeader, NflDraftPoolStatsRow } from '@/components
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import type { PlayerDraftOutlook } from '@/lib/draft-room/playerDraftOutlook'
 import { PlayerDraftOutlookSection } from './PlayerDraftOutlookSection'
+import { NcaabSeasonsSection } from './NcaabSeasonsSection'
 
 interface PlayerDetailPlayer {
   id?: string | null
@@ -356,6 +357,10 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
 
   if (!open) return null
 
+  // College basketball has its own seasons and game log, from our stored box scores (NcaabSeasonsSection),
+  // keyed by the Rolling Insights id the draft pool carries. Other sports keep the year tabs below.
+  const isNcaabCard = String(sport).toUpperCase() === 'NCAAB'
+  const ncaabPlayerId = isNcaabCard && /^\d+$/.test(String(player.id ?? '')) ? String(player.id) : null
   const colSet = columnSetForPosition(player.position)
   const rankings = analytics?.rankings ?? null
   const news =
@@ -687,6 +692,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
           ) : null}
 
           {/* Year tabs */}
+          {!isNcaabCard && (
           <div className="flex items-center gap-2 border-b border-white/8 px-6 pt-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Game logs</p>
             <div className="ml-auto flex items-center gap-1">
@@ -709,6 +715,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
               })}
             </div>
           </div>
+          )}
 
           {/* Career trends + season summary (from analytics) */}
           {/* Career stats (from DB-first PlayerSeasonStats) + meta trend badge */}
@@ -760,6 +767,9 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
           )}
 
           {/* Game-log table */}
+          {isNcaabCard ? (
+            <NcaabSeasonsSection playerId={ncaabPlayerId} open={open} />
+          ) : (
           <div className="px-6 pb-6 pt-3">
             {logsLoading && <p className="py-4 text-center text-[12px] text-white/50">Loading game logs…</p>}
             {!logsLoading && logsError && (
@@ -778,6 +788,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
               <GameLogTable colSet={colSet} rows={gameLogs} />
             )}
           </div>
+          )}
 
           {/* League context footer */}
           {leagueContext && (leagueContext.draftedPickLabel || leagueContext.rosteredByTeamName) && (

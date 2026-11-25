@@ -1,4 +1,5 @@
 import { reconcileCurrentProRows } from '@/lib/draft-room/currentProRoster'
+import { loadPlayedThisSeasonIds } from '@/lib/draft-room/playedThisSeason'
 /**
  * Resolves player pool by sport so leagues only load players for their sport.
  * Uses SportsPlayer and PlayerIdentityMap; draft room and waiver wire filter by league sport.
@@ -589,7 +590,12 @@ async function buildPlayerPoolRecords(
       })
     : null
   const sourceRows = isNfl ? collapseNflRowsOntoSleeper(rows) : ncaabRows ?? scorableSoccerRowsOnly(sport, rows)
-  const poolRows = reconcileCurrentProRows(sport, sourceRows, rows, options?.currentRosterOnly === true)
+  // Who has played this season, for the current-roster filter. A failed read is "no such evidence":
+  // the pool is then what it was before this evidence existed, never an error.
+  const playedThisSeason = options?.currentRosterOnly === true
+    ? await loadPlayedThisSeasonIds(sport).catch(() => new Set<string>())
+    : new Set<string>()
+  const poolRows = reconcileCurrentProRows(sport, sourceRows, rows, options?.currentRosterOnly === true, Date.now(), playedThisSeason)
   // NFL keys on the club CODE, so the vendor rows left over after the collapse still merge across
   // "PHI" / "Philadelphia Eagles"; other sports' team strings are not NFL clubs and stay as they are.
   const teamKeyOf = (team: string | null) =>
