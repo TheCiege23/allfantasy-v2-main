@@ -69,6 +69,8 @@ export interface PlayerStatSnapshotModel {
   fieldGoalPercentage?: number | null
   freeThrowPercentage?: number | null
   gamesPlayed?: number | null
+  /** Projected fantasy points PER GAME (MLB / NHL AF projection; college basketball under the league's scoring). */
+  projectedPointsPerGame?: number | null
   lifetimeValue?: number | null
   /** Rolling Insights numbers when RI did not replace snapshot PPG (supplemental only). */
   rollingInsightsSupplemental?: {

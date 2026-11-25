@@ -68,6 +68,45 @@ export async function readEspnNcaabClassYears(
   return years
 }
 
+/** Every ESPN college basketball headshot lives under this path; the roster sweep writes no other. */
+export const ESPN_NCAAB_HEADSHOT_PREFIX = 'https://a.espncdn.com/i/headshots/mens-college-basketball/'
+
+export function isEspnNcaabHeadshot(url: string | null | undefined): url is string {
+  return typeof url === 'string' && url.startsWith(ESPN_NCAAB_HEADSHOT_PREFIX)
+}
+
+/**
+ * ESPN athlete id → headshot, from the fresh roster snapshots of one basketball season. ESPN omits
+ * the field when it has no photo (contracts/espn GAPS R-05), so absence here means "none", and an
+ * athlete listed on two schools is dropped until a refresh settles the transfer.
+ */
+export async function readEspnNcaabHeadshots(
+  db: Pick<PrismaClient, 'sportsDataCache'>,
+  seasonYear: number,
+  now: Date,
+): Promise<Map<string, string>> {
+  const rows = await db.sportsDataCache.findMany({
+    where: { cacheKey: { startsWith: `${ESPN_NCAAB_ROSTER_KEY_PREFIX}${seasonYear}:` }, expiresAt: { gt: now } },
+    select: { data: true },
+  })
+  const photos = new Map<string, string>()
+  const seen = new Set<string>()
+  for (const { data } of rows) {
+    const snapshot = data as Partial<EspnNcaabRosterSnapshot> | null
+    if (snapshot?.seasonYear !== seasonYear || !Array.isArray(snapshot.athletes)) continue
+    for (const athlete of snapshot.athletes) {
+      if (typeof athlete?.id !== 'string' || !/^\d+$/.test(athlete.id)) continue
+      if (seen.has(athlete.id)) {
+        photos.delete(athlete.id)
+        continue
+      }
+      seen.add(athlete.id)
+      if (isEspnNcaabHeadshot(athlete.headshotUrl)) photos.set(athlete.id, athlete.headshotUrl)
+    }
+  }
+  return photos
+}
+
 export async function storeEspnNcaabRosterSnapshot(
   db: Pick<PrismaClient, 'sportsDataCache'>,
   snapshot: EspnNcaabRosterSnapshot,
