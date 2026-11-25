@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AssetValueSnapshot, TradeValueSnapshot } from '@/lib/trade-value/types'
-import { MAX_STARTERS_GIVEN, decideTradeOffer, weighedValue } from '@/lib/inactive-manager/autopilotTrades'
+import { MAX_STARTERS_GIVEN, decideTradeOffer, planCounterOffer, weighedValue } from '@/lib/inactive-manager/autopilotTrades'
 import { autopilotTradeMode, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { resolveManagerProfile } from '@/lib/inactive-manager/managerProfile'
 
@@ -112,5 +112,45 @@ describe('the trade mode saved on a Chimmy team', () => {
     // Lineup management only, no autopilot: nobody answers, so no offers.
     expect(autopilotTradeMode(readManagedLineups(settings(null)).r1)).toBe('off')
     expect(autopilotTradeMode(undefined)).toBe('off')
+  })
+})
+
+describe('planCounterOffer', () => {
+  const plan = (assets: AssetValueSnapshot[], askable: Array<{ playerId: string; playerName: string | null; position: string | null; value: number }> = [], profile = balanced) =>
+    planCounterOffer({ profile, snapshot: snapshot(assets), rosterId: CHIMMY, askable })
+  const bench = (playerId: string, value: number, position = 'WR') => ({ playerId, playerName: `Bench ${playerId}`, position, value })
+
+  it('asks for the smallest bench player that closes the gap, by name', () => {
+    // Gives 1000, gets 950: balanced wants 1080, so it needs 130 more.
+    const c = plan([gives({ v: 1000 }), gets({ v: 950 })], [bench('big', 300), bench('fit', 150), bench('tiny', 40)])
+    expect(c).toMatchObject({ kind: 'add_on', add: { playerId: 'fit' }, reason: 'Chimmy would do this deal with Bench fit added.' })
+  })
+
+  it('does not ask for a player worth far more than the gap, or one already in the deal', () => {
+    // Needs 130; 600 is far more than it needs, and nothing else is on offer.
+    expect(plan([gives({ v: 1000 }), gets({ v: 950 })], [bench('star', 600)])).toBeNull()
+    expect(plan([gives({ v: 1000 }), gets({ v: 950, playerId: 'fit' })], [bench('fit', 150)])).toBeNull()
+  })
+
+  it('otherwise offers the same deal with one of its players left out', () => {
+    const c = plan([gives({ v: 800, playerId: 'main', playerName: 'Main Man' }), gives({ v: 200, playerId: 'extra', playerName: 'Throw In' }), gets({ v: 950 })])
+    expect(c).toMatchObject({ kind: 'keep_back', keepPlayerId: 'extra', reason: 'Chimmy would do this deal if it keeps Throw In.' })
+    // A one-for-one with nobody to ask for has no counter.
+    expect(plan([gives({ v: 1000 }), gets({ v: 950 })])).toBeNull()
+  })
+
+  it('does not counter a deal that is already good, or one that is nowhere near', () => {
+    expect(plan([gives({ v: 1000 }), gets({ v: 1200 })], [bench('fit', 150)])).toBeNull()
+    expect(plan([gives({ v: 1000 }), gets({ v: 400 })], [bench('fit', 150), bench('big', 700)])).toBeNull()
+    expect(planCounterOffer({ profile: balanced, snapshot: null, rosterId: CHIMMY, askable: [] })).toBeNull()
+  })
+
+  it('weighs the player it asks for its own way', () => {
+    // Needs 130. A 110 running back is not enough for a balanced manager, but is for a back collector
+    // (whose even-swap gap is also 130: it weighs the receivers in the deal as any manager would).
+    const rbHeavy = resolveManagerProfile({ rosterId: 'r1', savedPersonality: 'RB_HEAVY' })
+    const offer = [gives({ v: 1000 }), gets({ v: 950 })]
+    expect(plan(offer, [bench('rb', 110, 'RB')])).toBeNull()
+    expect(plan(offer, [bench('rb', 110, 'RB')], rbHeavy)).toMatchObject({ kind: 'add_on', add: { playerId: 'rb' } })
   })
 })

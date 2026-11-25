@@ -541,7 +541,7 @@ export async function GET(request: Request) {
         rowsRead: r.offers,
         rowsWritten: r.accepted + r.rejected,
         errors: r.failures.map((f) => `${f.leagueId}/${f.proposalId}: ${f.error}`),
-        metadata: { accepted: r.accepted, rejected: r.rejected, skipped: r.skipped },
+        metadata: { accepted: r.accepted, rejected: r.rejected, countered: r.countered, skipped: r.skipped },
       }),
     )
   } catch (e) {
