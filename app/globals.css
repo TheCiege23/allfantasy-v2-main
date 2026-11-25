@@ -1567,22 +1567,13 @@ html[data-mode="light"] .via-white\/10:where(:not(.af-draft-dark, .af-draft-dark
 /* Room v2: the pick on the clock glows in the league-type accent (`--af-league-accent`, set by
    DraftRoomShell); cyan when no accent is set. */
 /*
- * Room v2 league signatures: a board tile is an inline-size container (DraftBoardCell), and a
- * tile carrying a signature chip drops its ADP gap below 120px, where the two no longer fit on the
- * info line's single row. A top-level @container rule, never nested in a @media block.
+ * A board tile is an inline-size container (DraftBoardCell). Below 120px a kept pick's cost line
+ * drops its leading "Costs " so the round and the year both fit. (It also hid the ADP gap beside a
+ * signature chip until that label left the tile, 2026-11-25.) A top-level @container rule, never
+ * nested in a @media block.
  */
 @container (max-width: 119px) {
   .af-tile-squeezable {
-    display: none;
-  }
-}
-/*
- * Every tile keeps its info line on one row (2026-11-25, DraftBoardCell). Below 100px the ADP gap
- * ("19 early") would leave no room for the position and team beside it, so it gives way there.
- * Top-level, like the rule above.
- */
-@container (max-width: 99px) {
-  .af-tile-adp-gap {
     display: none;
   }
 }

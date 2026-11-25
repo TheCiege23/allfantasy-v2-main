@@ -518,14 +518,15 @@ function DraftBoardCellInner({
           {/*
             With a league signature chip the line stays ONE row: wrapping it pushed the player's name
             off an 84px tile (measured on phone and portrait tablet). The team truncates first — the
-            headshot already carries the team logo — and the ADP gap gives way below a 120px tile
-            (`af-tile-squeezable`, globals.css), where it no longer fits beside the chip.
+            headshot already carries the team logo.
 
             ONE row on every tile, chip or not (2026-11-25). A 68px tile holds the photo and two lines
-            of text. Without a chip this line used to wrap, and "19 early" on a third line overflowed
-            a stacked tile by 13px: the photo rode up over the tile's top edge and the gap was cut off
-            at the bottom (seen on a 16-team board, 117px tiles). The team truncates to make room, and
-            below 100px the gap gives way (`af-tile-adp-gap`, globals.css).
+            of text. Without a chip this line used to wrap, and a third line overflowed a stacked tile
+            by 13px: the photo rode up over the tile's top edge (seen on a 16-team board, 117px tiles).
+
+            NO ADP GAP HERE ("19 early" / "4 late"; owner's call, 2026-11-25). It was that third line,
+            it is the least useful thing on a tile this small, and the recap already names the best
+            steal and the biggest reach. `pick.adpDelta` is still passed in; nothing on the tile shows it.
           */}
           <span
             className="flex max-w-full min-w-0 flex-nowrap items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80 af-tile-info"
@@ -568,25 +569,6 @@ function DraftBoardCellInner({
             {pick.amount != null && pick.amount > 0 ? (
               <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-black/20 px-0.5 font-bold tabular-nums">
                 <Gavel className="h-2.5 w-2.5" aria-hidden />${pick.amount}
-              </span>
-            ) : null}
-            {pick.adpDelta != null && pick.adpDelta !== 0 ? (
-              <span
-                className={`af-tile-adp-gap shrink-0 rounded bg-black/25 px-0.5 font-bold tabular-nums ${pick.signatureChip || pick.slotSalary ? 'af-tile-squeezable' : ''}`}
-                title={
-                  pick.adpDelta > 0
-                    ? `Taken ${pick.adpDelta} picks after ADP`
-                    : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
-                }
-                aria-label={
-                  pick.adpDelta > 0
-                    ? `Taken ${pick.adpDelta} picks after ADP`
-                    : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
-                }
-                data-testid="draft-board-cell-adp-delta"
-              >
-                {/* Words, not a bare "−5": nobody could tell what an unlabelled minus number meant. */}
-                {pick.adpDelta > 0 ? `${pick.adpDelta} late` : `${Math.abs(pick.adpDelta)} early`}
               </span>
             ) : null}
           </span>

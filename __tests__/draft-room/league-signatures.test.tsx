@@ -170,16 +170,10 @@ describe('the chip on a drafted tile', () => {
 
   it('keeps the info line on one row so the name is never pushed off a narrow tile', () => {
     // Measured: on an 84px tile "WR · DAL 26y" wrapped and the player's name left the tile.
-    renderBoard({
-      picks: [{ ...drafted, adpDelta: 3 } as typeof drafted],
-      signatureByOverall: { 1: { kind: 'age', text: '23y', title: 'Age 23' } },
-      adpDeltaByOverall: { 1: -6 },
-    })
+    renderBoard({ signatureByOverall: { 1: { kind: 'age', text: '23y', title: 'Age 23' } } })
     const info = screen.getByTestId('draft-board-cell-info-1')
     expect(info.className).toContain('flex-nowrap')
     expect(info.className).not.toContain('flex-wrap')
-    // The ADP gap gives way first on a narrow tile.
-    expect(screen.getByTestId('draft-board-cell-adp-delta').className).toContain('af-tile-squeezable')
     expect(screen.getByTestId('draft-board-cell-1').className).toContain('[container-type:inline-size]')
     const css = src('app/globals.css')
     const at = css.indexOf('@container (max-width: 119px)')
@@ -189,39 +183,29 @@ describe('the chip on a drafted tile', () => {
     expect(before.split('{').length - before.split('}').length).toBe(0)
   })
 
-  it('says what the ADP gap means in words, never a bare minus number', () => {
-    renderBoard({ adpDeltaByOverall: { 1: -6 } })
-    const reach = screen.getByTestId('draft-board-cell-adp-delta')
-    expect(reach.textContent).toBe('6 early')
-    expect(reach.getAttribute('aria-label')).toBe('Taken 6 picks before ADP')
-  })
-
-  it('a faller reads as late', () => {
-    renderBoard({ adpDeltaByOverall: { 1: 4 } })
-    expect(screen.getByTestId('draft-board-cell-adp-delta').textContent).toBe('4 late')
-  })
-
-  it('a tile without a chip keeps one row too, so the gap never becomes a third line', () => {
+  it('a tile without a chip keeps one row too, so nothing becomes a third line', () => {
     // 2026-11-25, a 16-team board with 117px tiles: "19 early" wrapped under the position and team,
-    // the 68px tile overflowed, the photo rode up over its top edge and the gap was cut off below.
+    // the 68px tile overflowed and the photo rode up over its top edge.
     renderBoard({ adpDeltaByOverall: { 1: -6 } })
     const info = screen.getByTestId('draft-board-cell-info-1')
     expect(info.className).toContain('flex-nowrap')
     expect(info.className).not.toContain('flex-wrap')
-    // It gives way only on a tile too narrow for it, not at the chip's 120px.
-    const gap = screen.getByTestId('draft-board-cell-adp-delta')
-    expect(gap.className).toContain('af-tile-adp-gap')
-    expect(gap.className).not.toContain('af-tile-squeezable')
-    const css = src('app/globals.css')
-    const at = css.indexOf('@container (max-width: 99px)')
-    expect(at).toBeGreaterThan(-1)
-    expect(css.slice(at, at + 90).replace(/\s+/g, ' ')).toContain('.af-tile-adp-gap { display: none; }')
-    const before = css.slice(0, at).replace(/\/\*[\s\S]*?\*\//g, '')
-    expect(before.split('{').length - before.split('}').length).toBe(0)
     // The photo's wrapper is as tall as the photo: no line box under an inline-block avatar.
     const cell = src('components/app/draft-room/DraftBoardCell.tsx')
     expect(cell).toMatch(/af-tile-photo-sm block rounded-full leading-\[0\]/)
     expect(cell).toMatch(/af-tile-photo-lg hidden rounded-full leading-\[0\]/)
+  })
+
+  it('shows no ADP gap on a tile, early or late, with or without a chip', () => {
+    // Owner's call, 2026-11-25: "19 early" is not needed on the box. The recap keeps steals and reaches.
+    for (const adpDeltaByOverall of [{ 1: -6 }, { 1: 4 }]) {
+      for (const signatureByOverall of [undefined, { 1: { kind: 'age' as const, text: '23y', title: 'Age 23' } }]) {
+        const { unmount } = renderBoard({ adpDeltaByOverall, ...(signatureByOverall ? { signatureByOverall } : {}) })
+        expect(screen.queryByTestId('draft-board-cell-adp-delta')).toBeNull()
+        expect(screen.getByTestId('draft-board-cell-info-1').textContent).not.toMatch(/early|late/)
+        unmount()
+      }
+    }
   })
 
   it('an empty tile never shows one', () => {
