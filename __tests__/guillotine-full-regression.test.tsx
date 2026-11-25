@@ -635,7 +635,7 @@ describe('Guilly full regression matrix', () => {
     expect(summary!.dangerTiers?.some((d) => d.tier === 'danger')).toBe(true)
   })
 
-  it('home view renders the chop line, waivers section, settings link, and storyline panel', async () => {
+  it('the Chop page renders the one list with its zones, the settings link, and the storyline panel', async () => {
     const summary = {
       leagueId: 'league-1',
       weekOrPeriod: 4,
@@ -651,6 +651,8 @@ describe('Guilly full regression matrix', () => {
       ],
       recentChopEvents: [{ weekOrPeriod: 4, choppedRosterIds: ['r4'] }],
       assets: { leagueImage: '/guillotine/Guillotine.png', introVideo: '/guillotine/Guillotine.mp4' },
+      // The score the engine ranked each team on, as the summary route serves it beside the tiers.
+      home: { scores: { r2: 80, r3: 83.2, r5: 91.1 }, chopped: [], lastChop: null, history: { weeks: [], teams: [] } },
       config: {
         eliminationStartWeek: 1,
         eliminationEndWeek: 18,
@@ -668,19 +670,21 @@ describe('Guilly full regression matrix', () => {
 
     render(<GuillotineHome leagueId="league-1" sport="NFL" leagueName="Blade League" />)
 
-    // The specialty home (2026-10-18) replaced the Survival Board: the chop line carries the
-    // engine's tiers, with the cut drawn above the chop-zone team.
+    // The survival board is the page's one list (2026-11-25): it carries the engine's tiers, with the
+    // chop-zone marker drawn above the chop-zone team and each other zone named once.
     await waitFor(() => {
-      expect(screen.getByTestId('guillotine-chop-line')).toBeTruthy()
+      expect(screen.getByTestId('guilly-survival-board')).toBeTruthy()
     })
-    expect(screen.getByTestId('guillotine-row-chop_zone').textContent).toContain('Team 2')
-    expect(screen.getByTestId('guillotine-row-danger').textContent).toContain('Team 3')
-    expect(screen.getByTestId('guillotine-cut-line')).toBeTruthy()
+    expect(screen.getByTestId('gsb-chop-line').parentElement?.textContent).toContain('Team 2')
+    expect(screen.getByTestId('gsb-zone-danger').parentElement?.textContent).toContain('Team 3')
+    expect(screen.getByTestId('gsb-zone-safe').parentElement?.textContent).toContain('Team 5')
+    // The hub's second chop line is gone, not kept beside the list.
+    expect(screen.queryByTestId('guillotine-chop-line')).toBeNull()
 
-    // One waivers link on the hub (the quick chip); the separate Waiver & FAAB card went 2026-11-23.
+    // No waivers card and no quick-link row: Waivers is the Team tab's screen, and the sidebar has the rest.
     expect(screen.queryByText('Waiver & FAAB')).toBeNull()
+    expect(screen.queryByTestId('guillotine-quick-waivers')).toBeNull()
     expect(screen.getByTestId('guillotine-ai-panel')).toBeTruthy()
-    expect(screen.getByTestId('guillotine-quick-waivers')).toBeTruthy()
     expect(screen.getByTestId('guillotine-league-settings')).toBeTruthy()
   })
 

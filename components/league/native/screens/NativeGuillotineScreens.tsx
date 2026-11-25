@@ -6,6 +6,7 @@ import type { DangerTierRow } from '@/components/guillotine/guillotineHomeModel'
 import { GuillySurvivalBoard } from '@/components/guillotine/GuillySurvivalBoard'
 import { boardFromNativeSummary } from '@/lib/guillotine/survivalBoardModel'
 import { buildSurvivalTable } from '@/lib/guillotine/nativeGuillotineScreens'
+import type { ChopListOrder } from '@/lib/guillotine/chopListOrder'
 import { Card, ScreenHead } from './NativeScreenParts'
 
 /**
@@ -26,7 +27,7 @@ type Summary = {
     chopLabel?: string | null
     chopped?: Array<{ rosterId: string; name: string; week: number | null; points: number | null }>
   } | null
-  config?: { eliminationStartWeek?: number; eliminationEndWeek?: number | null } | null
+  config?: { eliminationStartWeek?: number; eliminationEndWeek?: number | null; chopListOrder?: ChopListOrder | null } | null
   /** The league's calendar week; behind the chop week before chops start (lib/guillotine/survivalBoardModel.ts). */
   calendarWeek?: number | null
 }
@@ -68,10 +69,7 @@ export function GuillotineMatchupScreen({ league, onSelectTab }: { league: UserL
         board={board}
         loading={loading}
         error={error}
-        actions={[
-          ...(alive ? [{ label: 'Set my lineup', onClick: () => onSelectTab('roster'), primary: true }] : []),
-          { label: 'Guilly hub', onClick: () => onSelectTab('guillotine') },
-        ]}
+        actions={alive ? [{ label: 'Set my lineup', onClick: () => onSelectTab('roster'), primary: true }] : []}
       />
     </div>
   )
@@ -87,7 +85,7 @@ export function GuillotineStandingsScreen({ league, onSelectTab }: { league: Use
       <ScreenHead
         eyebrow={`${league.name} · Standings`}
         title="Survival standings"
-        sub={`${table.alive.length} alive${table.chopped.length ? ` · ${table.chopped.length} chopped` : ''}. A guillotine league has no wins, losses or playoffs: the last team standing wins.`}
+        sub={`${table.alive.length} alive${table.chopped.length ? ` · ${table.chopped.length} chopped` : ''}. A guillotine league has no wins or losses: the last team standing wins.`}
       />
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       <section className="nls-card nls-card-flush" aria-label="Teams still alive">
@@ -134,7 +132,7 @@ export function GuillotineStandingsScreen({ league, onSelectTab }: { league: Use
         </Card>
       ) : null}
       <div className="nls-actions">
-        <button type="button" className="nls-btn" onClick={() => onSelectTab('guillotine')}>Open Guilly</button>
+        <button type="button" className="nls-btn" onClick={() => onSelectTab('guillotine')}>Open Chop</button>
       </div>
     </div>
   )

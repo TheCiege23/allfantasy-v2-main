@@ -37,7 +37,25 @@ const WEEK_POINTS: number[][] = [
 const ids = Object.keys(NAMES)
 const scoreRows = WEEK_POINTS.flatMap((pts, i) => pts.map((points, j) => ({ rosterId: ids[j]!, week: i + 1, points })))
 
-export function guillotineSummary(mood: GuillotineHarnessMood) {
+/**
+ * What the URL can ask the Chop page for (2026-11-25): `?scores=none` is the week before anyone has scored (the
+ * list is then the projection), and `?order=bottom` is a league whose commissioner put the chop zone at the
+ * bottom of the list (lib/guillotine/chopListOrder.ts). Neither given: scores in, chop zone on top.
+ */
+export type GuillotineHarnessView = { scores: 'live' | 'none'; order: 'chop_top' | 'chop_bottom' }
+const DEFAULT_VIEW: GuillotineHarnessView = { scores: 'live', order: 'chop_top' }
+
+export function readGuillotineHarnessView(search: string): GuillotineHarnessView {
+  const q = new URLSearchParams(search)
+  return { scores: q.get('scores') === 'none' ? 'none' : 'live', order: q.get('order') === 'bottom' ? 'chop_bottom' : 'chop_top' }
+}
+
+/** Projected points, in NAMES order (only the teams alive are read): the rest of the week, and a whole week. */
+const REMAINING_PROJECTION = [22.4, 31.0, 18.6, 27.3, 12.9, 24.1, 20.5, 9.8, 15.2]
+const FULL_WEEK_PROJECTION = [121.8, 118.2, 112.5, 110.9, 104.6, 108.3, 101.7, 97.4, 93.1]
+const PLAYERS_LEFT = [2, 3, 2, 3, 1, 2, 2, 1, 2]
+
+export function guillotineSummary(mood: GuillotineHarnessMood, view: GuillotineHarnessView = DEFAULT_VIEW) {
   const week = GUILLOTINE_WEEK
   const alive = ids.filter((id) => CHOPPED[id] == null)
   const live = WEEK_POINTS[week - 1]!
@@ -50,6 +68,16 @@ export function guillotineSummary(mood: GuillotineHarnessMood) {
     return { rosterId: id, displayName: NAMES[id], tier, pointsFromChopZone: gap }
   })
   const myRosterId = mood === 'eliminated' ? 'r10' : ME
+  const preScores = view.scores === 'none'
+  // `?outlook=1`: players and games left and the projection for them, per team alive.
+  const outlook = Object.fromEntries(
+    alive.map((id, i) => [
+      id,
+      preScores
+        ? { playersLeft: 9, starters: 9, gamesLeft: 9, remainingProjection: FULL_WEEK_PROJECTION[i]!, partial: false }
+        : { playersLeft: PLAYERS_LEFT[i]!, starters: 9, gamesLeft: PLAYERS_LEFT[i]!, remainingProjection: REMAINING_PROJECTION[i]!, partial: false },
+    ]),
+  )
   const history = buildSurvivalHistory({
     scores: scoreRows.filter((r) => r.week < week),
     chopped: Object.entries(CHOPPED).map(([rosterId, w]) => ({ rosterId, week: w })),
@@ -67,7 +95,10 @@ export function guillotineSummary(mood: GuillotineHarnessMood) {
       rank: i + 1,
       seasonPointsCumul: Math.round(scoreRows.filter((r) => r.rosterId === id).reduce((s, r) => s + r.points, 0) * 10) / 10,
     })),
-    dangerTiers,
+    // Before anyone scores there is no chop line (lib/guillotine/chopWatch.ts): the route serves the field instead.
+    dangerTiers: preScores ? [] : dangerTiers,
+    ...(preScores ? { field: alive.map((id) => ({ rosterId: id, displayName: NAMES[id]! })) } : {}),
+    outlook,
     recentChopEvents: Object.entries(CHOPPED).map(([rosterId, w]) => ({ weekOrPeriod: w, choppedRosterIds: [rosterId] })).reverse(),
     myEscapes: [
       { weekOrPeriod: 3, myPoints: 96.5, chopLine: 93.9, margin: 2.6, choppedCount: 1 },
@@ -95,11 +126,12 @@ export function guillotineSummary(mood: GuillotineHarnessMood) {
       tiebreakerOrder: ['season_points', 'previous_period', 'draft_slot', 'commissioner'],
       dangerMarginPoints: 12,
       rosterReleaseTiming: 'next_waiver_run',
+      chopListOrder: view.order,
     },
-    chopWatch: mood === 'chop_week' ? { live: true, week, chopCount: 1, chopLine: cut } : null,
+    chopWatch: mood === 'chop_week' && !preScores ? { live: true, week, chopCount: 1, chopLine: cut } : null,
     home: {
       season: 2026,
-      scores,
+      scores: preScores ? {} : scores,
       teamCount: ids.length,
       aliveCount: alive.length,
       chopped: Object.entries(CHOPPED)
@@ -211,7 +243,7 @@ export function installGuillotineHarnessFetch(mood: GuillotineHarnessMood) {
     const method = (init?.method ?? 'GET').toUpperCase()
     if (p === `/api/leagues/${GUILLOTINE_LEAGUE_ID}/guillotine/summary` && method === 'GET') {
       if (url.searchParams.get('view') === 'preview') return json({ error: 'Not part of this harness.' }, 409)
-      return json(guillotineSummary(mood))
+      return json(guillotineSummary(mood, readGuillotineHarnessView(window.location.search)))
     }
     if (p === `/api/leagues/${GUILLOTINE_LEAGUE_ID}/guillotine-war-room` && method === 'GET') return json(guillotineWarRoomState(mood))
     if (p === '/api/subscription/entitlements') return json({ hasAccess: true, entitlement: { plans: ['pro'], status: 'active' } })

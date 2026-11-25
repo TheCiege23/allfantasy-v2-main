@@ -17,6 +17,7 @@ import { hasGuillotineAiRecapPlan } from './weeklyRecap'
 import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBestBall } from './guillotineBestBall'
 import { checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
 import { isPeriodEndWeek, PERIOD_WEEKS_KEY, readPeriodWeeks, supportsTwoWeekPeriods } from './eliminationPeriods'
+import { CHOP_LIST_ORDER_KEY, DEFAULT_CHOP_LIST_ORDER, readChopListOrder } from './chopListOrder'
 
 /**
  * Read and save the "League rules" page (rules and tiers in ./guillotineRules.ts).
@@ -82,6 +83,7 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
       faabOnChop: readFaabOnChop(settings),
       bestBall: readGuillotineBestBall(settings),
       periodWeeks: readPeriodWeeks(settings),
+      chopListOrder: readChopListOrder(settings),
     },
     startWeek: config.eliminationStartWeek,
     seasonWeeks,
@@ -179,7 +181,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
     }
   }
 
-  const { endgame, aiRecapAuto, faabOnChop, bestBall, periodWeeks, ...configPatch } = patch
+  const { endgame, aiRecapAuto, faabOnChop, bestBall, periodWeeks, chopListOrder, ...configPatch } = patch
   if (Object.keys(configPatch).length > 0) {
     const row = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
     if (row) {
@@ -209,7 +211,8 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
   const faabChanged = faabOnChop !== undefined && faabOnChop !== current.rules.faabOnChop
   const bestBallChanged = bestBall !== undefined && bestBall !== current.rules.bestBall
   const periodChanged = periodWeeks !== undefined && periodWeeks !== current.rules.periodWeeks
-  if (endgameChanged || recapChanged || faabChanged || bestBallChanged || periodChanged) {
+  const listOrderChanged = chopListOrder !== undefined && chopListOrder !== current.rules.chopListOrder
+  if (endgameChanged || recapChanged || faabChanged || bestBallChanged || periodChanged || listOrderChanged) {
     // League.settings is shared by every settings writer: take the row lock (as chop rules do).
     const conflict = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
@@ -221,6 +224,11 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
       if (faabChanged) settings[FAAB_ON_CHOP_KEY] = faabOnChop
       if (bestBallChanged) settings[GUILLOTINE_BEST_BALL_KEY] = bestBall
+      // The default is removed rather than stored, so a league that never chose reads the default wherever it changes.
+      if (listOrderChanged) {
+        if (chopListOrder === DEFAULT_CHOP_LIST_ORDER) delete settings[CHOP_LIST_ORDER_KEY]
+        else settings[CHOP_LIST_ORDER_KEY] = chopListOrder
+      }
       // One week is the default: the key is removed rather than stored, so the league reads as before.
       if (periodChanged) {
         if (periodWeeks === 2) settings[PERIOD_WEEKS_KEY] = 2

@@ -47,6 +47,7 @@ import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { providerLabel } from '@/lib/guillotine/importedLeagueGuard'
 import { readPeriodWeeks } from '@/lib/guillotine/eliminationPeriods'
+import { readChopListOrder } from '@/lib/guillotine/chopListOrder'
 import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
@@ -169,7 +170,8 @@ export async function GET(
   // "Who's next?" for chopped managers. Never fails the summary.
   const nextChopPick = await loadNextChopPickState(leagueId, myRosterId).catch(() => null)
   // 2 in an MLB two-week league (lib/guillotine/eliminationPeriods.ts): the home's tiebreak copy says "last period".
-  const periodWeeks = readPeriodWeeks((await (async () => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))().catch(() => null))?.settings)
+  const leagueSettings = (await (async () => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))().catch(() => null))?.settings
+  const periodWeeks = readPeriodWeeks(leagueSettings)
 
   return NextResponse.json({
     ...summary,
@@ -194,6 +196,8 @@ export async function GET(
           scheduleLines: advanced ? describeSchedule(advanced, config.teamsPerChop, config.eliminationStartWeek) : [],
           canEditPaidRules,
           periodWeeks,
+          // Which end of the Chop page's list the chop zone sits at (lib/guillotine/chopListOrder.ts).
+          chopListOrder: readChopListOrder(leagueSettings),
         }
       : null,
   })
