@@ -1060,9 +1060,16 @@ export async function scoreRosterForWeek(args: {
  */
 async function loadCampusPoints(
   league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
-  args: { season: number; week: number; homeRosterId: string; awayRosterId: string },
+  args: { season: number; week: number; homeRosterId: string; awayRosterId: string; leagueId: string },
 ) {
   if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'football') return null
+  // "separate" standings: the college lineup plays its own matchups (lib/c2c/campusSeason), so the pro
+  // score is the pro lineup alone. Only a league that chose it; a league with no config stays combined.
+  {
+    const { getC2CConfig } = await import('@/lib/merged-devy-c2c/C2CLeagueConfig')
+    const config = await getC2CConfig(args.leagueId).catch(() => null)
+    if (config?.standingsModel === 'separate') return null
+  }
   const { campusPointsForMatchup } = await import('@/lib/c2c/campusScoring')
   return campusPointsForMatchup(prisma as never, { season: args.season, nflWeek: args.week, homeRosterId: args.homeRosterId, awayRosterId: args.awayRosterId })
 }
@@ -1170,7 +1177,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   }
   const campus =
     scoringMode === 'points' && !bestBall && !useDevyEngine
-      ? await loadCampusPoints(scoringLeague, { season: seasonYear, week, homeRosterId, awayRosterId })
+      ? await loadCampusPoints(scoringLeague, { leagueId, season: seasonYear, week, homeRosterId, awayRosterId })
       : null
   const basketballCampus = scoringMode === 'points' && !bestBall && !useDevyEngine
     ? await loadBasketballCampusPoints(scoringLeague, { leagueId, season: seasonYear, week, homeRosterId, awayRosterId })
@@ -1432,7 +1439,7 @@ async function updateByeRowScore(row: {
   if (adjustments.length) home.points = adjustedScore(home.points, adjustments, m.id, m.homeRosterId)
   // A C2C bye team's campus starters count toward its median / extra-game score too.
   const campus = !bestBall && !useDevyEngine
-    ? await loadCampusPoints(league, { season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
+    ? await loadCampusPoints(league, { leagueId: m.leagueId, season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
     : null
   const basketballCampus = !bestBall && !useDevyEngine
     ? await loadBasketballCampusPoints(league, { leagueId: m.leagueId, season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })

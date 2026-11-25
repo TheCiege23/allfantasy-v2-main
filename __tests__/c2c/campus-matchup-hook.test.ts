@@ -105,6 +105,17 @@ describe('campus points in the matchup score', () => {
     expect(score.allFinal).toBe(false)
   })
 
+  it('a league on separate standings scores its pro lineup alone (the college side plays its own games)', async () => {
+    const { getC2CConfig } = await import('@/lib/merged-devy-c2c/C2CLeagueConfig')
+    vi.mocked(getC2CConfig).mockResolvedValueOnce({ standingsModel: 'separate' } as never)
+    db.league.findFirst.mockResolvedValue(league())
+    await updateMatchupScores('m1')
+    expect(campusPointsForMatchup).not.toHaveBeenCalled()
+    const data = db.redraftMatchup.update.mock.calls[0]![0].data
+    expect(data.homeScore).toBe(data.awayScore)
+    expect(data.lineupSnapshots.redraftScoring.campus).toBeUndefined()
+  })
+
   it('any other league is never asked', async () => {
     for (const over of [{ leagueVariant: 'devy_dynasty' }, { platform: 'sleeper' }, { sport: 'NHL' }, { sport: 'NBA', platform: 'sleeper' }]) {
       db.league.findFirst.mockResolvedValue(league(over))

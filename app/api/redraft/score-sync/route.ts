@@ -5,6 +5,7 @@ import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
+import { runCampusSeasonTicks } from '@/lib/c2c/campusSeason/runCampusSeason'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
 import { getZombieWeekReadiness, type ZombieWeekReadiness } from '@/lib/zombie/matchupCompletion'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
@@ -176,9 +177,16 @@ async function runLegacyAutomationBridge() {
     }
   }
 
+  // NFL C2C leagues on the "separate" standings model: the college side's own schedule, scores,
+  // standings and playoff (lib/c2c/campusSeason). Never fails the bridge.
+  const c2cCollegeSeasons = await runCampusSeasonTicks().catch((e: unknown) => ({
+    leagues: 0, ok: 0, failed: 1, error: e instanceof Error ? e.message : String(e),
+  }))
+
   return {
     updated: 0,
     matchupsRecalculated: c2cMatchupsRecalculated,
+    c2cCollegeSeasons,
     message: 'Survivor/zombie/C2C automation bridge ran. The scheduled GET also runs the redraft reconciliation sweep; POST with a leagueId or seasonId to reconcile one league on demand.',
     survivorBridge,
     zombieActivation,
