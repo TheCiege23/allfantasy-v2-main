@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
-import { buildChopLine, tierLabel, type DangerTierRow } from '@/components/guillotine/guillotineHomeModel'
+import type { DangerTierRow } from '@/components/guillotine/guillotineHomeModel'
+import { GuillySurvivalBoard } from '@/components/guillotine/GuillySurvivalBoard'
+import { boardFromNativeSummary } from '@/lib/guillotine/survivalBoardModel'
 import { buildSurvivalTable } from '@/lib/guillotine/nativeGuillotineScreens'
 import { Card, ScreenHead } from './NativeScreenParts'
 
@@ -29,14 +31,14 @@ type Summary = {
 
 type Load = { summary: Summary | null; loading: boolean; error: string | null }
 
-function useGuillotineSummary(leagueId: string): Load {
+function useGuillotineSummary(leagueId: string, opts: { outlook?: boolean } = {}): Load {
   const [state, setState] = useState<Load>({ summary: null, loading: true, error: null })
   useEffect(() => {
     const ac = new AbortController()
     setState({ summary: null, loading: true, error: null })
     void (async () => {
       try {
-        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary`, { signal: ac.signal, cache: 'no-store' })
+        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary${opts.outlook ? '?outlook=1' : ''}`, { signal: ac.signal, cache: 'no-store' })
         if (!res.ok) throw new Error()
         setState({ summary: (await res.json()) as Summary, loading: false, error: null })
       } catch {
@@ -44,70 +46,31 @@ function useGuillotineSummary(leagueId: string): Load {
       }
     })()
     return () => ac.abort()
-  }, [leagueId])
+  }, [leagueId, opts.outlook])
   return state
 }
 
 const pts = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(1) : '—')
 
-/** Matchup tab: there is no opponent, so this is the week's scores against the chop line. */
+/**
+ * Matchup tab: there is no opponent. It is you against the whole league, scored against the chop line
+ * (components/guillotine/GuillySurvivalBoard.tsx — the same board an imported Guilly league shows).
+ */
 export function GuillotineMatchupScreen({ league, onSelectTab }: { league: UserLeague; onSelectTab: (id: string) => void }) {
-  const { summary, loading, error } = useGuillotineSummary(league.id)
-  const line = useMemo(() => buildChopLine(summary?.dangerTiers, summary?.myRosterId, summary?.home?.scores), [summary])
-  const week = summary?.chopWatch?.week ?? summary?.weekOrPeriod ?? null
-  const chops = summary?.chopWatch?.chopCount ?? 1
-  const scored = line.rows.some((r) => r.points != null)
-  const me = line.me
+  const { summary, loading, error } = useGuillotineSummary(league.id, { outlook: true })
+  const board = useMemo(() => (summary ? boardFromNativeSummary(summary) : null), [summary])
+  const alive = board?.status !== 'chopped' && board?.status !== 'spectator'
   return (
     <div className="nls" data-testid="native-guillotine-matchup">
-      <ScreenHead
-        eyebrow={`${league.name} · Matchup`}
-        title={week ? `Week ${week} · The chop` : 'The chop'}
-        sub="There is no head-to-head in a guillotine league. Every team plays the whole field, and the lowest score is chopped."
+      <GuillySurvivalBoard
+        board={board}
+        loading={loading}
+        error={error}
+        actions={[
+          ...(alive ? [{ label: 'Set my lineup', onClick: () => onSelectTab('roster'), primary: true }] : []),
+          { label: 'Guilly hub', onClick: () => onSelectTab('guillotine') },
+        ]}
       />
-      {error ? <p className="nls-error" role="alert">{error}</p> : null}
-      {me && scored ? (
-        <p className="nls-gl-me" data-tier={me.tier} data-testid="guillotine-my-margin">
-          {me.tier === 'chop_zone'
-            ? `You are in the chop zone with ${pts(me.points)}.`
-            : `You are ${me.margin.toFixed(1)} above the chop line with ${pts(me.points)}.`}
-        </p>
-      ) : null}
-      <section className="nls-card nls-card-flush" aria-label="This week against the chop line">
-        <h3 className="nls-label nls-card-head">
-          {line.alive ? `${line.alive} teams alive` : 'This week'}
-          {chops !== 1 ? ` · ${chops === 0 ? 'no chop this week' : `${chops} chopped this week`}` : ''}
-        </h3>
-        {loading ? (
-          <p className="nls-empty">Loading the chop line…</p>
-        ) : line.rows.length === 0 ? (
-          <p className="nls-empty" data-testid="guillotine-matchup-empty">The chop line appears once the season has started.</p>
-        ) : (
-          <ul className="nls-rows nls-gl-rows">
-            {line.rows.map((r) => (
-              <li key={r.rosterId} data-cut={r.cutAbove || undefined}>
-                {r.cutAbove ? <div className="nls-gl-cut" data-testid="guillotine-chop-line"><span>Chop line</span></div> : null}
-                <div className="nls-gl-row" data-tier={r.tier} data-me={r.isMe || undefined} data-testid={`guillotine-row-${r.rosterId}`}>
-                  <span className="nls-gl-rank">{r.rank}</span>
-                  <span className="nls-gl-name">
-                    <strong>{r.name}{r.isMe ? <em> you</em> : null}</strong>
-                    <small>{r.immune ? 'Immune this week' : tierLabel(r.tier)}{scored && r.tier !== 'chop_zone' ? ` · +${r.margin.toFixed(1)}` : ''}</small>
-                  </span>
-                  <span className="nls-gl-pts">{pts(r.points)}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {!loading && line.rows.length > 0 && !scored ? <p className="nls-table-note">Scores appear here once this week&rsquo;s games start.</p> : null}
-        <div className="nls-card-foot">
-          <span className="nls-muted nls-mono">{summary?.home?.chopLabel ? `Chop after stat corrections · ${summary.home.chopLabel}` : 'Chop after stat corrections'}</span>
-          <span className="nls-actions">
-            <button type="button" className="nls-btn" onClick={() => onSelectTab('guillotine')}>Open Guilly</button>
-            <button type="button" className="nls-btn" onClick={() => onSelectTab('roster')}>Edit my lineup</button>
-          </span>
-        </div>
-      </section>
     </div>
   )
 }

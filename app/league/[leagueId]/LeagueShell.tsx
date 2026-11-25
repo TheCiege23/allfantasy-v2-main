@@ -193,6 +193,7 @@ import { KeeperSelectionTab } from './tabs/KeeperSelectionTab'
 import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
 import { ImportedGuillyTab } from './tabs/ImportedGuillyTab'
+import { ImportedGuillyMatchup } from './tabs/ImportedGuillyMatchup'
 import { guillyTabKind } from '@/lib/guillotine/importedGuillyView'
 import { ImportedGuillyChopCard } from '@/components/league/ImportedGuillyChopCard'
 import { DynastyHome } from './tabs/DynastyHome'
@@ -2740,8 +2741,12 @@ function LeagueTabRouter({
         />
       )
     case 'matchups':
-      return oneLeagueWeek(<MatchupTabContainer league={selectedLeague} />)
     case 'matchup':
+      // An imported Guilly league has no opponent: its Matchup tab is the survival board, read from the
+      // provider's scores (tabs/ImportedGuillyMatchup.tsx) — the same board a league hosted here shows.
+      if (guillyTabKind(selectedLeague, isNativePlatform(selectedLeague.platform)) === 'imported') {
+        return oneLeagueWeek(<ImportedGuillyMatchup leagueId={leagueId} onOpenGuilly={() => onSelectTab('guillotine')} />)
+      }
       return oneLeagueWeek(<MatchupTabContainer league={selectedLeague} />)
     case 'schedule':
       if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {

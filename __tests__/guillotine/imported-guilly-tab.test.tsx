@@ -21,6 +21,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: vi.fn(async () => h.league) },
     weeklyMatchup: { findMany: vi.fn(async () => h.rows) },
     leagueTeam: {
+      findFirst: vi.fn(async (q: { where: { claimedByUserId: string } }) => (q.where.claimedByUserId === 'u1' ? { externalId: 1 } : null)),
       findMany: vi.fn(async () => [
         { externalId: '1', teamName: 'Axes', platformUserId: 'u1' },
         { externalId: '2', teamName: 'Blades', platformUserId: 'u2' },
@@ -125,6 +126,8 @@ describe('the route', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body).toMatchObject({ platform: 'sleeper', view: { week: 3, teamsAlive: 2 }, check: { status: 'ok', attention: 0, format: 'confirmed' } })
+    // The viewer's claimed team, as the provider roster id the view is keyed by (the Matchup survival board).
+    expect(body.myRosterId).toBe('1')
   })
 
   it('signed out 401, not a member 403', async () => {
