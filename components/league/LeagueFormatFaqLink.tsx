@@ -17,13 +17,21 @@ const messages = defineMessages({
 })
 
 /** Available to every member; preserves their current league tab. */
-export function LeagueFormatFaqLink({ league = {}, href, className = '' }: {
+export function LeagueFormatFaqLink({ league = {}, href, className = '', iconOnly = false }: {
   league?: LeagueFormatFaqInput
   href?: string
   className?: string
+  /** The book alone, named for screen readers — for a one-line header with no room for a second row. */
+  iconOnly?: boolean
 }) {
   const m = useMessages(messages)
-  return <a href={href ?? leagueFormatFaqHref(league)} target="_blank" rel="noopener noreferrer"
+  const to = href ?? leagueFormatFaqHref(league)
+  if (iconOnly) {
+    return <a href={to} target="_blank" rel="noopener noreferrer" title={m.hint} aria-label={m.label} className={className}>
+      <BookOpen size={16} aria-hidden="true" />
+    </a>
+  }
+  return <a href={to} target="_blank" rel="noopener noreferrer"
     title={m.hint} className={'inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold underline underline-offset-4 hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ' + className}>
     <BookOpen size={15} className="shrink-0" aria-hidden="true" />{m.label}
   </a>

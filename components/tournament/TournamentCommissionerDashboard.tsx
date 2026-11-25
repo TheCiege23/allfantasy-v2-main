@@ -613,7 +613,7 @@ export function TournamentCommissionerDashboard({
         )}
 
         {tab === 'members' && (
-          <MembersTab
+          <TournamentMembersPanel
             tournamentId={tournamentId}
             isCreator={accessFlags?.isCreator ?? false}
             onRefreshSummary={loadSummary}
@@ -1135,7 +1135,9 @@ function MediaTab({ tournamentId, feederLeagues }: { tournamentId: string; feede
   )
 }
 
-function MembersTab({
+type StaffCandidate = { userId: string; displayName: string; username: string; avatarUrl: string | null; inTournament: boolean }
+
+export function TournamentMembersPanel({
   tournamentId,
   isCreator,
   onRefreshSummary,
@@ -1152,7 +1154,9 @@ function MembersTab({
     Array<{ userId: string; displayName: string; permissions: Record<string, unknown> }>
   >([])
   const [loading, setLoading] = useState(true)
-  const [staffUserId, setStaffUserId] = useState('')
+  const [staffQuery, setStaffQuery] = useState('')
+  const [staffMatches, setStaffMatches] = useState<StaffCandidate[] | null>(null)
+  const [staffPick, setStaffPick] = useState<StaffCandidate | null>(null)
   const [perm, setPerm] = useState({
     dashboard: true,
     manageLeagues: false,
@@ -1191,6 +1195,29 @@ function MembersTab({
     load()
   }, [load])
 
+  // Search as the commissioner types; the route needs two letters and ignores anything shorter.
+  useEffect(() => {
+    const q = staffQuery.trim()
+    if (!isCreator || staffPick || q.length < 2) {
+      setStaffMatches(null)
+      return
+    }
+    let live = true
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/tournament/${encodeURIComponent(tournamentId)}/staff?q=${encodeURIComponent(q)}`, { cache: 'no-store' })
+        const json = await res.json().catch(() => ({}))
+        if (live) setStaffMatches(res.ok && Array.isArray(json.candidates) ? json.candidates : [])
+      } catch {
+        if (live) setStaffMatches([])
+      }
+    }, 250)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [staffQuery, staffPick, isCreator, tournamentId])
+
   async function removeWaitlist(userId: string) {
     const res = await fetch(
       `/api/tournament/${encodeURIComponent(tournamentId)}/waitlist?userId=${encodeURIComponent(userId)}`,
@@ -1204,7 +1231,7 @@ function MembersTab({
 
   async function addStaff(e: FormEvent) {
     e.preventDefault()
-    const uid = staffUserId.trim()
+    const uid = staffPick?.userId
     if (!uid) return
     setStaffSaving(true)
     try {
@@ -1224,7 +1251,8 @@ function MembersTab({
         }),
       })
       if (res.ok) {
-        setStaffUserId('')
+        setStaffPick(null)
+        setStaffQuery('')
         await load()
       }
     } finally {
@@ -1294,15 +1322,64 @@ function MembersTab({
             )}
           </ul>
           <form onSubmit={addStaff} className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-white/45">
-              {t('tournament.commissioner.members.addStaffById')}
-            </p>
-            <input
-              value={staffUserId}
-              onChange={(e) => setStaffUserId(e.target.value)}
-              placeholder={t('tournament.commissioner.members.userUuidPlaceholder')}
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-sm text-white"
-            />
+            {staffPick ? (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2" data-testid="tournament-staff-pick">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-white">{staffPick.displayName}</span>
+                  <span className="block truncate text-xs text-white/55">@{staffPick.username}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStaffPick(null)}
+                  className="min-h-11 shrink-0 px-2 text-xs font-semibold text-cyan-200 hover:text-cyan-100"
+                >
+                  {t('tournament.commissioner.members.change')}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label htmlFor="tournament-staff-search" className="block text-xs font-semibold uppercase tracking-wide text-white/45">
+                  {t('tournament.commissioner.members.findPerson')}
+                </label>
+                <input
+                  id="tournament-staff-search"
+                  type="search"
+                  autoComplete="off"
+                  value={staffQuery}
+                  onChange={(e) => setStaffQuery(e.target.value)}
+                  placeholder={t('tournament.commissioner.members.findPersonPlaceholder')}
+                  aria-describedby="tournament-staff-search-hint"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                />
+                <p id="tournament-staff-search-hint" className="text-xs text-white/50">
+                  {t('tournament.commissioner.members.findPersonHint')}
+                </p>
+                {staffMatches && staffMatches.length === 0 ? (
+                  <p className="text-xs text-white/60">{t('tournament.commissioner.members.findPersonNone')}</p>
+                ) : null}
+                {staffMatches && staffMatches.length > 0 ? (
+                  <ul className="space-y-1" data-testid="tournament-staff-matches">
+                    {staffMatches.map((c) => (
+                      <li key={c.userId}>
+                        <button
+                          type="button"
+                          onClick={() => setStaffPick(c)}
+                          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-left hover:border-cyan-500/40"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm text-white">{c.displayName}</span>
+                            <span className="block truncate text-xs text-white/50">@{c.username}</span>
+                          </span>
+                          {c.inTournament ? (
+                            <span className="shrink-0 text-[11px] text-white/50">{t('tournament.commissioner.members.inTournament')}</span>
+                          ) : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            )}
             <div className="grid gap-2 text-xs text-white/75 sm:grid-cols-2">
               <label className="flex items-center gap-2">
                 <input
@@ -1339,7 +1416,7 @@ function MembersTab({
             </div>
             <button
               type="submit"
-              disabled={staffSaving}
+              disabled={staffSaving || !staffPick}
               className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
             >
               {staffSaving ? t('tournament.commissioner.members.saving') : t('tournament.commissioner.members.addStaff')}

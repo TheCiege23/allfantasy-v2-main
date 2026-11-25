@@ -75,6 +75,23 @@ describe('redraft identity on the native workspace', () => {
     expect(heading.querySelector('h1')!.textContent).toBe('Sunday League')
   })
 
+  it('the compact header keeps the format FAQ as a settings-sized icon, not a second row', () => {
+    const root = mount({}, { activeTab: 'roster', seasonFacts: { totalWeeks: 21 } })
+    const heading = root.querySelector('.nl-league-heading')!
+    expect(heading.querySelector('.nl-heading-name a[href^="/league-types/faq"]')).toBeNull()
+    const faq = heading.querySelector(':scope > a[href^="/league-types/faq"]')!
+    expect(faq).not.toBeNull()
+    expect(faq.classList.contains('nl-button')).toBe(true)
+    expect(faq.getAttribute('aria-label')).toBe('Format rules FAQ')
+    expect(faq.textContent).toBe('')
+  })
+
+  it('League home shows the format FAQ with its words, under the league line', () => {
+    const root = mount({}, { seasonFacts: { totalWeeks: 21 } })
+    const faq = root.querySelector('.nl-heading-name a[href^="/league-types/faq"]')!
+    expect(faq.textContent).toBe('Format rules FAQ')
+  })
+
   it('League home keeps the full header', () => {
     const root = mount({}, { seasonFacts: { totalWeeks: 21 } })
     expect(root.querySelector('.nl-league-heading')!.getAttribute('data-compact')).toBeNull()
