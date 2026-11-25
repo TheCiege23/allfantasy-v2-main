@@ -13,12 +13,9 @@ const m = vi.hoisted(() => {
     lockAllMoves: false,
     currentWeek: 5,
     counts: [0, 0] as number[],
+    values: {} as Record<string, [string, number]>,
   }
   const lineup = (starters: string[], bench: string[]) => ({ lineup_sections: { starters: starters.map((id) => ({ id, name: `N ${id}` })), bench: bench.map((id) => ({ id, name: `N ${id}` })), ir: [], taxi: [], devy: [] } })
-  const values: Record<string, [string, number]> = {
-    qb: ['QB', 3000], rb1: ['RB', 2500], rb2: ['RB', 1000], bwr: ['WR', 1900],
-    xrb: ['RB', 2000], xs: ['RB', 9000], crb: ['RB', 2000],
-  }
   return {
     state,
     prisma: {
@@ -34,12 +31,13 @@ const m = vi.hoisted(() => {
         ]),
       },
       redraftTradeProposal: { count: vi.fn(async () => state.counts.shift() ?? 0) },
+      redraftTradeBlockItem: { findMany: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []) },
       redraftRoster: { findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id, seasonId: 's', ownerId: where.id === 'rr-chimmy' ? 'orphan-r1' : 'uA', teamName: where.id === 'rr-chimmy' ? 'Ghosts' : 'Dana' })) },
       redraftSeason: { findFirst: vi.fn(async () => ({ id: 's', sport: 'NFL', season: 2026, playoffStartWeek: 15, currentWeek: state.currentWeek, league: { leagueVariant: null } })) },
     },
     create: vi.fn(async () => ({ ok: true, created: { id: 'p-new' } })),
     price: vi.fn(async (input: { assets: Array<{ playerId: string; playerName: string }> }) => ({
-      sides: [{ assets: input.assets.map((a) => ({ playerId: a.playerId, playerName: a.playerName, position: values[a.playerId]?.[0] ?? null, valuationBasis: 'market', internalValue: values[a.playerId]?.[1] ?? 0 })) }],
+      sides: [{ assets: input.assets.map((a) => ({ playerId: a.playerId, playerName: a.playerName, position: state.values[a.playerId]?.[0] ?? null, valuationBasis: 'market', internalValue: state.values[a.playerId]?.[1] ?? 0 })) }],
     })),
     log: vi.fn(async () => ({ id: 'a' })),
   }
@@ -74,6 +72,7 @@ beforeEach(() => {
   m.state.lockAllMoves = false
   m.state.currentWeek = 5
   m.state.counts = [0, 0]
+  m.state.values = { qb: ['QB', 3000], rb1: ['RB', 2500], rb2: ['RB', 1000], bwr: ['WR', 1900], xrb: ['RB', 2000], xs: ['RB', 9000], crb: ['RB', 2000] }
 })
 
 describe('runAutopilotTradeOffers', () => {
@@ -87,7 +86,7 @@ describe('runAutopilotTradeOffers', () => {
       expect.objectContaining({ fromRosterId: 'rr-other', toRosterId: 'rr-chimmy', assetType: 'player', playerId: 'xrb' }),
     ])
     expect(made.reason).toBe('Chimmy is offering N bwr for N xrb: it needs help at RB.')
-    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TRADE_SEND_ACTION, entityId: 'r1', metadata: expect.objectContaining({ proposalId: 'p-new', give: 'bwr', get: 'xrb', replaces: 'rb2' }) }))
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TRADE_SEND_ACTION, entityId: 'r1', metadata: expect.objectContaining({ proposalId: 'p-new', give: ['bwr'], get: 'xrb', replaces: 'rb2', onBlock: false }) }))
   })
 
   it('never prices or asks for the other team\'s starters, another Chimmy team, or an empty seat', async () => {
@@ -96,6 +95,19 @@ describe('runAutopilotTradeOffers', () => {
     expect(pricedIds).toContain('xrb')
     expect(pricedIds).not.toContain('xs')
     expect(pricedIds).not.toContain('crb')
+  })
+
+  it('may ask for a starter the other manager listed on the trade block', async () => {
+    // xs starts for the other team and is worth 9000: far too much. Listed and priced at a fair 2100, he is askable.
+    m.prisma.redraftTradeBlockItem.findMany.mockResolvedValueOnce([{ rosterId: 'rr-other', playerId: 'xl', playerName: 'N xl', askingForPositions: ['WR'] }])
+    m.state.values = { qb: ['QB', 3000], rb1: ['RB', 2500], rb2: ['RB', 1000], bwr: ['WR', 1900], xrb: ['RB', 1200], xl: ['RB', 2050] }
+    const r = await runAutopilotTradeOffers({ now: myHour })
+    expect(r.sent).toBe(1)
+    const made = (m.create.mock.calls[0] as unknown as [Record<string, any>])[0]
+    expect(made.assets.map((a: { playerId: string }) => a.playerId)).toEqual(['bwr', 'xl'])
+    expect(made.reason).toMatch(/you have him on the trade block/)
+    // Only active, league-visible listings of the teams it shopped were read.
+    expect((m.prisma.redraftTradeBlockItem.findMany.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0].where).toMatchObject({ leagueId: 'L', status: 'active', visibility: 'league', rosterId: { in: ['rr-other'] } })
   })
 
   it('sends nothing outside its hour, or when its trades are not set to send', async () => {

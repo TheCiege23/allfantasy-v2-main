@@ -4,13 +4,19 @@
  * Which offer, if any, a Chimmy team makes. Pure: it is handed its own players and the other teams'
  * BENCH players, already priced on one scale, and returns one one-for-one swap or nothing.
  *
- * The offer is always the same modest shape, so it reads as a sensible ask rather than a raid:
- *   - Chimmy asks for ONE bench player, never a starter, who would be a clear upgrade on its weakest
- *     starter at that position (`UPGRADE_MARGIN`).
- *   - It gives ONE of its own bench players, never a starter, so it cannot open a hole in its lineup.
- *   - The swap is fair to the other side on plain value: what Chimmy gives is worth at least
- *     `FAIR_FLOOR` of what it asks for — and Chimmy, weighing its own way, must not lose on it.
- * Among every swap that fits, it takes the biggest upgrade. Ties break on ids, so a run is repeatable.
+ * The offer is always a modest shape, so it reads as a sensible ask rather than a raid:
+ *   - Chimmy asks for ONE player who would be a clear upgrade on its weakest starter at that position
+ *     (`UPGRADE_MARGIN`): a bench player, or any player the other manager has put on the TRADE BLOCK —
+ *     a manager who lists a starter has said he would move him, so asking is not a raid.
+ *   - It gives its own BENCH players only, never a starter, so it cannot open a hole in its lineup.
+ *   - One for one where it can: what Chimmy gives is worth at least `FAIR_FLOOR` of what it asks for,
+ *     and Chimmy, weighing its own way, must not lose on it.
+ *   - Two for one only when no single bench player is enough: two bench players whose combined value
+ *     is at least the player's and at most `TWO_FOR_ONE_PREMIUM` over it. Chimmy pays a little extra
+ *     in total for the better single player; the other team gets depth.
+ * Among every offer that fits, it takes the biggest upgrade, with a player on the trade block counting
+ * for `BLOCK_BONUS` more — he is the one most likely to be said yes to — and more again when the
+ * listing asks for a position Chimmy is giving. Ties break on ids, so a run is repeatable.
  *
  * WHEN it may send (`sendsThisHour`) is decided here too, so the timing is testable without a clock:
  * each team has its own hour of the day, fixed by its roster id, and acts once in that hour — a league
@@ -24,12 +30,28 @@ export const UPGRADE_MARGIN = 0.1
 export const FAIR_FLOOR = 0.9
 
 export type PricedPlayer = { playerId: string; playerName: string | null; position: string | null; value: number }
-export type OtherTeam = { rosterId: string; bench: ReadonlyArray<PricedPlayer> }
+/** Two-for-one: the pair may be worth up to this much more than the one player, in total. */
+export const TWO_FOR_ONE_PREMIUM = 0.2
+/** A trade-block player's upgrade counts this much more when ranking offers. */
+export const BLOCK_BONUS = 1.25
+/** …and this much more again when his listing asks for a position Chimmy is giving. */
+export const BLOCK_ASK_BONUS = 1.1
+
+export type BlockPlayer = PricedPlayer & { askingForPositions?: ReadonlyArray<string> }
+export type OtherTeam = {
+  rosterId: string
+  bench: ReadonlyArray<PricedPlayer>
+  /** Players this team's manager has listed on the trade block (starters included), priced. */
+  block?: ReadonlyArray<BlockPlayer>
+}
 
 export type TradeOfferPlan = {
   toRosterId: string
-  give: PricedPlayer
+  /** One bench player, or two when no single one is enough. */
+  give: PricedPlayer[]
   get: PricedPlayer
+  /** The player asked for is on the other team's trade block. */
+  onBlock: boolean
   /** The starter the incoming player would replace. */
   replaces: PricedPlayer
   reason: string
@@ -56,29 +78,58 @@ export function planTradeOffer(args: {
   const giveable = args.bench.filter(usable)
   if (weakest.size === 0 || giveable.length === 0) return null
 
-  let best: (TradeOfferPlan & { upgrade: number }) | null = null
+  /** The cheapest fair way to pay for `get`: one bench player if any is enough, else two. */
+  const payFor = (get: PricedPlayer): PricedPlayer[] | null => {
+    const one = giveable
+      .filter((g) => g.value >= get.value * FAIR_FLOOR && g.value <= get.value && weighed(get, profile) >= weighed(g, profile))
+      // Give up as little as the deal allows.
+      .sort((x, y) => x.value - y.value || x.playerId.localeCompare(y.playerId))[0]
+    if (one) return [one]
+    let pair: { players: PricedPlayer[]; sum: number } | null = null
+    for (let i = 0; i < giveable.length; i += 1) {
+      for (let j = i + 1; j < giveable.length; j += 1) {
+        const x = giveable[i]!
+        const y = giveable[j]!
+        const sum = x.value + y.value
+        // Each is worth less than the player asked for (or one-for-one would have done it).
+        if (x.value >= get.value || y.value >= get.value) continue
+        if (sum < get.value || sum > get.value * (1 + TWO_FOR_ONE_PREMIUM)) continue
+        if (weighed(get, profile) * (1 + TWO_FOR_ONE_PREMIUM) < weighed(x, profile) + weighed(y, profile)) continue
+        const key = [x.playerId, y.playerId].sort().join(':')
+        if (!pair || sum < pair.sum || (sum === pair.sum && key < pair.players.map((p) => p.playerId).sort().join(':'))) {
+          pair = { players: [x, y].sort((p, q) => q.value - p.value || p.playerId.localeCompare(q.playerId)), sum }
+        }
+      }
+    }
+    return pair?.players ?? null
+  }
+
+  let best: (TradeOfferPlan & { score: number }) | null = null
   for (const team of args.others) {
-    for (const get of team.bench.filter(usable)) {
+    const onBlock = new Map((team.block ?? []).filter(usable).map((p) => [p.playerId, p]))
+    const candidates = new Map<string, PricedPlayer>()
+    for (const p of [...team.bench.filter(usable), ...onBlock.values()]) candidates.set(p.playerId, p)
+    for (const get of candidates.values()) {
       if (mine.has(get.playerId)) continue
       const replaces = weakest.get(pos(get))
       if (!replaces || get.value < replaces.value * (1 + UPGRADE_MARGIN)) continue
-      const give = giveable
-        .filter((g) => g.value >= get.value * FAIR_FLOOR && g.value <= get.value && weighed(get, profile) >= weighed(g, profile))
-        // Give up as little as the deal allows.
-        .sort((a, b) => a.value - b.value || a.playerId.localeCompare(b.playerId))[0]
+      const give = payFor(get)
       if (!give) continue
-      const upgrade = get.value - replaces.value
-      const better = !best || upgrade > best.upgrade
-        || (upgrade === best.upgrade && `${team.rosterId}:${get.playerId}` < `${best.toRosterId}:${best.get.playerId}`)
+      const listing = onBlock.get(get.playerId)
+      const asked = new Set((listing?.askingForPositions ?? []).map((x) => String(x).toUpperCase()))
+      const score = (get.value - replaces.value) * (listing ? BLOCK_BONUS : 1) * (listing && give.some((g) => asked.has(pos(g))) ? BLOCK_ASK_BONUS : 1)
+      const better = !best || score > best.score
+        || (score === best.score && `${team.rosterId}:${get.playerId}` < `${best.toRosterId}:${best.get.playerId}`)
       if (better) {
         const getName = get.playerName?.trim() || 'your player'
-        const giveName = give.playerName?.trim() || 'one of its players'
-        best = { toRosterId: team.rosterId, give, get, replaces, upgrade, reason: `Chimmy is offering ${giveName} for ${getName}: it needs help at ${pos(get)}.` }
+        const giveNames = give.map((g) => g.playerName?.trim() || 'one of its players').join(' and ')
+        const why = listing ? `you have him on the trade block, and it needs help at ${pos(get)}` : `it needs help at ${pos(get)}`
+        best = { toRosterId: team.rosterId, give, get, replaces, onBlock: Boolean(listing), score, reason: `Chimmy is offering ${giveNames} for ${getName}: ${why}.` }
       }
     }
   }
   if (!best) return null
-  const { upgrade: _u, ...plan } = best
+  const { score: _s, ...plan } = best
   return plan
 }
 

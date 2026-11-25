@@ -394,10 +394,28 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
         const myStarters = sectionPlayers(sections.starters)
         const myPriced = await pricePlayers(ctx, myId, shop[0]!.rosterId, [...myStarters, ...sectionPlayers(sections.bench)])
         const starterIds = new Set(myStarters.map((p) => p.playerId))
+        // Players those managers have listed on the trade block: askable even when they start.
+        const listings = await prisma.redraftTradeBlockItem
+          .findMany({
+            where: { leagueId, rosterId: { in: shop.map((t) => t.rosterId) }, status: 'active', visibility: 'league', OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+            select: { rosterId: true, playerId: true, playerName: true, askingForPositions: true },
+          })
+          .catch(() => [])
         const others = []
         for (const team of shop) {
           const bench = sectionPlayers(getNormalizedLineupSections(team.playerData).bench).slice(0, MAX_BENCH_PRICED)
-          others.push({ rosterId: team.rosterId, bench: await pricePlayers(ctx, team.rosterId, myId, bench) })
+          const listed = listings.filter((l) => l.rosterId === team.rosterId)
+          const benchIds = new Set(bench.map((p) => p.playerId))
+          // One pricing read per team: its bench plus any listed player not already on the bench.
+          const priced = await pricePlayers(ctx, team.rosterId, myId, [...bench, ...listed.filter((l) => !benchIds.has(l.playerId)).map((l) => ({ playerId: l.playerId, playerName: l.playerName }))])
+          others.push({
+            rosterId: team.rosterId,
+            bench: priced.filter((p) => benchIds.has(p.playerId)),
+            block: listed.flatMap((l) => {
+              const p = priced.find((x) => x.playerId === l.playerId)
+              return p ? [{ ...p, askingForPositions: Array.isArray(l.askingForPositions) ? l.askingForPositions.map(String) : [] }] : []
+            }),
+          })
         }
         const plan = planTradeOffer({
           profile,
@@ -421,7 +439,7 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
           proposerName: myRow.teamName ? `${CHIMMY_TRADE_ACTOR_NAME} (${myRow.teamName})` : CHIMMY_TRADE_ACTOR_NAME,
           reason: plan.reason,
           assets: [
-            { fromRosterId: myId, toRosterId: plan.toRosterId, assetType: 'player', playerId: plan.give.playerId, playerName: plan.give.playerName ?? undefined },
+            ...plan.give.map((g) => ({ fromRosterId: myId, toRosterId: plan.toRosterId, assetType: 'player', playerId: g.playerId, playerName: g.playerName ?? undefined })),
             { fromRosterId: plan.toRosterId, toRosterId: myId, assetType: 'player', playerId: plan.get.playerId, playerName: plan.get.playerName ?? undefined },
           ],
         })
@@ -437,7 +455,7 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
           actionType: TRADE_SEND_ACTION,
           entityType: 'roster',
           entityId: rosterId,
-          metadata: { rosterId, proposalId: made.created.id, toRosterId: plan.toRosterId, give: plan.give.playerId, get: plan.get.playerId, replaces: plan.replaces.playerId, personality: profile.personality, style: profile.style },
+          metadata: { rosterId, proposalId: made.created.id, toRosterId: plan.toRosterId, give: plan.give.map((g) => g.playerId), get: plan.get.playerId, onBlock: plan.onBlock, replaces: plan.replaces.playerId, personality: profile.personality, style: profile.style },
         }).catch((e) => console.warn('[chimmy-autopilot] trade audit failed', { rosterId, error: String(e) }))
       } catch (e) {
         result.failures.push({ leagueId, rosterId, error: e instanceof Error ? e.message : String(e) })
