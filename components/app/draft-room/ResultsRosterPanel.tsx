@@ -317,7 +317,7 @@ function SlotGroup({ heading, entries, showBye, sport, weekGames, testIdBase }: 
                 </span>
               </span>
             ) : (
-              <span className="text-[11px] italic text-white/35">Empty</span>
+              <span className="text-[11px] italic text-white/55">Empty</span>
             )}
           </li>
         ))}
