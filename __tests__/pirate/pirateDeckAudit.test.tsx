@@ -59,6 +59,12 @@ describe('Pirate Deck reads in light mode (1)', () => {
   })
 })
 
+/**
+ * A claim deadline that has not passed. It was a fixed date (2026-11-25T20:00Z); the deck opens the
+ * commissioner review on an overdue claim, so the suite began failing the moment that date went by.
+ */
+const NOT_YET_DUE = new Date(Date.now() + 2 * 24 * 3600_000).toISOString()
+
 describe('A claim you must act on comes first (3)', () => {
   it('puts the claim board above the protection deck while you have a pick to make', async () => {
     await deck(data([claim({})]))
@@ -72,11 +78,7 @@ describe('A claim you must act on comes first (3)', () => {
 
 describe('Commissioner review folds away until it is needed (4)', () => {
   it('is closed on a claim with nothing flagged', async () => {
-    // A deadline still ahead of the clock. A pending claim past its deadline is overdue, and overdue is
-    // something flagged: the review opens. This was the fixed instant 2026-11-25T20:00:00Z, so the test
-    // passed until that moment and has failed for every branch since.
-    const notYetDue = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-    await deck(data([claim({ winnerRosterId: 'other', status: 'pending', playerId: 'q7', deadlineAt: notYetDue })]))
+    await deck(data([claim({ winnerRosterId: 'other', status: 'pending', playerId: 'q7', deadlineAt: NOT_YET_DUE })]))
     const review = screen.getByTestId('pirate-commish-review-c') as HTMLDetailsElement
     expect(review.tagName).toBe('DETAILS')
     expect(review.open).toBe(false)
@@ -95,7 +97,7 @@ describe('Commissioner review folds away until it is needed (4)', () => {
 
 describe('Claim cards say what is happening (5)', () => {
   it('tells the losing manager who is taking whom', async () => {
-    await deck(data([claim({ winnerRosterId: 'other', loserRosterId: 'me', status: 'pending', playerId: 'p2', deadlineAt: '2026-11-25T20:00:00Z' })]), false)
+    await deck(data([claim({ winnerRosterId: 'other', loserRosterId: 'me', status: 'pending', playerId: 'p2', deadlineAt: NOT_YET_DUE })]), false)
     const card = screen.getByTestId('pirate-claim-c')
     expect(card.textContent).toMatch(/Jolly Rogers is taking Garrett Wilson from you/)
     expect(card.textContent).toMatch(/Waiting for your answer/)

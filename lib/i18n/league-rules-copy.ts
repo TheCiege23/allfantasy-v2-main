@@ -149,6 +149,9 @@ export const leagueRulesCopyEn: Record<string, string> = {
   'leagueRules.guillotine.release.immediate': 'A chopped team’s players become free agents as soon as the chop is final.',
   'leagueRules.guillotine.faab.keep': 'A chopped team’s unspent FAAB leaves with it; survivors keep the budgets they have.',
   'leagueRules.guillotine.faab.split': 'A chopped team’s unspent FAAB is shared evenly by every team still alive.',
+  'leagueRules.guillotine.faab.top_scorer': 'A chopped team’s unspent FAAB goes to the surviving team with the week’s highest score.',
+  'leagueRules.guillotine.faab.low_scorer': 'A chopped team’s unspent FAAB goes to the lowest-scoring team to survive the week.',
+  'leagueRules.guillotine.faab.waiver_order': 'A chopped team’s unspent FAAB goes to one surviving team at a time, in waiver order.',
   'leagueRules.guillotine.blindAuction': 'Waiver claims are blind: in the hours before each waiver run, bids are hidden and held, then settled together, highest bid first. A chopped team’s players go to the highest bidder, not the fastest.',
   'leagueRules.guillotine.bestBall': 'Best ball lineups: nobody sets a lineup. Each week every team is scored on its best possible lineup from its players’ points, and that score is the one that faces the chop.',
 
@@ -186,6 +189,7 @@ export const leagueRulesCopyEn: Record<string, string> = {
   'leagueRules.v.weeks.other': '{{n}} weeks',
   'leagueRules.v.hours.one': '{{n}} hour',
   'leagueRules.v.hours.other': '{{n}} hours',
+  'leagueRules.v.percent': '{{n}}%',
   'leagueRules.v.points.one': '{{n}} point',
   'leagueRules.v.points.other': '{{n}} points',
   'leagueRules.v.hourOfDay': '{{h}}:00',
@@ -225,6 +229,9 @@ export const leagueRulesCopyEn: Record<string, string> = {
   'leagueRules.release.next_waiver_run': 'At the next waiver run',
   'leagueRules.faabOnChop.keep': 'Leaves with the team',
   'leagueRules.faabOnChop.split': 'Split among survivors',
+  'leagueRules.faabOnChop.top_scorer': 'To the week’s highest scorer',
+  'leagueRules.faabOnChop.low_scorer': 'To the week’s lowest surviving scorer',
+  'leagueRules.faabOnChop.waiver_order': 'One team at a time, in waiver order',
   'leagueRules.immunity.off': 'Off',
   'leagueRules.immunity.top_scorer': 'Top scorer is safe',
 
@@ -274,6 +281,7 @@ export const leagueRulesCopyEn: Record<string, string> = {
   'leagueRules.label.dangerMarginPoints': 'Danger zone margin',
   'leagueRules.label.releaseTiming': 'When chopped players are released',
   'leagueRules.label.faabOnChop': 'A chopped team’s FAAB',
+  'leagueRules.label.faabOnChopPercent': 'Share of a chopped team’s FAAB passed on',
 
   'leagueRules.change.line': '{{label}}: {{before}} → {{after}}',
   'leagueRules.change.withConsequence': '{{line}} — {{consequence}}',
@@ -741,6 +749,9 @@ export const leagueRulesCopyEs: Record<string, string> = {
   'leagueRules.guillotine.release.immediate': 'Los jugadores de un equipo eliminado quedan como agentes libres en cuanto la eliminación es definitiva.',
   'leagueRules.guillotine.faab.keep': 'El FAAB sin gastar de un equipo eliminado se pierde con él; los supervivientes conservan sus presupuestos.',
   'leagueRules.guillotine.faab.split': 'El FAAB sin gastar de un equipo eliminado se reparte a partes iguales entre los equipos que siguen vivos.',
+  'leagueRules.guillotine.faab.top_scorer': 'El FAAB sin gastar de un equipo eliminado pasa al equipo superviviente con la mayor puntuación de la semana.',
+  'leagueRules.guillotine.faab.low_scorer': 'El FAAB sin gastar de un equipo eliminado pasa al equipo con la menor puntuación que sobrevive la semana.',
+  'leagueRules.guillotine.faab.waiver_order': 'El FAAB sin gastar de un equipo eliminado pasa a un equipo superviviente cada vez, por orden de prioridad de reclamaciones.',
   'leagueRules.guillotine.blindAuction': 'Los reclamos son a ciegas: en las horas antes de cada procesamiento de reclamos, las pujas quedan ocultas y retenidas, y luego se resuelven juntas, de la puja más alta a la más baja. Los jugadores de un equipo eliminado van al que más puja, no al más rápido.',
   'leagueRules.guillotine.bestBall': 'Alineaciones best ball: nadie arma su alineación. Cada semana cada equipo suma su mejor alineación posible con los puntos de sus jugadores, y esa puntuación es la que enfrenta la guillotina.',
 
@@ -774,6 +785,7 @@ export const leagueRulesCopyEs: Record<string, string> = {
   'leagueRules.v.noSpecialWeeks': 'Ninguna',
   'leagueRules.v.teams.one': '{{n}} equipo',
   'leagueRules.v.teams.other': '{{n}} equipos',
+  'leagueRules.v.percent': '{{n}} %',
   'leagueRules.v.weeks.one': '{{n}} semana',
   'leagueRules.v.weeks.other': '{{n}} semanas',
   'leagueRules.v.hours.one': '{{n}} hora',
@@ -817,6 +829,9 @@ export const leagueRulesCopyEs: Record<string, string> = {
   'leagueRules.release.next_waiver_run': 'En el siguiente procesamiento de reclamos',
   'leagueRules.faabOnChop.keep': 'Se pierde con el equipo',
   'leagueRules.faabOnChop.split': 'Se reparte entre los supervivientes',
+  'leagueRules.faabOnChop.top_scorer': 'Al mejor puntuador de la semana',
+  'leagueRules.faabOnChop.low_scorer': 'Al superviviente con menos puntos de la semana',
+  'leagueRules.faabOnChop.waiver_order': 'Un equipo cada vez, por orden de prioridad de reclamaciones',
   'leagueRules.immunity.off': 'Desactivada',
   'leagueRules.immunity.top_scorer': 'El máximo anotador está a salvo',
 
@@ -866,6 +881,7 @@ export const leagueRulesCopyEs: Record<string, string> = {
   'leagueRules.label.dangerMarginPoints': 'Margen de la zona de peligro',
   'leagueRules.label.releaseTiming': 'Cuándo se liberan los jugadores eliminados',
   'leagueRules.label.faabOnChop': 'El FAAB de un equipo eliminado',
+  'leagueRules.label.faabOnChopPercent': 'Parte del FAAB de un equipo eliminado que se reparte',
 
   'leagueRules.change.line': '{{label}}: {{before}} → {{after}}',
   'leagueRules.change.withConsequence': '{{line}} — {{consequence}}',
