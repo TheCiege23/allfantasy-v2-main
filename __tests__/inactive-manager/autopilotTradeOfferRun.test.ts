@@ -34,7 +34,7 @@ const m = vi.hoisted(() => {
           { id: 'r4', platformUserId: 'orphan-r4', redraftRosterId: 'rr-empty', playerData: lineup([], ['crb']) },
         ]),
       },
-      redraftTradeProposal: { count: vi.fn(async () => state.counts.shift() ?? 0) },
+      afLeagueTrade: { count: vi.fn(async () => state.counts.shift() ?? 0) },
       redraftTradeBlockItem: { findMany: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []) },
       redraftRoster: {
         findFirst: vi.fn(async ({ where }: { where: { id: string } }) => ({ id: where.id, seasonId: 's', ownerId: where.id === 'rr-chimmy' ? 'orphan-r1' : 'uA', teamName: where.id === 'rr-chimmy' ? 'Ghosts' : 'Dana', isEliminated: state.eliminated.includes(where.id) })),
@@ -43,7 +43,7 @@ const m = vi.hoisted(() => {
       redraftTradeInterest: { findMany: vi.fn(async () => state.interests) },
       redraftSeason: { findFirst: vi.fn(async () => ({ id: 's', sport: 'NFL', season: 2026, playoffStartWeek: 15, currentWeek: state.currentWeek, league: { leagueVariant: null } })) },
     },
-    create: vi.fn(async () => ({ ok: true, created: { id: 'p-new' } })),
+    create: vi.fn(async (): Promise<{ id: string }> => ({ id: 'p-new' })),
     price: vi.fn(async (input: { assets: Array<{ playerId: string; playerName: string }> }) => ({
       sides: [{ assets: input.assets.map((a) => ({ playerId: a.playerId, playerName: a.playerName, position: state.values[a.playerId]?.[0] ?? null, valuationBasis: 'market', internalValue: state.values[a.playerId]?.[1] ?? 0 })) }],
     })),
@@ -53,7 +53,9 @@ const m = vi.hoisted(() => {
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.log }))
 vi.mock('@/lib/redraft/tradeDecision', () => ({ acceptRedraftTrade: vi.fn(), rejectRedraftTrade: vi.fn() }))
-vi.mock('@/lib/redraft/createTradeProposal', () => ({ createRedraftTradeProposal: m.create }))
+vi.mock('@/lib/redraft/createTradeProposal', () => ({ createRedraftTradeProposal: vi.fn() }))
+vi.mock('@/lib/league-trade-engine/tradeService', () => ({ createAfLeagueTrade: m.create }))
+vi.mock('@/lib/inactive-manager/autopilotLeagueTrades', () => ({ engineRefusalCode: (e: { code?: string }) => e?.code ?? 'refused' }))
 vi.mock('@/lib/trade-value/captureSnapshot', () => ({ computeRedraftTradeValueSnapshot: m.price }))
 vi.mock('@/lib/league-trade-engine/tradeSettingsResolver', () => ({ resolveLeagueTradeSettings: () => ({ tradesAllowed: m.state.tradesAllowed }) }))
 vi.mock('@/lib/subscription/EntitlementResolver', () => ({
@@ -93,12 +95,15 @@ describe('runAutopilotTradeOffers', () => {
     const r = await runAutopilotTradeOffers({ now: myHour })
     expect(r).toMatchObject({ teams: 1, sent: 1, failures: [] })
     const made = (m.create.mock.calls[0] as unknown as [Record<string, any>])[0]
-    expect(made).toMatchObject({ leagueId: 'L', seasonId: 's', proposer: { id: 'rr-chimmy' }, receiver: { id: 'rr-other' }, actorUserId: CHIMMY_TRADE_ACTOR, proposerName: 'Chimmy (Ghosts)', additionalRosterIds: [] })
+    // Made in the league trade engine (the league page's trades), on Roster ids, as the team itself and
+    // answered for by the commissioner who handed it over.
+    expect(made).toMatchObject({ leagueId: 'L', proposedByUserId: 'u', chimmyForRosterId: 'r1', proposerRosterId: 'r1', receiverRosterId: 'r2' })
     expect(made.assets).toEqual([
-      expect.objectContaining({ fromRosterId: 'rr-chimmy', toRosterId: 'rr-other', assetType: 'player', playerId: 'bwr' }),
-      expect.objectContaining({ fromRosterId: 'rr-other', toRosterId: 'rr-chimmy', assetType: 'player', playerId: 'xrb' }),
+      { itemType: 'player', itemReference: 'bwr', fromRosterId: 'r1', toRosterId: 'r2' },
+      { itemType: 'player', itemReference: 'xrb', fromRosterId: 'r2', toRosterId: 'r1' },
     ])
-    expect(made.reason).toBe('Chimmy is offering N bwr for N xrb: it needs help at RB.')
+    expect(made.metadata).toEqual({ source: 'chimmy_autopilot', note: 'Chimmy is offering N bwr for N xrb: it needs help at RB.' })
+    expect(made.parentTradeId).toBeUndefined()
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TRADE_SEND_ACTION, entityId: 'r1', metadata: expect.objectContaining({ proposalId: 'p-new', give: ['bwr'], get: 'xrb', replaces: 'rb2', onBlock: false }) }))
   })
 
@@ -117,8 +122,8 @@ describe('runAutopilotTradeOffers', () => {
     const r = await runAutopilotTradeOffers({ now: myHour })
     expect(r.sent).toBe(1)
     const made = (m.create.mock.calls[0] as unknown as [Record<string, any>])[0]
-    expect(made.assets.map((a: { playerId: string }) => a.playerId)).toEqual(['bwr', 'xl'])
-    expect(made.reason).toMatch(/you have him on the trade block/)
+    expect(made.assets.map((a: { itemReference: string }) => a.itemReference)).toEqual(['bwr', 'xl'])
+    expect(made.metadata.note).toMatch(/you have him on the trade block/)
     // Only active, league-visible listings of the teams it shopped were read.
     expect((m.prisma.redraftTradeBlockItem.findMany.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0].where).toMatchObject({ leagueId: 'L', status: 'active', visibility: 'league', rosterId: { in: ['rr-other'] } })
   })
@@ -145,7 +150,7 @@ describe('runAutopilotTradeOffers', () => {
     await runAutopilotTradeOffers({ now: myHour })
     expect((m.prisma.redraftTradeInterest.findMany.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0].where).toMatchObject({ leagueId: 'L', status: 'active', visibility: 'league', interestType: 'player_interest', fromRosterId: { in: ['rr-other'] } })
     const made = (m.create.mock.calls[0] as unknown as [Record<string, any>])[0]
-    expect(made.reason).toBe('Chimmy is offering N bwr for N xrb: you were interested in N bwr, and it needs help at RB.')
+    expect(made.metadata.note).toBe('Chimmy is offering N bwr for N xrb: you were interested in N bwr, and it needs help at RB.')
     expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ wanted: true }) }))
   })
 
@@ -177,8 +182,8 @@ describe('runAutopilotTradeOffers', () => {
   })
 
   it("counts an offer the league's rules refuse, and logs nothing as sent", async () => {
-    m.create.mockResolvedValueOnce({ ok: false, status: 400, body: { code: 'TRADE_DEADLINE_PASSED' } } as never)
-    expect(await runAutopilotTradeOffers({ now: myHour })).toMatchObject({ sent: 0, skipped: { TRADE_DEADLINE_PASSED: 1 } })
+    m.create.mockRejectedValueOnce(Object.assign(new Error('deadline'), { code: 'TRADE_DEADLINE' }))
+    expect(await runAutopilotTradeOffers({ now: myHour })).toMatchObject({ sent: 0, skipped: { TRADE_DEADLINE: 1 } })
     expect(m.log).not.toHaveBeenCalled()
   })
 
