@@ -193,7 +193,6 @@ import { KeeperSelectionTab } from './tabs/KeeperSelectionTab'
 import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
 import { ImportedGuillyTab } from './tabs/ImportedGuillyTab'
-import { ImportedGuillyMatchup } from './tabs/ImportedGuillyMatchup'
 import { guillyTabKind } from '@/lib/guillotine/importedGuillyView'
 import { ImportedGuillyChopCard } from '@/components/league/ImportedGuillyChopCard'
 import { DynastyHome } from './tabs/DynastyHome'
@@ -239,7 +238,7 @@ import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { SpecialtyLeagueAtmosphere } from '@/components/league-atmosphere/SpecialtyLeagueAtmosphere'
 import { useGuillotineAtmosphere } from '@/components/league-atmosphere/useGuillotineAtmosphere'
 import { isGuillotineAtmosphereLeague } from '@/lib/guillotine/guillotineAtmosphere'
-import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+import { GUILLY_MATCHUP_ALIASES, nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { TournamentIntroVideoOverlay } from '@/components/tournament/TournamentIntroVideoOverlay'
 import {
   SpecialtyLeagueHomeHero,
@@ -624,7 +623,7 @@ export function LeagueShell({
     }
     if (guillyTab) {
       const idx = base.findIndex((t) => t.id === 'redraft')
-      const g = { id: 'guillotine', label: 'Guilly' }
+      const g = { id: 'guillotine', label: 'Chop' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), g, ...base.slice(idx + 1)] : [g, ...base]
     }
     if (league.leagueType === 'pirate' || league.leagueVariant === 'pirate') {
@@ -848,6 +847,16 @@ export function LeagueShell({
     setActiveTab('guillotine')
     guillotineLandingApplied.current = true
   }, [league.id, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary])
+
+  /**
+   * A Guilly league has one page for the week — Chop — and no Matchup tab (owner's decision, 2026-11-25). Anything
+   * that opens the head-to-head tab there (a `?view=matchup` link, a "Matchup" tile, a remembered tab) lands on Chop.
+   */
+  useEffect(() => {
+    if (!guillyTab || !GUILLY_MATCHUP_ALIASES.includes(activeTab)) return
+    if (!tabDefs.some((tab) => tab.id === 'guillotine')) return
+    setActiveTab('guillotine')
+  }, [guillyTab, activeTab, tabDefs])
 
   /** Survivor leagues default to the Survivor hub (once per visit) when no deep link. */
   useEffect(() => {
@@ -2742,10 +2751,11 @@ function LeagueTabRouter({
       )
     case 'matchups':
     case 'matchup':
-      // An imported Guilly league has no opponent: its Matchup tab is the survival board, read from the
-      // provider's scores (tabs/ImportedGuillyMatchup.tsx) — the same board a league hosted here shows.
-      if (guillyTabKind(selectedLeague, isNativePlatform(selectedLeague.platform)) === 'imported') {
-        return oneLeagueWeek(<ImportedGuillyMatchup leagueId={leagueId} onOpenGuilly={() => onSelectTab('guillotine')} />)
+      // A Guilly league has no opponent, so it has no Matchup: the shell sends this tab to its Chop page
+      // (GUILLY_MATCHUP_ALIASES). This is the frame before that lands — the same page, never a head-to-head card.
+      if (guillyTabKind(selectedLeague, isNativePlatform(selectedLeague.platform)) === 'imported') return <ImportedGuillyTab leagueId={leagueId} />
+      if (guillyTabKind(selectedLeague, isNativePlatform(selectedLeague.platform)) === 'native') {
+        return <GuillotineTab leagueId={leagueId} sport={sport} leagueName={selectedLeague.name} />
       }
       return oneLeagueWeek(<MatchupTabContainer league={selectedLeague} />)
     case 'schedule':

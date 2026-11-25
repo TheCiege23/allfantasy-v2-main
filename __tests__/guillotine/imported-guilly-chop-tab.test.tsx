@@ -1,11 +1,11 @@
 /**
- * An imported Guilly league's Matchup tab is the survival board, read from the provider's scores — not the
- * head-to-head matchup center, which a Guilly league does not have.
+ * An imported Guilly league's Chop tab is the survival board, read from the provider's scores: the one page for
+ * "who is getting chopped". It was two tabs (a plain standings list, and this board); the list is gone.
  */
 import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ImportedGuillyMatchup } from '@/app/league/[leagueId]/tabs/ImportedGuillyMatchup'
+import { ImportedGuillyTab } from '@/app/league/[leagueId]/tabs/ImportedGuillyTab'
 
 const body = {
   platform: 'sleeper',
@@ -32,28 +32,29 @@ const body = {
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('imported Guilly matchup tab', () => {
+describe('imported Guilly Chop tab', () => {
   it('🛑 shows you against the league and the chop line, from the provider scores', async () => {
     const calls: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (u: string) => { calls.push(u); return new Response(JSON.stringify(body)) }))
-    const open = vi.fn()
-    render(<ImportedGuillyMatchup leagueId="L1" onOpenGuilly={open} />)
+    render(<ImportedGuillyTab leagueId="L1" />)
     expect((await screen.findByTestId('gsb-headline')).textContent).toBe('Safe by 2.9')
     expect(calls).toEqual(['/api/leagues/L1/guillotine/imported?outlook=1'])
     expect(screen.getByTestId('gsb-chop-line').parentElement?.textContent).toContain('HoldtheDoor')
-    expect(screen.getByText(/Scores from Sleeper, which runs the chop/)).toBeTruthy()
+    expect(screen.getByText(/Scores from Sleeper, which runs the chop\. AllFantasy never chops a team here\./)).toBeTruthy()
+    // One list: the chop zone leads it, each team once.
+    expect([...document.querySelectorAll('.gsb-row strong')].map((e) => e.textContent)).toEqual(['HoldtheDoor', 'Team TheCiege24You', 'Chop till you drop'])
+    expect(screen.queryByTestId('imported-guilly-standings')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Guilly details' })).toBeNull()
     // % safe and players left, from the provider-scores outlook.
     expect(screen.getByTestId('gsb-my-left').textContent).toContain('3')
     expect(screen.getByTestId('gsb-my-odds').textContent).toMatch(/\d+%/)
     expect(screen.getByTestId('gsb-left-3').textContent).toContain('1 to play')
     expect(screen.getByTestId('gsb-graveyard').textContent).toContain('Team JukeyDukey86')
-    fireEvent.click(screen.getByRole('button', { name: 'Guilly details' }))
-    expect(open).toHaveBeenCalled()
   })
 
   it('says so when the standings cannot load', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'Not an imported Guilly league' }), { status: 404 })))
-    render(<ImportedGuillyMatchup leagueId="L1" />)
+    render(<ImportedGuillyTab leagueId="L1" />)
     expect((await screen.findByRole('alert')).textContent).toBe('Not an imported Guilly league')
   })
 })

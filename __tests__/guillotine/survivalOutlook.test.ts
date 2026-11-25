@@ -106,7 +106,11 @@ describe('before any score', () => {
         z: { playersLeft: 10, starters: 10, gamesLeft: 27, remainingProjection: 400, partial: false },
       },
     })
-    expect(b.rows.map((r) => r.rosterId)).toEqual(['z', 'a'])
+    // By projection, not by name: Aaa is projected lowest, so it is the projected chop zone, which leads the list
+    // by default (lib/guillotine/chopListOrder.ts).
+    expect(b.projected).toBe(true)
+    expect(b.rows.map((r) => r.rosterId)).toEqual(['a', 'z'])
+    expect(b.rows.map((r) => r.rank)).toEqual([2, 1])
     expect(b.me?.safePct).not.toBeNull()
   })
 })

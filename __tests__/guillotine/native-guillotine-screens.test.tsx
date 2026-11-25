@@ -85,9 +85,11 @@ describe('Matchup tab of a guillotine league', () => {
     expect(calls.every((u) => u.includes('/guillotine/summary'))).toBe(true)
     expect(screen.queryByTestId('native-matchup-no-game')).toBeNull()
     const rows = [...document.querySelectorAll('.gsb-row')]
-    expect(rows.map((r) => r.querySelector('strong')?.textContent)).toEqual(['Aces', 'BearsYou', 'Cubs'])
-    expect(rows.map((r) => r.querySelector('.gsb-pts')?.textContent)).toEqual(['120.5', '86.2', '80.0'])
-    // The line sits above the first team it takes.
+    // Chop zone on top, the league default (lib/guillotine/chopListOrder.ts).
+    expect(rows.map((r) => r.querySelector('strong')?.textContent)).toEqual(['Cubs', 'BearsYou', 'Aces'])
+    expect(rows.map((r) => r.querySelector('.gsb-pts')?.textContent)).toEqual(['80.0', '86.2', '120.5'])
+    expect(rows.map((r) => r.querySelector('.gsb-rank')?.textContent)).toEqual(['3', '2', '1'])
+    // The chop-zone marker sits above the first team it takes.
     expect(screen.getByTestId('gsb-chop-line').parentElement?.querySelector('strong')?.textContent).toBe('Cubs')
     // The race either side of you, and the graveyard.
     expect(screen.getByTestId('gsb-rival-above').textContent).toContain('Aces')
@@ -102,13 +104,13 @@ describe('Matchup tab of a guillotine league', () => {
     expect(screen.queryByTestId('gsb-strip')).toBeNull()
     expect(screen.queryByTestId('gsb-chop-line')).toBeNull()
   })
-  it('the buttons open the lineup and the Guilly tab', async () => {
+  it('the button opens the lineup; there is no second button to a hub, because this board is the Chop page', async () => {
     stubFetch(summary())
     const goTo = vi.fn()
     render(<NativeMatchupScreen league={league()} onSelectTab={goTo} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Set my lineup' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Guilly hub' }))
-    expect(goTo.mock.calls).toEqual([['roster'], ['guillotine']])
+    expect(screen.queryByRole('button', { name: 'Guilly hub' })).toBeNull()
+    expect(goTo.mock.calls).toEqual([['roster']])
   })
   it('[control] a league that is not guillotine still asks for its head-to-head matchup', async () => {
     const calls = stubFetch({})

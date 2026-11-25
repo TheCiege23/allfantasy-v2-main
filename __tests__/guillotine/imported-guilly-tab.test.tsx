@@ -157,22 +157,21 @@ describe('the tab', () => {
   const mount = async (data: unknown, ok = true) => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok, json: async () => data })))
     render(<ImportedGuillyTab leagueId="L" />)
-    if (ok) await screen.findByTestId('imported-guilly-tab')
+    if (ok) await screen.findByTestId('guilly-survival-board')
     else await screen.findByRole('alert')
   }
 
-  it('labels the source, marks the chop line, and lists who is out', async () => {
+  it('labels the source, marks the chop zone, and lists who is out, on the one board', async () => {
     await mount(ready())
-    expect(screen.getByTestId('imported-guilly-source').textContent).toBe('Results from Sleeper')
-    expect(screen.getByTestId('imported-guilly-summary').textContent).toBe('2 teams alive · 2 chopped · week 3')
-    expect(screen.getByTestId('imported-guilly-team-2').textContent).toContain('on the chop line')
-    expect(screen.getByTestId('imported-guilly-team-1').textContent).not.toContain('on the chop line')
-    expect(screen.getByTestId('imported-guilly-chopped').textContent).toContain('Daggers')
+    expect(screen.getByText(/Scores from Sleeper, which runs the chop/)).toBeTruthy()
+    expect(screen.getByTestId('guilly-survival-board').textContent).toContain('2 alive · 2 chopped')
+    // Blades is on the line: the chop-zone marker is drawn above it. Axes is 10 clear: the Danger zone.
+    expect(screen.getByTestId('gsb-chop-line').parentElement?.querySelector('strong')?.textContent).toBe('Blades')
+    expect(screen.getByTestId('gsb-zone-danger').parentElement?.querySelector('strong')?.textContent).toBe('Axes')
+    expect(screen.getByTestId('gsb-graveyard').textContent).toContain('Daggers')
     expect(screen.queryByTestId('imported-guilly-doubt')).toBeNull()
-    // Axes is 10 points clear of the line: in danger, and the tab says what that means.
-    expect(screen.getByTestId('imported-guilly-team-1').textContent).toContain('in danger')
-    expect(screen.getByTestId('imported-guilly-team-2').textContent).not.toContain('in danger')
-    expect(screen.getByTestId('imported-guilly-danger-note').textContent).toBe('In danger: within 10 points of the chop line on Sleeper’s scores so far.'.replace('’', "'"))
+    // The second list this tab used to draw under the same scores is gone.
+    expect(screen.queryByTestId('imported-guilly-standings')).toBeNull()
     vi.unstubAllGlobals()
   })
 
@@ -193,7 +192,7 @@ describe('the tab', () => {
   it('a failed load says why', async () => {
     await mount({ error: 'Not an imported Guilly league' }, false)
     expect(screen.getByRole('alert').textContent).toBe('Not an imported Guilly league')
-    expect(screen.queryByTestId('imported-guilly-tab')).toBeNull()
+    expect(screen.queryByTestId('guilly-survival-board')).toBeNull()
     vi.unstubAllGlobals()
   })
 })

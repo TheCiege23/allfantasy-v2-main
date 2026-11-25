@@ -64,6 +64,7 @@
 
 .gsb-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .gsb-btn { min-height: 40px; padding: 0 16px; border: 1px solid var(--gsb-line); border-radius: 10px; background: transparent; color: var(--gsb-text); font-size: 14px; font-weight: 600; cursor: pointer; }
+a.gsb-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .gsb-btn:hover { border-color: color-mix(in srgb, var(--gsb-text) 30%, transparent); }
 .gsb-btn[data-primary] { border-color: var(--gsb-accent); background: var(--gsb-accent); color: #10131a; }
 
@@ -125,3 +126,30 @@
 .gsb-row-odds[data-band=chop_zone] { background: color-mix(in srgb, var(--gsb-bad) 16%, transparent); color: var(--gsb-bad); }
 .gsb-name .gsb-row-left { color: var(--gsb-faint); }
 .gsb-foot-note { border-top: 0; padding-bottom: 0; }
+
+/* The clock beside the headline: when this week's chop locks */
+.gsb-hero-body { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
+.gsb-hero-text { flex: 1 1 320px; min-width: 0; }
+.gsb-clock { display: flex; flex: none; flex-direction: column; gap: 2px; margin-top: 10px; padding: 10px 14px; border: 1px solid var(--gsb-line); border-radius: 12px; background: color-mix(in srgb, var(--gsb-text) 4%, transparent); text-align: center; }
+.gsb-clock small { color: var(--gsb-tone); font: 700 11px var(--gsb-mono); letter-spacing: .1em; text-transform: uppercase; }
+.gsb-clock b { color: var(--gsb-text); font: 700 24px var(--gsb-mono); font-variant-numeric: tabular-nums; }
+.gsb-clock i { color: var(--gsb-faint); font: 11px var(--gsb-mono); font-style: normal; }
+
+/* Zone names inside the list. The chop zone's is the dashed marker (.gsb-cut). */
+.gsb-zone { padding: 10px 18px 4px; color: var(--gsb-good); font: 700 11px var(--gsb-mono); letter-spacing: .12em; text-transform: uppercase; }
+.gsb-zone[data-tier=danger] { color: var(--gsb-warn); }
+.gsb-rows > li:first-child .gsb-cut { padding-top: 12px; }
+
+/* Stepping through the weeks already chopped */
+.gsb-weeks { display: inline-flex; align-items: center; gap: 6px; color: var(--gsb-text); letter-spacing: .04em; }
+.gsb-weeks button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--gsb-line); border-radius: 8px; background: transparent; color: var(--gsb-text); cursor: pointer; }
+.gsb-weeks button:disabled { opacity: .35; cursor: default; }
+.gsb-weeks svg { width: 14px; height: 14px; }
+.gsb-list-note { margin: 0; padding: 8px 18px 0; color: var(--gsb-faint); font: 600 11px var(--gsb-mono); letter-spacing: .08em; text-transform: uppercase; }
+
+@media (max-width: 560px) {
+  .gsb-clock { flex: 1 1 100%; flex-direction: row; align-items: baseline; justify-content: space-between; margin-top: 4px; text-align: left; }
+  .gsb-clock b { font-size: 18px; }
+  .gsb-clock i { display: none; }
+  .gsb-zone { padding: 10px 14px 4px; }
+}

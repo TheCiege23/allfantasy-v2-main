@@ -9,6 +9,7 @@ import { GUILLOTINE_HARNESS_TABS, type GuillotineHarnessMood, type GuillotineHar
  *
  *   /e2e/guillotine-league/guillotine?mood=calm
  *   tab: guillotine | war_room      mood: calm | chop_week | final | eliminated
+ *   Chop page only: scores=none (before anyone has scored)   order=bottom (chop zone at the bottom of the list)
  */
 const MOODS: readonly GuillotineHarnessMood[] = ['calm', 'chop_week', 'final', 'eliminated']
 

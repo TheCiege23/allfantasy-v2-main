@@ -24,6 +24,7 @@ import type { GuillotineEndgameFormat } from './endgameRules'
 import type { TiebreakStep } from './types'
 import { MAX_CHOPS_PER_WEEK } from './chopSchedule'
 import { FAAB_ON_CHOP_OPTIONS, type FaabOnChop } from './faabOnChop'
+import { isChopListOrder, type ChopListOrder } from './chopListOrder'
 
 export type GuillotineRules = {
   teamsPerChop: number
@@ -48,6 +49,11 @@ export type GuillotineRules = {
    * first chop has happened.
    */
   periodWeeks: 1 | 2
+  /**
+   * Which end of the Chop page's list the chop zone sits at (./chopListOrder.ts). A display choice, free for
+   * every commissioner. Stored in League.settings (CHOP_LIST_ORDER_KEY); absent = chop zone on top.
+   */
+  chopListOrder: ChopListOrder
 }
 
 /** League.settings key for `aiRecapAuto`. Absent = on. */
@@ -205,6 +211,10 @@ export function normalizeGuillotineRulesPatch(
   if ('bestBall' in r) {
     if (typeof r.bestBall !== 'boolean') return { ok: false, error: { field: 'bestBall', message: 'Turn best ball lineups on or off.' } }
     out.bestBall = r.bestBall
+  }
+  if ('chopListOrder' in r) {
+    if (!isChopListOrder(r.chopListOrder)) return { ok: false, error: { field: 'chopListOrder', message: 'Pick where the chop zone sits in the list.' } }
+    out.chopListOrder = r.chopListOrder
   }
   if ('periodWeeks' in r) {
     const n = int(r.periodWeeks)
