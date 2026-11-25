@@ -988,8 +988,9 @@ export function LeagueHome({
             {showCommish ? commishSection : null}
           </div>
 
-          {/* Standings */}
-          <LeagueSection id="standings"><StatePanel title={copy('Standings')} state={data.standings}>
+          {/* Standings — not when the redraft deck above already lists every team in its playoff race
+              (2026-11-24, the simplify pass): the same twelve names twice, ~330px apart on a phone. */}
+          {data.redraft?.playoffRace ? null : <LeagueSection id="standings"><StatePanel title={copy('Standings')} state={data.standings}>
             {(rows) => (
               <div className="af-standings-wrap" data-faab={data.faabEnabled === true}>
                 {/*
@@ -1034,7 +1035,7 @@ export function LeagueHome({
                 </Link>
               </div>
             )}
-          </StatePanel></LeagueSection>
+          </StatePanel></LeagueSection>}
         </div>
 
         {/*
