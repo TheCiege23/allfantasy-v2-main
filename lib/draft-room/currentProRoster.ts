@@ -34,6 +34,16 @@ function sameBirthday(a: string, b: string): boolean {
   const [x, y] = [Date.parse(a.slice(0, 10)), Date.parse(b.slice(0, 10))]
   return Number.isFinite(x) && Number.isFinite(y) && Math.abs(x - y) <= 86400000
 }
+/**
+ * One birthday entered day-first on one profile and month-first on the other: the same year, with
+ * the day and the month exchanged. Rolling Insights has Jayden Struble on 2001-08-09 (his old
+ * Montreal profile) and 2001-09-08 (his Nashville one). Used only to recognise two Rolling Insights
+ * profiles of one player; it never confirms a roster spot against another provider.
+ */
+function swappedDayMonth(a: string, b: string): boolean {
+  const [x, y] = [a.slice(0, 10), b.slice(0, 10)]
+  return x.length === 10 && y.length === 10 && x.slice(0, 4) === y.slice(0, 4) && x.slice(5, 7) === y.slice(8, 10) && x.slice(8, 10) === y.slice(5, 7) && x !== y
+}
 /** A conflicting birthday never authorizes a photo or position change. Same names alone are insufficient. */
 export function verifiedRosterMatch(a: CurrentProRow, b: CurrentProRow): boolean {
   if (!normalizeMatchName(a.name) || normalizeMatchName(a.name) !== normalizeMatchName(b.name)) return false
@@ -88,10 +98,13 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
   // providers confirm the PLAYER, so they confirm every profile of them alike, and the spare one would
   // sit in the pool as a second copy on an old club or on an id that receives no stats.
   const rollingByBirthday = new Map<string, T[]>()
+  const rollingByName = new Map<string, T[]>()
   for (const row of rows) {
     if (row.source !== 'rolling_insights' || !row.dob) continue
     const key = row.dob.slice(0, 10)
     rollingByBirthday.set(key, [...(rollingByBirthday.get(key) ?? []), row])
+    const name = normalizeMatchName(row.name)
+    rollingByName.set(name, [...(rollingByName.get(name) ?? []), row])
   }
   const firstName = (row: CurrentProRow) => normalizeMatchName(row.name).split(' ')[0] ?? ''
   /** Another Rolling Insights profile of this same player is the current one. */
@@ -100,6 +113,11 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
       ? live(other, now) || (fresh(other, now) && !fresh(row, now))
       // A second spelling: the same birthday, club, position and first name, beside a live profile.
       : live(other, now) && team(other.team) === team(row.team) && other.position === row.position && firstName(other) === firstName(row)))
+    // The same name and position beside a live profile whose birthday is this one with day and month
+    // exchanged. Two different players of one name do not differ that way: the two goalies named
+    // Matt Murray were born in 1994 and 1998, and both stay.
+    || (row.dob != null && (rollingByName.get(normalizeMatchName(row.name)) ?? []).some((other) =>
+      other !== row && other.position === row.position && swappedDayMonth(row.dob!, other.dob!) && live(other, now)))
   const out: T[] = []
   for (const row of rows) {
     if (currentOnly && ['NBA', 'NHL', 'MLB'].includes(sport) && row.source !== 'rolling_insights') continue

@@ -128,6 +128,26 @@ describe('current pro roster reconciliation', () => {
       const tsdbSameId = row({ source: 'thesportsdb', externalId: '3825', status: 'Retired', dob: '2006-01-28' })
       expect(reconcileCurrentProRows('NFL', [tsdbSameId], [tsdbSameId], true, now, played)).toHaveLength(0)
     })
+    it('does not bring back an old profile whose birthday is the current one with day and month exchanged', () => {
+      // Production 2026-11-25: Jayden Struble is id 3562 (INACT, Montreal, 2001-08-09, 12 games) and
+      // id 4662 (ACT, Nashville, 2001-09-08). Restoring 3562 for its games listed him twice.
+      const old = row({ id: 'ri:3562', externalId: '3562', status: 'INACT', team: 'Old Team', position: 'D', dob: '2001-08-09' })
+      const current = row({ id: 'ri:4662', externalId: '4662', position: 'D', dob: '2001-09-08' })
+      const games = new Set(['3562', '4662'])
+      expect(reconcileCurrentProRows('NHL', [old, current], [], true, now, games).map((r) => r.id)).toEqual(['ri:4662'])
+      // Alone he is still a player with games this season.
+      expect(reconcileCurrentProRows('NHL', [old], [], true, now, games).map((r) => r.id)).toEqual(['ri:3562'])
+      // Not when the other profile is not live, plays another position, or was born in another year.
+      for (const other of [{ ...current, status: 'INACT' }, { ...current, position: 'G' }, { ...current, dob: '1998-09-08' }, { ...current, dob: '2001-09-09' }]) {
+        expect(reconcileCurrentProRows('NHL', [old, other], [], true, now, games).map((r) => r.id)).toContain('ri:3562')
+      }
+    })
+    it('keeps two different players who share a name', () => {
+      // The goalies named Matt Murray: born 1994 and 1998, both real.
+      const elder = row({ id: 'ri:597', externalId: '597', name: 'Matt Murray', status: 'INACT', position: 'G', dob: '1994-05-25' })
+      const younger = row({ id: 'ri:2884', externalId: '2884', name: 'Matt Murray', position: 'G', dob: '1998-02-02' })
+      expect(reconcileCurrentProRows('NHL', [elder, younger], [], true, now, new Set(['597', '2884']))).toHaveLength(2)
+    })
     it('does not bring back the spare profile of a player whose other profile is the current one', () => {
       const current = row({ id: 'ri:1', externalId: '1', dob: '2006-01-28' })
       const result = reconcileCurrentProRows('NHL', [current, sennecke], [], true, now, played)
