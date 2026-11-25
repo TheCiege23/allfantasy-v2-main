@@ -332,11 +332,17 @@
   .nls-mrow { grid-template-columns: minmax(0, 1fr) 48px 48px 48px minmax(0, 1fr); gap: 6px; min-height: 64px; padding: 8px 14px; }
   .nls-mrow .nls-pts { font-size: 16px; }
   .nls-mrow .nls-pos { min-width: 44px; }
-  /* Photo and team crest stay on a phone, above the name: a 40px column is too narrow beside it. */
-  .nls-mrow .nls-pl[data-media=true] { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .nls-mrow .nls-player[data-side=right] .nls-pl[data-media=true] { flex-direction: column; align-items: flex-end; }
-  .nls-mrow .nls-mavatar .nls-pavatar { width: 34px; height: 34px; }
-  .nls-mrow .nls-mavatar .nls-pavatar-crest { width: 17px; height: 17px; }
+  /* No photo on a phone (2026-11-24, the simplify pass). A 40px column is too narrow beside it, and stacked
+     above the name it made every starter row ~170px: nine rows were most of the page. The name, game and
+     points are the row; the photo is on the player card a tap away. */
+  .nls-mrow .nls-mavatar { display: none; }
+  .nls-mrow .nls-pl { width: 100%; }
+  .nls-mrow .nls-pl-text { flex: 1 1 auto; }
+  /* With the photo gone the names get the width back: 40px point and position columns, 4px gaps (84px a side at 390px). */
+  .nls-mrow { grid-template-columns: minmax(0, 1fr) 40px 40px 40px minmax(0, 1fr); gap: 4px; }
+  .nls-mrow .nls-pos { min-width: 40px; }
+  /* The scoreboard glance under the insight card: on a phone "League scoreboard" is the tab at the top. */
+  .nls-aside .nls-glance { display: none; }
   .nls-mrow .nls-pl-text > small:not(.nls-oprank) { white-space: normal; overflow: visible; line-height: 1.35; }
   .nls-player strong { font-size: 14px; }
   .nls-player small { font-size: 11px; }

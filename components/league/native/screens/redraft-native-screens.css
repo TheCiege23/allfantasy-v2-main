@@ -275,7 +275,8 @@
 
 @media (max-width: 767px) {
   /* The redraft row rule above out-specifies native-screens.css's phone row, so the phone row is restated here. */
-  .nl-workspace[data-format=redraft] .nls-mrow { grid-template-columns: minmax(0, 1fr) 44px 44px 44px minmax(0, 1fr); gap: 6px; min-height: 64px; padding: 8px 12px; }
+  /* 40px middle columns and 4px gaps since the phone row lost its photos (2026-11-24): the names take the width. */
+  .nl-workspace[data-format=redraft] .nls-mrow { grid-template-columns: minmax(0, 1fr) 40px 40px 40px minmax(0, 1fr); gap: 4px; min-height: 64px; padding: 8px 12px; }
   .nl-workspace[data-format=redraft] .nls-mrow .nls-pts { font-size: 15px; }
   .nls-rd-bug { gap: 14px; padding: 16px; }
   .nls-rd-bug-main { gap: 8px; }
