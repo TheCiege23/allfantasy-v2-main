@@ -37,6 +37,8 @@ import { readPlayableChimmyLineups } from './chimmyPlayable'
 import { resolveManagerProfile } from './managerProfile'
 import { TRADE_ANSWER_DELAY_MS, decideTradeOffer, planCounterOffer, type AskablePlayer, type CounterPlan } from './autopilotTrades'
 import { createRedraftTradeProposal, type TradeAssetInput } from '@/lib/redraft/createTradeProposal'
+import { createAfLeagueTrade } from '@/lib/league-trade-engine/tradeService'
+import { engineRefusalCode } from './autopilotLeagueTrades'
 import { computeRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
 import type { ManagerProfile } from './managerProfile'
 
@@ -379,9 +381,10 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
         const myId = mine.redraftRosterId
         const profile = resolveManagerProfile({ rosterId, style: entry.autopilot!.style, savedPersonality: entry.autopilot!.personality })
 
+        // Chimmy's offers live in the league trade engine, the trades the league page shows.
         const [sentThisWeek, waiting] = await Promise.all([
-          prisma.redraftTradeProposal.count({ where: { proposerRosterId: myId, createdAt: { gt: new Date(now.getTime() - WEEK_MS) } } }),
-          prisma.redraftTradeProposal.count({ where: { proposerRosterId: myId, status: 'pending' } }),
+          prisma.afLeagueTrade.count({ where: { leagueId, proposerRosterId: rosterId, createdAt: { gt: new Date(now.getTime() - WEEK_MS) } } }),
+          prisma.afLeagueTrade.count({ where: { leagueId, proposerRosterId: rosterId, status: 'pending' } }),
         ])
         if (sentThisWeek >= WEEKLY_OFFER_LIMIT[profile.activity]) { skip('weekly_limit'); continue }
         if (waiting > 0) { skip('offer_waiting'); continue }
@@ -397,7 +400,7 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
 
         const targets = rosters
           .filter((o) => o.id !== rosterId && o.redraftRosterId && !out.has(o.redraftRosterId) && !chimmyRosters.has(o.id) && o.platformUserId && !isSeatPlaceholderUserId(o.platformUserId))
-          .map((o) => ({ rosterId: o.redraftRosterId!, playerData: o.playerData }))
+          .map((o) => ({ rosterId: o.redraftRosterId!, playerData: o.playerData, leagueRosterId: o.id }))
         const shop = teamsToShopToday(targets, rosterId, now, MAX_TEAMS_SHOPPED)
         if (shop.length === 0) { skip('nobody_to_trade_with'); continue }
 
@@ -444,29 +447,29 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
         })
         if (!plan) { skip('no_offer'); continue }
 
-        const otherRow = await prisma.redraftRoster.findFirst({ where: { id: plan.toRosterId, seasonId: season.id, leagueId } })
-        if (!otherRow) { skip('no_season'); continue }
-        const made = await createRedraftTradeProposal({
-          leagueId,
-          seasonId: season.id,
-          season,
-          proposer: myRow,
-          receiver: otherRow,
-          additionalRosters: [],
-          additionalRosterIds: [],
-          actorUserId: CHIMMY_TRADE_ACTOR,
-          proposerName: myRow.teamName ? `${CHIMMY_TRADE_ACTOR_NAME} (${myRow.teamName})` : CHIMMY_TRADE_ACTOR_NAME,
-          reason: plan.reason,
-          assets: [
-            ...plan.give.map((g) => ({ fromRosterId: myId, toRosterId: plan.toRosterId, assetType: 'player', playerId: g.playerId, playerName: g.playerName ?? undefined })),
-            { fromRosterId: plan.toRosterId, toRosterId: myId, assetType: 'player', playerId: plan.get.playerId, playerName: plan.get.playerName ?? undefined },
-          ],
-        })
-        if (!made.ok || !made.created?.id) {
-          // The league's own rules said no (deadline, roster limits, …): nothing was sent.
-          skip(made.ok ? 'not_created' : String(made.body.code ?? `refused_${made.status}`))
+        const toLeagueRoster = shop.find((t) => t.rosterId === plan.toRosterId)?.leagueRosterId
+        if (!toLeagueRoster) { skip('no_season'); continue }
+        // Made through the league trade engine as the team itself (lib/league-trade-engine/chimmyActor.ts),
+        // so every rule a manager's offer meets applies. A refusal is the league's rules saying no.
+        let tradeId: string
+        try {
+          tradeId = (await createAfLeagueTrade({
+            leagueId,
+            proposedByUserId: entry.autopilot!.byUserId,
+            chimmyForRosterId: rosterId,
+            proposerRosterId: rosterId,
+            receiverRosterId: toLeagueRoster,
+            assets: [
+              ...plan.give.map((g) => ({ itemType: 'player' as const, itemReference: g.playerId, fromRosterId: rosterId, toRosterId: toLeagueRoster })),
+              { itemType: 'player' as const, itemReference: plan.get.playerId, fromRosterId: toLeagueRoster, toRosterId: rosterId },
+            ],
+            metadata: { source: 'chimmy_autopilot', note: plan.reason },
+          })).id
+        } catch (e) {
+          skip(engineRefusalCode(e))
           continue
         }
+        const made = { created: { id: tradeId } }
         result.sent += 1
         await logAction({
           leagueId,

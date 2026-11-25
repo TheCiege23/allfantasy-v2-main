@@ -534,9 +534,21 @@ export async function GET(request: Request) {
   let autopilotTrades: unknown = null
   try {
     const { runAutopilotTradeAnswers } = await import('@/lib/inactive-manager/autopilotTradeService')
+    const { runAutopilotLeagueTradeAnswers } = await import('@/lib/inactive-manager/autopilotLeagueTrades')
     autopilotTrades = await withSyncJobRun(
       { jobName: 'cron-chimmy-autopilot-trades', trigger: 'cron' },
-      () => runAutopilotTradeAnswers(),
+      // Both trade engines: the older redraft proposals, and the league page's trades (AfLeagueTrade).
+      async () => {
+        const [redraft, league] = await Promise.all([runAutopilotTradeAnswers(), runAutopilotLeagueTradeAnswers()])
+        return {
+          offers: redraft.offers + league.offers,
+          accepted: redraft.accepted + league.accepted,
+          rejected: redraft.rejected + league.rejected,
+          countered: redraft.countered + league.countered,
+          skipped: { ...redraft.skipped, ...Object.fromEntries(Object.entries(league.skipped).map(([k, v]) => [`league:${k}`, v])) },
+          failures: [...redraft.failures, ...league.failures.map((f) => ({ leagueId: f.leagueId, proposalId: f.tradeId, error: f.error }))],
+        }
+      },
       (r) => ({
         rowsRead: r.offers,
         rowsWritten: r.accepted + r.rejected,

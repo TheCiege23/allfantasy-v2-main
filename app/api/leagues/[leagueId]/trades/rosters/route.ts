@@ -1,5 +1,6 @@
 import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
+import { chimmyTradeTeams } from '@/lib/league-trade-engine/chimmyActor'
 import { rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -570,6 +571,12 @@ export async function GET(
       ? ('future_pick' as const)
       : ('rookie_pick' as const)
 
+  /*
+   * Teams Chimmy runs and takes offers for (lib/league-trade-engine/chimmyActor.ts): they have no
+   * account, so the account check below would hide them, but Chimmy answers offers made to them on the
+   * hourly run. A team whose commissioner switched its trades off stays unreachable.
+   */
+  const chimmyTeams = await chimmyTradeTeams(leagueId).catch(() => new Map<string, unknown>())
   const result: TradeableRoster[] = await Promise.all(
     rosters.map(async (r) => {
       const playerIds = getRosterPlayerIds(r.playerData)
@@ -677,13 +684,14 @@ export async function GET(
           }),
         ],
         teamExternalId: externalIdByPlatformId.get(r.platformUserId) ?? null,
-        ownerName:
-          teamNameByPlatformId.get(r.platformUserId) ||
-          account?.displayName ||
-          account?.username ||
-          null,
+        ownerName: chimmyTeams.has(r.id)
+          ? `${teamNameByPlatformId.get(r.platformUserId) || account?.displayName || account?.username || 'Team'} (Chimmy)`
+          : teamNameByPlatformId.get(r.platformUserId) ||
+            account?.displayName ||
+            account?.username ||
+            null,
         ownerHandles: rosterManagerHandles(r.playerData, [managerNameByPlatformId.get(String(r.platformUserId)), account?.username]),
-        canReceiveProposal: Boolean(account),
+        canReceiveProposal: Boolean(account) || chimmyTeams.has(r.id),
       }
     }),
   )
