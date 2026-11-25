@@ -211,6 +211,19 @@ describe('runCampusSeasonTick: a whole college season', () => {
     expect(getC2CConfig).not.toHaveBeenCalled()
   })
 
+  it('turned on mid-season, the college schedule starts with the next college week', async () => {
+    const f = fakeDb({ teams: 4, settings: { c2c_college_regular_weeks: 5, c2c_college_playoff_teams: 0 } })
+    await runCampusSeasonTick('L1', { db: f.db as never, now: new Date(f.sat(3) + 3 * 86400_000) })
+    expect(new Set(f.matchups.map((m) => m.week))).toEqual(new Set([4, 5]))
+    expect(campusPointsForCfbWeek).not.toHaveBeenCalled() // no week already played is scored
+  })
+
+  it('turned on after the college regular season, it waits for next season', async () => {
+    const f = fakeDb({ teams: 4, settings: { c2c_college_regular_weeks: 3 } })
+    await expect(runCampusSeasonTick('L1', { db: f.db as never, now: new Date(f.sat(5)) })).resolves.toMatchObject({ status: 'skipped' })
+    expect(f.seasons).toHaveLength(0)
+  })
+
   it('a stash-only devy league has no college season', async () => {
     const f = fakeDb({ teams: 4, variant: null, leagueType: 'devy', settings: {} })
     await expect(runCampusSeasonTick('L1', { db: f.db as never })).resolves.toMatchObject({ status: 'skipped' })

@@ -71,6 +71,12 @@ export async function loadCollegeCalendar(db: Pick<PrismaClient, 'sportsGame'>, 
   return { weeks, nflWeekOf }
 }
 
+/** The first college week (1 or later) that has not kicked off at `now`; 1 when the calendar is unknown. */
+export function collegeStartWeek(weeks: ReadonlyMap<number, CollegeWeek>, now: number): number {
+  const started = [...weeks.values()].filter((w) => w.week >= 1 && w.firstStart <= now).map((w) => w.week)
+  return started.length ? Math.max(...started) + 1 : 1
+}
+
 const toGame = (m: { week: number; homeRosterId: string; awayRosterId: string | null; homeScore: number; awayScore: number; status: string; kind: string }): CampusGame => ({ ...m })
 
 /** One tick for one league. Safe to run repeatedly; every step is idempotent. */
@@ -94,17 +100,27 @@ export async function runCampusSeasonTick(leagueId: string, opts: { now?: Date; 
   const shape = readCampusSeasonShape(league.settings, rosters.length)
   const medianGame = statedMedianGame(league.settings) ?? proSeason.medianGame === true
 
+  const { weeks, nflWeekOf } = await loadCollegeCalendar(db, proSeason.season)
+
   // 1. The season and its regular-season schedule, once.
   let campus = await db.c2CCampusSeason.findUnique({ where: { leagueId_season: { leagueId, season: proSeason.season } } })
   let created = false
   if (!campus) {
+    // A college side turned on after college games began (a commissioner switching devy college scoring
+    // on, or C2C to separate, mid-year) starts with the next college week that has not kicked off, so no
+    // week already played is scored after the fact.
+    const startWeek = collegeStartWeek(weeks, now)
+    if (startWeek > shape.regularSeasonWeeks) return { status: 'skipped', reason: 'too late in the college season to start; it starts next season' }
+    const weeksLeft = shape.regularSeasonWeeks - startWeek + 1
     const divisions = await loadSeasonRosterDivisions(leagueId, rosters).catch(() => null)
-    const slots = generateSchedule(rosters, shape.regularSeasonWeeks, shape.regularSeasonWeeks + 1, 'NCAAF', {
+    const slots = generateSchedule(rosters, weeksLeft, weeksLeft + 1, 'NCAAF', {
       medianGame: false,
       divisionByRoster: divisions?.byRoster ?? null,
       divisionRivalsTwice: divisions?.rivalsTwice === true,
       gamesPerWeek: readGamesPerWeek(league.settings),
-    }).filter((s) => s.type !== 'median' && s.week <= shape.regularSeasonWeeks)
+    })
+      .filter((s) => s.type !== 'median' && s.week <= weeksLeft)
+      .map((s) => ({ ...s, week: s.week + startWeek - 1 }))
     campus = await db.c2CCampusSeason.create({
       data: {
         leagueId,
@@ -119,8 +135,6 @@ export async function runCampusSeasonTick(leagueId: string, opts: { now?: Date; 
     })
     created = true
   }
-
-  const { weeks, nflWeekOf } = await loadCollegeCalendar(db, proSeason.season)
 
   // 2-3. Score every week that has kicked off and is not sealed; seal 48 hours after its last kickoff.
   const open = await db.c2CCampusMatchup.findMany({ where: { campusSeasonId: campus.id, status: { not: 'final' } }, orderBy: [{ week: 'asc' }] })
