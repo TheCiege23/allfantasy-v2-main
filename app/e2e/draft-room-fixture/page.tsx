@@ -11,12 +11,17 @@ import { FIXTURE_LEAGUE_ID, fixtureApiResponses } from './fixtures'
  * this one seeds the first paint from `initialSnapshot` (as /drafts/[draftId] does) and answers the
  * room's own requests from an inline fetch stub (the /e2e/import-v5 MockFetch pattern), so it can be
  * opened in a browser and measured. Production is refused here and by app/e2e/layout.tsx.
+ *
+ * `?clock=long` swaps the 90-second clock for a 4-hour one, so the long-clock extras render too.
  */
 export const dynamic = 'force-dynamic'
 
-export default async function DraftRoomFixturePage() {
+export default async function DraftRoomFixturePage(props?: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
   if (process.env.NODE_ENV === 'production') notFound()
-  const fx = fixtureApiResponses(Date.now())
+  const params = (await props?.searchParams) ?? {}
+  const fx = fixtureApiResponses(Date.now(), { longClock: params.clock === 'long' })
   // Under the nonce CSP an inline script without this request's nonce is refused.
   const nonce = await getRequestNonce()
   // An inline <script>, not a client effect: it must replace fetch before the room's own wrappers run.

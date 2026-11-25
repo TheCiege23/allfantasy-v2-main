@@ -50,7 +50,15 @@ export function fixturePoolEntries() {
   }))
 }
 
-export function buildFixtureSnapshot(nowMs: number): DraftSessionSnapshot {
+/**
+ * `longClock`: a 4-hour pick clock with 3h05m left, so the room shows the long-clock extras (the
+ * wall-clock "due" time beside the countdown, the planner cards). Open `?clock=long` to get it.
+ */
+export type FixtureOptions = { longClock?: boolean }
+
+export function buildFixtureSnapshot(nowMs: number, opts: FixtureOptions = {}): DraftSessionSnapshot {
+  const timerSeconds = opts.longClock ? 4 * 3600 : 90
+  const remainingSeconds = opts.longClock ? 3 * 3600 + 5 * 60 : 55
   const iso = new Date(nowMs).toISOString()
   const picks: DraftPickSnapshot[] = PLAYERS.slice(0, MADE).map(([playerName, position, team], i) => {
     const overall = i + 1
@@ -76,7 +84,7 @@ export function buildFixtureSnapshot(nowMs: number): DraftSessionSnapshot {
   })
   const next = slotFor(MADE + 1)
   const onClock = FIXTURE_SLOT_ORDER[next.slot - 1]
-  const endAt = new Date(nowMs + 55_000).toISOString()
+  const endAt = new Date(nowMs + remainingSeconds * 1000).toISOString()
   return {
     id: 'fx-session-1',
     leagueId: FIXTURE_LEAGUE_ID,
@@ -88,7 +96,7 @@ export function buildFixtureSnapshot(nowMs: number): DraftSessionSnapshot {
     onClockTradeTimerBehavior: 'inherit_remaining',
     inDraftPlayerTradesEnabled: false,
     customRankingsEnabled: false,
-    timerSeconds: 90,
+    timerSeconds,
     timerEndAt: endAt,
     pausedRemainingSeconds: null,
     slotOrder: FIXTURE_SLOT_ORDER,
@@ -103,7 +111,7 @@ export function buildFixtureSnapshot(nowMs: number): DraftSessionSnapshot {
       displayName: onClock.displayName,
       pickLabel: next.pickLabel,
     },
-    timer: { status: 'running', remainingSeconds: 55, timerEndAt: endAt },
+    timer: { status: 'running', remainingSeconds, timerEndAt: endAt },
     updatedAt: iso,
     currentUserRosterId: VIEWER_ROSTER,
     orphanRosterIds: [],
@@ -113,8 +121,8 @@ export function buildFixtureSnapshot(nowMs: number): DraftSessionSnapshot {
 }
 
 /** Response bodies keyed by the path suffix after `/api/leagues/<id>/`, plus a few global paths. */
-export function fixtureApiResponses(nowMs: number) {
-  const snapshot = buildFixtureSnapshot(nowMs)
+export function fixtureApiResponses(nowMs: number, opts: FixtureOptions = {}) {
+  const snapshot = buildFixtureSnapshot(nowMs, opts)
   const pool = fixturePoolEntries()
   return {
     snapshot,
