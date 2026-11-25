@@ -207,7 +207,10 @@ test.describe("@db @notifications notification preferences click audit", () => {
     await page.goto("/settings?tab=notifications")
     await expect(page.getByRole("heading", { name: "Notifications" }).first()).toBeVisible({ timeout: 20_000 })
     await expect(page.getByText("Chimmy alert controls").first()).toBeVisible({ timeout: 20_000 })
+    // Chimmy controls, the category list and the test send are closed rows (2026-11-25).
+    await page.getByTestId("notifications-chimmy-fold").locator("summary").click()
     await expect(page.getByText(/Tune Chimmy alert frequency/i).first()).toBeVisible({ timeout: 20_000 })
+    await page.getByTestId("notifications-categories").locator("summary").click()
 
     // Global toggle
     const globalCard = page.getByTestId("notifications-global-card")
@@ -251,6 +254,7 @@ test.describe("@db @notifications notification preferences click audit", () => {
     // Persist after reload
     await page.reload()
     await expect(page.getByTestId("notifications-global-toggle")).not.toBeChecked()
+    await page.getByTestId("notifications-categories").locator("summary").click()
     const matchupHeaderAfterReload = page.getByRole("button", { name: /Matchup results/i }).first()
     if ((await matchupHeaderAfterReload.getAttribute("aria-expanded")) !== "true") {
       await matchupHeaderAfterReload.click()
@@ -265,6 +269,7 @@ test.describe("@db @notifications notification preferences click audit", () => {
     await expect(page.getByTestId("notifications-global-toggle")).toBeChecked()
 
     // Test notification button
+    await page.getByTestId("notifications-test-fold").locator("summary").click()
     await page.getByRole("button", { name: "Send test notification" }).click()
     await expect(page.getByText("Test sent via inApp, email.")).toBeVisible()
 
@@ -272,9 +277,7 @@ test.describe("@db @notifications notification preferences click audit", () => {
     await page.getByTestId("notifications-sports-alerts-link").click()
     await expect(page).toHaveURL(/\/alerts\/settings/, { timeout: 15_000 })
     await expect(page.getByRole("heading", { name: "Chimmy alert controls" })).toBeVisible({ timeout: 15_000 })
-    await page.goto("/settings?tab=notifications")
-    await page.getByTestId("notifications-back-to-profile-link").click()
-    await expect(page).toHaveURL(/\/settings\?tab=profile/, { timeout: 15_000 })
+    // No "Back to profile" link since 2026-11-25: "All settings" at the top goes back.
 
     // Firefox intermittently stalls on runtime viewport resize in this long serial flow.
     if (browserName === "firefox") {
