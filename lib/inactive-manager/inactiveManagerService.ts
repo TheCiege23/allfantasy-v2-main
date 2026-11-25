@@ -41,6 +41,7 @@ import {
 import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { AUTO_HANDOVER_KEY, parseAutoHandover, readAutoHandover, teamsToHandOver, type AutoHandoverRule } from './autoHandover'
 import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
+import { isNpcDraftPersonalityId } from '@/lib/live-draft-engine/npcDraftPersonalityTypes'
 
 /**
  * Inactive manager mode (./inactiveManagerMode.ts): the commissioner's view and switch, the owner's
@@ -225,7 +226,14 @@ export async function setChimmyAutopilot(leagueId: string, userId: string, roste
  * manager assignments hand their teams to Chimmy for the season through here). Empty seats and
  * claimed teams alike, up to `CHIMMY_MANAGER_LIMIT` per league.
  */
-export async function applyChimmyAutopilot(leagueId: string, userId: string, rosterId: unknown, style: unknown): Promise<SwitchResult & { style?: string | null }> {
+export async function applyChimmyAutopilot(
+  leagueId: string,
+  userId: string,
+  rosterId: unknown,
+  style: unknown,
+  /** The personality the team drafts with, when the caller knows it: Chimmy keeps it for the season. */
+  opts?: { personality?: unknown },
+): Promise<SwitchResult & { style?: string | null }> {
   if (typeof rosterId !== 'string' || !rosterId) return { ok: false, status: 400, error: 'Name a team.' }
   const nextStyle = style === null ? null : isAutopilotStyle(style) ? style : style === undefined ? DEFAULT_AUTOPILOT_STYLE : undefined
   if (nextStyle === undefined) return { ok: false, status: 400, error: 'Choose a style: dynasty_owner, win_now or rebuild.' }
@@ -259,7 +267,9 @@ export async function applyChimmyAutopilot(leagueId: string, userId: string, ros
     if (entry?.autopilot?.style === nextStyle) return null
     changed = true
     const base = entry ?? { since: now, byUserId: userId, ownerUserId: roster.platformUserId ?? null }
-    return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId } } }
+    // A personality already on the team is kept: a later style change or handover never swaps the manager.
+    const personality = entry?.autopilot?.personality ?? (isNpcDraftPersonalityId(opts?.personality) ? opts.personality : undefined)
+    return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId, ...(personality ? { personality } : {}) } } }
   })
   if (overFree) {
     return { ok: false, status: 402, error: `Chimmy runs ${CHIMMY_FREE_TEAMS} team for free. AF Pro or AF Supreme lets it run up to ${CHIMMY_MANAGER_LIMIT}.` }
