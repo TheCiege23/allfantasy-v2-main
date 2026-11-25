@@ -10,6 +10,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { loadImportedGuillyTab } from '@/lib/guillotine/importedGuillyHealthLoad'
+import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +26,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   try {
     const data = await loadImportedGuillyTab(leagueId)
     if (!data) return NextResponse.json({ error: 'Not an imported Guilly league' }, { status: 404 })
-    return NextResponse.json(data)
+    // The viewer's own team, in the provider's roster ids the view is keyed by, so the survival board
+    // (lib/guillotine/survivalBoardModel.ts) can say "you". Null for a member with no claimed team.
+    const mine = await Promise.resolve()
+      .then(() => prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } }))
+      .catch(() => null)
+    return NextResponse.json({ ...data, myRosterId: mine?.externalId != null ? String(mine.externalId) : null })
   } catch (e) {
     console.error('[guillotine/imported GET]', e instanceof Error ? e.message : 'unknown error')
     return NextResponse.json({ error: 'Could not load the Guilly standings' }, { status: 500 })
