@@ -517,6 +517,19 @@ async function runRedraftReconciliation() {
         } catch {
           guillotineOutcomes.chop_zone_warning_failed = (guillotineOutcomes.chop_zone_warning_failed ?? 0) + 1
         }
+        /*
+         * The live danger alert (lib/guillotine/survivalAlerts.ts): earlier in the week, a team whose chance of
+         * surviving has fallen low is told, and told once more if it climbs back. It stops when the warning
+         * above takes over for the last day. Throttled and recorded inside; most ticks stop at the schedule read.
+         */
+        try {
+          // Loaded here: it brings the chop preview and the outlook with it, which no other part of this route needs.
+          const { sendSurvivalOddsAlertsForSeason } = await import('@/lib/guillotine/survivalAlerts')
+          const alert = await sendSurvivalOddsAlertsForSeason({ seasonId: season.id, week: guillotine.week })
+          if (alert.outcome === 'sent') guillotineOutcomes.survival_alert = (guillotineOutcomes.survival_alert ?? 0) + 1
+        } catch {
+          guillotineOutcomes.survival_alert_failed = (guillotineOutcomes.survival_alert_failed ?? 0) + 1
+        }
       }
     } catch {
       guillotineFailed += 1

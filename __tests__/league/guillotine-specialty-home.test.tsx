@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 
 vi.mock('next/link', () => ({
@@ -9,6 +9,10 @@ vi.mock('next/link', () => ({
 import { buildChopLine, guillotineHeadline, tiebreakLabels } from '@/components/guillotine/guillotineHomeModel'
 import { GuillotineChopExtras, GuillotineChopMoment } from '@/components/guillotine/GuillotineSpecialtyHome'
 import { bottomScores } from '@/lib/league-specialty/guillotineHome'
+
+// The chop moment remembers, per league, that this browser has watched a chop (it opens on the result next
+// time). Each test starts as a first visit.
+beforeEach(() => window.localStorage.clear())
 
 const tiers = [
   { rosterId: 'z', displayName: 'Open Team 11', tier: 'chop_zone', pointsFromChopZone: 0 },

@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Skull, Shield } from 'lucide-react'
 import { formatSpecialtyCountdown } from '@/components/league/specialty/theme'
+import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { fmtPts, type BoardRow, type BoardTier, type SurvivalBoard } from '@/lib/guillotine/survivalBoardModel'
 import './guilly-survival-board.css'
 
@@ -128,7 +129,7 @@ function WeekPicker({ picker }: { picker: BoardWeekPicker }) {
   )
 }
 
-export function GuillySurvivalBoard({ board, actions = [], sourceNote, loading, error, weekLabel, chopAt, weekPicker, extra }: {
+export function GuillySurvivalBoard({ board, actions = [], sourceNote, loading, error, weekLabel, chopAt, weekPicker, extra, onRemoveLastWords }: {
   board: SurvivalBoard | null
   actions?: BoardAction[]
   /** Imported leagues: "Scores from Sleeper" — the provider runs the chop. */
@@ -142,6 +143,8 @@ export function GuillySurvivalBoard({ board, actions = [], sourceNote, loading, 
   weekPicker?: BoardWeekPicker | null
   /** Drawn under the list and above the graveyard: this week's chop moment, on the page that has one. */
   extra?: ReactNode
+  /** The commissioner taking a chopped team's last words down. Absent for everyone else: no button is drawn. */
+  onRemoveLastWords?: (rosterId: string) => void
 }) {
   if (error) return <p className="gsb-error" role="alert">{error}</p>
   if (loading || !board) return <div className="gsb gsb-loading" data-testid="gsb-loading">Loading the chop line…</div>
@@ -273,6 +276,22 @@ export function GuillySurvivalBoard({ board, actions = [], sourceNote, loading, 
               </li>
             ))}
           </ol>
+          {/* Last words (lib/guillotine/lastWords.ts): what each chopped manager left the league, newest chop first. */}
+          {b.graveyard.some((g) => g.lastWords) ? (
+            <ul className="gsb-words" data-testid="gsb-last-words">
+              {[...b.graveyard].filter((g) => g.lastWords).sort((x, y) => (y.week ?? 0) - (x.week ?? 0)).map((g) => (
+                <li key={g.rosterId} data-testid={`gsb-last-words-${g.rosterId}`}>
+                  <span className="gsb-words-who">{g.name}{g.isMe ? ' (you)' : ''}{g.week != null ? ` · week ${g.week}` : ''}</span>
+                  <blockquote>“{censorProfanity(g.lastWords ?? '')}”</blockquote>
+                  {onRemoveLastWords ? (
+                    <button type="button" className="gsb-words-remove" onClick={() => onRemoveLastWords(g.rosterId)} data-testid={`gsb-last-words-remove-${g.rosterId}`}>
+                      Remove
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </section>
       ) : null}
     </div>

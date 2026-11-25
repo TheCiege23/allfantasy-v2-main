@@ -20,6 +20,7 @@ import {
   usePrefersReducedMotion,
 } from '@/components/league/specialty/SpecialtyShell'
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
+import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import gl from './guillotine-specialty.module.css'
 
 const asset = (f: string) => specialtyAsset('guillotine', f)
@@ -46,14 +47,57 @@ function Avatar({ id, name, size = 34 }: { id: string; name: string; size?: numb
  * feed and a phone-only copy of all of it. The Chop page is one list now (owner's decision, 2026-11-25), drawn by
  * GuillySurvivalBoard, so those are gone rather than kept beside it.
  */
-export function GuillotineChopExtras({ leagueId, home }: { leagueId: string; home: GuillotineHomeExtras | null | undefined }) {
+export function GuillotineChopExtras({
+  leagueId,
+  home,
+  lastWords,
+  boardHasOdds,
+}: {
+  leagueId: string
+  home: GuillotineHomeExtras | null | undefined
+  /** The list above already shows this week's survival odds, so the block below must not show a second, different one. */
+  boardHasOdds?: boolean
+  /** Each chopped team's last words (lib/guillotine/lastWords.ts); the moment shows the latest chop's. */
+  lastWords?: ReadonlyArray<{ rosterId: string; text: string }> | null
+}) {
   return (
     <SpecialtyShell format="guillotine" className={gl.home} testId="guillotine-chop-extras">
       {/* What do I need to avoid the chop — lib/scenario-explainer. Hidden until there are chop scores to model. */}
-      <ChopExplainerBlock leagueId={leagueId} />
-      {home?.lastChop ? <GuillotineChopMoment leagueId={leagueId} lastChop={home.lastChop} aliveCount={home.aliveCount} waiverLabel={home.waiverLabel} /> : null}
+      <ChopExplainerBlock leagueId={leagueId} weekOdds={!boardHasOdds} />
+      {home?.lastChop ? (
+        <GuillotineChopMoment
+          // A new chop is a new moment: it starts armed whatever the last one's state was.
+          key={home.lastChop.week}
+          leagueId={leagueId}
+          lastChop={home.lastChop}
+          aliveCount={home.aliveCount}
+          waiverLabel={home.waiverLabel}
+          lastWords={(lastWords ?? []).filter((w) => home.lastChop!.choppedRosterIds.includes(w.rosterId))}
+        />
+      ) : null}
     </SpecialtyShell>
   )
+}
+
+/** localStorage key: the latest chop week this browser has watched in this league. */
+export const chopSeenKey = (leagueId: string) => `guillotine_chop_seen_${leagueId}`
+
+function chopSeenWeek(leagueId: string): number {
+  try {
+    const n = Number(window.localStorage.getItem(chopSeenKey(leagueId)))
+    return Number.isFinite(n) ? n : 0
+  } catch {
+    // No storage (private mode, blocked): the moment simply starts armed every time, as it always did.
+    return 0
+  }
+}
+
+function rememberChopSeen(leagueId: string, week: number): void {
+  try {
+    window.localStorage.setItem(chopSeenKey(leagueId), String(week))
+  } catch {
+    /* nothing to remember it in */
+  }
 }
 
 const BLADE_SVG = (
@@ -76,16 +120,27 @@ export function GuillotineChopMoment({
   lastChop,
   aliveCount,
   waiverLabel,
+  lastWords,
   now = Date.now(),
 }: {
   leagueId: string
   lastChop: NonNullable<GuillotineHomeExtras['lastChop']>
   aliveCount: number
   waiverLabel?: string | null
+  /** The chopped teams' last words. Shown once the blade has dropped: they are the end of the moment. */
+  lastWords?: ReadonlyArray<{ rosterId: string; text: string }> | null
   now?: number
 }) {
   const reduced = usePrefersReducedMotion()
-  const [dropped, setDropped] = useState(false)
+  // Armed the first time a manager sees this week's chop; after they have dropped the blade once, later visits
+  // open on the result with Replay. It re-armed on every visit before, so the page's newest card always asked
+  // for a press to show something already seen. Read here and not in an effect: the Chop page fetches its
+  // summary in the browser, so this never renders on the server and an effect would replay the drop each visit.
+  const [dropped, setDropped] = useState(() => chopSeenWeek(leagueId) >= lastChop.week)
+  const drop = () => {
+    setDropped(true)
+    rememberChopSeen(leagueId, lastChop.week)
+  }
   const done = dropped || reduced
   const chopped = new Set(lastChop.choppedRosterIds)
   const cut = lastChop.bottom.find((b) => chopped.has(b.rosterId)) ?? lastChop.bottom[lastChop.bottom.length - 1] ?? null
@@ -108,7 +163,7 @@ export function GuillotineChopMoment({
         {done ? (
           <SpecialtyReplayButton onReplay={() => setDropped(false)} />
         ) : (
-          <button type="button" className={`${sp.btn} ${sp.btnP}`} onClick={() => setDropped(true)} data-testid="guillotine-drop-blade">
+          <button type="button" className={`${sp.btn} ${sp.btnP}`} onClick={drop} data-testid="guillotine-drop-blade">
             Drop the blade
           </button>
         )}
@@ -152,6 +207,14 @@ export function GuillotineChopMoment({
           ? `${cutName} is out${cut ? ` with ${fmt(cut.points)}` : ''}. ${aliveCount} teams remain. Their roster is on waivers.`
           : 'Scores are final. The lowest score is chopped when the blade drops.'}
       </p>
+      {done && lastWords?.length
+        ? lastWords.map((w) => (
+            <blockquote key={w.rosterId} className={sp.t2} style={{ margin: 0, fontSize: 15, fontStyle: 'italic', overflowWrap: 'anywhere' }} data-testid={`guillotine-chop-last-words-${w.rosterId}`}>
+              “{censorProfanity(w.text)}”
+              <span className={sp.t3} style={{ fontSize: 12, fontStyle: 'normal' }}> {lastChop.bottom.find((b) => b.rosterId === w.rosterId)?.name ?? cutName}&rsquo;s last words</span>
+            </blockquote>
+          ))
+        : null}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

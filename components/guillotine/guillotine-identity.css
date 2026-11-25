@@ -88,6 +88,9 @@ html[data-mode='light'] .gl{
 .gl-chip[data-tone=warn]{background:var(--gl-warn-soft);border-color:color-mix(in srgb,var(--gl-warn) 35%,transparent);color:var(--gl-warn)}
 .gl-btn-primary{background:var(--gl-ember);color:var(--gl-ember-ink)}
 .gl-btn-primary:hover:not(:disabled){filter:brightness(1.08)}
+/* A second, quieter action beside a primary one (Cancel, Change it). */
+.gl-btn-quiet{border-color:var(--gl-line2);background:none;color:var(--gl-text)}
+.gl-btn-quiet:hover:not(:disabled){background:var(--gl-hover)}
 .gl-btn-good{border-color:color-mix(in srgb,var(--gl-good) 45%,transparent);color:var(--gl-good)}
 .gl-btn-good:hover:not(:disabled){background:var(--gl-good-soft)}
 .gl-field{background:var(--gl-surface2);border-color:var(--gl-line2);color:var(--gl-text)}

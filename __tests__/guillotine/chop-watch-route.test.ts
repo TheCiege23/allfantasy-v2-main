@@ -22,6 +22,8 @@ vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurr
 vi.mock('@/lib/guillotine/chopWatchLoad', () => ({ loadChopWatch: h.watch }))
 vi.mock('@/lib/commissioner/permissions', () => ({ isCommissioner: h.commish, assertCommissioner: vi.fn() }))
 vi.mock('@/lib/guillotine/guillotineAdvancedSettings', () => ({ readGuillotineAdvanced: vi.fn(async () => null), saveGuillotineAdvanced: vi.fn() }))
+// Last words are read by the summary too (lib/guillotine/lastWordsStore.ts); not what this file tests.
+vi.mock('@/lib/guillotine/lastWordsStore', () => ({ loadLastWordsState: vi.fn(async () => null), saveLastWords: vi.fn(), removeLastWords: vi.fn() }))
 
 import { NextRequest } from 'next/server'
 import { GET } from '@/app/api/leagues/[leagueId]/guillotine/summary/route'
