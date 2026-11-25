@@ -80,4 +80,7 @@ jobs:
           SERVICE_ID: 26e55ff8-c945-4526-8523-f6bfa723357e
           REPO_URL: https://github.com/${{ github.repository }}.git
           QUIET_SECONDS: ${{ github.event_name == 'workflow_dispatch' && inputs.quiet_seconds || '180' }}
+          # A run queued behind another usually finds its commit already deployed by that run; it then
+          # starts no build. A manual run always builds, so "Run workflow" stays a way to redeploy.
+          SKIP_IF_LIVE: ${{ github.event_name == 'push' && '1' || '0' }}
         run: node scripts/railway-batched-deploy.mjs
