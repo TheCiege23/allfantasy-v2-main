@@ -48,6 +48,14 @@ describe('indexNcaabSeasonBoxes', () => {
     expect(indexNcaabSeasonBoxes([row('1', 2025, 30)]).byRiId.get('1')?.current?.season).toBe(2025)
   })
 
+  it('drops a rate with no recorded value rather than carrying a null', () => {
+    // Minutes arrive as null when the vendor recorded none for the player all season.
+    const boxes = indexNcaabSeasonBoxes([{ id: '7', season: 2026, games: 4, rates: { points: 12, minutes: null as unknown as number } }], 2026)
+    expect(boxes.byRiId.get('7')?.current?.rates).toEqual({ points: 12 })
+    const line = buildNcaabDraftSeasonLine(boxes.byRiId.get('7')!.current!, 'G', null)
+    expect(line.nbaDraftStats).toMatchObject({ gamesPlayed: 4, pointsPerGame: 12, minutesPerGame: null })
+  })
+
   it('drops rows with no id, no games or no rates', () => {
     const boxes = indexNcaabSeasonBoxes([row(' ', 2026, 5), row('4', 2026, 0), { id: '5', season: 2026, games: 3, rates: null }], 2026)
     expect(boxes.byRiId.size).toBe(0)
