@@ -34,6 +34,7 @@ vi.mock('@/lib/roster-lineup-engine/lineupLockService', () => ({
   loadLeagueWeekContext: async () => ({ season: 2026, week: 8 }),
   resolveFullLineupLockContext: async () => ({ locked: false, policy: 'kickoff', lockedPlayerIds: [], perPlayerReasons: {} }),
   computePerPlayerKickoffLocks: () => ({ lockedPlayerIds: [] }),
+  resolveScheduleLockedPlayerIds: async () => [],
 }))
 
 import { importedLineupTemplateSlots, parseProviderRosterPositions, withImportedPlayerPositions } from '@/lib/league/importedLineupTemplate'

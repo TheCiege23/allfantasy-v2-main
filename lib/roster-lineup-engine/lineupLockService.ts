@@ -13,6 +13,7 @@ import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonS
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
 import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week/effectiveRedraftWeek'
 
 export type LineupLockResolveArgs = {
   leagueId: string
@@ -286,8 +287,92 @@ export async function upsertAfLineupLockState(input: {
   })
 }
 
-export async function resolveFullLineupLockContext(args: LineupLockResolveArgs): Promise<LineupLockContext> {
-  const now = args.now ?? new Date()
+const LOCK_WEEK_TTL_MS = 60_000
+const lockWeekCache = new Map<string, { at: number; week: number | null }>()
+
+/**
+ * The week the league is actually playing, for the lock: the roster's redraft season, read the way
+ * every other reader reads it (`resolveEffectiveRedraftWeek` — a native season's own week, an imported
+ * one's from the schedule). Null when there is no redraft season or it cannot be read; the caller's
+ * week then stands. Cached a minute per roster, since the automations resolve locks roster by roster.
+ */
+async function resolveCurrentLockWeek(leagueId: string, rosterId: string, nowMs: number): Promise<number | null> {
+  const hit = lockWeekCache.get(rosterId)
+  if (hit && nowMs - hit.at < LOCK_WEEK_TTL_MS) return hit.week
+  let week: number | null = null
+  try {
+    const [roster, league] = await Promise.all([
+      prisma.roster.findUnique({ where: { id: rosterId }, select: { redraftRosterId: true } }),
+      prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }),
+    ])
+    if (roster?.redraftRosterId && league) {
+      const redraft = await prisma.redraftRoster.findUnique({
+        where: { id: roster.redraftRosterId },
+        select: { season: { select: { id: true, currentWeek: true } } },
+      })
+      if (redraft?.season) week = await resolveEffectiveRedraftWeek(redraft.season, league.platform)
+    }
+  } catch {
+    week = null
+  }
+  lockWeekCache.set(rosterId, { at: nowMs, week })
+  return week
+}
+
+export function clearLineupLockWeekCache(): void {
+  lockWeekCache.clear()
+}
+
+/*
+ * 🛑 EVERY LOCK PATH BUT ONE READ THE WEEK FROM `League.settings`, AND THAT IS NOT WHERE THE WEEK IS
+ * (2026-11-25). The native lineup screen, its save, the lock-state route, Chimmy's lineup action, the
+ * lineup automations and waiver eligibility all passed `settings.currentWeek` as the league week — and the
+ * schedule lock below locks each player against THAT week's games. Measured on production the night
+ * before the Wednesday NFL game of 2026 week 12:
+ *
+ *     hosted (manual) NFL leagues   7 of 7 with NO settings week  -> read as week 1   (season says 12)
+ *     Sleeper NFL leagues           696 of 795 at settings week 11, the rest 1, 8, 10 or 12
+ *
+ * Week 1's games are all long finished, so a hosted league's lock "found" every player's game started and
+ * locked the whole roster; and had a settings week ever lagged to the week before a midweek game, that
+ * game's players would have been checked against last week's slate. The redraft lineup route already
+ * read the right week (`resolveEffectiveRedraftWeek`); now every path does, here, once.
+ *
+ * A caller asking about "the current week" (editing week == the week it passed as current) is moved to
+ * the real current week with it; one asking about another week explicitly keeps that week.
+ */
+async function withCurrentLockWeek(args: LineupLockResolveArgs, now: Date): Promise<LineupLockResolveArgs> {
+  const current = await resolveCurrentLockWeek(args.leagueId, args.rosterId, now.getTime())
+  if (current == null || current === args.leagueWeek) return args
+  return {
+    ...args,
+    leagueWeek: current,
+    editingWeek: args.editingWeek === args.leagueWeek ? current : args.editingWeek,
+  }
+}
+
+/**
+ * The players whose game this week has started, from the schedule, at the league's real current week —
+ * for a path that moves players without a lineup save (a waiver or free-agent drop). Null when the
+ * schedule could not be read or the sport has no schedule lock; the caller keeps its own fallback.
+ */
+export async function resolveScheduleLockedPlayerIds(
+  input: Pick<LineupLockResolveArgs, 'leagueId' | 'rosterId' | 'sport' | 'leagueVariant' | 'settings' | 'season' | 'leagueWeek' | 'now'>,
+): Promise<string[] | null> {
+  const now = input.now ?? new Date()
+  try {
+    const args = await withCurrentLockWeek({ ...input, editingWeek: input.leagueWeek, playerData: null }, now)
+    const weekly = await resolveDailySportWeeklyLocks(args, now)
+    return weekly ? weekly.lockedPlayerIds : null
+  } catch (err) {
+    console.warn('[lineupLockService] schedule locks unavailable:', err instanceof Error ? err.message : String(err))
+    return null
+  }
+}
+
+export async function resolveFullLineupLockContext(rawArgs: LineupLockResolveArgs): Promise<LineupLockContext> {
+  const now = rawArgs.now ?? new Date()
+  const args = await withCurrentLockWeek(rawArgs, now)
   const nbaSurvivor = args.sport.toUpperCase() === 'NBA' && String(args.leagueVariant ?? '').toLowerCase() === 'survivor'
   const dailyLineups = isDailyLineupScoringEnabled(args.settings, args.sport)
   const base: LineupLockResult = evaluateLineupLock({
