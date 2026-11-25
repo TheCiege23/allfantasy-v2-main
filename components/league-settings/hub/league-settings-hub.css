@@ -245,3 +245,9 @@
 .af-lsh-fold > summary::after { content: '▾'; position: absolute; right: 18px; top: 50%; translate: 0 -50%; color: var(--lsh-muted); font-size: 14px; }
 .af-lsh-fold[open] > summary::after { rotate: 180deg; }
 .af-lsh-fold:not([open]) > summary.af-lsh-card-head { padding-bottom: 18px; }
+
+/* 2026-11-25 — My Settings › Notifications: the category switches behind one row inside the card. */
+.af-lsh-subfold > summary { list-style: none; cursor: pointer; }
+.af-lsh-subfold > summary::-webkit-details-marker { display: none; }
+.af-lsh-subfold-chev { margin-left: auto; color: var(--lsh-muted); font-size: 14px; transition: rotate 0.15s ease; }
+.af-lsh-subfold[open] .af-lsh-subfold-chev { rotate: 180deg; }

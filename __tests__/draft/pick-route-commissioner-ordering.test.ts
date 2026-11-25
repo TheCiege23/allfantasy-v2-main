@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMockNextRequest } from '@/__tests__/helpers/createMockNextRequest'
 
@@ -82,8 +82,19 @@ vi.mock('@/lib/draft-intelligence', () => ({
 }))
 // Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
 vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
+// The route reads the draft's execution mode (an auto draft takes no pick by hand, autoDraftPickRule.ts).
+// These are live drafts; unmocked, the read reaches for a database this suite does not have.
+vi.mock('@/lib/draft-defaults/DraftUISettingsResolver', () => ({
+  getDraftUISettingsForLeague: vi.fn(async () => ({ executionMode: 'live' })),
+}))
 
 describe('POST /api/leagues/[leagueId]/draft/pick commissioner ordering', () => {
+  // An accepted pick starts fire-and-forget work that logs after the response. A log still in flight
+  // when the worker closes fails the RUN, not a test (measured: 1 run in 12). Let it finish first.
+  afterAll(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     hm.getServerSession.mockResolvedValue({ user: { id: 'user-1' } })

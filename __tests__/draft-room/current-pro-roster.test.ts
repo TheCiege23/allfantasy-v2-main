@@ -101,6 +101,40 @@ describe('current pro roster reconciliation', () => {
       expect(reconcileCurrentProRows('NBA', [current, twin], [current, twin, twinProof], true, now)).toHaveLength(2)
     })
   })
+  describe('a player who has played this season', () => {
+    // Production 2026-11-25: Beckett Sennecke had 22 NHL games and could not be drafted. Rolling
+    // Insights had him INACT and TheSportsDB had a placeholder birthday, so nothing confirmed him.
+    const sennecke = row({ id: 'ri:3825', externalId: '3825', status: 'INACT', dob: '2006-01-28' })
+    const placeholder = row({ source: 'thesportsdb', status: 'Active', dob: '2006-01-01' })
+    const played = new Set(['3825'])
+    it('is kept without any second provider agreeing on his name or birthday', () => {
+      expect(reconcileCurrentProRows('NHL', [sennecke], [sennecke, placeholder], true, now)).toHaveLength(0)
+      const kept = reconcileCurrentProRows('NHL', [sennecke], [sennecke, placeholder], true, now, played)
+      expect(kept.map((r) => r.id)).toEqual(['ri:3825'])
+      // Nothing about him is taken from the row that could not be matched.
+      expect(kept[0]).toEqual(sennecke)
+      expect(reconcileCurrentProRows('NBA', [sennecke], [sennecke], true, now, played)).toHaveLength(1)
+    })
+    it("still has to be in today's feed and on a club", () => {
+      const gone = { ...sennecke, fetchedAt: new Date(now - 30 * 86400000), expiresAt: new Date(now - 86400000) }
+      expect(reconcileCurrentProRows('NHL', [gone], [gone], true, now, played)).toHaveLength(0)
+      for (const team of [null, '', 'FA', 'Free Agent']) {
+        expect(reconcileCurrentProRows('NHL', [{ ...sennecke, team }], [], true, now, played)).toHaveLength(0)
+      }
+    })
+    it('is evidence about that id only, and only for a Rolling Insights profile', () => {
+      const other = row({ id: 'ri:9', externalId: '9', name: 'Other Player', status: 'INACT', dob: '2000-01-01' })
+      expect(reconcileCurrentProRows('NHL', [sennecke, other], [], true, now, played).map((r) => r.id)).toEqual(['ri:3825'])
+      const tsdbSameId = row({ source: 'thesportsdb', externalId: '3825', status: 'Retired', dob: '2006-01-28' })
+      expect(reconcileCurrentProRows('NFL', [tsdbSameId], [tsdbSameId], true, now, played)).toHaveLength(0)
+    })
+    it('does not bring back the spare profile of a player whose other profile is the current one', () => {
+      const current = row({ id: 'ri:1', externalId: '1', dob: '2006-01-28' })
+      const result = reconcileCurrentProRows('NHL', [current, sennecke], [], true, now, played)
+      expect(result.map((r) => r.id)).toEqual(['ri:1'])
+    })
+  })
+
   it('does not restore a free agent team or accept stale roster evidence', () => {
     const ri = row({ team: null, status: 'INACT' })
     const old = row({ source: 'thesportsdb', status: 'Active', fetchedAt: new Date(now - 4 * 86400000) })

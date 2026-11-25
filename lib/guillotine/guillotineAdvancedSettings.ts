@@ -6,7 +6,7 @@ import { ADVANCED_KEY, isDefault, normalizeAdvanced, readAdvanced, type Guilloti
 import { calendarFitMessage, guillotineCalendarFit } from './calendarFit'
 import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import { resolveGuillotineEndgame } from './endgameRules'
-import { FAAB_RULES_CONFLICT_MESSAGE, readFaabOnChop } from './faabOnChop'
+import { FAAB_RULES_CONFLICT_MESSAGE, movesChoppedFaab, readFaabOnChop } from './faabOnChop'
 import { isPeriodEndWeek, periodEndWeek, readPeriodWeeks } from './eliminationPeriods'
 
 /**
@@ -52,7 +52,7 @@ export async function saveGuillotineAdvanced(
     const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
     if (!row) return false
     // Under the lock, so a split saved a moment ago by the other editor is seen (faabOnChop.ts).
-    if (n.value.faab.mode !== 'unchanged' && readFaabOnChop(row.settings) === 'split') return 'faab_conflict' as const
+    if (n.value.faab.mode !== 'unchanged' && movesChoppedFaab(readFaabOnChop(row.settings))) return 'faab_conflict' as const
     const next = { ...((row.settings as Record<string, unknown> | null) ?? {}) }
     if (isDefault(n.value)) delete next[ADVANCED_KEY]
     else next[ADVANCED_KEY] = n.value

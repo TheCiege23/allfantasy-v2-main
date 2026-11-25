@@ -12,7 +12,7 @@ import {
   type GuillotineRules,
 } from '@/lib/guillotine/guillotineRules'
 import { DEFAULT_ADVANCED, MAX_CHOPS_PER_WEEK, MAX_FAAB_AMOUNT, isDefault, type FaabAfterChop, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
-import { FAAB_ON_CHOP_OPTIONS, type FaabOnChop } from '@/lib/guillotine/faabOnChop'
+import { DEFAULT_FAAB_ON_CHOP_PERCENT, FAAB_ON_CHOP_OPTIONS, FAAB_ON_CHOP_PERCENT_CHOICES, movesChoppedFaab, type FaabOnChop } from '@/lib/guillotine/faabOnChop'
 import { CHOP_LIST_ORDER_OPTIONS, DEFAULT_CHOP_LIST_ORDER, type ChopListOrder } from '@/lib/guillotine/chopListOrder'
 import { CHOP_PATTERN_OPTIONS, applyChopPattern, chopPatternWeeks, describeWeeks, type ChopPatternKind } from '@/lib/guillotine/chopPatterns'
 import { calendarFitMessage, guillotineSeasonPreview, type CalendarFitInput } from '@/lib/guillotine/calendarFit'
@@ -167,6 +167,9 @@ export function GuillotineRulesPage({
   const weeks = Array.from({ length: Math.max(1, rules.eliminationEndWeek - firstWeek + 1) }, (_, i) => firstWeek + i)
   const overrides = Object.entries(advanced.overrides).map(([w, n]) => ({ week: Number(w), chops: n })).sort((a, b) => a.week - b.week)
   const listOrder: ChopListOrder = rules.chopListOrder ?? DEFAULT_CHOP_LIST_ORDER
+  // Absent from an older server = all of it. A stored share that is not one of the offered ones is still shown.
+  const faabPercent = rules.faabOnChopPercent ?? DEFAULT_FAAB_ON_CHOP_PERCENT
+  const faabPercentChoices = [...new Set([...FAAB_ON_CHOP_PERCENT_CHOICES, faabPercent])].sort((a, b) => b - a)
   const patternFrom = pattern.from != null && weeks.includes(pattern.from) ? pattern.from : weeks[0]!
   const patternTo = pattern.to != null && weeks.includes(pattern.to) && pattern.to >= patternFrom ? pattern.to : weeks[weeks.length - 1]!
   const patternWeeks = chopPatternWeeks({ kind: pattern.kind, fromWeek: patternFrom, toWeek: patternTo }, { startWeek: firstWeek, periodWeeks: rules.periodWeeks })
@@ -232,7 +235,7 @@ export function GuillotineRulesPage({
 
   const endgameHelp = ENDGAME_OPTIONS.find((o) => o.value === rules.endgame)?.help
   const releaseHelp = RELEASE_OPTIONS.find((o) => o.value === rules.rosterReleaseTiming)?.help
-  const faabHelp = `${FAAB_ON_CHOP_OPTIONS.find((o) => o.value === rules.faabOnChop)?.help ?? ''} Only matters if your league uses FAAB bidding.`
+  const faabHelp = `${FAAB_ON_CHOP_OPTIONS.find((o) => o.value === rules.faabOnChop)?.help ?? ''}${movesChoppedFaab(rules.faabOnChop) && faabPercent < 100 ? ` ${100 - faabPercent}% of it leaves with the chopped team.` : ''} Only matters if your league uses FAAB bidding.`
   const week = rules.periodWeeks === 2 ? 'period' : 'week'
 
   return (
@@ -473,20 +476,30 @@ export function GuillotineRulesPage({
         </Field>
 
         <Field label="A chopped team's unspent FAAB" help={faabHelp} paid={paidLocked('faabOnChop')}>
-          <select className={inputClass} value={rules.faabOnChop} onChange={(e) => update({ faabOnChop: e.target.value as FaabOnChop })} data-testid="guillotine-rules-faab-on-chop">
-            {FAAB_ON_CHOP_OPTIONS.map((o) => {
-              // Without AF Commissioner only "keep" is selectable — and the current value, so the page still shows it.
-              const locked = paidLocked('faabOnChop') && o.value !== 'keep' && o.value !== rules.faabOnChop
-              return (
-                <option key={o.value} value={o.value} disabled={locked}>
-                  {o.label}{paidLocked('faabOnChop') && o.value !== 'keep' ? ' · AF Commissioner' : ''}
-                </option>
-              )
-            })}
-          </select>
+          <div className="grid items-end gap-2 sm:grid-cols-[2fr_1fr]">
+            <select className={inputClass} value={rules.faabOnChop} onChange={(e) => update({ faabOnChop: e.target.value as FaabOnChop })} data-testid="guillotine-rules-faab-on-chop">
+              {FAAB_ON_CHOP_OPTIONS.map((o) => {
+                // Without AF Commissioner only "keep" is selectable — and the current value, so the page still shows it.
+                const locked = paidLocked('faabOnChop') && o.value !== 'keep' && o.value !== rules.faabOnChop
+                return (
+                  <option key={o.value} value={o.value} disabled={locked}>
+                    {o.label}{paidLocked('faabOnChop') && o.value !== 'keep' ? ' · AF Commissioner' : ''}
+                  </option>
+                )
+              })}
+            </select>
+            {/* How much of it moves; the rest leaves with the team. Only asked when a rule moves it at all. */}
+            {movesChoppedFaab(rules.faabOnChop) ? (
+              <label className="text-[11px] text-white/50">How much of it
+                <select className={inputClass} value={faabPercent} disabled={paidLocked('faabOnChopPercent')} onChange={(e) => update({ faabOnChopPercent: Number(e.target.value) })} data-testid="guillotine-rules-faab-percent">
+                  {faabPercentChoices.map((p) => <option key={p} value={p}>{p === 100 ? 'All of it' : `${p}%`}</option>)}
+                </select>
+              </label>
+            ) : null}
+          </div>
         </Field>
 
-        <Field label="Survivors' FAAB after a chop" paid={scheduleLocked} help="What every surviving team's FAAB becomes once a team is chopped, so the released players are worth bidding on. Cannot be on together with splitting the chopped team's FAAB.">
+        <Field label="Survivors' FAAB after a chop" paid={scheduleLocked} help="What every surviving team's FAAB becomes once a team is chopped, so the released players are worth bidding on. Cannot be on together with passing the chopped team's FAAB to survivors.">
           <div className="grid grid-cols-[1fr_1fr] items-end gap-2">
             <select className={inputClass} value={advanced.faab.mode} disabled={scheduleLocked} data-testid="guillotine-faab-mode"
               onChange={(e) => {

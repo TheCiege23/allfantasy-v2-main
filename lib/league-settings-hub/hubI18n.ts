@@ -71,6 +71,8 @@ const ES: Record<string, string> = {
   'What pings you about this league': 'Lo que te avisa sobre esta liga',
   'Sign in again to manage notifications.': 'Vuelve a iniciar sesión para gestionar las notificaciones.',
   'Alerts for this league': 'Alertas de esta liga',
+  'By category': 'Por categoría',
+  on: 'activadas',
   'Turn off to silence this league without changing your other leagues': 'Desactívalo para silenciar esta liga sin cambiar tus otras ligas',
   'Delivery channels (push, email, SMS) and quiet hours apply to every league.': 'Los canales de envío (push, correo, SMS) y las horas de silencio se aplican a todas las ligas.',
   'Manage them in account settings': 'Gestiónalos en los ajustes de la cuenta',
