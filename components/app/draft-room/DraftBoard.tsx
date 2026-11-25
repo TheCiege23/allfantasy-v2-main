@@ -713,6 +713,7 @@ function DraftBoardInner({
                         tradedPickColorMode={tradedPickColorMode}
                         showNewOwnerInRed={showNewOwnerInRed}
                         pickHighlight={pickHighlight(existing)}
+                        isOwnPick={Boolean(currentUserRosterId && pick.ownerRosterId === currentUserRosterId)}
                         onTradeFromCell={
                           currentUserRosterId && onCellTrade && pick.ownerRosterId && typeof pick.slot === 'number'
                             ? () =>
@@ -957,6 +958,7 @@ function DraftBoardInner({
                             isCollegeRound={c2cCollegeRounds.includes(round) && isPickDisplayEmpty}
                             pickHighlight={isCurrentPick ? 'none' : pickHighlight(existing)}
                             emptyCellDirection={emptyCellDirection}
+                            isOwnPick={Boolean(currentUserRosterId && pick.ownerRosterId === currentUserRosterId)}
                             onTradeFromCell={
                               currentUserRosterId && onCellTrade && pick.ownerRosterId && typeof pick.slot === 'number'
                                 ? () =>
