@@ -293,7 +293,14 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
   const claimSourceTeamId =
     typeof body.claimSourceTeamId === 'string' ? body.claimSourceTeamId.trim() : ''
   if (claimSourceTeamId) {
-    if (!OPEN_READ_PROVIDERS.includes(provider) || gate.sourceManagerId) {
+    /*
+     * A PASTED Yahoo league is in the same position as an open-read provider: the pages carry no
+     * Yahoo ids, so nothing can say which team is the importer's — only they can. Without this the
+     * league imported with every team unclaimed, which hides it from Portfolio and leaves the
+     * attested commissioner's `C` with no team to land on (production, 2026-11-25).
+     */
+    const pickable = OPEN_READ_PROVIDERS.includes(provider) || yahooSnapshotAllowed
+    if (!pickable || gate.sourceManagerId) {
       return NextResponse.json(
         {
           error: 'Choosing your team is not needed for this league — we already know which team is yours.',
