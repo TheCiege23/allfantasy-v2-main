@@ -737,17 +737,22 @@ function CommissionerHubTab({ data, cb, slots }: { data: HubViewData; cb: HubCal
       <Card id="season" title="Season controls" sub="Lineups, locks, members and points, for any team.">
         <HubLinks links={SEASON_LINKS} cb={cb} />
       </Card>
-      <Card id="schedule" title="Schedule" sub="Who plays whom each week.">
+      {/*
+        Below Season controls, one closed row each (2026-11-25, the simplify pass), as in League Setup:
+        open, the tab was ~2,700px on a phone. "Needs you" and Season controls — the queue and the tools
+        used week to week — stay open; the section chips open what they jump to.
+      */}
+      <Card id="schedule" fold="closed" title="Schedule" sub="Who plays whom each week.">
         <HubLinks links={SCHEDULE_LINKS} cb={cb} />
       </Card>
-      <Card id="rivalry" title="Rivalry Week" sub="Pick a week and pair each team with its biggest rival.">
+      <Card id="rivalry" fold="closed" title="Rivalry Week" sub="Pick a week and pair each team with its biggest rival.">
         {slots?.rivalryWeek ?? <HubLinks links={[{ label: 'Set up Rivalry Week', description: 'Preview the pairs, then apply them to that week.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-rivalry-open' }]} cb={cb} />}
       </Card>
-      <Card id="options" title="League options" sub="The same settings as League Setup, with the editors that change them.">
+      <Card id="options" fold="closed" title="League options" sub="The same settings as League Setup, with the editors that change them.">
         {data.afOptions === undefined ? <Loading lines={2} /> : data.afOptions.length ? <AfOptionRows options={data.afOptions} cb={cb} canOpen /> : null}
         <HubLinks links={withoutAfDuplicates(leagueOptionLinks(data.kind, data.leagueId), data.afOptions)} cb={cb} />
       </Card>
-      <Card id="storyline" title="Storyline" sub="How Chimmy tells your season in the league chat.">
+      <Card id="storyline" fold="closed" title="Storyline" sub="How Chimmy tells your season in the league chat.">
         {slots?.storyline ?? <p className="af-lsh-empty">{t('Storyline loads here on the league page.')}</p>}
       </Card>
     </div>

@@ -227,3 +227,14 @@ describe('Record Book, Members and My Settings folds', () => {
     expect(Number(m![1])).toBe(Number(m![2]) - 1)
   })
 })
+
+describe('Commissioner Hub folds (2026-11-25)', () => {
+  const fold = (id: string) => document.querySelector<HTMLDetailsElement>(`[data-testid="league-settings-fold-${id}"]`)
+  it('keeps Needs you and Season controls open, and folds Schedule, Rivalry Week, League options and Storyline', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="hub" />)
+    expect(screen.getByTestId('league-settings-hub-commissioner')).toBeTruthy()
+    expect(fold('needs')).toBeNull()
+    expect(fold('season')).toBeNull()
+    for (const id of ['schedule', 'rivalry', 'options', 'storyline']) expect(fold(id)!.open).toBe(false)
+  })
+})
