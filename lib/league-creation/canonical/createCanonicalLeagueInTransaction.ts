@@ -728,7 +728,11 @@ export async function createCanonicalLeagueInTransaction(
             ? 'zombie'
             : formatId === 'pirate'
               ? 'pirate'
-              : null,
+              // A pro-sport C2C league carries the C2C variant every C2C surface keys on (2026-11-24: a wizard
+              // C2C league had none, so it had no college lineup). A college-sport C2C league keeps none.
+              : formatId === 'c2c' && (sport === 'NFL' || sport === 'NBA')
+                ? 'c2c'
+                : null,
       timezone: body.timezone ?? 'America/New_York',
       language: body.language ?? 'en',
       joinCode,
@@ -981,7 +985,8 @@ export async function createCanonicalLeagueInTransaction(
         mergedStartupDraft: !c2cSeparateDrafts,
         separateStartupCollegeDraft: c2cSeparateDrafts,
         collegeRosterSize: readNumber(setup, 'collegeRosterSize', readNumber(foundationDefaults.rosterSettings, 'collegeRosterSlots', 20)),
-        collegeSports: [sport] as Prisma.InputJsonValue,
+        // The COLLEGE sport (an NFL league's college side is NCAAF); it stored the pro sport before 2026-11-24.
+        collegeSports: [sport === 'NFL' ? 'NCAAF' : sport === 'NBA' ? 'NCAAB' : sport] as Prisma.InputJsonValue,
         collegeScoringSystem: readString(setup, 'collegeScoringSystem', sport === 'NBA' || sport === 'NCAAB' ? 'points' : 'ppr'),
         mixProPlayers: setup.mixProPlayers !== false,
         taxiSize: readNumber(setup, 'taxiSize', readNumber(foundationDefaults.rosterSettings, 'taxiSlots', 6)),

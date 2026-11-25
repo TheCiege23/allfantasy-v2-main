@@ -634,3 +634,32 @@ describe('new NBA and NHL redraft leagues start in daily lineups', () => {
     }
   })
 })
+
+/*
+ * 2026-11-24: a wizard C2C league had no variant, so no C2C surface saw it; its college sport was stored as
+ * the pro sport; and a new NFL devy league's college lineup scores.
+ */
+describe('C2C and devy leagues carry what their college side needs', () => {
+  it.each([
+    ['NFL', 'fb_half_ppr', 'NCAAF', 'separate'],
+    ['NBA', 'nba_points', 'NCAAB', 'unified'],
+  ])('%s C2C (%s): variant c2c, college sport %s, standings %s', async (sport, scoringPreset, collegeSport, standingsModel) => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'c2c', sport, scoringPreset }), buildEngine({ leagueFormatId: 'c2c' }))
+    expect(tx.league.create.mock.calls[0]?.[0].data).toMatchObject({ leagueType: 'c2c', leagueVariant: 'c2c' })
+    const created = tx.c2CLeagueConfig.upsert.mock.calls[0]?.[0].create
+    expect(created).toMatchObject({ collegeSports: [collegeSport], standingsModel })
+  })
+
+  it('[control] a college-sport C2C league keeps no variant', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'c2c', sport: 'NCAAF', scoringPreset: 'ncaaf_c2c_ppr' }), buildEngine({ leagueFormatId: 'c2c' }))
+    expect(tx.league.create.mock.calls[0]?.[0].data.leagueVariant).toBeNull()
+  })
+
+  it('a new NFL devy league starts with college scoring on', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'devy', sport: 'NFL', scoringPreset: 'fb_half_ppr' }), buildEngine({ leagueFormatId: 'devy' }))
+    expect(tx.league.create.mock.calls[0]?.[0].data.settings).toMatchObject({ devy_college_scoring: true })
+  })
+})

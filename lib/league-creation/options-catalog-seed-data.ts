@@ -162,7 +162,9 @@ const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
     idp: ['NFL', 'NCAAF'],
     salary_cap: ALL_SPORTS,
     devy: ['NFL', 'NCAAF'],
-    c2c: ['NFL', 'NCAAF', 'NCAAB'],
+    // NBA joined 2026-11-24: an NBA league with a college basketball lineup (the tested NBA C2C engine), up to
+    // 30 teams. NCAAF and NCAAB stay for big college-sized C2C leagues.
+    c2c: ['NFL', 'NBA', 'NCAAF', 'NCAAB'],
     /*
      * Only sports whose weekly finalizer can run. A guillotine league needs a completed week
      * before it can eliminate a roster. This list controls both the wizard and create API.
@@ -256,6 +258,7 @@ const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
     },
     c2c: {
       NFL: ['fb_half_ppr', 'fb_superflex'],
+      NBA: ['nba_points'],
       NCAAF: ['ncaaf_half_ppr'],
       NCAAB: ['ncaab_points'],
     },
@@ -381,6 +384,8 @@ const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
     },
     c2c: {
       NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
+      // Even sizes from 8 to the NBA's 30 teams.
+      NBA: NFL_PRO_BOUND_EVEN_TEAM_COUNTS.filter((n) => n <= 30),
       NCAAF: DYNASTY_CREATE_TEAM_COUNTS,
       NCAAB: DYNASTY_CREATE_TEAM_COUNTS,
     },
