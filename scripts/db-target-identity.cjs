@@ -42,6 +42,9 @@ const KNOWN_SAFE_TARGETS = [
   { endpoint: "ep-sparkling-mountain-ads99f9t", database: "neondb", label: "redraft-test" },
   { endpoint: "ep-billowing-dream-b7cf9pxk", database: "tournament_pilot", label: "isolated tournament pilot" },
   { endpoint: "ep-wild-butterfly-adxlodkh", database: "neondb", label: "isolated bracket staging PR 2766" },
+  // Neon branch `staging` (br-sweet-cell-ad149gqr) of the production project, created
+  // 2026-11-25 for the Railway `staging` environment's web service.
+  { endpoint: "ep-gentle-truth-ad357o06", database: "neondb", label: "railway staging" },
 ];
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
