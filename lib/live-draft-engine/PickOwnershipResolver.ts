@@ -83,3 +83,30 @@ export function applyTradedOwnerToCurrentPick<T extends { round: number; slot: n
   const resolved = resolvePickOwner(currentPick.round, currentPick.slot, slotOrder, tradedPicks)
   return resolved ? { ...currentPick, rosterId: resolved.rosterId, displayName: resolved.displayName } : currentPick
 }
+
+/**
+ * `resolvePickOwner` for many cells at once: the slot order and the traded picks are indexed once, so a board
+ * of 180 teams x 30 rounds resolves each cell in constant time instead of re-scanning (and re-copying) the
+ * traded list per cell (2026-11-24). Same answers, the latest accepted trade still winning.
+ */
+export function buildPickOwnerResolver(
+  slotOrder: { slot: number; rosterId: string; displayName: string }[],
+  tradedPicks: TradedPickRecord[] = [],
+): (round: number, slot: number) => ResolvedPickOwner | null {
+  const bySlot = new Map(slotOrder.map((e) => [e.slot, e]))
+  const latestTrade = new Map<string, TradedPickRecord>()
+  for (const t of tradedPicks) latestTrade.set(`${t.round}|${t.originalRosterId}`, t) // later records win
+  const cache = new Map<string, ResolvedPickOwner | null>()
+  return (round, slot) => {
+    const key = `${round}|${slot}`
+    if (cache.has(key)) return cache.get(key)!
+    const entry = bySlot.get(slot)
+    let out: ResolvedPickOwner | null = null
+    if (entry) {
+      const traded = latestTrade.get(`${round}|${entry.rosterId}`)
+      out = traded ? resolvePickOwner(round, slot, [entry], [traded]) : resolvePickOwner(round, slot, [entry], [])
+    }
+    cache.set(key, out)
+    return out
+  }
+}

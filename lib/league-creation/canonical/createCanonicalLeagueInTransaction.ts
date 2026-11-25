@@ -177,6 +177,12 @@ type CanonicalCreateTransactionResult = {
   inviteUrl: string
 }
 
+/** The league invite link's claim limit: every team twice over (replaced managers rejoin), never under 50. */
+export function inviteMaxUsesFor(teamCount: number): number {
+  const n = Number.isFinite(teamCount) && teamCount > 0 ? Math.floor(teamCount) : 0
+  return Math.max(50, n * 2)
+}
+
 /** The C2C standings model a new league starts with. NBA C2C scoring requires unified. */
 function c2cStandingsModelFor(sport: string, requested: unknown): string {
   if (String(sport).toUpperCase() !== 'NFL') return 'unified'
@@ -1469,7 +1475,8 @@ export async function createCanonicalLeagueInTransaction(
       leagueId: league.id,
       createdBy: appUserId,
       createdByRole: 'COMMISSIONER',
-      maxUses: 50,
+      // Enough claims for every team plus spares; a flat 50 stopped a 100+ team league's link halfway (2026-11-24).
+      maxUses: inviteMaxUsesFor(managerCount),
       isActive: true,
       bypassRankGate: false,
     },
