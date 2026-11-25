@@ -11,7 +11,13 @@ export async function loadStoredDraftSeasonStats(sport: string, ids: string[], s
     where: { sport, playerId: { in: [...new Set(ids)] }, source: 'rolling_insights', seasonType: 'regular', season: { in: [String(season), String(season - 1)] }, gamesPlayed: { gt: 0 } },
     select: { playerId: true, season: true, gamesPlayed: true, stats: true, position: true },
   })
-  for (const [id, row] of selectDraftSeasonRows(rows, season)) {
+  const selected = selectDraftSeasonRows(rows, season)
+  // "Previous" is measured against the newest season these players have a game in, not against
+  // `season`. A caller with no league passes the calendar year, and an NBA or NHL season is stored
+  // under the year it STARTS in: from January, `season` is one more than every row, and comparing
+  // with it would call the whole league's current numbers last season's.
+  const newestSeason = Math.max(...[...selected.values()].map((row) => Number(row.season)).filter(Number.isFinite), -Infinity)
+  for (const [id, row] of selected) {
     const box = normalizeRiDraftSeasonUnits(sport, row.stats)
     const nbaDraftStats = sport === 'NBA' ? extractNbaDraftSeasonRates(box) : null
     const seasonStatLine = sport === 'MLB' ? extractMlbDraftSeasonStats(box) : sport === 'NHL' ? extractNhlDraftSeasonStats(box) : null
@@ -20,7 +26,7 @@ export async function loadStoredDraftSeasonStats(sport: string, ids: string[], s
       delete seasonStatLine.wins
       delete seasonStatLine.shutouts
     }
-    if (nbaDraftStats || seasonStatLine) out.set(id, { nbaDraftStats, seasonStatLine, statSeason: sport === 'NBA' || sport === 'NHL' ? row.season + '–' + String(Number(row.season) + 1).slice(-2) : row.season, statSeasonIsPrevious: Number(row.season) < season })
+    if (nbaDraftStats || seasonStatLine) out.set(id, { nbaDraftStats, seasonStatLine, statSeason: sport === 'NBA' || sport === 'NHL' ? row.season + '–' + String(Number(row.season) + 1).slice(-2) : row.season, statSeasonIsPrevious: Number(row.season) < newestSeason })
   }
   return out
 }

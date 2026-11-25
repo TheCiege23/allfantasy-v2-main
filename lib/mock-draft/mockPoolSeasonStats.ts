@@ -32,6 +32,8 @@ export interface MockSeasonStatFields {
   stats?: Record<string, number | null> | null
   nflDraftProjectionSplits?: unknown
   statSeason?: string | null
+  /** The line is the season before the newest one on file: no game played in it yet. */
+  statSeasonIsPrevious?: boolean
 }
 
 /** The mock's scoring label as the scoring engine's preset. */
@@ -57,6 +59,7 @@ export function mergeSeasonStatsIntoEntry<T>(entry: T, fields: MockSeasonStatFie
     display: { ...display, stats },
     ...(fields.nflDraftProjectionSplits ? { nflDraftProjectionSplits: fields.nflDraftProjectionSplits } : {}),
     ...(fields.statSeason ? { statSeason: fields.statSeason } : {}),
+    ...(fields.statSeason && fields.statSeasonIsPrevious === true ? { statSeasonIsPrevious: true } : {}),
   } as T
 }
 
@@ -122,7 +125,7 @@ async function storedFields(sport: 'NBA' | 'NHL' | 'MLB', entries: Row[]): Promi
     const s = id ? stored.get(id) : null
     if (!s) return null
     const line = (sport === 'NBA' ? s.nbaDraftStats : s.seasonStatLine) as Record<string, number | null> | null
-    return line ? { stats: line, statSeason: s.statSeason } : null
+    return line ? { stats: line, statSeason: s.statSeason, statSeasonIsPrevious: s.statSeasonIsPrevious } : null
   })
 }
 
