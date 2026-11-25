@@ -94,17 +94,17 @@ function IntelRow({ row, sport }: { row: LookaheadRow; sport?: string }) {
         </div>
         <p className="mt-0.5 text-[11px] text-white/55">{habitLine(row)}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1">
-          <span className="text-[11px] uppercase tracking-wide text-white/45">Needs</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/50">Needs</span>
           {needs.length > 0 ? (
             needs.map((pos) => <PositionChip key={pos} pos={pos} sport={sport} />)
           ) : (
             <span className="text-[11px] text-white/55">Depth</span>
           )}
-          {moreNeeds > 0 ? <span className="text-[11px] text-white/45">+{moreNeeds}</span> : null}
+          {moreNeeds > 0 ? <span className="text-[11px] text-white/50">+{moreNeeds}</span> : null}
         </div>
       </div>
       <div className="w-[96px] shrink-0 text-right">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Likely</p>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-white/50">Likely</p>
         {row.projected ? (
           <>
             <p className="truncate text-[12px] font-semibold text-white" title={row.projected.name}>
@@ -112,11 +112,11 @@ function IntelRow({ row, sport }: { row: LookaheadRow; sport?: string }) {
             </p>
             <span className="inline-flex items-center gap-1">
               <PositionChip pos={row.projected.position} sport={sport} />
-              <span className="text-[11px] text-white/45">ADP {row.projected.adp.toFixed(1)}</span>
+              <span className="text-[11px] text-white/50">ADP {row.projected.adp.toFixed(1)}</span>
             </span>
           </>
         ) : (
-          <p className="text-[11px] text-white/45">—</p>
+          <p className="text-[11px] text-white/50">—</p>
         )}
       </div>
     </li>
@@ -157,7 +157,7 @@ function DraftIntelPanelInner({ lookahead, idle, sport, formatPickLabel }: Draft
             <IntelRow key={row.overall} row={row} sport={sport} />
           ))}
           {windowSize > rows.length ? (
-            <li className="py-1 text-center text-[11px] text-white/45">
+            <li className="py-1 text-center text-[11px] text-white/50">
               +{windowSize - rows.length} more picks before {viewerNextOverall != null ? 'yours' : 'the end'}
             </li>
           ) : null}
