@@ -1622,6 +1622,8 @@ export const translationsEn: Record<string, string> = {
   "lsHub.wv.playoffs.alive_only": "Only teams still alive for the title",
   "lsHub.wv.playoffs.locked": "Lock all rosters",
   "lsHub.wv.playoffsHint": "Locked rosters take no adds, drops or claims until the season ends.",
+  "lsHub.wv.benchDrops": "Allow bench drops after kickoff",
+  "lsHub.wv.benchDropsHint": "Off by default: once a player's game starts he can't be dropped, starter or bench. Turn on to let managers drop a benched player whose game has started.",
   "waiverClaim.processesAfter": "Processes after {{date}}",
   "waiverClaim.onWaiversUntil": "On waivers until {{date}}",
   "lsHub.ai.intro": "Control League Helper settings. Premium controls require AF Commissioner or AF Supreme.",

@@ -3898,6 +3898,8 @@ export const translationsEsParity: Record<string, string> = {
   "lsHub.wv.playoffs.alive_only": "Solo los equipos que siguen vivos por el título",
   "lsHub.wv.playoffs.locked": "Bloquear todas las plantillas",
   "lsHub.wv.playoffsHint": "Con las plantillas bloqueadas no hay altas, bajas ni reclamos hasta que termine la temporada.",
+  "lsHub.wv.benchDrops": "Permitir bajas del banco tras el inicio del partido",
+  "lsHub.wv.benchDropsHint": "Desactivado por defecto: cuando empieza el partido de un jugador no se le puede dar de baja, sea titular o suplente. Actívalo para permitir dar de baja a un suplente cuyo partido ya empezó.",
   "waiverClaim.processesAfter": "El reclamo se procesa después del {{date}}",
   "lsHub.ai.intro": "Controla los ajustes del Asistente de la liga. Los controles premium requieren AF Commissioner o AF Supreme.",
   "lsHub.ai.helper": "Asistente de la liga",
