@@ -5,7 +5,7 @@ import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { getRosterEngineRegistry } from '@/lib/roster-engine'
 import { DEFAULT_END_WEEK_BY_SPORT, getGuillotineConfig } from './GuillotineLeagueConfig'
 import { resolveGuillotineCalendarWeek } from './guillotineCurrentWeek'
-import { readRosterScheduleRan } from './rosterScheduleApply'
+import { readRosterScheduleRan } from './rosterScheduleRan'
 import {
   ROSTER_SCHEDULE_KEY,
   normalizeRosterSchedule,

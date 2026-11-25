@@ -590,8 +590,8 @@ export function GuillotineRulesPage({
 
       {/* ---------- Roster changes during the season ---------- */}
       {roster && (
-        <Group id="roster" title="Roster changes during the season" sub="Add starting or bench spots on a set week. AllFantasy changes every team's roster for you.">
-          <Field label="Scheduled changes" paid={scheduleLocked} help="A new starting spot stays empty until its manager fills it. Nobody's lineup is changed for them.">
+        <Group id="roster" title="Roster changes during the season" sub="Add or take away spots on a set week. AllFantasy changes every team's roster for you.">
+          <Field label="Scheduled changes" paid={scheduleLocked} help="A new starting spot stays empty until its manager fills it. A spot that is taken away becomes a bench spot, and the player in it moves to the bench between weeks.">
             <p className="text-[12px] text-white/60" data-testid="guillotine-roster-now">Right now every team has {describeLayout(roster.layout, roster.spots)}.</p>
             {rosterDone.map((c) => (
               <p key={c.id} className="rounded-lg border border-white/10 px-3 py-2 text-[12px] text-white/50" data-testid={`guillotine-roster-done-${c.id}`}>
@@ -599,7 +599,7 @@ export function GuillotineRulesPage({
               </p>
             ))}
             {rosterChanges.map((c) => (
-              <div key={c.id} className="grid grid-cols-2 items-end gap-2 rounded-lg border border-white/10 p-3 sm:grid-cols-[0.7fr_1.5fr_1.9fr_0.7fr_auto]" data-testid="guillotine-roster-change">
+              <div key={c.id} className="grid grid-cols-2 items-end gap-2 rounded-lg border border-white/10 p-3 sm:grid-cols-[0.55fr_1.9fr_1.7fr_0.6fr_auto]" data-testid="guillotine-roster-change">
                 <label className="order-1 text-[11px] text-white/50 sm:order-none">Week
                   <select className={inputClass} value={c.week} disabled={scheduleLocked} onChange={(e) => editRoster(c.id, { week: Number(e.target.value) })} data-testid="guillotine-roster-week">
                     {[...new Set([...rosterWeeks, c.week])].sort((a, b) => a - b).map((w) => <option key={w} value={w}>{w}</option>)}

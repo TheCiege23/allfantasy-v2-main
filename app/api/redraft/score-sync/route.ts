@@ -482,6 +482,8 @@ async function runRedraftReconciliation() {
         const run = await applyDueRosterChanges({
           leagueId: season.leagueId,
           week: resolved.sportWeekComplete ? resolved.fantasyWeek + 1 : resolved.fantasyWeek,
+          // A change that moves a player (a starting spot taken away) runs only between weeks.
+          betweenWeeks: resolved.sportWeekComplete === true,
         })
         if (run) rosterChangesApplied += run.applied.length
       } catch (e) {

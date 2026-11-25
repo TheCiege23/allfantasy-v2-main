@@ -3,7 +3,8 @@ name: Guilly chop week integration
 # (__tests__/guillotine/chop-week-db.test.ts): scoring, tiebreak, the elimination engine, the chop
 # audit and its row lock, roster release, the automation locks and the season finish, unmocked.
 # The same database then runs the scheduled roster changes (__tests__/guillotine/roster-schedule-db.test.ts):
-# the save, the weekly run, a crash at each step, three passes at once and a stale settings write.
+# the save, the weekly run, a crash at each step, three passes at once and a stale settings write, and a
+# starting spot taken away through the real lineup engine, with the finished week's score kept.
 on:
   pull_request:
     paths:
@@ -21,6 +22,9 @@ on:
       - 'lib/league/lineupStarterSlots.ts'
       - 'lib/league/lineupSlotPositions.ts'
       - 'lib/redraft/rosterConfigResolver.ts'
+      - 'lib/redraft/weekLineupSlots.ts'
+      - 'lib/roster-lineup-engine/**'
+      - 'lib/roster/LineupTemplateValidation.ts'
       - '.github/workflows/guillotine-chop-week-db.yml'
   workflow_dispatch:
 permissions:

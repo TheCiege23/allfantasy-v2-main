@@ -3,14 +3,20 @@
  * added plus 1 bench spot", "week 11 a bench spot turns into a starting spot" — set once by the commissioner,
  * applied by AllFantasy, instead of the commissioner editing the roster by hand on the right morning.
  *
- * 🛑 ONLY CHANGES THAT NEVER FORCE A MOVE. Every kind here leaves every team's saved lineup legal: a new
- * starting spot is simply empty until its manager fills it, and a bench spot that becomes a starter leaves the
- * bench able to hold what it held (lib/roster/benchCapacity.ts counts an empty starting spot as bench room).
- * The owner's third example, "week 7 a starter is taken away", is NOT here, on purpose. Weekly scoring counts
- * whoever is stored as a starter and never checks the layout (lib/redraft/scoringEngine.ts), so taking a spot
- * away without also benching the player in it would leave that team an extra scoring starter until its manager
- * acted. Shrinking the roster likewise leaves full teams over the limit, unable to save a lineup until they
- * drop someone. Both need AllFantasy to move a player for a manager, which is its own change.
+ * 🛑 EVERY KIND LEAVES EVERY TEAM ABLE TO SAVE A LINEUP. The roster never gets smaller, so no team is ever
+ * over the limit and made to drop a player:
+ *
+ *   - a new starting spot is simply empty until its manager fills it;
+ *   - a bench spot that becomes a starter leaves the bench able to hold what it held
+ *     (lib/roster/benchCapacity.ts counts an empty starting spot as bench room);
+ *   - a starting spot that is TAKEN AWAY becomes a bench spot ("week 7 a starter is taken away", owner's
+ *     rule 2026-11-25). Weekly scoring counts whoever is stored as a starter and never checks the layout
+ *     (lib/redraft/scoringEngine.ts), so the spot alone going away would leave that team an extra scoring
+ *     starter until its manager acted. AllFantasy therefore benches the player sitting in it, and only between
+ *     weeks, so nobody who has already played is touched (./rosterScheduleApply.ts, ./rosterBenchRemovedSeats.ts).
+ *
+ * Shrinking the roster itself (fewer bench spots, or a starter gone with no bench spot in return) is NOT here:
+ * full teams would be over the limit and unable to save any lineup until they dropped someone.
  *
  * A change is a DELTA on the layout the league has when its week arrives, not a layout of its own. So a
  * commissioner who edits the roster by hand mid-season keeps that edit, and the next scheduled change builds on
@@ -33,7 +39,7 @@ export const MAX_ROSTER_CHANGES = 12
 export const MAX_SPOTS_PER_CHANGE = 3
 const MAX_WEEK = 30
 
-export type RosterChangeKind = 'add_starter' | 'add_bench' | 'bench_to_starter'
+export type RosterChangeKind = 'add_starter' | 'add_bench' | 'bench_to_starter' | 'starter_to_bench'
 
 export type RosterChange = {
   id: string
@@ -49,10 +55,13 @@ export const ROSTER_CHANGE_OPTIONS: ReadonlyArray<{ value: RosterChangeKind; lab
   { value: 'add_starter', label: 'Add a starting spot', needsSlot: true },
   { value: 'add_bench', label: 'Add bench spots', needsSlot: false },
   { value: 'bench_to_starter', label: 'Turn a bench spot into a starter', needsSlot: true },
+  { value: 'starter_to_bench', label: 'Take away a starting spot', needsSlot: true },
 ]
 
 const KINDS = new Set<RosterChangeKind>(ROSTER_CHANGE_OPTIONS.map((o) => o.value))
 export const rosterChangeNeedsSlot = (kind: RosterChangeKind): boolean => kind !== 'add_bench'
+/** A change that makes AllFantasy move a player: it runs only between weeks. */
+export const rosterChangeMovesPlayers = (kind: RosterChangeKind): boolean => kind === 'starter_to_bench'
 
 /** One roster spot a league of this sport can have, with the editor's own limits. */
 export type RosterSpot = { key: string; label: string; shortLabel: string; min: number; max: number }
@@ -118,8 +127,15 @@ export type RosterScheduleState = {
     skipped: Array<{ id: string; reason: string }>
     /** The layout this run writes. Absolute, so writing it twice changes nothing. */
     slots: Record<string, number>
+    /** The layout it replaces: what "could be seated before the change" is measured against. */
+    slotsBefore: Record<string, number>
     /** The lineup's starter seats before the write (./rosterSeatRemap.ts). */
     seatsBefore: string[]
+    /**
+     * When the run was recorded. A roster changed after this may already be in the new layout's terms (its
+     * manager saved against it), so its saved seat positions are not read as the old layout's.
+     */
+    startedAt: string | null
   } | null
 }
 
@@ -137,7 +153,9 @@ export function readRosterScheduleState(settings: unknown): RosterScheduleState 
           ids: p.ids.filter((x): x is string => typeof x === 'string'),
           skipped: skippedList(p.skipped),
           slots,
+          slotsBefore: p.slotsBefore && typeof p.slotsBefore === 'object' && !Array.isArray(p.slotsBefore) ? cleanLayout(p.slotsBefore as Record<string, unknown>) : slots,
           seatsBefore: Array.isArray(p.seatsBefore) ? p.seatsBefore.filter((x): x is string => typeof x === 'string') : [],
+          startedAt: typeof p.startedAt === 'string' ? p.startedAt : null,
         }
       : null
   return { done, skipped, pending }
@@ -241,6 +259,16 @@ export function applyRosterChange(layout: Record<string, number>, change: Roster
     slots[s.key] = have(s.key) + n
     return null
   }
+  const removeStarter = (): string | null => {
+    const s = starter!
+    if (have(s.key) - n < s.min) {
+      return have(s.key) === 0
+        ? `the league has no ${s.label} starting spot to take away.`
+        : `the league has ${have(s.key)} ${s.label} starting ${plural(have(s.key), 'spot')}, so ${n} cannot be taken away.`
+    }
+    slots[s.key] = have(s.key) - n
+    return null
+  }
   const addBench = (): string | null => {
     if (have(bench.key) + n > bench.max) return `a league can have at most ${bench.max} bench spots, and this would make ${have(bench.key) + n}.`
     slots[bench.key] = have(bench.key) + n
@@ -255,11 +283,13 @@ export function applyRosterChange(layout: Record<string, number>, change: Roster
     add_starter: [addStarter],
     add_bench: [addBench],
     bench_to_starter: [removeBench, addStarter],
+    starter_to_bench: [removeStarter, addBench],
   }
   for (const step of run[change.kind]) {
     const reason = step()
     if (reason) return { ok: false, change, reason }
   }
+  if (startingSpots(slots, spots) < 1) return { ok: false, change, reason: 'a league needs at least one starting spot.' }
   return { ok: true, change, slots }
 }
 
@@ -306,6 +336,8 @@ export function describeRosterChange(change: RosterChange, spots: RosterSpots): 
       return `Add ${n} bench ${plural(n, 'spot')}`
     case 'bench_to_starter':
       return `Turn ${n} bench ${plural(n, 'spot')} into ${n === 1 ? `a ${name} starting spot` : `${n} ${name} starting spots`}`
+    case 'starter_to_bench':
+      return `Take away ${n} ${name} starting ${plural(n, 'spot')}`
   }
 }
 
