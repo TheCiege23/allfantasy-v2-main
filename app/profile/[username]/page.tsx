@@ -36,11 +36,7 @@ export default async function PublicProfilePage({
           <h1 className="text-2xl font-semibold mode-text">
             {isOwnProfile ? "Your profile" : `@${username}`}
           </h1>
-          <p className="mt-2 text-sm mode-muted">
-            {isOwnProfile
-              ? "Your identity and preferences. Edit below or open Settings."
-              : "Public profile view."}
-          </p>
+          {/* No intro line (2026-11-25, the simplify pass): the heading names whose profile this is. */}
         </div>
         <ProfilePageClient
           isOwnProfile={isOwnProfile}
