@@ -316,7 +316,9 @@
   .nls-head { align-items: flex-start; }
   .nls-head-actions { width: 100%; }
   .nls-seg { width: 100%; overflow-x: auto; scrollbar-width: none; }
-  .nls-seg button { flex: 1; min-height: 44px; }
+  /* Grow to fill, never shrink below the label: `flex: 1` let a 7-item bar (Waivers: Search … My claims) squeeze
+     every button to 46px on a 375px phone, and the nowrap labels ran into each other. Too many items now scroll. */
+  .nls-seg button { flex: 1 0 auto; min-height: 44px; }
   .nls-card { padding: 18px 16px; }
   .nls-btn { min-height: 44px; }
   .nls-aside { display: flex; }
