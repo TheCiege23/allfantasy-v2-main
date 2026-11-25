@@ -72,6 +72,27 @@
   border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
 }
+/*
+ * A strip of ONE value-first tile on a narrow column (2026-11-24, the simplify pass): the figure on the
+ * left and its words beside it — "#11 · Waiver priority · of 12 rosters" — as one row, not a 100px box.
+ * Every screen's lone tile gets it here, in the primitive, so no screen redraws a tile's box.
+ */
+@container af-pg-stats (max-width: 599px) {
+  .af-core .af-pg-stats[data-count='1'][data-order='value-first'] > .af-pg-stat {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 2px;
+    align-items: center;
+    padding: 10px 14px;
+  }
+  .af-core .af-pg-stats[data-count='1'][data-order='value-first'] > .af-pg-stat > :first-child {
+    grid-row: 1 / span 3;
+  }
+  .af-core .af-pg-stats[data-count='1'][data-order='value-first'] > .af-pg-stat > :not(:first-child) {
+    grid-column: 2;
+  }
+}
 .af-core .af-pg-stat-label {
   color: var(--muted);
   font: 600 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
