@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/adminAuth'
 import { resolveContractCaptureRequester } from '@/lib/admin/contractCapture/captureGate'
 import {
   ContractCaptureInputError,
@@ -14,6 +15,10 @@ const NO_STORE = { 'Cache-Control': 'no-store' }
 
 /** The requesting admin's OWN Yahoo/ESPN NFL leagues, for the picker. Reads Postgres only. */
 export async function GET() {
+  // The admin gate is checked here, in the route itself, as every /api/admin route does
+  // (__tests__/admin-api-protection.test.ts); the requester check then also binds the app session.
+  const admin = await requireAdmin()
+  if (!admin.ok) return admin.res
   const gate = await resolveContractCaptureRequester()
   if (!gate.ok) return gate.res
   const leagues = await listOwnCaptureLeagues(gate.userId)
@@ -26,6 +31,10 @@ export async function GET() {
  * lib/admin/contractCapture/contractCaptureService.ts.
  */
 export async function POST(request: Request) {
+  // The admin gate is checked here, in the route itself, as every /api/admin route does
+  // (__tests__/admin-api-protection.test.ts); the requester check then also binds the app session.
+  const admin = await requireAdmin()
+  if (!admin.ok) return admin.res
   const gate = await resolveContractCaptureRequester()
   if (!gate.ok) return gate.res
 
