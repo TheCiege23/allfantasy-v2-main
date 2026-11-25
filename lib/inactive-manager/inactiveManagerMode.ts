@@ -16,6 +16,7 @@ import { buildPlayerDataFromSections, getNormalizedLineupSections } from '@/lib/
 import { buildLineupListsFromPlayerData } from '@/lib/league/lineup-swap'
 import { optimalLineupListsRespectingLocks, type LineupPlayerInfo } from '@/lib/league/native/nativeScreenModels'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
+import { isNpcDraftPersonalityId, type NpcDraftPersonalityId } from '@/lib/live-draft-engine/npcDraftPersonalityTypes'
 
 export const AF_MANAGED_LINEUPS_KEY = 'af_managed_lineups'
 
@@ -35,8 +36,12 @@ export function isAutopilotStyle(v: unknown): v is AutopilotStyle {
 /**
  * Chimmy autopilot (AF Commissioner): everything inactive manager mode does, plus roster decisions in
  * the chosen style. Lineup-only management stays free; `autopilot` marks the paid upgrade.
+ *
+ * `personality` is the manager Chimmy is for this team in season (./managerProfile.ts): the one it
+ * drafted with when that is known at the handover. Absent on older entries and on teams Chimmy did not
+ * draft, which get theirs from the roster id.
  */
-export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: string }
+export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: string; personality?: NpcDraftPersonalityId }
 
 /**
  * `ownerUserId` is who owned the team when the commissioner switched it on (phase 9, 2026-10-29). The
@@ -72,6 +77,7 @@ export function readManagedLineups(settings: unknown): ManagedLineups {
     const ap = o.autopilot && typeof o.autopilot === 'object' ? (o.autopilot as Record<string, unknown>) : null
     if (ap && typeof ap.since === 'string' && typeof ap.byUserId === 'string') {
       entry.autopilot = { style: isAutopilotStyle(ap.style) ? ap.style : DEFAULT_AUTOPILOT_STYLE, since: ap.since, byUserId: ap.byUserId }
+      if (isNpcDraftPersonalityId(ap.personality)) entry.autopilot.personality = ap.personality
     }
     out[rosterId] = entry
   }
