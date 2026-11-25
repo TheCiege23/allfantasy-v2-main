@@ -4,9 +4,10 @@ import { getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 as CATALOG } from '@/lib/league-creation/options-catalog-seed-data'
 
 describe('NBA C2C in the create form (2026-11-24)', () => {
-  it('offers NBA C2C with points scoring, up to the NBA’s 30 teams', () => {
-    expect(CATALOG.allowedSportsByConcept.c2c).toEqual(expect.arrayContaining(['NFL', 'NBA', 'NCAAF', 'NCAAB']))
-    expect(Math.max(...getTeamCountOptions('NBA', 'c2c'))).toBe(30)
+  it('offers C2C as an NFL or NBA league, sized by the pro player pool, not the real league', () => {
+    expect(CATALOG.allowedSportsByConcept.c2c).toEqual(['NFL', 'NBA'])
+    expect(Math.max(...getTeamCountOptions('NBA', 'c2c'))).toBe(46)
+    expect(Math.max(...getTeamCountOptions('NFL', 'c2c'))).toBe(104)
     expect(Math.min(...getTeamCountOptions('NBA', 'c2c'))).toBe(8)
   })
 })
