@@ -249,7 +249,8 @@ test.describe("referral system click audit", () => {
     await expect(page.getByTestId("referral-stat-signups")).toContainText("1")
     await expect(page.getByTestId("referral-stat-claimable-rewards")).toContainText("1")
 
-    await page.getByTestId("referral-open-leaderboard").click()
+    // The Leaderboard tab (2026-11-25): the "Climb the leaderboard" card that also opened it is gone.
+    await page.getByTestId("referral-tab-leaderboard").click()
     await expect(page.getByRole("heading", { name: "Referral leaderboard", exact: true })).toBeVisible()
     await expect(page.getByText("Top Recruiter")).toBeVisible()
 

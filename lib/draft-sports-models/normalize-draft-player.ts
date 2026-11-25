@@ -198,9 +198,9 @@ export function normalizeDraftPlayer(
     byeWeek: bye ?? null,
     fantasyPointsPerGame: sportNorm === 'NFL' && raw.statSeason && raw.nflDraftProjectionSplits?.projectedPointsPerGame != null
       ? raw.nflDraftProjectionSplits.projectedPointsPerGame : fppg,
-    ...(sportNorm === 'NBA' && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
+    ...((sportNorm === 'NBA' || sportNorm === 'NCAAB') && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
     ...((sportNorm === 'MLB' || sportNorm === 'NHL') && raw.seasonStatLine ? raw.seasonStatLine : {}),
-    ...((sportNorm === 'MLB' || sportNorm === 'NHL') &&
+    ...((sportNorm === 'MLB' || sportNorm === 'NHL' || sportNorm === 'NCAAB') &&
     typeof raw.afProjectionPerGame === 'number' &&
     Number.isFinite(raw.afProjectionPerGame) &&
     raw.afProjectionPerGame > 0

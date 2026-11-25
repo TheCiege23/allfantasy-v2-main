@@ -14,6 +14,7 @@ import dynamic from 'next/dynamic'
 import KeeperPanel from '@/components/app/draft-room/KeeperPanel'
 import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room/DraftRoomShell'
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
+import { scheduledDraftAutoStarts } from '@/lib/draft/scheduledStartCountdown'
 import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
 import DraftRoomMusicBar, { MUSIC_ROW_ANCHOR_ID } from './DraftRoomMusicBar'
 import { readLivePlaylist, type DraftPlaylist } from '@/lib/draft-room/draftPlaylist'
@@ -380,6 +381,8 @@ export function DraftRoomPageClient({
   const [chimmyManagedRosterIds, setChimmyManagedRosterIds] = useState<string[]>([])
   /** The commissioner's draft playlist from the settings poll, so a change reaches this room; undefined until read. */
   const [livePlaylist, setLivePlaylist] = useState<DraftPlaylist | null | undefined>(undefined)
+  /** The league's scheduled draft time, from the same settings poll: the top bar counts down to it before the draft. */
+  const [scheduledStart, setScheduledStart] = useState<{ iso: string | null; autoStarts: boolean }>({ iso: null, autoStarts: false })
   /** Prisma Chimmy opponent assignments — draft roster ids (see `/api/league/ai-opponents/summary`). */
   const [aiOpponentRosterIds, setAiOpponentRosterIds] = useState<string[]>([])
   /** Draft roster id → Chimmy archetype label for manager strip badges. */
@@ -1356,6 +1359,13 @@ export function DraftRoomPageClient({
           Array.isArray(data.chimmyManagedRosterIds)
             ? data.chimmyManagedRosterIds.filter((id: unknown): id is string => typeof id === 'string')
             : [],
+        )
+        // `draftDate` is LeagueSettings.draftDateUtc; whether the server starts the draft at that time
+        // depends on the league (lib/draft/scheduledStartCountdown.ts mirrors the draft tick's starters).
+        const nextScheduledIso = typeof data.draftDate === 'string' && data.draftDate ? data.draftDate : null
+        const nextAutoStarts = scheduledDraftAutoStarts(data.autostartEnabled === true, data.scheduledStartLeague ?? null)
+        setScheduledStart((prev) =>
+          prev.iso === nextScheduledIso && prev.autoStarts === nextAutoStarts ? prev : { iso: nextScheduledIso, autoStarts: nextAutoStarts },
         )
         const nextPlaylist = readLivePlaylist(data.draftPlaylist)
         if (nextPlaylist !== undefined) {
@@ -5299,6 +5309,8 @@ export function DraftRoomPageClient({
             dynastyDraftKindLabel={dynastyDraftKindLabel}
             rookieAuctionNote={rookieAuctionNote}
             picksUntilUser={ribbonPicksUntilUser}
+            scheduledStartIso={scheduledStart.iso}
+            scheduledStartAutoStarts={scheduledStart.autoStarts}
             controlsSlot={
               leagueId ? <DraftRoomMusicBar compact leagueId={leagueId} draftStatus={session.status} livePlaylist={livePlaylist} /> : null
             }

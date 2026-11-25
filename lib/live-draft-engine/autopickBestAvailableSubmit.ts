@@ -39,6 +39,8 @@ export type AutopickFallbackPoolEntry = {
   playerId: string | null
   byeWeek: number | null
   adp: number | null
+  /** This league's projected points per game, when the pool carries one. Orders players that have no ADP. */
+  projectedPointsPerGame?: number | null
 }
 
 export type AutopickDraftContext = {
@@ -154,7 +156,12 @@ function toFallbackPoolEntry(e: ResolvedPoolEntry): AutopickFallbackPoolEntry {
     playerId: String(e.display?.playerId ?? e.playerId ?? '').trim() || null,
     byeWeek: e.byeWeek ?? e.display?.metadata?.byeWeek ?? null,
     adp: e.adp ?? null,
+    projectedPointsPerGame: finiteRate(e.display?.stats?.projectedPointsPerGame),
   }
+}
+
+function finiteRate(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
 /**
@@ -537,6 +544,13 @@ export async function resolveBestAvailableAutopickCandidate(
       const adpA = aiAdpByKey?.[keyA] ?? a.adp ?? 999
       const adpB = aiAdpByKey?.[keyB] ?? b.adp ?? 999
       if (adpA !== adpB) return adpA - adpB
+      // Same ADP — in a sport with no ADP feed, none on either side: the higher projected scorer,
+      // not the earlier name. Alphabetical here drafted a whole college basketball board A to Z.
+      const projA = a.projectedPointsPerGame ?? null
+      const projB = b.projectedPointsPerGame ?? null
+      if (projA != null && projB != null && projA !== projB) return projB - projA
+      if (projA != null && projB == null) return -1
+      if (projA == null && projB != null) return 1
       return a.playerName.localeCompare(b.playerName)
     })
     const top = sorted[0]

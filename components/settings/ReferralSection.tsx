@@ -220,7 +220,7 @@ export function ReferralSection() {
           ) : null}
           {link && (
             <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
-              <ReferralShareBar referralLink={link} testIdPrefix="referral-share" />
+              <ReferralShareBar referralLink={link} testIdPrefix="referral-share" omit={["copy_link"]} />
             </div>
           )}
           {link && (
@@ -231,8 +231,9 @@ export function ReferralSection() {
         </div>
       )}
 
+      {/* Two across on a phone (2026-11-25, the simplify pass): four full-width tiles were ~400px. */}
       {stats && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="referral-stats-grid">
           <div data-testid="referral-stat-clicks" className="rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5" style={{ color: "var(--muted)" }} />
