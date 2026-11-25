@@ -217,10 +217,17 @@ describe('the rail, grouped by job', () => {
     expect(group('Plan ahead')).toEqual(['/core/season-outlook', '/core/players', '/core/draft-hq'])
   })
 
+  it('the Clubhouse is a desktop rail link, under All leagues beside Find a League', () => {
+    const { groups } = shell({ selectedLeagueId: null })
+    const all = groups.find((g) => g.heading === 'All leagues')!.hrefs
+    expect(all).toContain('/clubhouse')
+    expect(all.indexOf('/clubhouse')).toBe(all.indexOf('/find-league') + 1)
+  })
+
   it('every key named in a no-league rail group renders with no league, and none lands in a trailing group', () => {
     const { groups } = shell({ selectedLeagueId: null, commissionerCount: 1, isAdmin: true })
     const rendered = new Set(groups.flatMap((g) => g.hrefs).map((h) => h.replace(/^\/core\/?/, '').replace(/\?.*$/, '')))
-    const conditional = new Set(['devy', 'brackets', 'find-league', 'my-leagues', 'settings', 'plans', 'admin', 'home'])
+    const conditional = new Set(['devy', 'brackets', 'find-league', 'clubhouse', 'my-leagues', 'settings', 'plans', 'admin', 'home'])
     for (const section of NAV_SECTION_ORDER_NO_LEAGUE) {
       for (const key of section.keys) if (!conditional.has(key)) expect(rendered.has(key)).toBe(true)
     }
@@ -243,7 +250,7 @@ describe('nothing the tab row carried became unreachable', () => {
   it('every key named in a rail group is one the shell actually renders somewhere', () => {
     const { reachable } = shell({ hasIdpDefense: true, commissionerCount: 1, isAdmin: true })
     const rendered = new Set(reachable.map((h) => h.replace(/^\/core\/?/, '').replace(/\?.*$/, '')))
-    const conditional = new Set(['devy', 'devy-league', 'brackets', 'find-league', 'my-leagues', 'settings', 'plans', 'admin', 'home'])
+    const conditional = new Set(['devy', 'devy-league', 'brackets', 'find-league', 'clubhouse', 'my-leagues', 'settings', 'plans', 'admin', 'home'])
     for (const section of NAV_SECTION_ORDER) {
       for (const key of section.keys) if (!conditional.has(key)) expect(rendered.has(key)).toBe(true)
     }

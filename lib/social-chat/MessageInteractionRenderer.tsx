@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import Link from "next/link"
 import type { PlatformChatMessage } from "@/types/platform-shared"
 import {
@@ -52,6 +52,8 @@ export function MessageInteractionRenderer({
 }: MessageInteractionRendererProps) {
   const meta = (message.metadata || {}) as Record<string, unknown>
   const reactions = getReactionsFromMetadata(meta)
+  /** The quick-reaction row and Pin, opened per message from "Add reaction". */
+  const [actionsOpen, setActionsOpen] = useState(false)
   const isAlreadyPinned = pinnedReferencedIds?.has(message.id)
   const poll = message.messageType === "poll" ? parsePollBody(message.body || "") : null
 
@@ -194,6 +196,24 @@ export function MessageInteractionRenderer({
             {r.emoji} {r.count}
           </button>
         ))}
+        {/*
+          Behind one button per message (2026-11-25, the simplify pass): six emoji and "Pin" under EVERY
+          message took a line each on a phone. Reactions already given stay visible above; the row
+          stays open after a tap so a second reaction or Pin is one more tap.
+        */}
+        <button
+          type="button"
+          onClick={() => setActionsOpen((o) => !o)}
+          aria-label="Add reaction"
+          aria-expanded={actionsOpen}
+          className="inline-flex min-h-[24px] min-w-[32px] items-center justify-center rounded-full border px-1.5 text-xs leading-none"
+          style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+          data-testid="message-add-reaction"
+        >
+          ☺+
+        </button>
+        {actionsOpen ? (
+        <>
         <div className="flex gap-0.5">
           {QUICK_REACTIONS.map((emoji) => (
             <button
@@ -218,6 +238,8 @@ export function MessageInteractionRenderer({
             Pin
           </button>
         )}
+        </>
+        ) : null}
         {isAlreadyPinned && (
           <span className="text-[11px]" style={{ color: "var(--muted)" }}>Pinned</span>
         )}

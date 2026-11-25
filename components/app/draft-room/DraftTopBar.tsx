@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, More
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { formatTimerRemaining } from '@/lib/live-draft-engine/DraftTimerService'
 import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
+import { resolveScheduledStartCountdown, SCHEDULED_START_GRACE_MS } from '@/lib/draft/scheduledStartCountdown'
 import type { TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import './af-draft-room.css'
 import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
@@ -152,6 +153,17 @@ type DraftTopBarProps = {
   idleClockLabel?: string | null
   /** "Invite leaguemates" and the menu's Copy Invite Link. A solo mock has nobody to invite. */
   showInvite?: boolean
+  /**
+   * The league's scheduled draft time (`LeagueSettings.draftDateUtc`, ISO). Before the draft the
+   * middle slot counts down to it ("Starts in 12:34"). Null / absent renders exactly as before.
+   */
+  scheduledStartIso?: string | null
+  /**
+   * True when the server starts the draft at that time (`scheduledDraftAutoStarts`). Once the time
+   * has passed the countdown then reads "Starting…" for a few minutes; false drops it instead, so
+   * the room never promises a start the commissioner has to press.
+   */
+  scheduledStartAutoStarts?: boolean
 }
 
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {
@@ -303,6 +315,8 @@ export function DraftTopBar({
   extraMenuItems = [],
   idleClockLabel = null,
   showInvite = true,
+  scheduledStartIso = null,
+  scheduledStartAutoStarts = false,
 }: DraftTopBarProps) {
   const { t, tInterpolate, language } = useLanguage()
   const pickClockCopy = useMessages(pickClockPlannerMessages)
@@ -328,6 +342,25 @@ export function DraftTopBar({
     timerRemainingSeconds,
     { pauseReason: timerPauseReason, overnightResumeAtIso },
   )
+  // Pre-draft countdown to the scheduled start. The same hook ticks it once a second; it stops
+  // ticking once the time is far enough past that nothing is shown any more.
+  const scheduledStartMs = scheduledStartIso ? Date.parse(scheduledStartIso) : Number.NaN
+  const scheduledStartLive =
+    draftStatus === 'pre_draft' &&
+    Number.isFinite(scheduledStartMs) &&
+    Date.now() - scheduledStartMs <= SCHEDULED_START_GRACE_MS
+  const scheduledStartRemaining = useDraftCountdownSeconds(
+    scheduledStartLive ? 'running' : 'none',
+    scheduledStartLive ? scheduledStartIso : null,
+    null,
+  )
+  const scheduledStart = resolveScheduledStartCountdown({
+    draftStatus,
+    scheduledStartIso,
+    nowMs: Date.now(),
+    autoStarts: scheduledStartAutoStarts,
+    remainingSeconds: scheduledStartRemaining,
+  })
   const menuRef = useRef<HTMLDivElement | null>(null)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const menuDropdownRef = useRef<HTMLDivElement | null>(null)
@@ -485,6 +518,57 @@ export function DraftTopBar({
   const draftFormatLabel = resolveDraftFormatLabel(draftType, thirdRoundReversal, t)
   const poolReadinessLabel = formatPoolReadinessLabel(sport, poolReadiness, t)
 
+  /**
+   * "Starts in 12:34" before the scheduled draft time, "Starting…" just after it when the server
+   * starts the draft. `compact` is the commissioner's version beside the Start Draft button: on a
+   * phone it drops the words and keeps clock + time, so the pair still fits a 390px row.
+   */
+  const scheduledStartPill = (compact: boolean) => {
+    if (scheduledStart.phase === 'none') return null
+    const starting = scheduledStart.phase === 'starting'
+    const startsInLabel = t('draftRoom.topBar.scheduledStart.startsIn')
+    const startingLabel = t('draftRoom.topBar.scheduledStart.starting')
+    const when = Number.isFinite(scheduledStartMs)
+      ? new Date(scheduledStartMs).toLocaleString(language === 'es' ? 'es-US' : 'en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : ''
+    return (
+      <div
+        role="timer"
+        aria-label={starting ? startingLabel : `${startsInLabel} ${scheduledStart.time}`}
+        title={t('draftRoom.topBar.scheduledStart.title').replace('{{when}}', when)}
+        data-testid="draft-topbar-scheduled-countdown"
+        data-phase={scheduledStart.phase}
+        className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-cyan-400/35 bg-cyan-500/[0.12] text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ${
+          compact ? 'min-h-[36px] gap-1.5 px-2.5 py-1 text-[12px]' : 'min-h-[40px] gap-2 px-4 py-2 text-sm'
+        }`}
+      >
+        {starting ? (
+          <>
+            <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300/55 opacity-65" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300" />
+            </span>
+            <span className="font-semibold">{startingLabel}</span>
+          </>
+        ) : (
+          <>
+            <Clock className={`shrink-0 text-cyan-300/90 ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} aria-hidden />
+            <span className={`font-medium text-cyan-100/85 ${compact ? 'max-sm:hidden' : ''}`}>{startsInLabel}</span>
+            <span className="font-bold tabular-nums text-white" data-testid="draft-topbar-scheduled-countdown-time">
+              {scheduledStart.time}
+            </span>
+          </>
+        )}
+      </div>
+    )
+  }
+
   const centerCta = (() => {
     /** Completed state: show a clear broadcast "Draft Complete" badge. */
     if (draftStatus === 'completed') {
@@ -498,17 +582,24 @@ export function DraftTopBar({
 
     if (draftStatus === 'pre_draft' && isCommissioner && onStartDraft) {
       return (
-        <button
-          type="button"
-          onClick={onStartDraft}
-          disabled={commissionerLoading || startDraftDisabled}
-          data-testid="draft-topbar-start-draft"
-          className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[#aeb7ff]/40 bg-gradient-to-r from-[#9ca9ff] to-[#8b7fd8] px-5 py-2 text-sm font-semibold text-[#0a1030] shadow-[0_12px_36px_rgba(139,127,216,0.35)] transition duration-150 hover:brightness-110 hover:shadow-[0_14px_40px_rgba(156,169,255,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 active:scale-[0.98] disabled:opacity-55"
-          title={startDraftDisabled ? (poolReadinessLabel ?? t('draftRoom.topBar.poolPreparingGeneric')) : t('draftRoom.topBar.startDraftTitle')}
-        >
-          <Grid2x2 className="h-4 w-4" />
-          {t('draftRoom.topBar.startDraftCta')}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={onStartDraft}
+            disabled={commissionerLoading || startDraftDisabled}
+            data-testid="draft-topbar-start-draft"
+            className={`inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[#aeb7ff]/40 bg-gradient-to-r from-[#9ca9ff] to-[#8b7fd8] px-5 py-2 text-sm font-semibold text-[#0a1030] shadow-[0_12px_36px_rgba(139,127,216,0.35)] transition duration-150 hover:brightness-110 hover:shadow-[0_14px_40px_rgba(156,169,255,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 active:scale-[0.98] disabled:opacity-55${
+              // Only beside the countdown: keep the label on one line and tighten it on a phone.
+              scheduledStart.phase !== 'none' ? ' shrink-0 whitespace-nowrap max-sm:px-3.5' : ''
+            }`}
+            title={startDraftDisabled ? (poolReadinessLabel ?? t('draftRoom.topBar.poolPreparingGeneric')) : t('draftRoom.topBar.startDraftTitle')}
+          >
+            <Grid2x2 className="h-4 w-4" />
+            {t('draftRoom.topBar.startDraftCta')}
+          </button>
+          {/* The commissioner keeps Start Draft; the scheduled time counts down beside it. */}
+          {scheduledStartPill(true)}
+        </>
       )
     }
 
@@ -620,6 +711,9 @@ export function DraftTopBar({
       )
     }
 
+    // Before the draft, a scheduled time replaces the bare "pre draft" label with its countdown.
+    if (scheduledStart.phase !== 'none' && !idleClockLabel) return scheduledStartPill(false)
+
     return (
       <div className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-sm text-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm">
         <Clock className="h-4 w-4 shrink-0 text-cyan-300/90" />
@@ -720,8 +814,16 @@ export function DraftTopBar({
                 }}
               />
             ) : (
-              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-white/[0.16] to-white/[0.05] ring-1 ring-white/25 shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
-                <Image src="/brand/af-shield-transparent.png" alt="AllFantasy" width={22} height={24} className="h-6 w-[22px] object-contain drop-shadow-[0_0_6px_rgba(255,255,255,0.25)]" data-testid="draft-topbar-brand-logo" />
+              /*
+                The crest is a navy shield (#012d5a) and this header is navy too, so on the old
+                translucent tile the shield body vanished and only the white "AF" showed. A light
+                plate behind it gives the shield an edge on every header skin (default, redraft, dynasty).
+              */
+              <span
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-white to-[#cfe6ff] ring-1 ring-cyan-200/70 shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
+                data-testid="draft-topbar-brand-plate"
+              >
+                <Image src="/brand/af-shield-transparent.png" alt="AllFantasy" width={22} height={24} className="h-6 w-[22px] object-contain" data-testid="draft-topbar-brand-logo" />
               </span>
             )}
 
@@ -808,21 +910,21 @@ export function DraftTopBar({
                     >
                       {noteText}
                     </span>
-                    <span className="text-white/24">·</span>
+                    <span className="text-white/24" aria-hidden>·</span>
                   </>
                 ) : null}
                 <span>{timerSummary}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span>{withCount(t('draftRoom.topBar.teamsCount'), teamCount)}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span>{withCount(t('draftRoom.topBar.roundsCount'), rounds)}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span className="text-white/55">{sport}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span title={t('draftRoom.topBar.draftTypeTitle').replace('{{type}}', draftTypeLabel)}>{draftFormatLabel}</span>
                 {poolReadinessLabel ? (
                   <>
-                    <span className="text-white/24">·</span>
+                    <span className="text-white/24" aria-hidden>·</span>
                     <span
                       data-testid="draft-topbar-pool-readiness"
                       className={poolReadiness?.ready ? 'text-emerald-200' : 'text-amber-200'}
@@ -833,7 +935,7 @@ export function DraftTopBar({
                 ) : null}
                 {thirdRoundReversal ? (
                   <>
-                    <span className="text-white/24">·</span>
+                    <span className="text-white/24" aria-hidden>·</span>
                     <span
                       data-testid="draft-topbar-third-round-reversal-badge"
                       title={t('draftRoom.topBar.thirdRoundReversalTitle')}
@@ -845,7 +947,7 @@ export function DraftTopBar({
                 ) : null}
                 {showInvite ? (
                   <>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <button
                   type="button"
                   onClick={() => {

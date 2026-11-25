@@ -132,6 +132,16 @@ export function applyPoolSort<T extends PoolSortPlayer>(
     const tieB = tieKey === 'aiAdp' ? num(b.aiAdp) : num(b.adp)
     const tieCmp = comparePoolSort(tieA, tieB, 'asc')
     if (tieCmp !== 0) return tieCmp
+    // No ADP on either side: higher projected points per game first, matching the server's pool order
+    // and autopick (lib/draft-room/adp-ordering.ts) instead of falling to the alphabet.
+    if (tieA == null && tieB == null) {
+      const projCmp = comparePoolSort(
+        num(a.display?.stats?.projectedPointsPerGame),
+        num(b.display?.stats?.projectedPointsPerGame),
+        'desc',
+      )
+      if (projCmp !== 0) return projCmp
+    }
     return (a.name ?? '').localeCompare(b.name ?? '')
   })
   return out

@@ -20,9 +20,7 @@ export default async function ProfilePage() {
           ← Back to dashboard
         </Link>
         <h1 className="text-2xl font-semibold mode-text">Profile</h1>
-        <p className="mt-2 text-sm mode-muted">
-          Your identity, preferences, and quick links. Edit below or open Settings for more options.
-        </p>
+        {/* No intro line (2026-11-25, the simplify pass): the card, the Edit button and Settings say it. */}
       </div>
       <ProfilePageClient isOwnProfile={true} />
     </main>

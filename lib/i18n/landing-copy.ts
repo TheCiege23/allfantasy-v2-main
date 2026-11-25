@@ -77,6 +77,8 @@ type LandingCopy = {
     demo: string
     pricing: string
     forCommissioners: string
+    /** The community board, /clubhouse. A name, so it stays "Clubhouse" in every language. */
+    clubhouse: string
     signIn: string
     /** Primary CTA when the reader is already signed in. */
     goToDashboard: string
@@ -228,6 +230,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       demo: 'Demo',
       pricing: 'Pricing',
       forCommissioners: 'For commissioners',
+      clubhouse: 'Clubhouse',
       signIn: 'Sign in',
       goToDashboard: 'Go to dashboard',
       partners: 'Partners',
@@ -447,6 +450,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       demo: 'Demo',
       pricing: 'Precios',
       forCommissioners: 'Para comisionados',
+      clubhouse: 'Clubhouse',
       signIn: 'Iniciar sesión',
       goToDashboard: 'Ir al panel',
       partners: 'Socios',
