@@ -254,14 +254,21 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
   if (dropId && dropLocked.has(dropId)) {
     const sec = sectionForPlayerId(roster.playerData, dropId)
     const canDropStarters = engineConfig.can_drop_starters_after_game_start === true
-    const canDropBench = engineConfig.can_drop_bench_after_lock !== false
+    /*
+     * Owner's call, 2026-11-25: a BENCH player whose game has started is locked too, by default — "can't
+     * be moved in or out" makes no exception for the bench. A commissioner can still allow it by setting
+     * `can_drop_bench_after_lock: true` (no league had set it either way: 861 of 861 rows blank).
+     * IR, taxi and devy keep the old default — those players are not in the lineup at all.
+     */
+    const canDropBench = engineConfig.can_drop_bench_after_lock === true
+    const canDropReserve = engineConfig.can_drop_bench_after_lock !== false
     if (sec === 'starters' && !canDropStarters) {
       throw new Error('This starter is locked because their game has started.')
     }
     if (sec === 'bench' && !canDropBench) {
-      throw new Error('This bench player is locked until the league allows drops after lock.')
+      throw new Error('This bench player is locked because their game has started.')
     }
-    if ((sec === 'ir' || sec === 'taxi' || sec === 'devy') && !canDropBench) {
+    if ((sec === 'ir' || sec === 'taxi' || sec === 'devy') && !canDropReserve) {
       throw new Error('You cannot drop this player while this slot is locked for the period.')
     }
   }

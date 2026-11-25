@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+const sched = vi.hoisted(() => ({ locked: vi.fn(), waiverRow: vi.fn() }))
 const h = vi.hoisted(() => ({ league: vi.fn(), legality: vi.fn(), drops: vi.fn(), claims: vi.fn(), settings: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findFirst: h.league }, roster: { findFirst: async () => ({ id: 'r1', playerData: { players: ['drop-1'] }, faabRemaining: 0 }), findMany: async () => [] },
-  leagueWaiverSettings: { findUnique: async () => ({}) }, waiverTransaction: { count: h.drops }, waiverClaim: { count: h.claims },
+  leagueWaiverSettings: { findUnique: (...a: unknown[]) => sched.waiverRow(...a) }, waiverTransaction: { count: h.drops }, waiverClaim: { count: h.claims },
 } }))
 vi.mock('@/lib/waiver-wire/settings-service', () => ({ getEffectiveLeagueWaiverSettings: h.settings }))
 vi.mock('@/lib/waiver-wire/current-nba-player-pool', () => ({ assertCurrentNbaWaiverPlayer: async () => {} }))
 vi.mock('@/lib/league/commissioner-roster-lock', () => ({ isCommissionerRosterLocked: async () => false }))
 vi.mock('@/lib/roster-legality/loadLegalityEvaluationContext', () => ({ evaluateLegalityForProjectedRoster: h.legality }))
-const sched = vi.hoisted(() => ({ locked: vi.fn() }))
 vi.mock('@/lib/roster-lineup-engine/lineupLockService', () => ({
   computePerPlayerKickoffLocks: () => ({ lockedPlayerIds: [] }),
   resolveScheduleLockedPlayerIds: (...a: unknown[]) => sched.locked(...a),
@@ -24,6 +24,7 @@ beforeEach(() => {
   h.drops.mockResolvedValue(0); h.claims.mockResolvedValue(0)
   h.legality.mockResolvedValue({ result: { blockingReasons: [], irViolations: [], taxiViolations: [], devyViolations: [] } })
   sched.locked.mockResolvedValue([])
+  sched.waiverRow.mockResolvedValue({})
 })
 
 describe('joint acquisition canonical simulation', () => {
@@ -69,5 +70,22 @@ describe('a drop is a move out: the schedule lock applies to it', () => {
   it('a schedule that cannot be read keeps the old check (does not fail the claim)', async () => {
     sched.locked.mockResolvedValue(null)
     await expect(previewWaiverClaimEligibility(input, started)).resolves.toBeUndefined()
+  })
+})
+
+describe('a BENCH player whose game has started is locked too (owner, 2026-11-25)', () => {
+  const benched = { playerData: { players: ['add-1', 'drop-2'], lineup_sections: { starters: [{ id: 'add-1' }], bench: [{ id: 'drop-2' }] } }, priorDrops: 0 }
+  it('🛑 refuses the drop by default', async () => {
+    sched.locked.mockResolvedValue(['drop-2'])
+    await expect(previewWaiverClaimEligibility(input, benched)).rejects.toThrow('This bench player is locked because their game has started.')
+  })
+  it('a commissioner who explicitly allows bench drops after lock still can', async () => {
+    sched.locked.mockResolvedValue(['drop-2'])
+    sched.waiverRow.mockResolvedValue({ waiverEngineConfig: { can_drop_bench_after_lock: true } })
+    await expect(previewWaiverClaimEligibility(input, benched)).resolves.toBeUndefined()
+  })
+  it('a bench player whose game has NOT started can be dropped', async () => {
+    sched.locked.mockResolvedValue([])
+    await expect(previewWaiverClaimEligibility(input, benched)).resolves.toBeUndefined()
   })
 })
