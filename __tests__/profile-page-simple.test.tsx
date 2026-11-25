@@ -30,7 +30,12 @@ const STATS = {
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
     ok: true,
-    json: async () => (String(url).includes('/api/profile/stats') ? STATS : {}),
+    json: async () =>
+      String(url).includes('/api/profile/stats')
+        ? STATS
+        : String(url).includes('/api/profile/public')
+          ? { username: 'GridironGuru', displayName: 'Sam Rivera', profileImageUrl: null, avatarPreset: 'crown', bio: 'Open to trades.', preferredSports: ['NFL'] }
+          : {},
   })))
 })
 afterEach(() => {
@@ -71,4 +76,18 @@ describe('/profile, simplified', () => {
     expect(code('app/profile/page.tsx')).not.toMatch(/Your identity, preferences/)
     expect(code('app/profile/[username]/page.tsx')).not.toMatch(/Your identity and preferences|Public profile view/)
   })
+
+  it("someone else's profile: Message once per width, no second card, no page heading", async () => {
+    render(<ProfilePageClient isOwnProfile={false} publicUsername="GridironGuru" />)
+    const phone = await screen.findByTestId('public-profile-message')
+    expect(phone.className).toMatch(/(^|\s)sm:hidden(\s|$)/)
+    expect(phone.className).toMatch(/(^|\s)w-full(\s|$)/)
+    // The other Message link is the sm-and-up one beside the name: exactly two, never three.
+    const messages = screen.getAllByRole('link', { name: /Message/ })
+    expect(messages).toHaveLength(2)
+    expect(messages.find((a) => a !== phone)!.parentElement!.className).toMatch(/(^|\s)hidden(\s|$)/)
+    expect(document.body.textContent).not.toMatch(/Only shared info is shown/)
+    expect(code('app/profile/[username]/page.tsx')).not.toMatch(/`@\$\{username\}`/)
+  })
 })
+

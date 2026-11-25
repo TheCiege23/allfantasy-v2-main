@@ -242,8 +242,9 @@ export default function ProfilePageClient({
               </Link>
             </div>
           )}
+          {/* From sm up, Message sits beside the name; on a phone it is the full-width button below. */}
           {!isOwnProfile && username && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="hidden flex-wrap items-center gap-2 sm:flex">
               <Link
                 href={`/messages?start=${encodeURIComponent(username)}`}
                 className="inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"
@@ -277,6 +278,23 @@ export default function ProfilePageClient({
               ))}
             </div>
           </div>
+        )}
+
+        {/*
+          Someone else's profile on a phone (2026-11-25, the simplify pass): Message is one full-width
+          button at the foot of the card, so the name beside the avatar is not cut short. A second card
+          repeating the button with "Only shared info is shown" is gone.
+        */}
+        {!isOwnProfile && username && (
+          <Link
+            href={`/messages?start=${encodeURIComponent(username)}`}
+            data-testid="public-profile-message"
+            className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold sm:hidden"
+            style={{ borderColor: "var(--accent-cyan)", color: "var(--accent-cyan-strong)", background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)" }}
+          >
+            <MessageCircle className="h-4 w-4" />
+            Message
+          </Link>
         )}
 
         {isOwnProfile && (
@@ -418,19 +436,6 @@ export default function ProfilePageClient({
         </div>
       )}
 
-      {!isOwnProfile && publicProfile && (
-        <div className="rounded-2xl border p-6 text-center" style={{ borderColor: "var(--border)" }}>
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Viewing public profile. Only shared info is shown.</p>
-          <Link
-            href={`/messages?start=${encodeURIComponent(username)}`}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition"
-            style={{ borderColor: "var(--accent-cyan)", color: "var(--accent-cyan-strong)", background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)" }}
-          >
-            <MessageCircle className="h-4 w-4" />
-            Message
-          </Link>
-        </div>
-      )}
     </div>
   )
 }
