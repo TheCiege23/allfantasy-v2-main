@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { BarChart3, Check, Copy, Loader2, RefreshCcw, Sparkles, Users } from "lucide-react"
-import { ReferralCTACard } from "./ReferralCTACard"
 import { ReferralLeaderboard } from "./ReferralLeaderboard"
 import { ReferralProgressWidget } from "./ReferralProgressWidget"
 import { ReferralShareBar } from "./ReferralShareBar"
@@ -159,28 +158,26 @@ export function ReferralDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--muted)" }}>
-            Referral System
-          </p>
-          <h1 className="mt-2 text-3xl font-bold" style={{ color: "var(--text)" }}>
-            Grow the league, earn the upside
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--muted)" }}>
-            Track referral signups, onboarding completion, creator momentum, and claimable rewards from one dashboard.
-          </p>
-        </div>
+      {/*
+        The heading alone (2026-11-25, the simplify pass): the "Referral System" eyebrow and "Track referral
+        signups, onboarding completion, creator momentum, and claimable rewards from one dashboard" said what
+        the cards below show. Reload is an icon beside it, labelled for screen readers.
+      */}
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="min-w-0 text-2xl font-bold sm:text-3xl" style={{ color: "var(--text)" }}>
+          Grow the league, earn the upside
+        </h1>
 
         <button
           type="button"
           onClick={() => void fetchDashboard("reload")}
           data-testid="referral-dashboard-reload"
-          className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"
+          aria-label="Reload data"
+          title="Reload data"
+          className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border"
           style={{ borderColor: "var(--border)", color: "var(--text)" }}
         >
           {reloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-          Reload data
         </button>
       </div>
 
@@ -192,10 +189,15 @@ export function ReferralDashboard() {
             "linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--panel) 92%, transparent))",
         }}
       >
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
+        {/*
+          `grid-cols-1` (minmax(0,1fr)) on every grid here (2026-11-25): with no column set, a track is as
+          wide as its widest child, so on a 390px phone the share row and stat tiles pushed the page to
+          404px and it scrolled sideways.
+        */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="min-w-0 space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="min-w-0">
                 <p className="text-xs font-medium" style={{ color: "var(--muted)" }}>
                   Referral code
                 </p>
@@ -211,7 +213,7 @@ export function ReferralDashboard() {
                     type="button"
                     onClick={() => void copyCode()}
                     data-testid="referral-copy-code"
-                    className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium"
+                    className="inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium"
                     style={{ borderColor: "var(--border)", color: "var(--text)" }}
                   >
                     {copiedCode ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -220,7 +222,7 @@ export function ReferralDashboard() {
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-medium" style={{ color: "var(--muted)" }}>
                   Referral link
                 </p>
@@ -236,7 +238,7 @@ export function ReferralDashboard() {
                     type="button"
                     onClick={() => void copyLink()}
                     data-testid="referral-copy-link"
-                    className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium"
+                    className="inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium"
                     style={{ borderColor: "var(--border)", color: "var(--text)" }}
                   >
                     {copiedLink ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -246,12 +248,13 @@ export function ReferralDashboard() {
               </div>
             </div>
 
-            <ReferralShareBar referralLink={dashboard.link} onShare={shareHandler} />
+            <ReferralShareBar referralLink={dashboard.link} onShare={shareHandler} omit={["copy_link"]} />
           </div>
 
           <ProWeekOfferCard />
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* Two across on a phone too (2026-11-25): four full-width tiles were ~400px. */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--panel)" }}>
               <p className="text-xs font-medium" style={{ color: "var(--muted)" }}>
                 Signups
@@ -292,23 +295,12 @@ export function ReferralDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <ReferralProgressWidget progress={dashboard.progress} />
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          {dashboard.ctaCards.map((card) => (
-            <ReferralCTACard
-              key={card.id}
-              title={card.title}
-              description={card.description}
-              ctaLabel={card.label}
-              ctaHref={card.href}
-              variant={card.variant}
-              testId={card.id === "leaderboard" ? "referral-open-leaderboard" : undefined}
-            />
-          ))}
-        </div>
-      </div>
+      {/*
+        No call-to-action cards under the progress (2026-11-25, the simplify pass): "Share your link",
+        "Claim rewards" and "Climb the leaderboard" repeated the Copy buttons above and the Rewards and
+        Leaderboard tabs right below — three ~125px cards on a phone that each went somewhere one tap away.
+      */}
+      <ReferralProgressWidget progress={dashboard.progress} />
 
       <div className="flex flex-wrap gap-2">
         {(["overview", "rewards", "leaderboard"] as const).map((value) => (
@@ -336,9 +328,9 @@ export function ReferralDashboard() {
       ) : null}
 
       {tab === "overview" ? (
-        <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="min-w-0 space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border)" }}>
                 <div className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4" style={{ color: "var(--muted)" }} />
@@ -346,7 +338,7 @@ export function ReferralDashboard() {
                     Funnel snapshot
                   </span>
                 </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="mt-4 grid grid-cols-2 gap-3">
                   {[
                     { label: "Clicks", value: dashboard.funnel.clicked },
                     { label: "Signed up", value: dashboard.funnel.signedUp },
@@ -378,7 +370,7 @@ export function ReferralDashboard() {
                       ? `${claimableRewards.length} reward${claimableRewards.length === 1 ? "" : "s"} ready to claim now.`
                       : "No claimable rewards yet. Reload after new referrals land."}
                   </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
                       <p className="text-xs" style={{ color: "var(--muted)" }}>
                         Pending
@@ -437,7 +429,8 @@ export function ReferralDashboard() {
             </div>
           </div>
 
-          <ReferralLeaderboard entries={dashboard.leaderboard.slice(0, 8)} />
+          {/* The top three on Overview (2026-11-25); the Leaderboard tab has the rest. */}
+          <ReferralLeaderboard entries={dashboard.leaderboard.slice(0, 3)} />
         </div>
       ) : null}
 
