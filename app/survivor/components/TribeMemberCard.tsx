@@ -47,7 +47,9 @@ export function TribeMemberCard({
           {/* Under the name, not beside it: beside, a score cut names to "Cie…" on a phone. */}
           {weeklyScore != null ? (
             <p className="font-mono text-[15px] font-semibold tabular-nums text-[var(--survivor-torch)]">{weeklyScore.toFixed(1)}</p>
-          ) : null}
+          ) : out ? null : (
+            <p className="text-[12px] text-[var(--survivor-text-dim)]" data-testid="survivor-member-no-score">No score yet</p>
+          )}
           {teamName ? (
             <p className="truncate text-[11px] text-[var(--survivor-text-dim)]">{teamName}</p>
           ) : null}
