@@ -27,6 +27,7 @@ import { getCurrentlyEliminatedRosterIds } from '@/lib/survivor/SurvivorRosterSt
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
 import { prisma } from '@/lib/prisma'
+import { loadNbaSurvivorLiveMemberScores, wantsSurvivorLiveScores } from '@/lib/survivor/survivorLiveTribeScores'
 import {
   parseSurvivorFairPlayFromLeagueSettings,
   redactSurvivorSummaryPayloadForFairPlay,
@@ -388,6 +389,21 @@ export async function GET(
       expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
     })),
     scoresFinalized: weeklyScoreRows.length > 0 && weeklyScoreRows.every(row => row.isFinalized),
+    /*
+     * UNOFFICIAL live points per castaway (main roster id), for the Matchup tab's tribe race: an NBA week's
+     * official score stays 0 until the week is final (lib/survivor/survivorLiveTribeScores.ts). Only when
+     * that tab asks (`?live=1`), only for an NBA league, and only while the week is not final. Nothing
+     * that decides immunity or Elimination Council reads it.
+     */
+    liveMemberScores:
+      wantsSurvivorLiveScores({ liveParam: req.nextUrl.searchParams?.get('live'), sport: leagueMeta?.sport, week: currentWeek, rows: weeklyScoreRows })
+        ? await loadNbaSurvivorLiveMemberScores({
+            leagueId,
+            week: currentWeek,
+            season: leagueMeta?.season ?? new Date().getFullYear(),
+            rosterIds: tribes.flatMap((t) => t.members.map((m) => m.rosterId)),
+          }).catch(() => null)
+        : null,
     tribes: tribes.map((t) => ({
       id: t.id,
       name: t.name,
