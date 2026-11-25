@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -147,6 +149,27 @@ describe('eviction night', () => {
     expect(screen.getByText(/joins the jury\. Their team stops scoring and all 15 players go to waivers\./)).toBeTruthy()
     fireEvent.click(screen.getByTestId('specialty-replay'))
     expect(moment.getAttribute('data-state')).toBe('sealed')
+  })
+
+  it('the privacy promise is a closed row; what happens after the eviction stays open (2026-11-24)', () => {
+    render(<BigBrotherEvictionMoment eviction={eviction} nameOf={nameOf} avatarOf={() => null} />)
+    const privacy = screen.getByTestId('bb-privacy') as HTMLDetailsElement
+    expect(privacy.tagName).toBe('DETAILS')
+    expect(privacy.open).toBe(false)
+    expect(privacy.querySelector('summary')?.textContent).toContain('What’s shown, what stays private')
+    expect(screen.getByText('After the eviction').closest('details')).toBeNull()
+  })
+
+  it('the phone layout puts the nominees side by side and the houseguests two across', () => {
+    const css = readFileSync(join(process.cwd(), 'components/big-brother/big-brother-specialty.module.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    const phone = css.slice(css.indexOf('@media (max-width: 560px)'))
+    expect(phone).toMatch(/\.evictStage \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+    expect(phone).toMatch(/\.hgGrid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+  })
+
+  it('"How winners are decided" is a closed row on the house view', () => {
+    const src = readFileSync(join(process.cwd(), 'components/big-brother/BigBrotherHome.tsx'), 'utf8')
+    expect(src).toMatch(/<details className="[^"]*" data-testid="bb-how-winners">\s*<summary className="[^"]*min-h-\[44px\][^"]*">\s*<h3[^>]*>How winners are decided<\/h3>/)
   })
 
   it('a league with private totals reveals the result only', () => {

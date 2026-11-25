@@ -628,14 +628,18 @@ export function BigBrotherEvictionMoment({
       </p>
       {!counts ? <p className={sp.empty} style={{ textAlign: 'center' }}>This league keeps vote totals private. Only the result is shown.</p> : null}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-        <div className={sp.card2} style={{ flex: '1 1 260px', padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span className={sp.lbl}>What’s shown, what stays private</span>
-          <ul className={sp.rules}>
+        {/* The privacy promise is the same every week, so it folds (2026-11-24, the simplify pass); "After the
+            eviction" stays open because once the vote is read it says what happened to this manager. */}
+        <details className={`${sp.card2} ${sp.fold}`} style={{ flex: '1 1 260px', padding: 16 }} data-testid="bb-privacy">
+          <summary className={sp.foldSummary} style={{ margin: 0 }}>
+            <span className={sp.lbl}>What’s shown, what stays private</span>
+          </summary>
+          <ul className={sp.rules} style={{ marginTop: 10 }}>
             <li className={sp.rule}><b>✓</b><span>Who was evicted{counts ? ' and the vote count' : ''}.</span></li>
             <li className={sp.rule}><b>✓</b><span>Who voted is never shown until the season ends.</span></li>
             <li className={sp.rule}><b>✓</b><span>AF never reveals sealed ballots in chat or recaps.</span></li>
           </ul>
-        </div>
+        </details>
         <div className={sp.card2} style={{ flex: '1 1 260px', padding: 16, display: 'flex', flexDirection: 'column', gap: 8, borderColor: 'rgba(139,92,246,.35)' }}>
           <span className={sp.lbl} style={{ color: '#c4b5fd' }}>After the eviction</span>
           <span className={sp.t2} style={{ fontSize: 13 }}>
