@@ -20481,12 +20481,53 @@ model CommunityPost {
   author          AppUser          @relation("CommunityPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
   replies         CommunityReply[]
   ideaVotes       CommunityIdeaVote[]
+  attachments     CommunityAttachment[]
+  ideaPlan        CommunityIdeaPlan?
 
   @@index([channel, isPinned, lastActivityAt])
   @@index([lastActivityAt])
   @@index([authorUserId, createdAt])
   @@index([kind, upvoteCount])
   @@map("community_posts")
+}
+
+/// A photo or PDF attached to a League Lab idea. Stored in private storage under `storageKey` and
+/// served by /api/community/attachments/[id], which re-checks the post on every read.
+model CommunityAttachment {
+  id             String        @id @default(uuid())
+  postId         String
+  uploaderUserId String
+  storageKey     String        @db.VarChar(255)
+  /// Sniffed from the bytes, never taken from the browser: image/png | image/jpeg | image/gif | image/webp | application/pdf.
+  contentType    String        @db.VarChar(32)
+  fileName       String        @db.VarChar(160)
+  byteSize       Int
+  createdAt      DateTime      @default(now())
+  post           CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@map("community_attachments")
+}
+
+/// The staff-only build plan Chimmy writes for a League Lab idea. One per idea.
+model CommunityIdeaPlan {
+  id          String        @id @default(uuid())
+  postId      String        @unique
+  /// "pending" | "ready" | "failed" | "disabled" (the spend switch was off).
+  status      String        @default("pending") @db.VarChar(16)
+  plan        Json?
+  model       String?       @db.VarChar(64)
+  error       String?       @db.VarChar(200)
+  attempts    Int           @default(0)
+  startedAt   DateTime?
+  generatedAt DateTime?
+  emailedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  post        CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([status, updatedAt])
+  @@map("community_idea_plans")
 }
 
 /// One upvote per (person, idea).
