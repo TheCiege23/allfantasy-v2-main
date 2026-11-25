@@ -1336,7 +1336,9 @@ export default function ChimmyChatShell({
           </button>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-white/40 flex-wrap gap-2">
+        {/* text-white/60, not /40: at 11px, /40 measured 3.81:1 on this panel, under the 4.5:1 AA floor
+            for small text. Hover goes one step brighter so it still reads as a change. */}
+        <div className="flex items-center justify-between text-[11px] text-white/60 flex-wrap gap-2">
           <div className="flex items-center gap-3">
             {startSitDecisionHref ? (
               <Link
@@ -1351,7 +1353,7 @@ export default function ChimmyChatShell({
               type="button"
               onClick={handleCopyResponse}
               data-testid="chimmy-copy-response-button"
-              className="hover:text-white/60"
+              className="hover:text-white/85"
               aria-label="Copy response"
             >
               Copy response
@@ -1362,7 +1364,7 @@ export default function ChimmyChatShell({
                 onClick={handleRetry}
                 disabled={retryLoading}
                 data-testid="chimmy-retry-button"
-                className="inline-flex items-center gap-1 hover:text-white/60 disabled:opacity-50"
+                className="inline-flex items-center gap-1 hover:text-white/85 disabled:opacity-50"
                 aria-label="Retry"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${retryLoading ? 'animate-spin' : ''}`} />
@@ -1375,7 +1377,7 @@ export default function ChimmyChatShell({
               type="button"
               onClick={onSaveConversation}
               data-testid="chimmy-save-conversation-button"
-              className="hover:text-white/60"
+              className="hover:text-white/85"
             >
               Save conversation
             </button>
