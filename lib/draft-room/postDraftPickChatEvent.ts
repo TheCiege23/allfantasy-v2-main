@@ -32,6 +32,11 @@ export type PostDraftPickChatEventInput = {
   /** D.6.3 — true when this pick was made by an AI / autopick manager
    * (drives the "AI Manager" badge on the pick card). */
   aiManager?: boolean
+  /**
+   * Why Chimmy picked this player on an automatic pick (`pickMetadata.autopick.reason`: queue,
+   * Draft like me, best available). Shown under the pick in draft chat; ignored on a manual pick.
+   */
+  autoPickReason?: string | null
   /** Commit T — true when this pick was committed via a commissioner
    * action (force_autopick, skip_pick, or assigned-pick from the
    * commissioner control center). Drives a distinct "Commissioner"
@@ -124,6 +129,9 @@ export async function postDraftPickChatEvent(input: PostDraftPickChatEventInput)
         ? { teamLogoUrl: input.teamLogoUrl.trim() }
         : {}),
       ...(input.aiManager === true ? { aiManager: true } : {}),
+      ...(input.aiManager === true && typeof input.autoPickReason === 'string' && input.autoPickReason.trim()
+        ? { autoPickReason: input.autoPickReason.trim().slice(0, 300) }
+        : {}),
       // Commit T — commissioner-pick badge metadata. Mutually exclusive
       // with aiManager: when source is 'commissioner', aiManager stays
       // false. Renderers can show "AI Manager" / "Commissioner" /

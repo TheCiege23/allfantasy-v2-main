@@ -1256,7 +1256,7 @@ export default function MockDraftSleeperRoomClient({
   }, [])
 
   const handlePick = useCallback(
-    (player: AvailablePlayer, isAiPick: boolean, expectedOverall?: number) => {
+    (player: AvailablePlayer, isAiPick: boolean, expectedOverall?: number, autoReason?: string) => {
       setDraftState((current) => {
         if (!current || current.status !== 'drafting') return current
         if (expectedOverall != null && current.currentPick !== expectedOverall) return current
@@ -1280,7 +1280,7 @@ export default function MockDraftSleeperRoomClient({
           projectedPts: player.projectedPts,
           headshotUrl: player.headshotUrl ?? null,
           teamLogoUrl: player.teamLogoUrl ?? null,
-          aiReason: isAiPick ? generatePickReason(player, team, team.rosterNeeds, round) : undefined,
+          aiReason: isAiPick ? generatePickReason(player, team, team.rosterNeeds, round) : autoReason,
           isUser: team.isUser,
           managerName: team.managerName,
         }
@@ -1311,7 +1311,7 @@ export default function MockDraftSleeperRoomClient({
             Boolean(updatedTeams.find((entry) => entry.slot === getOnTheClockSlot(updatedTeams, current.settings, nextCurrentPick))?.isUser)),
           pausedRemainingMs: undefined,
           chatMessages:
-            isAiPick && pick.aiReason
+            pick.aiReason
               ? [...current.chatMessages, { role: 'ai', content: pick.aiReason, pick: pick.overall }]
               : current.chatMessages,
         }
@@ -1404,8 +1404,18 @@ export default function MockDraftSleeperRoomClient({
 
     if (fallbackPlayer) {
       // A missed clock puts the user's team on auto for the rest of the draft (the AUTO pill turns it off).
+      const wasOnAuto = Boolean(draftState.userAutoPick)
       setDraftState((current) => (current && !current.userAutoPick ? { ...current, userAutoPick: true } : current))
-      handlePick(fallbackPlayer, false, draftState.currentPick)
+      // Said in chat, as for every Chimmy pick: why this player, and that the team is now on auto.
+      const why = queuedPlayer ? 'the next player in your queue' : 'the best player left on the board'
+      handlePick(
+        fallbackPlayer,
+        false,
+        draftState.currentPick,
+        wasOnAuto
+          ? `You're on auto, so Chimmy took ${why}: ${fallbackPlayer.name}.`
+          : `Your clock ran out, so Chimmy took ${why}: ${fallbackPlayer.name}. You're on auto now; tap AUTO to turn it off.`,
+      )
     }
   }, [draftState, draftedIds, handlePick, onTheClockTeam?.isUser, queue])
 
