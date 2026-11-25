@@ -126,12 +126,14 @@ export default function SurvivorChallengesPage() {
       {leagueId ? <RealGameChallengeCard leagueId={leagueId} /> : null}
       {leagueId ? <WeeklyCallCard leagueId={leagueId} /> : null}
 
-      <section className="mt-8">
-        <h2 className="sv-kicker mb-3 text-[12px]">
-          Past challenges
-        </h2>
-        {past && past.length === 0 ? <p className="text-[13px] text-white/50">No challenge results yet.</p> : null}
-        <div className="space-y-2">
+      {/* Past challenges are history: one closed row with the count (2026-11-24, the simplify pass). Open,
+          four or more settled weeks sat between this week's games and the chat button. */}
+      <details className="mt-8" data-testid="survivor-past-challenges">
+        <summary className="sv-kicker flex min-h-[44px] cursor-pointer items-center text-[12px]">
+          Past challenges{past && past.length ? ` (${Math.min(past.length, 12)})` : ''}
+        </summary>
+        {past && past.length === 0 ? <p className="mt-3 text-[13px] text-white/50">No challenge results yet.</p> : null}
+        <div className="mt-3 space-y-2">
           {(past ?? []).slice(0, 12).map((row) => (
             <div key={row.id} className="survivor-panel rounded-xl p-3">
               <p className="text-[13px] font-semibold text-white/85">Week {row.week} · {row.title || 'Challenge'}</p>
@@ -139,7 +141,7 @@ export default function SurvivorChallengesPage() {
             </div>
           ))}
         </div>
-      </section>
+      </details>
 
       <div className="mt-8 text-center md:hidden">
         <Link
