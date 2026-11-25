@@ -1577,6 +1577,16 @@ html[data-mode="light"] .via-white\/10:where(:not(.af-draft-dark, .af-draft-dark
   }
 }
 /*
+ * Every tile keeps its info line on one row (2026-11-25, DraftBoardCell). Below 100px the ADP gap
+ * ("19 early") would leave no room for the position and team beside it, so it gives way there.
+ * Top-level, like the rule above.
+ */
+@container (max-width: 99px) {
+  .af-tile-adp-gap {
+    display: none;
+  }
+}
+/*
  * Board pick tiles, 2026-11-24: a tile 150px or wider (a desktop board) puts the player photo and
  * team logo on the LEFT and the text on the right, with a larger photo and name. Narrower tiles
  * (phones, crowded boards) keep the centred stack with the smaller photo. Top-level, as above;

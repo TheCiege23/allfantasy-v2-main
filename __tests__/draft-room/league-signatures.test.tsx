@@ -201,10 +201,27 @@ describe('the chip on a drafted tile', () => {
     expect(screen.getByTestId('draft-board-cell-adp-delta').textContent).toBe('4 late')
   })
 
-  it('a tile without a chip wraps as before', () => {
+  it('a tile without a chip keeps one row too, so the gap never becomes a third line', () => {
+    // 2026-11-25, a 16-team board with 117px tiles: "19 early" wrapped under the position and team,
+    // the 68px tile overflowed, the photo rode up over its top edge and the gap was cut off below.
     renderBoard({ adpDeltaByOverall: { 1: -6 } })
-    expect(screen.getByTestId('draft-board-cell-info-1').className).toContain('flex-wrap')
-    expect(screen.getByTestId('draft-board-cell-adp-delta').className).not.toContain('af-tile-squeezable')
+    const info = screen.getByTestId('draft-board-cell-info-1')
+    expect(info.className).toContain('flex-nowrap')
+    expect(info.className).not.toContain('flex-wrap')
+    // It gives way only on a tile too narrow for it, not at the chip's 120px.
+    const gap = screen.getByTestId('draft-board-cell-adp-delta')
+    expect(gap.className).toContain('af-tile-adp-gap')
+    expect(gap.className).not.toContain('af-tile-squeezable')
+    const css = src('app/globals.css')
+    const at = css.indexOf('@container (max-width: 99px)')
+    expect(at).toBeGreaterThan(-1)
+    expect(css.slice(at, at + 90).replace(/\s+/g, ' ')).toContain('.af-tile-adp-gap { display: none; }')
+    const before = css.slice(0, at).replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(before.split('{').length - before.split('}').length).toBe(0)
+    // The photo's wrapper is as tall as the photo: no line box under an inline-block avatar.
+    const cell = src('components/app/draft-room/DraftBoardCell.tsx')
+    expect(cell).toMatch(/af-tile-photo-sm block rounded-full leading-\[0\]/)
+    expect(cell).toMatch(/af-tile-photo-lg hidden rounded-full leading-\[0\]/)
   })
 
   it('an empty tile never shows one', () => {
