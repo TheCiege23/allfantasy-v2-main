@@ -12,8 +12,12 @@ const status = (row: CurrentProRow) => String(row.status ?? '').trim().toUpperCa
 function fresh(row: CurrentProRow, now: number) {
   return date(row.fetchedAt) >= now - 72 * 60 * 60 * 1000 && date(row.expiresAt) > now
 }
+/** In today's feed and listed on a club. */
+function onAClub(row: CurrentProRow, now: number) {
+  return fresh(row, now) && Boolean(team(row.team)) && !['FA', 'FREEAGENT', 'NONE'].includes(team(row.team).toUpperCase())
+}
 function live(row: CurrentProRow, now: number) {
-  if (!fresh(row, now) || !team(row.team) || ['FA', 'FREEAGENT', 'NONE'].includes(team(row.team).toUpperCase())) return false
+  if (!onAClub(row, now)) return false
   if (row.source === 'rolling_insights') return ['ACT', 'QUES'].includes(status(row))
   // Sleeper's team is authoritative. Inactive can describe a rostered injured player.
   // Null teams were rejected above; never restore a free agent's previous club.
@@ -60,8 +64,11 @@ function verifiedRosterAliasMatches(sport: string, row: CurrentProRow, peer: Cur
 }
 
 /** Keep scoring IDs on the input row. Supplement only from one verified current roster identity. */
+const NO_ONE: ReadonlySet<string> = new Set()
 export function reconcileCurrentProRows<T extends CurrentProRow>(
   sport: string, rows: readonly T[], evidence: readonly T[], currentOnly: boolean, now = Date.now(),
+  /** Rolling Insights ids with a game this season (`loadPlayedThisSeasonIds`). Empty: no such evidence. */
+  playedThisSeason: ReadonlySet<string> = NO_ONE,
 ): T[] {
   if (!['NFL', 'NBA', 'NHL', 'MLB'].includes(sport)) return [...rows]
   const byName = new Map<string, T[]>()
@@ -111,7 +118,14 @@ export function reconcileCurrentProRows<T extends CurrentProRow>(
     // Curry, Wembanyama and Edwards. Roster membership only: `verified` still needs a single match,
     // so a position or photo is never taken from one of two providers that may disagree.
     const agreed = new Set(matches.map((other) => other.source)).size === matches.length ? matches : []
-    if (currentOnly && !live(row, now) && !agreed.some((other) => live(other, now))) continue
+    // A game this season is the plainest roster evidence there is, and it needs no second provider
+    // to agree on a name or a birthday. Rolling Insights' own flag cannot be read as "not playing":
+    // on 2026-11-25 it had Wembanyama INACT with 17 games played. Measured that day, the rules above
+    // left out 42 of the 870 players with an NHL game this season, Beckett Sennecke (22 games) among
+    // them, where TheSportsDB had a placeholder birthday or another spelling. The profile must still
+    // be in today's feed and on a club.
+    const played = row.source === 'rolling_insights' && Boolean(row.externalId) && playedThisSeason.has(row.externalId!) && onAClub(row, now)
+    if (currentOnly && !live(row, now) && !agreed.some((other) => live(other, now)) && !played) continue
     const peerId = verifiedMediaAliasPeerId(sport, row)
     const peer = peerId ? byExternalId.get(peerId) : undefined
     const aliasPhoto = peer && verifiedMediaAliasMatches(sport, row, peer) ? peer.imageUrl : null

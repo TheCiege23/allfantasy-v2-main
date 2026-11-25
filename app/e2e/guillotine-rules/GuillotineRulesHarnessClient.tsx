@@ -24,6 +24,7 @@ const RULES: GuillotineRules = {
   rosterReleaseTiming: 'next_waiver_run',
   aiRecapAuto: true,
   faabOnChop: 'keep',
+  faabOnChopPercent: 100,
   bestBall: false,
   periodWeeks: 1,
   chopListOrder: 'chop_top',

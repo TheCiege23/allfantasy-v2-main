@@ -11,7 +11,7 @@ import { readGuillotineAdvanced } from './guillotineAdvancedSettings'
 import { DEFAULT_ADVANCED, type GuillotineAdvanced } from './chopSchedule'
 import { hasFirstChopHappened } from './guillotineFirstChopWeek'
 import { normalizeGuillotineRulesPatch, paidFieldsChanged, RULE_DEFAULTS, AI_RECAP_AUTO_KEY, type GuillotineRuleField, type GuillotineRules } from './guillotineRules'
-import { FAAB_ON_CHOP_KEY, FAAB_RULES_CONFLICT_MESSAGE, readFaabOnChop } from './faabOnChop'
+import { DEFAULT_FAAB_ON_CHOP_PERCENT, FAAB_ON_CHOP_KEY, FAAB_ON_CHOP_PERCENT_KEY, FAAB_RULES_CONFLICT_MESSAGE, movesChoppedFaab, readFaabOnChop, readFaabOnChopPercent } from './faabOnChop'
 import { readAdvanced } from './chopSchedule'
 import { hasGuillotineAiRecapPlan } from './weeklyRecap'
 import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBestBall } from './guillotineBestBall'
@@ -90,6 +90,7 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
       rosterReleaseTiming: config.rosterReleaseTiming === 'immediate' ? 'immediate' : 'next_waiver_run',
       aiRecapAuto: settings[AI_RECAP_AUTO_KEY] !== false,
       faabOnChop: readFaabOnChop(settings),
+      faabOnChopPercent: readFaabOnChopPercent(settings),
       bestBall: readGuillotineBestBall(settings),
       periodWeeks: readPeriodWeeks(settings),
       chopListOrder: readChopListOrder(settings),
@@ -194,7 +195,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
     }
   }
 
-  const { endgame, aiRecapAuto, faabOnChop, bestBall, periodWeeks, chopListOrder, ...configPatch } = patch
+  const { endgame, aiRecapAuto, faabOnChop, faabOnChopPercent, bestBall, periodWeeks, chopListOrder, ...configPatch } = patch
   if (Object.keys(configPatch).length > 0) {
     const row = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
     if (row) {
@@ -225,17 +226,23 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
   const bestBallChanged = bestBall !== undefined && bestBall !== current.rules.bestBall
   const periodChanged = periodWeeks !== undefined && periodWeeks !== current.rules.periodWeeks
   const listOrderChanged = chopListOrder !== undefined && chopListOrder !== current.rules.chopListOrder
-  if (endgameChanged || recapChanged || faabChanged || bestBallChanged || periodChanged || listOrderChanged) {
+  const faabPercentChanged = faabOnChopPercent !== undefined && faabOnChopPercent !== current.rules.faabOnChopPercent
+  if (endgameChanged || recapChanged || faabChanged || faabPercentChanged || bestBallChanged || periodChanged || listOrderChanged) {
     // League.settings is shared by every settings writer: take the row lock (as chop rules do).
     const conflict = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
       // Split and "FAAB after a chop" cannot be on together (faabOnChop.ts); checked under the lock.
-      if (faabChanged && faabOnChop === 'split' && readAdvanced(row?.settings).faab.mode !== 'unchanged') return true
+      if (faabChanged && faabOnChop && movesChoppedFaab(faabOnChop) && readAdvanced(row?.settings).faab.mode !== 'unchanged') return true
       const settings: Record<string, unknown> = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
       if (endgameChanged) settings.guillotineEndgame = endgame
       if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
       if (faabChanged) settings[FAAB_ON_CHOP_KEY] = faabOnChop
+      // The default (all of it) is removed rather than stored, as the list order is.
+      if (faabPercentChanged) {
+        if (faabOnChopPercent === DEFAULT_FAAB_ON_CHOP_PERCENT) delete settings[FAAB_ON_CHOP_PERCENT_KEY]
+        else settings[FAAB_ON_CHOP_PERCENT_KEY] = faabOnChopPercent
+      }
       if (bestBallChanged) settings[GUILLOTINE_BEST_BALL_KEY] = bestBall
       // The default is removed rather than stored, so a league that never chose reads the default wherever it changes.
       if (listOrderChanged) {
