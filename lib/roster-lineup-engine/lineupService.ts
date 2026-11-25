@@ -374,6 +374,12 @@ async function runRosterLineupWithEngine(
       const { persistNbaCampusWeekSnapshot } = await import('@/lib/c2c/storeNbaCampusWeekSnapshot')
       await persistNbaCampusWeekSnapshot(tx, { leagueId: input.leagueId, rosterId: input.rosterId, snapshot: campusSnapshot, now: new Date() })
     }
+    // NFL C2C: record this week's campus starters, so rescoring a past week reads the lineup it had
+    // (lib/c2c/footballCampusWeekSnapshot.ts). Native only; a no-op for every other league.
+    if (redraftRosterId && sport === 'NFL' && ['c2c', 'merged_devy_c2c'].includes(String(league.leagueVariant ?? '').toLowerCase())) {
+      const { persistFootballCampusWeekSnapshot } = await import('@/lib/c2c/footballCampusWeekSnapshot')
+      await persistFootballCampusWeekSnapshot(tx, { redraftRosterId, season: input.season, week: input.week, playerData: input.nextPlayerData, now: new Date() })
+    }
     await syncAfRosterLineupAssignments(
       {
         leagueId: input.leagueId,
