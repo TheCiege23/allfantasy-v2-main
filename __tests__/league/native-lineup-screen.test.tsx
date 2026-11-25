@@ -98,6 +98,10 @@ describe('NativeLineupScreen', () => {
     await screen.findByText('Jalen Hurts')
     const lockedBtn = screen.getByRole('button', { name: 'Locked' }) as HTMLButtonElement
     expect(lockedBtn.disabled).toBe(true)
+    // The row says only until when; the full reason is the button's description, not a paragraph on the row.
+    const lock = lockedBtn.closest('.nls-lock') as HTMLElement
+    expect(lock.querySelector('.nls-lock-when')?.textContent).toBe('Game started')
+    expect(document.getElementById(lockedBtn.getAttribute('aria-describedby')!)?.textContent).toBe('His game has started.')
     expect(screen.getByText(/PHI · vs NYG/)).toBeTruthy()
     // Moving the bench RB in offers the RB slot only; the QB never appears as a target.
     fireEvent.click(screen.getAllByRole('button', { name: 'Move' }).at(-1)!)
