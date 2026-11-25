@@ -4,7 +4,8 @@ import { selectDraftSeasonRows, normalizeRiDraftSeasonUnits } from './selectDraf
 
 /** Provider IDs, sport and season are joined directly; names never join statistics. */
 export async function loadStoredDraftSeasonStats(sport: string, ids: string[], season: number) {
-  const out = new Map<string, { nbaDraftStats: ReturnType<typeof extractNbaDraftSeasonRates>; seasonStatLine: ReturnType<typeof extractMlbDraftSeasonStats>; statSeason: string }>()
+  /** `statSeasonIsPrevious`: no played row for `season`, so the line is the season before it. The room says so beside the numbers. */
+  const out = new Map<string, { nbaDraftStats: ReturnType<typeof extractNbaDraftSeasonRates>; seasonStatLine: ReturnType<typeof extractMlbDraftSeasonStats>; statSeason: string; statSeasonIsPrevious: boolean }>()
   if (!['NBA', 'NHL', 'MLB'].includes(sport) || !ids.length) return out
   const rows = await prisma.playerSeasonStats.findMany({
     where: { sport, playerId: { in: [...new Set(ids)] }, source: 'rolling_insights', seasonType: 'regular', season: { in: [String(season), String(season - 1)] }, gamesPlayed: { gt: 0 } },
@@ -19,7 +20,7 @@ export async function loadStoredDraftSeasonStats(sport: string, ids: string[], s
       delete seasonStatLine.wins
       delete seasonStatLine.shutouts
     }
-    if (nbaDraftStats || seasonStatLine) out.set(id, { nbaDraftStats, seasonStatLine, statSeason: sport === 'NBA' || sport === 'NHL' ? row.season + '–' + String(Number(row.season) + 1).slice(-2) : row.season })
+    if (nbaDraftStats || seasonStatLine) out.set(id, { nbaDraftStats, seasonStatLine, statSeason: sport === 'NBA' || sport === 'NHL' ? row.season + '–' + String(Number(row.season) + 1).slice(-2) : row.season, statSeasonIsPrevious: Number(row.season) < season })
   }
   return out
 }

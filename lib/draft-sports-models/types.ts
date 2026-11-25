@@ -45,6 +45,8 @@ export interface PlayerAssetModel {
 export interface PlayerStatSnapshotModel {
   /** Actual stored season, including a previous-season fallback. */
   seasonLabel?: string | null
+  /** True when `seasonLabel` is the season BEFORE the one being drafted: no game played in it yet. */
+  seasonIsPrevious?: boolean
   /** e.g. "ADP 12" or "PPG 22.1" */
   primaryStatLabel?: string | null
   primaryStatValue?: number | null

@@ -314,7 +314,16 @@ function SleeperRow(props: SleeperRowProps) {
                     className="flex-shrink-0 rounded px-1 py-px"
                   />
                 ) : null}
-                {p.display?.stats?.seasonLabel ? <span className="shrink-0 text-[11px] text-cyan-200/70" title="Recorded season statistics. Projections are labeled separately.">{p.display.stats.seasonLabel}</span> : null}
+                {/* Last season's numbers beside this season's must not read as this season's. */}
+                {p.display?.stats?.seasonLabel && p.display.stats.seasonIsPrevious ? (
+                  <span
+                    className="shrink-0 rounded border border-amber-300/35 bg-amber-500/12 px-1 py-px text-[11px] font-semibold text-amber-100"
+                    title={t('draftRoom.pool.lastSeasonStatsTooltip')}
+                    data-testid={`${testIdBase}-last-season-stats`}
+                  >
+                    {p.display.stats.seasonLabel} · {t('draftRoom.pool.lastSeasonStats')}
+                  </span>
+                ) : p.display?.stats?.seasonLabel ? <span className="shrink-0 text-[11px] text-cyan-200/70" title="Recorded season statistics. Projections are labeled separately.">{p.display.stats.seasonLabel}</span> : null}
               </div>
               {showAi ? (
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">

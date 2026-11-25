@@ -44,6 +44,8 @@ export type RawDraftPlayerLike = {
   imageUrl?: string | null
   fantasyPointsPerGame?: number | null
   statSeason?: string | null
+  /** The stat line is the season before the one being drafted: the player has no game in it yet. */
+  statSeasonIsPrevious?: boolean
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
   /** MLB / NHL season line, spread into `display.stats` for the pool's stat columns. */
   seasonStatLine?: Partial<Record<string, number>> | null
@@ -168,6 +170,7 @@ export function normalizeDraftPlayer(
 
   const stats: PlayerStatSnapshotModel = {
     seasonLabel: raw.statSeason ?? null,
+    ...(raw.statSeason && raw.statSeasonIsPrevious === true ? { seasonIsPrevious: true } : {}),
     rollingInsightsSupplemental: raw.rollingInsightsSupplemental ?? undefined,
     primaryStatLabel: adp != null ? 'ADP' : fppg != null ? 'PPG' : ltv != null ? 'Val' : null,
     primaryStatValue: adp ?? fppg ?? ltv ?? null,

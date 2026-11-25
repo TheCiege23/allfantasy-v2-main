@@ -914,6 +914,8 @@ export const translationsEsParity: Record<string, string> = {
   "draftRoom.playerPanel.noPicksYet": "Aún no hay picks.",
   "draftRoom.pool.prospectBadge": "Prospecto",
   "draftRoom.pool.prospectUnsigned": "Sin contrato",
+  "draftRoom.pool.lastSeasonStats": "temporada pasada",
+  "draftRoom.pool.lastSeasonStatsTooltip": "Aún no ha jugado esta temporada. Estos son los números de la temporada pasada.",
   "draftRoom.pool.prospectTooltip":
     "Prospecto de la NHL listado por Fantrax que no figura en ningún plantel de la NHL en nuestros datos. El equipo indicado es el club de la NHL que tiene sus derechos. No hay edad ni año de draft disponibles.",
   "waiverWire.prospects.sortNote":
