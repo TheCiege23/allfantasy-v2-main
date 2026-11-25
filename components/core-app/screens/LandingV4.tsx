@@ -253,6 +253,10 @@ export function LandingV4({
             {c.nav.pricing}
           </a>
           <Link href="/commissioners">{c.nav.forCommissioners}</Link>
+          {/* Public: anyone can read the community board before signing up. */}
+          <Link href="/clubhouse" className="af-lp-nav-clubhouse" data-testid="landing-nav-clubhouse">
+            {c.nav.clubhouse}
+          </Link>
         </div>
 
         {/*
@@ -308,6 +312,7 @@ export function LandingV4({
                 {c.nav.pricing}
               </a>
               <Link href="/commissioners">{c.nav.forCommissioners}</Link>
+              <Link href="/clubhouse">{c.nav.clubhouse}</Link>
               <Link href="/core/partners" className="af-lp-partners">
                 {c.nav.partners}
                 <span className="af-lp-api-chip af-num">API</span>
@@ -726,6 +731,7 @@ export function LandingV4({
           </span>
           <nav className="af-lp-footer-links" aria-label="Footer">
             <Link href="/commissioners">{c.nav.forCommissioners}</Link>
+            <Link href="/clubhouse">{c.nav.clubhouse}</Link>
             <Link href="/core/players">{c.footer.playerFinder}</Link>
             <Link href="/blog">{c.footer.blog}</Link>
             <Link href="/core">{c.footer.dashboard}</Link>

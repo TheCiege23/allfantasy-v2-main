@@ -3862,7 +3862,7 @@ export const translationsEn: Record<string, string> = {
   "settings.nav.home": "Home page",
   "settings.hub.desc.home": "Choose which sections show on your home — and turn off their alerts with them.",
   "settings.home.title": "Your home page",
-  "settings.home.intro": "Turn off anything you don't want on your home. Off hides that section right away. Your notifications don't change — set those in Notifications. Turn it back on any time.",
+  "settings.home.intro": "Off hides a section from your home. Your notifications don't change — set those in Notifications.",
   "settings.home.count": "{{shown}} of {{total}} sections showing",
   "settings.home.showAll": "Show everything",
   "settings.home.saving": "Saving…",
@@ -3872,7 +3872,6 @@ export const translationsEn: Record<string, string> = {
   "settings.home.group.week": "Your week",
   "settings.home.group.side": "Sidebar",
   "settings.home.group.more": "Insights at the bottom",
-  "settings.home.hiddenTag": "Hidden",
   "settings.home.on": "On",
   "settings.home.off": "Off",
   "settings.home.switchAria": "Show {{section}} on your home page",
@@ -4030,6 +4029,7 @@ export const translationsEn: Record<string, string> = {
   "settings.profile.avatarPreset.champion": "Champion",
 
   "settings.preferences.title": "Preferences",
+  "settings.preferences.chimmyFold": "Chimmy & AutoCoach",
   "settings.preferences.subtitle":
     "Language, timezone, theme, and default sport. Synced across devices when signed in.",
   "settings.preferences.language": "Language",
@@ -4175,9 +4175,6 @@ export const translationsEn: Record<string, string> = {
 
   "settings.security.title": "Security",
   "settings.security.subtitle": "Verification, password, and contact methods.",
-  "settings.security.twoFactorTitle": "Two-factor authentication",
-  "settings.security.twoFactorBody":
-    "Authenticator or SMS 2FA is not enabled yet. When it ships, you will be able to turn it on here.",
   "settings.security.sessionsTitle": "Active sessions",
   "settings.security.sessionsBody":
     "Lost a phone or signed in on a shared computer? Sign out everywhere ends every session on every device, including this one. To sign out of just this browser, use Sign out in Account.",
@@ -4401,6 +4398,7 @@ export const translationsEn: Record<string, string> = {
   "settings.notifications.resumeEmail": "Turn alert emails back on",
   "settings.notifications.resumeEmailError": "Your email alerts could not be turned back on. Please try again.",
   "settings.notifications.byCategory": "By category",
+  "settings.notifications.categoriesOnCount": "{{on}} of {{total}} on",
   "settings.notifications.smsNeedsConsent":
     "Texts are off: we have no SMS opt-in for your phone. Re-verify your phone in Security settings and tick the SMS box to turn them on.",
   "settings.notifications.smsAddPhone":
@@ -7512,6 +7510,9 @@ export const translationsEn: Record<string, string> = {
   "draftRoom.topBar.draftComplete": "Draft Complete",
   "draftRoom.topBar.startDraftTitle": "Start draft",
   "draftRoom.topBar.startDraftCta": "START DRAFT",
+  "draftRoom.topBar.scheduledStart.startsIn": "Starts in",
+  "draftRoom.topBar.scheduledStart.starting": "Starting…",
+  "draftRoom.topBar.scheduledStart.title": "Draft scheduled for {{when}}",
   "draftRoom.topBar.resumeBadge": "Resume",
   "draftRoom.topBar.teamsCount": "{{count}} Teams",
   "draftRoom.topBar.roundsCount": "{{count}} Rounds",

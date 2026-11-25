@@ -229,7 +229,7 @@ function SleeperRow(props: SleeperRowProps) {
       case 'rk':
         return (
           <Cell key={col.key} width={col.width} align="right">
-              <span className="text-white/45 text-[11px] font-medium" data-testid={`${testIdBase}-rk`}>
+              <span className="text-white/50 text-[11px] font-medium" data-testid={`${testIdBase}-rk`}>
               {rank}
             </span>
           </Cell>
@@ -286,9 +286,9 @@ function SleeperRow(props: SleeperRowProps) {
               <div className="flex min-w-0 items-center gap-1">
                 <PositionChip pos={p.position} sport={draftSport} />
                 {p.team ? (
-                  <span className="truncate text-[11px] text-white/38">{p.team}</span>
+                  <span className="truncate text-[11px] text-white/50">{p.team}</span>
                 ) : isProspect ? (
-                  <span className="truncate text-[11px] text-white/38" data-testid={`${testIdBase}-prospect-unsigned`}>
+                  <span className="truncate text-[11px] text-white/50" data-testid={`${testIdBase}-prospect-unsigned`}>
                     {t('draftRoom.pool.prospectUnsigned')}
                   </span>
                 ) : null}
@@ -604,7 +604,7 @@ function SleeperRow(props: SleeperRowProps) {
             <span
               data-testid={statTestId}
               title={tipFor(col.key, col.statLabel ?? def.label, tipRaw)}
-              className={display === '—' ? 'text-white/30' : undefined}
+              className={display === '—' ? 'text-white/50' : undefined}
             >
               {display}
             </span>

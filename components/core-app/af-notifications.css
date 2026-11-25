@@ -395,7 +395,10 @@
 }
 
 @media (max-width: 640px) {
-  .af-nt-title { font-size: 20px; }
+  /* The page heading only (2026-11-25). Written as `.af-nt-title`, this also caught every ROW title,
+     which share the class — so on a phone each notification headline was 20px, larger than the
+     13.5px it is on a computer, and most rows ran to two lines. */
+  .af-nt-head .af-nt-title { font-size: 20px; }
   .af-nt-row { flex-wrap: wrap; }
   .af-nt-act { align-self: flex-start; margin-left: 17px; }
 }
@@ -622,3 +625,19 @@ a.af-nt-row-link:hover { background: var(--chip); }
 .af-nt-headlines li[data-read='true'] a { color: var(--muted); }
 .af-nt-list + .af-nt-sectionnote { margin-top: 10px; }
 .af-nt-delivery { margin: 0 0 8px; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.6; color: var(--text2); }
+
+/*
+ * 2026-11-25 — the simplify pass. Top-level, appended after every @media block like the rules above.
+ *
+ * "Mark all read" stays beside the heading instead of wrapping under it: the heading block shrinks and
+ * the button keeps its size. On a phone the four filters share one row — All and Unread at their size,
+ * the two dropdowns splitting what is left — where they took two rows.
+ */
+.af-nt-head { flex-wrap: nowrap; align-items: flex-start; }
+.af-nt-head > div { flex: 1 1 auto; min-width: 0; }
+.af-nt-head .af-nt-markall { flex: none; }
+@media (max-width: 640px) {
+  .af-nt-filters { flex-wrap: nowrap; margin-bottom: 14px; }
+  .af-nt-filters > button.af-nt-filter { flex: none; }
+  .af-nt-filters > select.af-nt-filter { flex: 1 1 0; min-width: 0; text-overflow: ellipsis; }
+}

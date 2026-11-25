@@ -378,17 +378,6 @@ export function findSleeperPoolStatDef(
   return buildSleeperPoolStatColumnDefs(draftSport, opts).find((c) => c.key === key) ?? null
 }
 
-const NBA_LIKE: DraftStatColumnDef[] = [
-  col('pts', 'PPG', 'number', 'offense', ['pointsPerGame', 'points_per_game', 'ppg', 'points', 'pts', 'nba_points']),
-  col('reb', 'RPG', 'number', 'offense', ['reboundsPerGame', 'rebounds_per_game', 'rpg', 'rebounds', 'reb', 'total_rebounds']),
-  col('mpg', 'MPG', 'number', 'offense', ['minutesPerGame', 'minutes_per_game', 'mpg']),
-  col('ast', 'AST', 'number', 'offense', ['assists', 'ast']),
-  col('stl', 'STL', 'number', 'offense', ['steals', 'stl']),
-  col('blk', 'BLK', 'number', 'offense', ['blocks', 'blk']),
-  col('fg3m', '3PM', 'number', 'offense', ['threePointersMade', 'fg3m', 'fg3_made', 'threes']),
-  col('nba_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points', 'season_projection']),
-]
-
 const NBA_OBSERVED: DraftStatColumnDef[] = [
   col('pts', 'PPG', 'number', 'offense', ['pointsPerGame', 'points_per_game', 'ppg', 'points', 'pts', 'nba_points']),
   col('reb', 'RPG', 'number', 'offense', ['reboundsPerGame', 'rebounds_per_game', 'rpg', 'rebounds', 'reb', 'total_rebounds']),
@@ -401,6 +390,16 @@ const NBA_OBSERVED: DraftStatColumnDef[] = [
   col('ft_pct', 'FT%', 'percent', 'offense', ['freeThrowPercentage']),
   col('gp', 'GP', 'number', 'offense', ['gamesPlayed']),
   col('nba_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points', 'season_projection']),
+]
+
+/**
+ * College basketball: the same per-game line as the NBA board, read from our own stored box scores
+ * (`ncaabDraftSeason.ts`). The last column is this league's fantasy points per game — it carries a
+ * per-game key and label, like MLB and NHL, rather than borrowing the season-total `projectedPoints`.
+ */
+const NCAAB_OBSERVED: DraftStatColumnDef[] = [
+  ...NBA_OBSERVED.filter((c) => c.key !== 'nba_proj'),
+  col('ncaab_proj', 'Proj/G', 'number', 'offense', ['projectedPointsPerGame']),
 ]
 
 /*
@@ -559,7 +558,7 @@ export function getDraftStatColumnsForSport(
     case 'NBA':
       return [...NBA_OBSERVED]
     case 'NCAAB':
-      return [...NBA_LIKE]
+      return [...NCAAB_OBSERVED]
     case 'MLB':
       return isLikelyPitcherPosition(pos ?? undefined) ? [...MLB_PITCHER] : [...MLB_HITTER]
     case 'NHL':

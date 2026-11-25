@@ -510,7 +510,7 @@ function DraftBoardCellInner({
           <span className="af-tile-name block max-w-full truncate text-[12px] leading-[14px] tracking-tight" title={pick.playerName ?? undefined}>
             {/* "A. Runner" for the eye; the full name for screen readers and text search. */}
             <span aria-hidden>
-              {firstName ? <span className="font-medium opacity-80">{firstName.slice(0, 1)}. </span> : null}
+              {firstName ? <span className="font-medium opacity-90">{firstName.slice(0, 1)}. </span> : null}
               <span className="font-extrabold">{lastName}</span>
             </span>
             <span className="sr-only">{pick.playerName}</span>
@@ -529,7 +529,7 @@ function DraftBoardCellInner({
             steal and the biggest reach. `pick.adpDelta` is still passed in; nothing on the tile shows it.
           */}
           <span
-            className="flex max-w-full min-w-0 flex-nowrap items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80 af-tile-info"
+            className="flex max-w-full min-w-0 flex-nowrap items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-90 af-tile-info"
             data-testid={`draft-board-cell-info-${pick.overall}`}
           >
             <span className="min-w-0 truncate">

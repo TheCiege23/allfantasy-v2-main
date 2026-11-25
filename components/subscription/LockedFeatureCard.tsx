@@ -131,7 +131,7 @@ export function LockedFeatureCard({
                 requiredPlan,
               })
             }}
-            className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-medium text-white hover:bg-cyan-500 active:scale-[0.98] transition-premium focus-ring touch-manipulation"
+            className="flex items-center justify-center gap-2 rounded-xl bg-cyan-700 px-4 py-3 text-sm font-medium text-white hover:bg-cyan-800 active:scale-[0.98] transition-premium focus-ring touch-manipulation"
             data-testid="locked-feature-signup-link"
           >
             Sign up free

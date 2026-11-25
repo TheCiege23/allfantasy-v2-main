@@ -254,7 +254,7 @@ function SlotGroup({ heading, entries, showBye, sport, weekGames, testIdBase }: 
   if (!entries.length) return null
   return (
     <div className="border-b border-white/8 last:border-b-0" data-testid={testIdBase}>
-      <div className="sticky top-0 bg-[#0a1228] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
+      <div className="sticky top-0 bg-[#0a1228] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">
         {heading}
       </div>
       <ul>

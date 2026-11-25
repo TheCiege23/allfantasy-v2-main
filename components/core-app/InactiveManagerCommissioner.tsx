@@ -6,6 +6,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { inactiveManagerCommissionerMessages } from '@/lib/core-app/messages/inactiveManagerCommissioner'
 
 type AutopilotStyle = 'dynasty_owner' | 'win_now' | 'rebuild'
+type TradeMode = 'off' | 'answer' | 'answer_and_send'
 type AutoHandover = { days: 7 | 14 | 21; to: 'lineups' | 'autopilot' } | null
 type ChimmyReport = { title: string; body: string; sentAt: string }
 
@@ -17,6 +18,8 @@ type Team = {
   managed: { since: string; byUserId: string; autopilot?: { style: AutopilotStyle; since: string } } | null
   suggested: boolean
   emptySeat?: boolean
+  /** Commissioner-only: who Chimmy is for this team and whether it takes trade offers. */
+  chimmy?: { personality: string; label: string; summary: string; trades: TradeMode } | null
 }
 
 /**
@@ -105,6 +108,23 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
       setBusy(null)
     }
   }
+  /** Whether a Chimmy team takes trade offers (it answers them itself) or refuses them all. */
+  const setTrades = async (team: Team, trades: 'off' | 'answer') => {
+    setBusy(team.rosterId)
+    setMessage('')
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterId: team.rosterId, trades }) })
+      const body = (await r.json().catch(() => ({}))) as { error?: string }
+      if (!r.ok) throw new Error(body.error || '')
+      setMessage(trades === 'off' ? m.tradesOffSaved : m.tradesAnswerSaved)
+      await load()
+    } catch (e) {
+      setMessage(e instanceof Error && e.message ? e.message : m.saveFailed)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   /** Draft as me (AF Commissioner): a missed draft pick is made the way that manager drafts. */
   const toggleDraftAsMe = async (on: boolean) => {
     setBusy('draft-as-me')
@@ -199,6 +219,26 @@ export function InactiveManagerCommissioner({ leagueId }: { leagueId: string }) 
                       <option value="rebuild">{styleLabel('rebuild')}</option>
                     </select>
                   </label>
+                  {running && team.chimmy ? (
+                    <div className="af-tw-chimmy-profile" data-testid="chimmy-manager-profile">
+                      <p data-testid="chimmy-manager-personality">
+                        {m.chimmyPersonality(team.chimmy.personality, team.chimmy.label, team.chimmy.summary)}{' '}
+                        <small>{m.chimmyPersonalityNote}</small>
+                      </p>
+                      <label>
+                        {m.tradeOffers}{' '}
+                        <select
+                          data-testid="chimmy-manager-trades"
+                          value={team.chimmy.trades === 'off' ? 'off' : 'answer'}
+                          disabled={busy !== null}
+                          onChange={(e) => void setTrades(team, e.target.value === 'off' ? 'off' : 'answer')}
+                        >
+                          <option value="answer">{m.tradesAnswer}</option>
+                          <option value="off">{m.tradesOff}</option>
+                        </select>
+                      </label>
+                    </div>
+                  ) : null}
                 </li>
               )
             })}
