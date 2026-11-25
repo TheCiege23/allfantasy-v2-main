@@ -29,7 +29,6 @@ import { maintainPirateClaims, queuePirateProtectionReminders, seedPirateClaims 
 import { capturePirateLineupEvidence } from '@/lib/pirate/lineupEvidence'
 import { isPirateLeague } from '@/lib/pirate/rules'
 import { sendChopZoneWarningsForSeason } from '@/lib/guillotine/chopAlerts'
-import { sendSurvivalOddsAlertsForSeason } from '@/lib/guillotine/survivalAlerts'
 import { GUILLOTINE_ARCHIVE_RETRY_MS, GUILLOTINE_UNARCHIVED_LIFECYCLE_STATES } from '@/lib/guillotine/finishGuillotineSeason'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
 import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSeasonRunner'
@@ -524,6 +523,8 @@ async function runRedraftReconciliation() {
          * above takes over for the last day. Throttled and recorded inside; most ticks stop at the schedule read.
          */
         try {
+          // Loaded here: it brings the chop preview and the outlook with it, which no other part of this route needs.
+          const { sendSurvivalOddsAlertsForSeason } = await import('@/lib/guillotine/survivalAlerts')
           const alert = await sendSurvivalOddsAlertsForSeason({ seasonId: season.id, week: guillotine.week })
           if (alert.outcome === 'sent') guillotineOutcomes.survival_alert = (guillotineOutcomes.survival_alert ?? 0) + 1
         } catch {
