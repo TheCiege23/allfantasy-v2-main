@@ -166,4 +166,13 @@ describe('NativeTradesScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(calls.some((c) => c.url.endsWith('/trades/t1/accept') && c.init?.method === 'POST')).toBe(true))
   })
+
+  it('opens the builder from one place: "Propose a trade", with no "Build a trade" card repeating it (2026-11-24)', async () => {
+    stubFetch({ '/api/league/trades-panel': { activeTrades: [], historyTrades: [], tradeBlock: [] } })
+    render(<NativeTradesScreen league={league} teams={[]} />)
+    expect(await screen.findByText('Your open offers')).toBeTruthy()
+    expect(screen.queryByText('Build a trade')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open trade builder' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Propose a trade' })).toBeTruthy()
+  })
 })
