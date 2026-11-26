@@ -5457,6 +5457,7 @@ export function DraftRoomPageClient({
                   currentUserRosterId={currentUserRosterId ?? null}
                   aiManagedRosterIds={aiManagedRosterIds}
                   autoDraftRosterIds={session.autoDraftRosterIds ?? []}
+                  autoDraft={isAutoDraft}
                   orderSourceLabel={boardOrderSourceLabel}
                   presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
                   onCellTrade={currentUserRosterId ? openPickTradeFromBoard : undefined}

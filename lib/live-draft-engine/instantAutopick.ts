@@ -101,7 +101,17 @@ export async function listAutoDraftRosterIds(args: {
   leagueId: string
   draftSessionId: string
   leagueSettings?: unknown
+  /**
+   * The draft's execution mode. In an auto draft every team picks by itself, so every team is AUTO;
+   * before 2026-11-25 an open seat earned the badge only after its first automatic pick, so most of
+   * a 54-team board's columns read as if someone were picking by hand.
+   */
+  executionMode?: string | null
 }): Promise<string[]> {
+  if (args.executionMode === 'auto') {
+    const all = await prisma.roster.findMany({ where: { leagueId: args.leagueId }, select: { id: true } })
+    return all.map((roster) => roster.id)
+  }
   const [settings, rosters, prefs] = await Promise.all([
     args.leagueSettings !== undefined
       ? Promise.resolve(args.leagueSettings)
