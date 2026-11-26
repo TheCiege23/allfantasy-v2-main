@@ -2,6 +2,7 @@ import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { loadGradedLeagueTradeRows, type GradedLeagueTradeRows, type LeagueTradeRow } from '@/lib/core-app/leagueTradeRowGrades'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { controversyFromLetter, fairnessScoreFromPercentDiff } from '@/lib/decision-os/trade/gradeFairness'
 import { toLeagueSport } from './SportCommissionerResolver'
 import type { TradeFairnessInsight, TradeControversyLevel } from './types'
 
@@ -56,13 +57,8 @@ const defaultDeps: TradeFairnessDeps = {
     )?.transactionId ?? null,
 }
 
-/** The letter's own band — see the header. Exported for tests. */
-export function controversyFromLetter(letter: string | null | undefined): TradeControversyLevel {
-  if (letter === 'A' || letter === 'F') return 'high'
-  if (letter === 'B' || letter === 'D') return 'medium'
-  if (letter === 'C') return 'low'
-  return 'unknown'
-}
+/** The letter's own band — ONE rule, shared with the Trade Evaluator (`gradeFairness.ts`). Re-exported for tests. */
+export { controversyFromLetter }
 
 function tone(level: TradeControversyLevel): string {
   if (level === 'high') return 'Commissioner review recommended.'
@@ -106,7 +102,7 @@ export function insightFromGrade(input: {
     graded: true,
     letter: grade.letter,
     partnerLetter: grade.partnerLetter,
-    fairnessScore: Math.max(0, Math.min(100, 100 - imbalancePct)),
+    fairnessScore: fairnessScoreFromPercentDiff(grade.percentDiff),
     imbalancePct,
     controversyLevel,
     withheldReason: null,
