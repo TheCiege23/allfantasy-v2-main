@@ -10,7 +10,8 @@ const isCommissionerMock = vi.fn()
 const isDraftPickTradingAllowedForLeagueMock = vi.fn()
 const getDraftUISettingsForLeagueMock = vi.fn()
 const dispatchNotificationMock = vi.fn()
-const buildDraftTradeAiReviewMock = vi.fn()
+const gradeMock = vi.fn()
+const createLeagueTradeGraderMock = vi.fn(async () => ({ grade: gradeMock }))
 const sendPrivateTradeAIDMMock = vi.fn()
 const createDraftNotificationMock = vi.fn()
 const getAppUserIdForRosterMock = vi.fn()
@@ -72,9 +73,16 @@ vi.mock('@/lib/notifications/NotificationDispatcher', () => ({
   dispatchNotification: dispatchNotificationMock,
 }))
 
-vi.mock('@/lib/live-draft-engine/DraftTradeAiReviewService', () => ({
-  buildDraftTradeAiReview: buildDraftTradeAiReviewMock,
+// THE grade is the draft-room verdict (2026-11-26): the grader is the only double; the review is real.
+vi.mock('@/lib/decision-os/trade/leagueTradeGrader', () => ({
+  createLeagueTradeGrader: createLeagueTradeGraderMock,
+  gradeDeal: async (grader: any, args: any) => grader.grade({ give: args.give.assets, get: args.get.assets, viewerSide: args.viewerSide }),
 }))
+
+const gradedView = (action: string, letter: string, partnerLetter: string, recommendation: string) => ({
+  graded: true, letter, partnerLetter, label: 'Slightly favors opponent', action,
+  giveValue: 5000, getValue: 4200, recommendation,
+})
 
 vi.mock('@/lib/trade-ai-dm/TradeAIDMService', () => ({
   sendPrivateTradeAIDM: sendPrivateTradeAIDMMock,
@@ -137,6 +145,8 @@ describe('Draft trade AI DM system contract', () => {
       teamCount: 2,
       draftType: 'snake',
       thirdRoundReversal: false,
+      draftModeLabel: 'rookie',
+      startedAt: new Date('2026-05-01T00:00:00.000Z'),
       slotOrder: [
         { slot: 1, rosterId: 'roster-1', displayName: 'Manager One' },
         { slot: 2, rosterId: 'roster-2', displayName: 'Manager Two' },
@@ -161,14 +171,7 @@ describe('Draft trade AI DM system contract', () => {
     })
     getAppUserIdForRosterMock.mockResolvedValueOnce('user-2')
     ;(prismaMock.league.findUnique as any).mockResolvedValueOnce({ name: 'League One' })
-    buildDraftTradeAiReviewMock.mockReturnValueOnce({
-      verdict: 'counter',
-      summary: 'Deterministic review says this is close, but ask for one more asset.',
-      reasons: ['Value edge is small.'],
-      counterReasons: ['Ask for a future middle-round pick.'],
-      declineReasons: [],
-      suggestedCounterPackage: null,
-    })
+    gradeMock.mockResolvedValueOnce(gradedView('counter', 'D', 'B', 'Favors the other side on league value. A counter needs about 800 more coming back to reach even.'))
     sendPrivateTradeAIDMMock.mockResolvedValueOnce({
       sent: true,
       threadId: 'ai-thread-1',
@@ -206,6 +209,14 @@ describe('Draft trade AI DM system contract', () => {
         trigger: 'trade_received',
       })
     )
+    // The DM's verdict, summary and counter reason are the grade's — and the receiver's side was graded.
+    const dm = sendPrivateTradeAIDMMock.mock.calls[0][0]
+    expect(dm.review.verdict).toBe('counter')
+    expect(dm.review.summary).toMatch(/^Favors the other side on league value/)
+    expect(dm.review.counterReasons).toEqual([dm.review.summary])
+    const graded = gradeMock.mock.calls[0][0]
+    expect(graded.give[0]).toMatchObject({ kind: 'pick', round: 2 })
+    expect(graded.get[0]).toMatchObject({ kind: 'pick', round: 1 })
   })
 
   it('returns private AI DM metadata for review responses with counter suggestion', async () => {
@@ -219,6 +230,8 @@ describe('Draft trade AI DM system contract', () => {
       teamCount: 12,
       draftType: 'snake',
       thirdRoundReversal: false,
+      draftModeLabel: 'rookie',
+      startedAt: new Date('2026-05-01T00:00:00.000Z'),
       slotOrder: [
         { slot: 1, rosterId: 'roster-1', displayName: 'Manager One' },
         { slot: 2, rosterId: 'roster-2', displayName: 'Manager Two' },
@@ -242,14 +255,8 @@ describe('Draft trade AI DM system contract', () => {
       receiveSlot: 2,
       session: { leagueId: 'league-1', teamCount: 12 },
     })
-    buildDraftTradeAiReviewMock.mockReturnValueOnce({
-      verdict: 'counter',
-      summary: 'Counter is preferred based on deterministic edge.',
-      reasons: ['Expected value is slightly negative.'],
-      counterReasons: ['Ask for one extra future pick.'],
-      declineReasons: ['Current proposal underprices your pick.'],
-      suggestedCounterPackage: null,
-    })
+    // Receiver gives 2.02 (overall 23) for 1.01: the old distance rule called that ACCEPT. The grade says decline.
+    gradeMock.mockResolvedValueOnce(gradedView('decline', 'F', 'A', 'An overpay on league value — about 3,000 short. Decline, or ask for substantially more.'))
     getProviderStatusMock.mockReturnValueOnce({ anyAi: false })
     evaluateAIInvocationPolicyMock.mockReturnValueOnce({
       decision: 'deterministic_only',
@@ -287,6 +294,10 @@ describe('Draft trade AI DM system contract', () => {
     expect(body.private).toBe(true)
     expect(body.privateAiDmSent).toBe(true)
     expect(body.privateAiDmCounterSuggestion).toBe('Ask for one extra future pick.')
+    expect(body.verdict).toBe('reject')
+    expect(body.tradeGrade).toMatchObject({ graded: true, letter: 'F', partnerLetter: 'A', action: 'decline' })
+    expect(body.declineReasons).toEqual([body.summary])
+    expect(body.structuredAnalysis).toEqual({ overallDelta: -22, moveDirection: 'up' })
     expect(sendPrivateTradeAIDMMock).toHaveBeenCalledWith(
       expect.objectContaining({
         receiverUserId: 'receiver-user',

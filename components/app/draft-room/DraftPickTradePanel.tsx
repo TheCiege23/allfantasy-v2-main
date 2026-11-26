@@ -20,17 +20,10 @@ export type ProposalSummary = {
   createdAt: string
 }
 
+/** The draft-position fact only — the verdict is THE league grade (`tradeGrade`). */
 export type StructuredTradeAnalysis = {
   overallDelta: number | null
   moveDirection: 'up' | 'down' | 'neutral'
-  fairnessBand: 'favorable' | 'balanced' | 'costly'
-  guidanceTone: 'good_move' | 'okay_move' | 'risky_move'
-  fairnessLabel:
-    | 'strong_value'
-    | 'slight_edge_you'
-    | 'neutral'
-    | 'slight_edge_them'
-    | 'overpay'
 }
 
 export type AiReviewState = {
@@ -44,7 +37,7 @@ export type AiReviewState = {
   executionMode?: string | null
   structuredAnalysis?: StructuredTradeAnalysis | null
   aiConfidence?: number | null
-  /** THE grade (builder only, rookie drafts) — when graded, the private verdict chips are not shown. */
+  /** THE grade (rookie drafts) — the verdict above is read from it; withheld, it says why. */
   tradeGrade?: DraftPickTradeGrade | null
 } | null
 
@@ -59,6 +52,8 @@ export type DraftPickTradeSuggestion = {
   receiveSlot: number
   rationale: string
   aiEnhanced?: boolean
+  /** THE grade of this swap from your side, when the league's chart prices it. */
+  tradeGrade?: DraftPickTradeGrade | null
 }
 
 export type DraftPickTradeSuggestionKind = 'fair' | 'move_up' | 'move_down' | 'best_for_pick'
@@ -321,11 +316,11 @@ export function DraftPickTradePanel({
             structuredAnalysis:
               sa &&
               typeof sa === 'object' &&
-              typeof sa.moveDirection === 'string' &&
-              typeof sa.fairnessBand === 'string'
+              typeof sa.moveDirection === 'string'
                 ? (sa as StructuredTradeAnalysis)
                 : null,
             aiConfidence: typeof data.aiConfidence === 'number' ? data.aiConfidence : null,
+            tradeGrade: readDraftPickTradeGrade(data.tradeGrade),
           })
         } else if (seq === reviewSeqRef.current) {
           setAiReview({
@@ -472,8 +467,7 @@ export function DraftPickTradePanel({
           structuredAnalysis:
             sa &&
             typeof sa === 'object' &&
-            typeof sa.moveDirection === 'string' &&
-            typeof sa.fairnessBand === 'string'
+            typeof sa.moveDirection === 'string'
               ? (sa as StructuredTradeAnalysis)
               : null,
           aiConfidence: typeof data.aiConfidence === 'number' ? data.aiConfidence : null,

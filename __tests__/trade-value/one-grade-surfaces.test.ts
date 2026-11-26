@@ -38,7 +38,15 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'app/api/redraft/trades/trade-block/route.ts', entry: /gradeDeal\(/, what: 'the trade block' },
   { file: 'lib/core-app/trades.ts', entry: /gradeDeal\(/, what: 'the /core Trades pending list' },
   /* 2026-09-28: the live draft's pick-trade builder, rookie drafts (see lib/live-draft-engine/draftPickTradeGrade.ts). */
-  { file: 'app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts', entry: /gradeDeal\(/, what: 'the live draft pick-trade builder' },
+  /* 2026-11-26: every draft-room pick-trade verdict goes through ONE module, and that module to the one grader. */
+  { file: 'lib/live-draft-engine/draftPickTradeCanonicalReview.ts', entry: /gradeDeal\(/, what: 'the draft-room pick-swap verdict' },
+  { file: 'app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts', entry: /reviewDraftPickSwap\(/, what: 'the live draft pick-trade builder' },
+  { file: 'app/api/leagues/[leagueId]/draft/trade-builder/suggestions/route.ts', entry: /gradeDraftPickSwap\(/, what: 'the live draft pick-trade suggestions' },
+  { file: 'app/api/leagues/[leagueId]/draft/trade-proposals/route.ts', entry: /reviewDraftPickSwap\(/, what: 'the draft pick offer DM and notification' },
+  { file: 'app/api/leagues/[leagueId]/draft/trade-proposals/[proposalId]/review/route.ts', entry: /reviewDraftPickSwap\(/, what: 'the receiver’s private draft-offer review' },
+  { file: 'app/api/league/trade-grades/route.ts', entry: /gradeDraftPickSwap\(/, what: 'the league trade feed’s draft-pick proposals' },
+  { file: 'lib/commissioner-ai-draft-manager/aiTradeAutoResponse.ts', entry: /reviewDraftPickSwap\(/, what: 'the commissioner AI manager’s answer to a pick offer' },
+  { file: 'lib/orphan-ai-manager/OrphanAIManagerService.ts', entry: /reviewDraftPickSwap\(/, what: 'the orphan AI manager’s answer to a pick offer' },
   /* 2026-09-28: "Propose a Trade" — the deal as composed, before it is sent (packages: the rosters route above). */
   { file: 'app/api/leagues/[leagueId]/trades/grade-preview/route.ts', entry: /gradeDeal\(/, what: 'the trade proposal composer' },
   { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade between rostered players (the evaluate_trade tool and the push path) — through the one engine, with a receipt' },
@@ -90,6 +98,7 @@ const PRIVATE_LETTERS: ReadonlyArray<{ name: string; shape: RegExp }> = [
   { name: 'a value edge on the mean of both sides', shape: /letterForValueEdge\(/ },
   { name: 'the flat-200 FantasyCalc balance', shape: /calculateTradeBalance\(/ },
   { name: "the canonical memo's fairness letter", shape: /canonicalFairnessGrade\(/ },
+  { name: 'the overall-distance draft-pick verdict (retired 2026-11-26)', shape: /buildDraftTradeAiReview\(/ },
 ]
 
 describe.each(SURFACES)('$what', ({ file, entry }) => {

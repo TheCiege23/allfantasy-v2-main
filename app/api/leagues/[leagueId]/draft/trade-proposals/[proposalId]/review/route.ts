@@ -1,7 +1,8 @@
 /**
- * POST: Private AI trade review for the receiving manager.
- * Returns suggested verdict (accept | reject | counter), reasons, structured fairness bands,
- * and optional AF Pro AI summary.
+ * POST: Private review of an incoming pick-swap offer for the receiving manager.
+ * The verdict (accept | counter | reject | even | not_graded), reasons and values are THE league grade's
+ * (`draftPickTradeCanonicalReview`); the draft-position move is a fact; AF Pro adds an AI summary that
+ * explains the grade and never overrides it.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,7 +10,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { prisma } from '@/lib/prisma'
-import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
+import { draftPickTradeGraderSource, reviewDraftPickSwap } from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getProviderStatus } from '@/lib/provider-config'
 import { sendPrivateTradeAIDM } from '@/lib/trade-ai-dm/TradeAIDMService'
@@ -131,16 +132,20 @@ export async function POST(
   const dt = draftSession.draftType as 'snake' | 'linear' | 'auction'
   const trr = Boolean(draftSession.thirdRoundReversal)
 
-  /** Receiver POV: you give receive*, you get give*. */
-  const review = buildDraftTradeAiReview({
-    giveRound: proposal.receiveRound,
-    giveSlot: proposal.receiveSlot,
-    receiveRound: proposal.giveRound,
-    receiveSlot: proposal.giveSlot,
-    teamCount: proposal.session?.teamCount ?? draftSession.teamCount,
-    draftType: dt,
-    thirdRoundReversal: trr,
-  })
+  /*
+   * Receiver POV: you give receive*, you get give*. 🛑 THE ONE GRADE is the verdict (2026-11-26) — the
+   * same one the builder and the offer DM read. Membership was verified by `canAccessLeagueDraft`, and the
+   * viewer is this offer's receiver.
+   */
+  const { tradeGrade, review } = await reviewDraftPickSwap(
+    draftPickTradeGraderSource({ leagueId, userId }),
+    draftSession,
+    {
+      give: { round: proposal.receiveRound, slot: proposal.receiveSlot },
+      get: { round: proposal.giveRound, slot: proposal.giveSlot },
+    },
+    slotOrder.find((s) => s.rosterId === proposerRosterId)?.displayName ?? proposal.proposerName ?? null,
+  )
 
   const giveOverallYou = resolveOverallForRoundSlot({
     round: proposal.receiveRound,
@@ -160,7 +165,6 @@ export async function POST(
   const structuredAnalysis = buildDraftPickTradeStructuredAnalysis({
     giveOverall: giveOverallYou,
     receiveOverall: receiveOverallYou,
-    teamCount: draftSession.teamCount,
   })
 
   const premiumTradeAi = (await new EntitlementResolver().resolveForUser(userId, 'pro_trade_ai')).hasAccess
@@ -197,7 +201,7 @@ export async function POST(
           {
             role: 'system',
             content:
-              'You analyze live fantasy draft pick trades (snake/redraft). Use only the JSON facts provided. Return strict JSON: { "summary": string (2 short sentences), "confidence": number between 0 and 1 } reflecting certainty given draft-capital logic — not player predictions.',
+              'You analyze live fantasy draft pick trades (snake/redraft). Use only the JSON facts provided. If trade.leagueGrade is present it is THE AllFantasy grade for this offer and it is the verdict: explain it and never contradict it or call the trade better or worse than it says. If trade.gradeWithheld is present the offer is NOT graded: say why and never call it good, bad, fair or unfair. Return strict JSON: { "summary": string (2 short sentences), "confidence": number between 0 and 1 } reflecting how certain your wording is — not player predictions.',
           },
           {
             role: 'user',
@@ -234,8 +238,18 @@ export async function POST(
                   ownerLabel: partnerSlotEntry?.displayName ?? 'Partner',
                 },
                 structured: structuredAnalysis,
-                deterministicVerdict: review.verdict,
-                deterministicReasons: review.reasons,
+                ...(tradeGrade.graded
+                  ? {
+                      leagueGrade: {
+                        yourLetter: tradeGrade.letter,
+                        theirLetter: tradeGrade.partnerLetter,
+                        label: tradeGrade.label,
+                        youSendLeagueValue: tradeGrade.giveValue,
+                        youGetLeagueValue: tradeGrade.getValue,
+                      },
+                    }
+                  : { gradeWithheld: tradeGrade.reason }),
+                reasons: review.reasons,
               },
             }),
           },
@@ -285,6 +299,7 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
+    tradeGrade,
     verdict: review.verdict,
     reasons: review.reasons,
     declineReasons: review.declineReasons,

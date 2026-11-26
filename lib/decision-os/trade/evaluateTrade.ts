@@ -205,7 +205,7 @@ export function tradeInputHash(input: Pick<EvaluateTradeInput, 'leagueId' | 'giv
     a.kind === 'player'
       ? ['player', (a.name ?? '').trim().toLowerCase(), a.playerId ?? '']
       : a.kind === 'pick'
-        ? ['pick', a.year, a.round, a.tier ?? '', ...(a.overall == null ? [] : [a.overall])]
+        ? ['pick', a.year, a.round, a.tier ?? '', ...(a.overall == null ? [] : [a.overall]), ...(a.roundPick == null ? [] : [`slot:${a.roundPick}`])]
         : ['faab', a.amount]
   const side = (g: GradeInputs) => ({
     assets: g.assets.map(norm).map((x) => JSON.stringify(x)).sort(),

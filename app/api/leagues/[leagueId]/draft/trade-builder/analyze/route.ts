@@ -1,5 +1,6 @@
 /**
- * POST: Evaluate a hypothetical trade (no saved proposal) using the same rules as create + DraftTradeAiReview.
+ * POST: Evaluate a hypothetical pick swap (no saved proposal) with THE league grade — the same verdict
+ * the offer, the receiver's review and the AI managers read (`draftPickTradeCanonicalReview`).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -8,7 +9,6 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { getDraftSessionByLeague } from '@/lib/live-draft-engine/DraftSessionService'
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
-import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { isDraftPickTradingAllowedForLeague } from '@/lib/tournament-mode/safety'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
@@ -19,16 +19,11 @@ import { buildDraftPickTradeStructuredAnalysis } from '@/lib/live-draft-engine/d
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getCanonicalDraftState } from '@/lib/draft/getCanonicalDraftState'
 import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
-import { ANNUAL_C2C_DRAFT, annualC2CDraftSeason } from '@/lib/live-draft-engine/annualC2CDraft'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
-import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import {
-  NOT_A_ROOKIE_DRAFT_REASON,
-  draftPickGradeAsset,
-  draftPickTradeGradeFrom,
-  isRookieDraft,
-  type DraftPickTradeGrade,
-} from '@/lib/live-draft-engine/draftPickTradeGrade'
+  draftPickTradeGraderSource,
+  reviewDraftPickSwap,
+} from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
 
 export const dynamic = 'force-dynamic'
 
@@ -124,50 +119,22 @@ export async function POST(
     return NextResponse.json({ ok: false, code: 'PICK_ALREADY_USED', error: 'Cannot trade picks already made.' }, { status: 400 })
   }
 
-  const structuredAnalysis = buildDraftPickTradeStructuredAnalysis({
-    giveOverall,
-    receiveOverall,
-    teamCount: draftSession.teamCount,
-  })
-
-  const review = buildDraftTradeAiReview({
-    giveRound,
-    giveSlot,
-    receiveRound,
-    receiveSlot,
-    teamCount: draftSession.teamCount,
-    draftType: draftSession.draftType as 'snake' | 'linear' | 'auction',
-    thirdRoundReversal: draftSession.thirdRoundReversal,
-  })
+  const structuredAnalysis = buildDraftPickTradeStructuredAnalysis({ giveOverall, receiveOverall })
 
   /*
-   * 🛑 THE ONE GRADE, for a swap the league's chart can price (2026-09-28) — see
-   * lib/live-draft-engine/draftPickTradeGrade.ts. Rookie drafts only: elsewhere a pick is worth the
-   * player taken there, which the chart does not price. The viewer is the side giving `give` (its
-   * ownership was verified above), and membership was verified by `canAccessLeagueDraft` + the roster
-   * check, which is what `createLeagueTradeGrader` requires of its caller. A preview, like a pending
-   * offer: `gradeDeal`, no receipt written per tweak. `viewerSide: false` keeps roster-need reads off
-   * a live-draft request path — need never changes the letter anyway.
+   * 🛑 THE ONE GRADE is the verdict (2026-11-26) — see lib/live-draft-engine/draftPickTradeCanonicalReview.ts.
+   * The viewer is the side giving `give` (its ownership was verified above), and membership was verified
+   * by `canAccessLeagueDraft` + the roster check, which is what `createLeagueTradeGrader` requires of its
+   * caller. Each pick is priced at its EXACT slot where the league's chart has that slot's row. A swap
+   * the chart cannot price (a startup or redraft draft) is `not_graded`, with the reason.
    */
-  const combined = draftSession.draftModeLabel === ANNUAL_C2C_DRAFT
-  const pickSeason = combined ? annualC2CDraftSeason(draftSession) : new Date(draftSession.startedAt ?? draftSession.createdAt).getUTCFullYear()
-  const tradeGrade: DraftPickTradeGrade = pickSeason == null
-    ? { graded: false, reason: 'This combined draft has no verified season.' }
-    : isRookieDraft(draftSession)
-    ? await gradeDeal(await createLeagueTradeGrader({ leagueId, userId }).catch(() => null), {
-        give: {
-          assets: [draftPickGradeAsset({ season: pickSeason, round: giveRound, overall: giveOverall, slot: giveSlot, teamCount: draftSession.teamCount, combined })],
-          unpriceable: [],
-        },
-        get: {
-          assets: [draftPickGradeAsset({ season: pickSeason, round: receiveRound, overall: receiveOverall, slot: receiveSlot, teamCount: draftSession.teamCount, combined })],
-          unpriceable: [],
-        },
-        viewerSide: false,
-      })
-        .then(draftPickTradeGradeFrom)
-        .catch((): DraftPickTradeGrade => ({ graded: false, reason: 'This trade could not be graded just now.' }))
-    : { graded: false, reason: NOT_A_ROOKIE_DRAFT_REASON }
+  const partnerSlotName = slotOrder.find((s) => s.rosterId === receiverRosterId)?.displayName ?? null
+  const { tradeGrade, review } = await reviewDraftPickSwap(
+    draftPickTradeGraderSource({ leagueId, userId }),
+    draftSession,
+    { give: { round: giveRound, slot: giveSlot }, get: { round: receiveRound, slot: receiveSlot } },
+    partnerSlotName,
+  )
 
   const premiumTradeAi = (await new EntitlementResolver().resolveForUser(userId, 'pro_trade_ai')).hasAccess
 
@@ -179,8 +146,8 @@ export async function POST(
     providerAvailable: getProviderStatus().anyAi,
   })
 
-  // A graded swap leads with the grade's own recommendation; the draft-position line stays a reason.
-  let summary = tradeGrade.graded && tradeGrade.recommendation ? tradeGrade.recommendation : review.summary
+  // The grade's own recommendation (or why it is withheld); the draft-position line stays a reason.
+  let summary = review.summary
   let aiUsed = false
   let reasonCode = invocation.reasonCode
   if (!premiumTradeAi && includeAiExplanation) {
@@ -214,7 +181,7 @@ export async function POST(
           {
             role: 'system',
             content:
-              'You analyze live fantasy draft pick trades (snake/redraft). Use only the JSON facts provided. If trade.leagueGrade is present it is THE AllFantasy grade for this trade and it is the verdict: explain it and never contradict it or call the trade better or worse than it says. Return strict JSON: { "summary": string (2 short sentences), "confidence": number between 0 and 1 } reflecting how certain your wording is given public draft-capital logic — not player predictions.',
+              'You analyze live fantasy draft pick trades (snake/redraft). Use only the JSON facts provided. If trade.leagueGrade is present it is THE AllFantasy grade for this trade and it is the verdict: explain it and never contradict it or call the trade better or worse than it says. If trade.gradeWithheld is present the trade is NOT graded: say why and never call it good, bad, fair or unfair. Return strict JSON: { "summary": string (2 short sentences), "confidence": number between 0 and 1 } reflecting how certain your wording is — not player predictions.',
           },
           {
             role: 'user',
@@ -260,8 +227,8 @@ export async function POST(
                         youGetLeagueValue: tradeGrade.getValue,
                       },
                     }
-                  : { deterministicVerdict: review.verdict }),
-                deterministicReasons: review.reasons,
+                  : { gradeWithheld: tradeGrade.reason }),
+                reasons: review.reasons,
               },
             }),
           },

@@ -42,10 +42,10 @@ function buildTradeDmPrompt(input: {
   verdict: string
   counterSuggestion: string
 }): string {
-  const action = input.verdict.toUpperCase()
+  const action = input.verdict === 'not_graded' ? 'NOT GRADED' : input.verdict.toUpperCase()
   return [
     `Re-check draft trade proposal ${input.proposalId}.`,
-    `Current deterministic suggestion: ${action}.`,
+    `Current league-grade suggestion: ${action}.`,
     `Counter idea: ${input.counterSuggestion}`,
     'Give me one safer option and one higher-upside option.',
   ].join(' ')
@@ -91,11 +91,13 @@ export async function sendPrivateTradeAIDM(
       }),
     })
 
+    // A withheld grade suggests no action and no counter — there is no verdict to act on.
+    const notGraded = input.review.verdict === 'not_graded'
     const privateReviewText = [
       `Private Chimmy trade review for proposal ${input.proposalId}.`,
-      `Suggested action: ${input.review.verdict.toUpperCase()}.`,
+      notGraded ? 'Not graded.' : `Suggested action: ${input.review.verdict.toUpperCase()}.`,
       input.review.summary,
-      `Counter suggestion: ${counterSuggestion}`,
+      ...(notGraded ? [] : [`Counter suggestion: ${counterSuggestion}`]),
       'This review is private and not posted to league chat.',
     ].join(' ')
 

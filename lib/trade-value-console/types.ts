@@ -35,6 +35,13 @@ export type TradeAssetInput =
       round: number
       /** Overall selection number when a draft has assigned this pick a slot. */
       overall?: number
+      /**
+       * Where the pick falls WITHIN its round in a draft being run now (1 = the round's first
+       * selection) — the N in the market's "2026 Pick 1.04" rows. Set only by a caller that knows the
+       * exact slot (the live draft room); a pick carrying it is priced from that slot's row when the
+       * chart has one, and exactly as before otherwise (`priceLeagueTradePick`).
+       */
+      roundPick?: number
       draftSide?: C2CDraftSide
       tier?: 'early' | 'mid' | 'late'
       label?: string

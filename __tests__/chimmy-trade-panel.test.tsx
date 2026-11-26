@@ -120,17 +120,26 @@ it('aborts the old league request when its panel unmounts', async () => {
   unmount()
   expect(signal!.aborted).toBe(true)
 })
-it('renders draft-pick verdicts and sends their league context to Chimmy', async () => {
+it('renders draft-pick proposals with THE league grade (or not graded) and anchors Chimmy to it', async () => {
   const onAsk = vi.fn()
   vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url.includes('view=draft-proposals') ? {
-    proposals: [{ id: 'draft-one', title: 'Alpha → Beta', status: 'pending', involvesYou: true, assets: ['Alpha offers pick 2.01', 'Beta offers pick 4.01'], grade: 'ACCEPT', explanation: 'Receiver-side draft-capital verdict: You receive an earlier pick.' }], nextCursor: null,
+    proposals: [
+      { id: 'draft-one', title: 'Alpha → Beta', status: 'pending', involvesYou: true, assets: ['Alpha offers pick 2.01', 'Beta offers pick 4.01'], grade: 'B', explanation: "Receiver's league grade B (Slightly favors you): Favors you on league value." },
+      { id: 'draft-two', title: 'Gamma → Beta', status: 'pending', involvesYou: true, assets: ['Gamma offers pick 1.01', 'Beta offers pick 1.02'], grade: null, explanation: 'Not graded: Only rookie-draft picks are graded.' },
+    ], nextCursor: null,
   } : url.includes('view=proposals') ? { proposals: [], nextCursor: null } : url.includes('trades-panel') ? { activeTrades: [], historyTrades: [] } : { supported: false } })))
   render(<ChimmyTrades leagueId="league" onAsk={onAsk} />)
   fireEvent.click(screen.getByRole('button', { name: /Trade intelligence/ }))
-  await screen.findByText(/Draft-capital verdict ACCEPT/)
+  await screen.findByText("pending · Your trade · Receiver's league grade B")
+  expect(screen.queryByText(/Draft-capital verdict/)).toBeNull()
   const draftArticle = screen.getByText('Alpha → Beta').closest('article')!
   fireEvent.click(draftArticle.querySelector('button')!)
+  expect(onAsk).toHaveBeenCalledWith(expect.stringContaining('The AllFantasy league grade for the receiver is B'))
   expect(onAsk).toHaveBeenCalledWith(expect.stringContaining("this league's exact draft rules"))
+  const ungraded = screen.getByText('Gamma → Beta').closest('article')!
+  expect(ungraded.textContent).toContain('Not graded')
+  fireEvent.click(ungraded.querySelector('button')!)
+  expect(onAsk).toHaveBeenLastCalledWith(expect.stringContaining('AllFantasy did not grade it'))
 })
 it('includes general league offers and processed trade grades with explanations', async () => {
   const offer = { id: 'native', partnerName: 'Rivals', status: 'pending', sent: [{ label: 'Player A' }], received: [{ label: 'Player B' }], viewerIsReceiver: true, decisionCoveragePct: 95, proposalGrade: 'A', decisionRecommendation: 'Improves your starting lineup.' }

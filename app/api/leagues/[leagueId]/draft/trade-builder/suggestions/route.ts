@@ -1,5 +1,13 @@
 /**
- * POST: Valid pick-swap suggestions (authoritative ownership) + optional AI ranking of a precomputed candidate set.
+ * POST: Valid pick-swap suggestions (authoritative ownership), each carrying THE league grade.
+ *
+ * 🛑 RANKED BY THE GRADE WHEN THERE IS ONE (2026-11-26). Candidates were ordered by overall-pick
+ * distance — a pick curve by another name. A swap the league's chart prices (a rookie draft) is now
+ * graded (`draftPickTradeCanonicalReview`) and the list is ordered by how close to even it is on league
+ * value; the AI may then only write the rationale, never reorder graded candidates. A draft the chart
+ * cannot price (startup / redraft) keeps the board-distance order — stated as `rankingBasis:
+ * 'draft_position'` with the grade's reason — and the optional AI ranking, since there is no grade to
+ * contradict.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -19,6 +27,12 @@ import { buildDraftExecutionMetadata, evaluateAIInvocationPolicy, withTimeout } 
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getCanonicalDraftState } from '@/lib/draft/getCanonicalDraftState'
 import type { SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
+import {
+  draftPickLabel,
+  draftPickTradeGraderSource,
+  gradeDraftPickSwap,
+} from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
+import type { DraftPickTradeGrade } from '@/lib/live-draft-engine/draftPickTradeGrade'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +76,18 @@ function deterministicRationale(give: UpcomingPick, recv: UpcomingPick, kind: Ki
   if (kind === 'best_for_pick') {
     return `From your ${gl}: receive ${rl} (overall gap ${Math.abs(recv.overall - give.overall)}).`
   }
-  return `Balanced swap: ${gl} ↔ ${rl} (overall gap ${Math.abs(recv.overall - give.overall)}).`
+  return `Swap: ${gl} ↔ ${rl} (overall gap ${Math.abs(recv.overall - give.overall)}).`
+}
+
+/** How far from even a graded swap is, as a share of the larger side (0 = dead even). */
+function leagueValueGapShare(grade: DraftPickTradeGrade): number {
+  if (!grade.graded) return Number.POSITIVE_INFINITY
+  const top = Math.max(grade.giveValue, grade.getValue)
+  return top > 0 ? Math.abs(grade.getValue - grade.giveValue) / top : Number.POSITIVE_INFINITY
+}
+
+function gradedRationale(give: UpcomingPick, recv: UpcomingPick, grade: Extract<DraftPickTradeGrade, { graded: true }>): string {
+  return `${draftPickLabel(give)} for ${draftPickLabel(recv)}: league grade you ${grade.letter} · them ${grade.partnerLetter}${grade.label ? ` (${grade.label})` : ''} — you get ${Math.round(grade.getValue).toLocaleString()} for ${Math.round(grade.giveValue).toLocaleString()} in league value.`
 }
 
 function validateSwap(params: {
@@ -243,6 +268,29 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     })
   }
 
+  /*
+   * THE grade of each candidate, from your side (you give `give`). One grader for the request; a draft
+   * the chart cannot price never loads it (`gradeDraftPickSwap` withholds before asking for it).
+   */
+  const grader = draftPickTradeGraderSource({ leagueId, userId })
+  const grades = await Promise.all(
+    validated.map((row) =>
+      gradeDraftPickSwap(grader, draftSession, {
+        give: { round: row.give.round, slot: row.give.slot },
+        get: { round: row.recv.round, slot: row.recv.slot },
+      }),
+    ),
+  )
+  const gradeById = new Map(validated.map((row, i) => [row.id, grades[i]]))
+  const graded = grades.some((g) => g.graded)
+  const gradeWithheldReason = graded ? null : (grades.find((g) => !g.graded) as { reason: string } | undefined)?.reason ?? null
+  if (graded) {
+    // Closest to even on league value first; an ungraded candidate (no market row for one pick) goes last.
+    const order = validated.map((row, i) => ({ row, i, gap: leagueValueGapShare(grades[i]) }))
+    order.sort((a, b) => a.gap - b.gap || a.row.score - b.row.score || a.i - b.i)
+    validated.splice(0, validated.length, ...order.map((o) => o.row))
+  }
+
   const canonicalDraftState = await getCanonicalDraftState({
     leagueId,
     draftId: draftSession.id,
@@ -271,6 +319,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     receive: { round: row.recv.round, slot: row.recv.slot, overall: row.recv.overall },
     overallDelta: row.recv.overall - row.give.overall,
     deterministicHint: deterministicRationale(row.give, row.recv, row.kind),
+    ...(() => {
+      const g = gradeById.get(row.id)
+      return g?.graded
+        ? { leagueGrade: { yourLetter: g.letter, theirLetter: g.partnerLetter, label: g.label, youSendLeagueValue: g.giveValue, youGetLeagueValue: g.getValue } }
+        : {}
+    })(),
   }))
 
   let rankedIndices: number[] = validated.map((_, i) => i)
@@ -302,6 +356,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
               'Return strict JSON: { "ranked": [ { "candidateIndex": number, "rationale": string } ], "sessionNote": string }',
               'ranked must contain up to 6 entries; candidateIndex values must exist in the list.',
               'rationale: max 2 sentences, tactical redraft/snake-aware.',
+              'If a candidate has leagueGrade, that is THE AllFantasy grade for it: never contradict it or call the swap better or worse than it says.',
             ].join(' '),
           },
           {
@@ -348,9 +403,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
         nextIdx.push(idx)
       }
       if (nextIdx.length > 0) {
-        rankedIndices = [...nextIdx, ...validated.map((_, i) => i).filter((i) => !used.has(i))]
+        // A graded list keeps the grade's order; the AI only writes rationale for it.
+        if (!graded) rankedIndices = [...nextIdx, ...validated.map((_, i) => i).filter((i) => !used.has(i))]
         aiUsed = true
-        reasonCode = 'ai_ranked_candidates'
+        reasonCode = graded ? 'ai_rationale_grade_ranked' : 'ai_ranked_candidates'
         if (typeof parsed?.sessionNote === 'string' && parsed.sessionNote.trim()) {
           aiStrategyNotes = parsed.sessionNote.trim().slice(0, 600)
         }
@@ -374,6 +430,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const ordered = rankedIndices.map((i) => validated[i]).filter(Boolean)
   const suggestions = ordered.slice(0, 6).map((row) => {
     const aiRationale = (row as unknown as { aiRationale?: string }).aiRationale
+    const tradeGrade = gradeById.get(row.id) ?? null
     return {
       id: row.id,
       suggestionKind: row.kind,
@@ -384,8 +441,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
       rationale:
         typeof aiRationale === 'string' && aiRationale.length > 0
           ? aiRationale
-          : deterministicRationale(row.give, row.recv, row.kind),
+          : tradeGrade?.graded
+            ? gradedRationale(row.give, row.recv, tradeGrade)
+            : deterministicRationale(row.give, row.recv, row.kind),
       aiEnhanced: Boolean(aiRationale && aiRationale.length > 0),
+      tradeGrade,
     }
   })
 
@@ -395,7 +455,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     mineCount: mine.length,
     theirsCount: theirs.length,
     aiUsed,
-    suggestionSource: aiUsed ? 'ai_ranked' : 'deterministic',
+    suggestionSource: graded ? (aiUsed ? 'league_grade_ai_rationale' : 'league_grade') : aiUsed ? 'ai_ranked' : 'deterministic',
+    rankingBasis: graded ? ('league_value' as const) : ('draft_position' as const),
+    gradeWithheldReason,
     aiStrategyNotes,
     execution: buildDraftExecutionMetadata({
       feature: 'counter_trade_suggestion',
