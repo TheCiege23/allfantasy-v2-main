@@ -542,10 +542,18 @@ export async function gatherFormatObservations(
     charts.set(bookKey(b), m)
   }
 
+  /*
+   * 🛑 NFL ROWS ONLY (2026-11-26). Sleeper numbers each sport's players separately, so `SportsPlayer` holds
+   * NFL 1466 Travis Kelce (TE) beside NBA 1466 JaVale McGee (C), both `source='sleeper'`. Read across sports,
+   * the fresher row named the id, and every DYNASTY/REDRAFT book published Kelce's value as "JaVale McGee C"
+   * (likewise Saquon Barkley as "AJ Dybantsa PF", DJ Moore as "Isaac McKneely PG" — 44 rows). The grade's quote
+   * (`loadAfNflMarketQuote`) rightly refuses a row whose position contradicts the player, so every trade with
+   * one of those players was emailed "N assets have no value on this league's chart".
+   */
   const meta = new Map<string, { name: string; position: string | null; age?: number | null }>()
   for (const part of chunk([...ids])) {
     const players = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: part } },
+      where: { sport: 'NFL', sleeperId: { in: part } },
       select: { sleeperId: true, name: true, position: true, age: true, source: true, fetchedAt: true },
       orderBy: { fetchedAt: 'desc' },
     })

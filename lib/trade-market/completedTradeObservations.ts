@@ -197,8 +197,9 @@ export async function gatherCompletedTradeObservations(args: {
    * Jenkins (11304) "Elgton Jenkins G" in the trade market. The Sleeper row names the id; another
    * row may only fill a gap it agrees with (`lib/player-match/authoritativePlayerRow.ts`).
    */
+  // NFL rows only: a Sleeper id names a different athlete in each sport (NBA 1466 is JaVale McGee) — see formatMarkets.
   const players = await args.prisma.sportsPlayer.findMany({
-    where: { sleeperId: { in: [...ids] } },
+    where: { sport: 'NFL', sleeperId: { in: [...ids] } },
     select: { sleeperId: true, name: true, position: true, source: true, fetchedAt: true },
     orderBy: { fetchedAt: 'desc' },
   })
