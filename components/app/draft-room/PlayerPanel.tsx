@@ -103,6 +103,8 @@ export type PlayerEntry = {
   classYearLabel?: string | null
   /** A college player's transfer-portal move, one line (lib/devy/portalMoves.ts). */
   transferNote?: string | null
+  /** A college football player's place at his school by usage (lib/college/usageDepth.ts). */
+  depthNote?: string | null
   draftGrade?: string | null
   projectedLandingSpot?: string | null
   /** Devy: promoted to NFL */
@@ -1263,6 +1265,7 @@ function PlayerPanelInner({
             teamLogoUrl: selectedNormalized?.teamLogoUrl ?? selectedPlayer.display?.assets?.teamLogoUrl ?? null,
             status: getDraftRoomDisplayInjury(selectedPlayer) ?? selectedPlayer.display?.metadata?.injuryStatus ?? null,
             transferNote: selectedPlayer.transferNote ?? null,
+            depthNote: selectedPlayer.depthNote ?? null,
             college: selectedPlayer.school ?? selectedPlayer.display?.metadata?.collegeOrPipeline ?? null,
             age: selectedPlayer.display?.metadata?.age ?? null,
             heightIn: null,

@@ -174,7 +174,7 @@ with a shootout game, committed as a fixture.
 | `G-04` | Field names in `/live` for **SOCCER** (all 3 leagues) | PARTIAL 2026-09-28 — no fixture | Soccer scoring | Still no `/live` fixture. What the ingest STORES was read off production `player_game_stats` instead (4,159 rows, EPL + La Liga + Serie A): groups `fielders` / `goalkeepers`, and the fields listed in `lib/scoring-runtime/soccerStatNormalization.ts`. That is the ingest's output, not the vendor payload — capture `probe.sh live SOCCER EPL <matchday>` to close this. |
 | `G-05` | `game_id` format for NHL / NCAAFB / NCAABB / SOCCER | SOCCER resolved 2026-09-28 | Per-game polling | SOCCER: `YYYYMMDD-<home>-<away>`, the date being the kickoff's US Eastern day (all 1,140 live rows of `fixtures/schedule-season.SOCCER.*.json`). |
 | `G-06` | **`/injuries` field list** for NFL beyond the 5 known keys | PARTIAL | Injury detail | Known: `player`, `player_id`, `injury`, `date_injured`, `returns`. Probe for more. |
-| `G-07` | `/depth-charts` field list — **all sports** | UNVERIFIED | Depth-chart features | Probe NFL first |
+| `G-07` | `/depth-charts` field list — **all sports** | UNVERIFIED | Depth-chart features | Probe NFL first. ⚠ 2026-11-26: `data.NBA` came back as an OBJECT (30 entries), not a list, and `probe.sh`'s field listing crashed on it (`KeyError: 0`) BEFORE writing the fixture, so a depth-chart capture cannot be saved until the probe handles an object envelope. |
 
 ## Non-blocking but worth resolving
 
@@ -196,6 +196,7 @@ with a shootout game, committed as a fixture.
 |---|---|
 | Play-by-play for NHL, NCAAFB, NCAABB, SOCCER, DARTS, PGA | Support matrix, 4 independent statements in skill repo |
 | Injuries / depth charts for NCAAFB, NCAABB, SOCCER, DARTS, PGA | Support matrix |
+| **Depth charts for NCAAFB — MEASURED absent, 2026-11-26** | `FORCE=1 ./probe.sh depth-charts NCAAFB` with `ROLLING_INSIGHTS_RSC_TOKEN2` (the account that holds college football) → **HTTP 404**, on both the contract base URL and `ROLLING_INSIGHTS_REST_BASE_URL` (same host). Positive control, same token and URL: `depth-charts NBA` → **200, 30 teams**. So the 404 is the feed, not the token. AllFantasy derives a usage order from CFBD box scores instead (`lib/college/usageDepth.ts`); CFBD has no depth-chart endpoint either. No fixture: a 404 is refused by the probe. |
 | Player season stats for SOCCER | Support matrix |
 | Team info / team stats for DARTS, PGA | Support matrix |
 | Odds endpoints — any sport | Vendor FAQ: "Do you have Odds data? No" |

@@ -31,6 +31,8 @@ import { poolTypeForStartupDraftLabel } from '@/lib/draft-defaults/startupColleg
 import { isDevyLeague } from '@/lib/devy'
 import { readCollegeConferenceScope } from '@/lib/college/conferenceScope'
 import { describeCollegeTransfer, portalYearFor } from '@/lib/devy/portalMoves'
+import { usageDepthNote } from '@/lib/college/usageDepth'
+import { loadUsageDepthIndex, usageForSchool } from '@/lib/college/usageDepthStore'
 import { devySchoolsInScope, loadDevySchoolConferences } from '@/lib/college/devySchoolConferences'
 import { currentNcaabRosterEvidence } from '@/lib/devy/ncaabRosterPool'
 import { getPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/devy'
@@ -151,6 +153,8 @@ export type DraftPoolRawRow = {
   classYearLabel?: string | null
   /** A college player's transfer-portal move, as one line for his card (lib/devy/portalMoves.ts). */
   transferNote?: string | null
+  /** A college football player's place at his school by usage (lib/college/usageDepth.ts). */
+  depthNote?: string | null
   draftGrade?: string | null
   projectedLandingSpot?: string | null
   draftEligibleYear?: number | null
@@ -1236,6 +1240,15 @@ async function buildResolvedDraftPoolForLeague(
       ? devySchoolsInScope(devyCollegeSport, devyScope, await loadDevySchoolConferences(devyCollegeSport).catch(() => new Map<string, string>()))
       : null
   const devySchoolWhere = devySchoolsAllowed ? { school: { in: devySchoolsAllowed } } : {}
+  /*
+   * College football has no published depth charts (lib/college/usageDepth.ts), so a college football
+   * player's card gets his place at his school by usage. Read once, for a college football league or the
+   * college side of an NFL devy / C2C league.
+   */
+  const usageDepth =
+    sport === 'NCAAF' || (devyCollegeSport === 'NCAAF' && (isDevyDynasty || isC2C || devyEnabled || c2cEnabled))
+      ? await loadUsageDepthIndex().catch(() => null)
+      : null
   // A two-draft startup (lib/draft-defaults/startupCollegeDraft.ts): the pro draft offers pros only, the
   // college draft college players only, so the board and auto-pick match what each round accepts.
   if (poolType == null) poolType = poolTypeForStartupDraftLabel(draftSession?.draftModeLabel, { isC2C, isDevy: isDevyDynasty })
@@ -2750,6 +2763,13 @@ async function buildResolvedDraftPoolForLeague(
       graduatedToNFL: row.graduatedToNFL ?? (promoted ? true : undefined),
       school: row.school ?? promoted?.school ?? null,
       college: row.college ?? promoted?.school ?? null,
+      depthNote: (() => {
+        if (!usageDepth) return null
+        const isCollegeRow = sport === 'NCAAF' || (row as RawRow).isDevy === true || (row as RawRow).poolType === 'college'
+        if (!isCollegeRow) return null
+        const found = usageForSchool(usageDepth, (row as RawRow).school ?? team)
+        return found ? usageDepthNote({ position, name, schoolLabel: found.label, usage: found.usage }) : null
+      })(),
       fantasyPointsPerGame:
         observedNfl?.fantasyPointsPerGame ??
         resolvedAnalytics?.fantasyPointsPerGame ??

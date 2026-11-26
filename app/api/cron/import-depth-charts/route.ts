@@ -17,7 +17,11 @@
  * The two write different `source` values into a table keyed on (sport, team, position, source),
  * so for NFL they coexist rather than overwrite.
  *
- * NCAAF, NCAAB and SOCCER have NO depth-chart feed from this vendor (`support_matrix`). They are
+ * NCAAF has no vendor feed either (Rolling Insights 404, probed 2026-11-26; CFBD has no endpoint), so it
+ * gets a depth order DERIVED from stored box scores instead: lib/college/usageDepthStore.ts, written as
+ * `source = 'af_usage'` rows and always worded on the card as usage, never as a published chart.
+ *
+ * NCAAB and SOCCER have NO depth-chart feed from this vendor (`support_matrix`). They are
  * reported as `providerCoverage: "none"` and do NOT fail the run — a red light that can never go
  * green is a red light an operator learns to ignore.
  */
@@ -31,6 +35,7 @@ import { syncRollingInsightsDepthChartsToDb } from "@/lib/sports-data/rollingIns
 import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import { recordSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { writeNcaafUsageDepth } from "@/lib/college/usageDepthStore"
 
 const JOB_NAME = "cron-import-depth-charts"
 
@@ -61,6 +66,15 @@ interface SportOutcome {
 
 async function runOneSport(sport: string, season: string | undefined): Promise<SportOutcome> {
   const startedAt = Date.now()
+
+  if (sport === "NCAAF") {
+    const r = await writeNcaafUsageDepth()
+    return {
+      body: { ok: r.rows > 0, sport, source: "af_usage", season: r.season, schools: r.schools, synced: r.rows, durationMs: Date.now() - startedAt },
+      // No box scores yet (preseason) is not a failure; nothing to rank is the truth.
+      failed: r.season != null && r.rows === 0,
+    }
+  }
 
   if (!riSupports("depth_charts", sport)) {
     return {
