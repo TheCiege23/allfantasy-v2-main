@@ -105,7 +105,7 @@ export default function ImportedLeagueWorkspaceHarnessClient({ member = false, e
           <WhatsNextPanel
             league={IMPORTED}
             userId="e2e-viewer"
-            isCommissioner
+            isCommissioner={!member}
             hasTeam
             draftDateIso={null}
             availableTabIds={tabIds}

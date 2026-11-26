@@ -23,6 +23,7 @@ import { RedraftCommishHealth } from '@/components/decide/RedraftCommishHealth'
 import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { MAKE_NATIVE_LABEL, makeNativeLeagueHref } from '@/lib/league/makeNativeLeague'
 
 type WorkspaceAction = {
   id: string
@@ -184,10 +185,11 @@ export function CommissionerOperationsWorkspace({
           ) : null}
           {!isNativePlatform(league.platform) ? (
             <a
-              href={`/create-league?fromLeague=${encodeURIComponent(leagueId)}`}
+              href={makeNativeLeagueHref(leagueId)}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-[12px] font-extrabold transition"
+              data-testid="commissioner-make-native"
             >
-              Create standalone AllFantasy league →
+              {MAKE_NATIVE_LABEL} →
             </a>
           ) : null}
         </div>

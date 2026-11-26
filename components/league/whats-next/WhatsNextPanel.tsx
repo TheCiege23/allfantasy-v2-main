@@ -23,6 +23,7 @@ import {
   walkthroughFor,
 } from '@/lib/league/whats-next/formatWalkthroughs'
 import type { WhatsNextFacts } from '@/lib/league/whats-next/types'
+import { MAKE_NATIVE_LABEL, makeNativeLeagueHref } from '@/lib/league/makeNativeLeague'
 import { FormatWalkthrough } from './FormatWalkthrough'
 import './whats-next.css'
 
@@ -155,6 +156,8 @@ export function WhatsNextPanel({
   const action = view.action
   const actionAvailable = action ? (action.href ? true : !availableTabIds || (action.tab != null && availableTabIds.includes(action.tab))) : false
   const statusLabel = view.status === 'act' ? (view.shared ? 'To do' : 'Your turn') : view.status === 'done' ? 'Done' : 'Waiting'
+  // An imported league's commissioner can move it onto AllFantasy; the create flow re-checks the role.
+  const makeNativeHref = imported && isCommissioner ? makeNativeLeagueHref(league.id) : null
 
   return (
     <section
@@ -222,9 +225,9 @@ export function WhatsNextPanel({
         </dl>
       ) : null}
 
-      {action && actionAvailable ? (
+      {(action && actionAvailable) || makeNativeHref ? (
         <div className="wn-actions">
-          {action.href && action.external ? (
+          {!action || !actionAvailable ? null : action.href && action.external ? (
             // The imported league's host, from the allowlisted source-link resolver: a new tab, no referrer.
             <a
               href={action.href}
@@ -250,7 +253,17 @@ export function WhatsNextPanel({
               {action.label} <ArrowRight size={16} aria-hidden />
             </button>
           )}
+          {makeNativeHref ? (
+            <Link href={makeNativeHref} className="wn-btn" data-testid="whats-next-make-native">
+              {MAKE_NATIVE_LABEL} <ArrowRight size={16} aria-hidden />
+            </Link>
+          ) : null}
         </div>
+      ) : null}
+      {makeNativeHref ? (
+        <p className="wn-note" data-testid="whats-next-make-native-note">
+          Native leagues run on AllFantasy. Teams, rosters and history copy into a new league; this import stays as it is.
+        </p>
       ) : null}
 
       {walkthrough ? (
