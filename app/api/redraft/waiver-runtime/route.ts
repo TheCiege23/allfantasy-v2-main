@@ -10,8 +10,6 @@ import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/leagu
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 import {
   addNflRedraftFreeAgent,
-  cancelNflRedraftWaiverClaim,
-  editNflRedraftWaiverClaim,
   processNflRedraftWaiverWindow,
   resolveNflRedraftWaiverRuntime,
   type NflRedraftWaiverRuntimeState,
@@ -201,41 +199,10 @@ export async function POST(request: Request) {
     const access = await rosterAccess({ rosterId: body.rosterId, seasonId: body.seasonId, leagueId, userId })
     if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
 
-    // Retired 2026-11-26: new claims go through the main waiver system. Editing or cancelling a pending
-    // claim below still works, so claims already queued in the old table are not stuck.
-    if (action === 'submit_claim') {
+    // Retired 2026-11-26: the old claim table takes no claims and a production count found it empty, so
+    // submitting, editing and cancelling a claim here all refuse and point at the main waiver system.
+    if (action === 'submit_claim' || action === 'edit_claim' || action === 'cancel_claim') {
       return legacyRedraftWaiverClaimsRetiredResponse(leagueId)
-    }
-
-    if (action === 'edit_claim') {
-      if (!body.claimId?.trim()) return NextResponse.json({ error: 'claimId required' }, { status: 400 })
-      const claim = await editNflRedraftWaiverClaim({
-        claimId: body.claimId.trim(),
-        seasonId: body.seasonId,
-        leagueId,
-        rosterId: access.roster.id,
-        addPlayerId: body.addPlayerId ?? '',
-        addPlayerName: body.addPlayerName,
-        addPlayerPosition: body.addPlayerPosition,
-        addPlayerTeam: body.addPlayerTeam,
-        dropPlayerId: body.dropPlayerId,
-        dropPlayerName: body.dropPlayerName,
-        bidAmount: body.bidAmount,
-        conditionalGroupId: body.conditionalGroupId,
-        conditionalRank: body.conditionalRank,
-        actorUserId: userId,
-      })
-      return NextResponse.json({ ok: true, ...claim })
-    }
-
-    if (action === 'cancel_claim') {
-      if (!body.claimId?.trim()) return NextResponse.json({ error: 'claimId required' }, { status: 400 })
-      const claim = await cancelNflRedraftWaiverClaim({
-        claimId: body.claimId.trim(),
-        rosterId: access.roster.id,
-        actorUserId: userId,
-      })
-      return NextResponse.json({ ok: true, ...claim })
     }
 
     if (action === 'add_free_agent') {

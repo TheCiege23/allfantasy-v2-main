@@ -28,7 +28,6 @@ vi.mock('@/lib/guillotine/lateStartSeats', () => ({ resolveGuillotineEffectiveSe
 
 import { tradeStatusAlertFor, tradeStatusHref, tradeStatusRecipients } from '@/lib/chat-notifications/tradeStatusAlert'
 import { postTradeStatusToDm } from '@/lib/chat-notifications/tradeOfferDm'
-import { waiverResultNotices } from '@/lib/redraft/waiverResultNotices'
 import { notifyNativePlayoffStatus, playoffStatusCopy } from '@/lib/redraft/playoffStatusNotify'
 import { notifyInviterOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
 
@@ -100,29 +99,6 @@ describe('trade results reach the other manager', () => {
     expect(r.posted).toBe(true)
     await new Promise((r) => setTimeout(r, 20))
     expect(m.dispatch).not.toHaveBeenCalled()
-  })
-})
-
-describe('redraft waiver results', () => {
-  const claims = [
-    { id: 'c1', ownerId: 'u1', addPlayerName: 'Puka Nacua', dropPlayerName: 'Kendre Miller', bidAmount: 23 },
-    { id: 'c2', ownerId: 'u2', addPlayerName: 'Puka Nacua', bidAmount: 10 },
-    { id: 'c3', ownerId: 'orphan-r3', addPlayerName: 'Tank Bigsby' },
-    { id: 'c4', ownerId: 'u4', addPlayerName: 'Rico Dowdle', bidAmount: 0 },
-  ]
-
-  it('the winner hears what they got and paid; the loser hears why; an open seat hears nothing', () => {
-    const n = waiverResultNotices(claims, [
-      { claimId: 'c1', status: 'approved' },
-      { claimId: 'c2', status: 'denied', reason: 'Another claim in this waiver run already won this player.' },
-      { claimId: 'c3', status: 'approved' },
-      { claimId: 'c4', status: 'approved' },
-    ])
-    expect(n).toEqual([
-      { userId: 'u1', claimId: 'c1', type: 'waiver_claim_won', title: 'You got Puka Nacua', body: 'Your waiver claim for $23 FAAB went through. Kendre Miller was dropped to make room.' },
-      { userId: 'u2', claimId: 'c2', type: 'waiver_claim_lost', title: 'Waiver claim not awarded: Puka Nacua', body: 'Your claim did not go through. Another claim in this waiver run already won this player.' },
-      { userId: 'u4', claimId: 'c4', type: 'waiver_claim_won', title: 'You got Rico Dowdle', body: 'Your waiver claim went through.' },
-    ])
   })
 })
 

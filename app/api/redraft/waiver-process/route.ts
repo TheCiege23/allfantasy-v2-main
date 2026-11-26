@@ -1,9 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { processWaiverWindow } from '@/lib/redraft/waiverEngine'
-import { prisma } from '@/lib/prisma'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
-import { SCORING_SEASON_STATUSES, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import {
   expireDueRedraftTradeProposals,
@@ -21,75 +18,28 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 /**
- * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
+ * Heartbeat job name, probed by scripts/cron-freshness-check.mjs and lib/production-health/cronRegistry.ts.
+ * Only the SCHEDULED GET records a run — POST is the admin path.
  *
- * This job is CONDITIONAL: with no active/drafting season there is no waiver window to
- * process, so redraft_waiver_claims can sit untouched for months while the schedule is
- * perfectly healthy. Only the SCHEDULED GET records a run — POST is the admin path.
+ * ⚠ THIS ROUTE NO LONGER PROCESSES WAIVERS (2026-11-26). Its original job was settling claims in
+ * `redraft_waiver_claims` through lib/redraft/waiverEngine.ts. That table takes no new claims
+ * (lib/redraft/legacyWaiverClaimsRetired.ts), a production count found it empty — zero rows of any status —
+ * and the engine was deleted. Every redraft claim goes through the main waiver system and `/api/cron/waivers`.
+ * The route keeps its name and heartbeat because the hourly sweeps below (trade expiry, lineups, taxi, …)
+ * live here.
  */
 const JOB = 'cron-redraft-waiver-process'
-
-// This branch added its own cron GET here; #284 landed an equivalent one further down
-// (kept), so both would have exported `GET` from the same module. Dropped this copy —
-// main's is the shipped, reviewed version and does the same work inline.
-// `runWaiverProcessing()` stays: POST still calls it.
 
 export async function POST(request: Request) {
   const gate = await requireAdminOrBearer(request)
   if (!gate.ok) return gate.res
 
-  return runWaiverProcessing()
+  return NextResponse.json(retiredWaiverStep())
 }
 
-/**
- * The actual work, as plain data. GET and POST ran byte-identical copies of this inline; it is
- * one function now so the cron path can be wrapped in telemetry without the two drifting.
- */
-async function processDueWaiverWindows() {
-  // ⚠ THIS FILTERED OUT 242 OF 246 SEASONS AND NOTHING SAID SO. `'in_season'` —
-  // what the import materializer writes — matched neither arm, so waiver
-  // processing has only ever run for natively drafted leagues. That is a
-  // defensible rule; it just was not one anybody had written. `engineSeasonScope`
-  // states it: both spellings, native leagues only, shadow behind an argument.
-  // Playoff seasons too: waivers keep running in the postseason, as on every host platform, and
-  // the playoff teams are the ones who most need them. See SCORING_SEASON_STATUSES.
-  //
-  // ⚠ ORDERED AND UNCAPPED. This read `take: 20` with no `orderBy`, so once more than twenty
-  // seasons were running, the same twenty (by Postgres' physical order) were processed every
-  // hour and the rest never ran a waiver. `processWaiverWindow` is a no-op read for a season
-  // with no pending claims, so every season is visited instead.
-  //
-  // ⚠ DRAIN-ONLY SINCE 2026-11-26. The old table takes no new claims (lib/redraft/legacyWaiverClaimsRetired.ts);
-  // every claim goes through the main waiver system and `/api/cron/waivers`. This step now only settles claims
-  // that were ALREADY pending here, so it visits just the seasons that still have one, and reports how many are
-  // left. When `legacyPendingAfter` reads 0 on every run, the old engine (lib/redraft/waiverEngine.ts) can be
-  // deleted. It is not deleted yet because nobody has confirmed the table is empty.
-  const pendingBySeason = await prisma.redraftWaiverClaim.groupBy({
-    by: ['seasonId'],
-    where: { status: 'pending' },
-    _count: { _all: true },
-  })
-  const legacyPendingBefore = pendingBySeason.reduce((n, g) => n + g._count._all, 0)
-  const seasonIds = pendingBySeason.map((g) => g.seasonId)
-  const seasons = seasonIds.length
-    ? await prisma.redraftSeason.findMany({
-        where: { AND: [engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }), { id: { in: seasonIds } }] },
-        orderBy: { id: 'asc' },
-      })
-    : []
-  const results: { seasonId: string; processed: unknown[] }[] = []
-  for (const s of seasons) {
-    const processed = await processWaiverWindow(s.leagueId, s.id)
-    results.push({ seasonId: s.id, processed })
-  }
-  const legacyPendingAfter = legacyPendingBefore
-    ? await prisma.redraftWaiverClaim.count({ where: { status: 'pending' } })
-    : 0
-  return { results, legacyPendingBefore, legacyPendingAfter }
-}
-
-async function runWaiverProcessing() {
-  return NextResponse.json(await processDueWaiverWindows())
+/** What the retired waiver step reports: nothing processed, and why. */
+function retiredWaiverStep() {
+  return { results: [] as never[], legacyWaiverEngine: 'retired' as const }
 }
 
 /**
@@ -720,15 +670,8 @@ export async function GET(request: Request) {
 
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
-    () => processDueWaiverWindows(),
-    (r) => ({
-      rowsRead: r.results.length,
-      metadata: {
-        seasonsProcessed: r.results.length,
-        legacyPendingBefore: r.legacyPendingBefore,
-        legacyPendingAfter: r.legacyPendingAfter,
-      },
-    }),
+    async () => retiredWaiverStep(),
+    () => ({ rowsRead: 0, metadata: { legacyWaiverEngine: 'retired' } }),
   )
 
   // The native Exile pool has its own roster snapshots. Reuse the waiver heartbeat, with

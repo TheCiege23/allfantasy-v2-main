@@ -1,7 +1,7 @@
 import { createWeeklyPointsAgainst } from '@/lib/redraft/weeklyPointsAgainst'
 import { extraMatchupForRoster, extraMatchupResults, readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
 // Pure, import-free: the same league-median rule `updateStandings` applies (see the standings below).
-import { computeWeeklyMedianResults, medianEligibleRows } from '@/lib/redraft/medianGame'
+import { byeWeekMedianCredits, computeWeeklyMedianResults, medianEligibleRows } from '@/lib/redraft/medianGame'
 import { normalizeGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import type {
   CanonicalLeagueRules,
@@ -170,6 +170,8 @@ type BuildScheduleInput = {
   medianGame?: boolean | null
   /** `settings.median_game_in_playoffs`; off unless the commissioner turned it on. */
   medianInPlayoffs?: boolean | null
+  /** Credit a bye with the week's median score as points for, as `updateStandings` does (points leagues). */
+  byeMedianCredit?: boolean | null
   /** `division_config.rivalsTwice`, used only when no schedule is persisted yet (the preview). */
   divisionRivalsTwice?: boolean | null
 } & ScheduleRuntimeShapeOverrides
@@ -737,6 +739,8 @@ export function buildCanonicalScheduleStandings(input: {
   medianGame?: boolean | null
   medianInPlayoffs?: boolean | null
   playoffStartWeek?: number | null
+  /** See `BuildScheduleInput.byeMedianCredit`. */
+  byeMedianCredit?: boolean | null
 }): CanonicalScheduleStanding[] {
   const standingsByRosterId = new Map<string, CanonicalScheduleStanding>()
   const outcomesByRosterId = new Map<string, Array<{ week: number; result: 'W' | 'L' | 'T' }>>()
@@ -864,6 +868,17 @@ export function buildCanonicalScheduleStandings(input: {
     }
   }
 
+  // A plain bye is credited the week's median team score as points for — the stored standings do this
+  // (lib/redraft/standingsEngine.ts, `byeWeekMedianCredits`), and points for is the first tiebreaker after
+  // win percentage. Without it, two teams level on record in an odd-team league could sit in one order
+  // here and the other in the standings.
+  if (input.byeMedianCredit) {
+    for (const credit of byeWeekMedianCredits(asRows, { playoffStartWeek: input.playoffStartWeek ?? null })) {
+      const row = standingsByRosterId.get(credit.rosterId)
+      if (row) row.pointsFor = round1(row.pointsFor + credit.median)
+    }
+  }
+
   // League median: a second game each week against the week's median score (never in playoff weeks
   // unless the league kept it on there).
   if (input.medianGame) {
@@ -973,6 +988,7 @@ export function buildCanonicalScheduleRuntimeState(input: BuildScheduleInput): C
     medianGame: input.medianGame,
     medianInPlayoffs: input.medianInPlayoffs,
     playoffStartWeek: resolvedShape.playoffStartWeek,
+    byeMedianCredit: input.byeMedianCredit,
   })
   const validationIssues = [
     ...(generatedSchedule?.validationIssues ?? []),

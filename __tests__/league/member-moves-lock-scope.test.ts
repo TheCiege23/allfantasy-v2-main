@@ -174,15 +174,14 @@ describe('redraft waiver claims', () => {
     expect(h.prisma.redraftWaiverClaim.create).not.toHaveBeenCalled()
   })
 
-  it('cancelling a pending claim stays open under the lock: it moves nothing', async () => {
+  it('DELETE /api/redraft/waivers cancels nothing now: 410, and the table is not touched', async () => {
     h.state.lockAllMoves = true
-    ;(h.prisma.redraftWaiverClaim as Record<string, unknown>).findFirst = vi.fn(async () => ({ id: 'c1', rosterId: 'rr-1', seasonId: 's1', leagueId: 'L', status: 'pending' }))
     ;(h.prisma.redraftWaiverClaim as Record<string, unknown>).update = vi.fn(async () => ({}))
     const res = await deleteRedraftWaiver(
       createMockNextRequest('http://localhost/api/redraft/waivers', { method: 'DELETE', body: { claimId: 'c1', rosterId: 'rr-1' } }),
     )
-    expect(res.status).toBe(200)
-    ;(h.prisma.redraftWaiverClaim as Record<string, unknown>).findFirst = vi.fn(async () => null)
+    expect(res.status).toBe(410)
+    expect((h.prisma.redraftWaiverClaim as Record<string, ReturnType<typeof vi.fn>>).update).not.toHaveBeenCalled()
   })
 })
 

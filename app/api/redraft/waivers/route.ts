@@ -41,47 +41,22 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Retired 2026-11-26: claims go through the main waiver system now (lib/redraft/legacyWaiverClaimsRetired.ts).
- * GET still lists a roster's old claims and DELETE still cancels a pending one, so nothing already queued is stuck.
+ * Retired 2026-11-26: claims go through the main waiver system now (lib/redraft/legacyWaiverClaimsRetired.ts),
+ * and a production count found this table empty, so creating and cancelling both refuse. GET stays because the
+ * redraft Waivers screen still lists from it; it returns an empty list.
  */
-export async function POST(req: NextRequest) {
+async function refuse(leagueId: string | null) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  return legacyRedraftWaiverClaimsRetiredResponse(leagueId)
+}
+
+export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as { leagueId?: string } | null
-  return legacyRedraftWaiverClaimsRetiredResponse(body?.leagueId ?? null)
+  return refuse(body?.leagueId ?? null)
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
-  const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  let body: { claimId?: string; rosterId?: string }
-  try {
-    body = (await req.json()) as typeof body
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-
-  const claimId = body.claimId?.trim()
-  const rosterId = body.rosterId?.trim()
-  if (!claimId || !rosterId) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
-
-  const c = await prisma.redraftWaiverClaim.findFirst({ where: { id: claimId, rosterId } })
-  if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const roster = await prisma.redraftRoster.findFirst({
-    where: { id: rosterId, seasonId: c.seasonId, leagueId: c.leagueId },
-    select: { ownerId: true },
-  })
-  if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(c.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (c.status !== 'pending') return NextResponse.json({ error: 'Only pending claims can be cancelled' }, { status: 409 })
-
-  await prisma.redraftWaiverClaim.update({
-    where: { id: claimId },
-    data: { status: 'cancelled' },
-  })
-
-  return NextResponse.json({ ok: true })
+  const body = (await req.json().catch(() => null)) as { leagueId?: string } | null
+  return refuse(body?.leagueId ?? null)
 }
