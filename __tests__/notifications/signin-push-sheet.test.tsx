@@ -186,3 +186,40 @@ describe('the sheet', () => {
     expect(h.subscribe).not.toHaveBeenCalled()
   })
 })
+
+/*
+ * Measured (2026-11-24): the sheet asks every new account but sent no event, so `push_ask_shown`
+ * counted only Player Finder and read as "1 of 22 new users was asked". Same events and key as PushAsk.
+ */
+describe('the sheet is counted, by placement', () => {
+  const tracked = () =>
+    (vi.mocked(fetch).mock.calls as unknown as Array<[string, { body?: string }?]>)
+      .filter((c) => c[0] === '/api/analytics/track')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { event: string; toolKey: string; meta: Record<string, string> })
+
+  it('shown, then "Not now": push_ask_shown + push_ask_dismissed with placement signin_sheet', async () => {
+    render(<SignInPushSheet />)
+    fireEvent.click(await screen.findByText('Not now'))
+    await waitFor(() => expect(tracked().map((e) => e.event)).toEqual(['push_ask_shown', 'push_ask_dismissed']))
+    for (const e of tracked()) {
+      expect(e.toolKey).toBe('push_ask')
+      expect(e.meta).toEqual({ placement: 'signin_sheet', mode: 'web' })
+    }
+  })
+
+  it('shown, then turned on: push_ask_enabled once, and closing "Done" is not a dismissal', async () => {
+    h.subscribe.mockResolvedValue(true)
+    render(<SignInPushSheet />)
+    fireEvent.click(await screen.findByText('Turn on alerts'))
+    await waitFor(() => expect(screen.getByText("You're set")).toBeTruthy())
+    fireEvent.click(screen.getByText('Done'))
+    await waitFor(() => expect(tracked().map((e) => e.event)).toEqual(['push_ask_shown', 'push_ask_enabled']))
+  })
+
+  it('never shown: nothing counted', async () => {
+    h.web.permission = 'granted'
+    render(<SignInPushSheet />)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(tracked()).toEqual([])
+  })
+})

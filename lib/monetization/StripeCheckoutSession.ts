@@ -14,6 +14,7 @@ import {
   type StripeCheckoutPurchaseType,
 } from "@/lib/monetization/StripeCheckoutLinkRegistry"
 import { getFoundingCouponId } from "@/lib/monetization/foundingMember"
+import { getHolidaySale, holidaySaleCouponSpec, type HolidaySaleView } from "@/lib/monetization/holidaySale"
 
 export type StripeCheckoutSessionResult = {
   url: string
@@ -21,6 +22,8 @@ export type StripeCheckoutSessionResult = {
   purchaseType: StripeCheckoutPurchaseType
   /** The founding-member coupon rode this session (see lib/monetization/foundingMember.ts). */
   foundingDiscountApplied: boolean
+  /** The Black Friday / Cyber Monday coupon rode this session (lib/monetization/holidaySale.ts). */
+  holidaySaleApplied: boolean
 }
 
 /**
@@ -85,6 +88,8 @@ export async function buildStripeCheckoutSessionForSku(input: {
    */
   partnerCouponId?: string | null
   partnerCodeId?: string | null
+  /** The instant to judge the holiday sale's window by. Tests only; defaults to now. */
+  now?: Date
   env?: NodeJS.ProcessEnv
 }): Promise<StripeCheckoutSessionResult | null> {
   const env = input.env ?? process.env
@@ -180,7 +185,37 @@ export async function buildStripeCheckoutSessionForSku(input: {
       ? getFoundingCouponId(env)
       : null
   let foundingDiscountApplied = false
-  if (couponCode && percentOff > 0) {
+  /*
+   * The Black Friday → Cyber Monday sale (lib/monetization/holidaySale.ts): every subscription bought
+   * on the web inside the window gets 50% off its first year. It outranks founding pricing and a
+   * Partner Code's friend discount (Stripe takes one discount per session, and 50% beats both), but
+   * NOT a typed sponsor code worth more — the buyer always gets the bigger one. A Partner Code buyer
+   * keeps their `partnerCodeId` metadata, so the commissioner is still credited.
+   */
+  const sale: HolidaySaleView | null =
+    item.type === "subscription" && mode === "subscription" && (item.interval === "month" || item.interval === "year")
+      ? getHolidaySale(input.now ?? new Date())
+      : null
+  const saleBeatsSponsor = sale && !(couponCode && percentOff > sale.percentOff)
+  let holidaySaleApplied = false
+  // ⚠ The sale must never be the reason a customer cannot pay: a coupon Stripe will not create (a key
+  // without coupon write access, an outage) falls through to the discounts below, as if no sale ran.
+  let saleCouponId: string | null = null
+  if (sale && saleBeatsSponsor) {
+    try {
+      saleCouponId = await ensureHolidaySaleCoupon(stripe, item.interval as "month" | "year", sale)
+    } catch (error) {
+      console.warn("[checkout] holiday sale coupon unavailable; continuing without it", {
+        code: (error as { code?: unknown })?.code ?? null,
+      })
+    }
+  }
+  if (saleCouponId) {
+    params.discounts = [{ coupon: saleCouponId }]
+    holidaySaleApplied = true
+    metadata.holidaySale = "bf2026"
+    if (params.subscription_data) params.subscription_data.metadata = { ...metadata }
+  } else if (couponCode && percentOff > 0) {
     const couponId = await ensureStripeSponsorCoupon(stripe, couponCode, percentOff)
     params.discounts = [{ coupon: couponId }]
   } else if (foundingCouponId) {
@@ -204,24 +239,58 @@ export async function buildStripeCheckoutSessionForSku(input: {
      * pricing were off. Anything else wrong with the request fails the retry the same way and
      * still throws.
      */
-    if (!foundingDiscountApplied || !isStripeInvalidRequest(error)) throw error
-    console.warn("[checkout] founding coupon rejected by Stripe; retrying without it", {
+    if (!(foundingDiscountApplied || holidaySaleApplied) || !isStripeInvalidRequest(error)) throw error
+    console.warn(`[checkout] ${holidaySaleApplied ? "holiday sale" : "founding"} coupon rejected by Stripe; retrying without it`, {
       code: (error as { code?: unknown })?.code ?? null,
       param: (error as { param?: unknown })?.param ?? null,
     })
     delete params.discounts
     params.allow_promotion_codes = true
     foundingDiscountApplied = false
+    if (holidaySaleApplied) {
+      delete metadata.holidaySale
+      if (params.subscription_data) params.subscription_data.metadata = { ...metadata }
+    }
+    holidaySaleApplied = false
     session = await stripe.checkout.sessions.create(params)
   }
   if (!session.url) return null
 
-  return { url: session.url, sessionId: session.id, purchaseType, foundingDiscountApplied }
+  return { url: session.url, sessionId: session.id, purchaseType, foundingDiscountApplied, holidaySaleApplied }
 }
 
 function isStripeInvalidRequest(error: unknown): boolean {
   const e = error as { type?: unknown; rawType?: unknown } | null
   return e?.type === "StripeInvalidRequestError" || e?.rawType === "invalid_request_error"
+}
+
+/**
+ * The holiday-sale coupon for this interval, created on first use (see holidaySaleCouponSpec for its
+ * shape). Idempotent across requests and servers: the id is fixed, and a racing create reuses the
+ * winner's. It stops being redeemable on its own when the sale ends (`redeem_by`).
+ */
+export async function ensureHolidaySaleCoupon(
+  stripe: ReturnType<typeof getStripeClient>,
+  interval: "month" | "year",
+  sale: HolidaySaleView
+): Promise<string> {
+  const spec = holidaySaleCouponSpec(interval, sale)
+  try {
+    const existing = await stripe.coupons.retrieve(spec.id)
+    return existing.id
+  } catch (error: any) {
+    if (error?.code !== "resource_missing") throw error
+  }
+  try {
+    const created = await stripe.coupons.create({
+      ...spec,
+      metadata: { af_holiday_sale: "bf2026" },
+    })
+    return created.id
+  } catch (error: any) {
+    if (error?.code === "resource_already_exists") return spec.id
+    throw error
+  }
 }
 
 /**

@@ -31,7 +31,7 @@ import { readDeadlineAt } from '@/lib/trade-deadline/tradeDeadlineTime'
 import { isWaiverProcessingMode, readDailyWaiverScheduleFromSettings, WAIVER_DAY_KEYS } from '@/lib/waivers/dailyWaiverSchedule'
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { readAdvanced, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
-import { readFaabOnChop } from '@/lib/guillotine/faabOnChop'
+import { readFaabOnChop, readFaabOnChopPercent } from '@/lib/guillotine/faabOnChop'
 import { readGuillotineBestBall } from '@/lib/guillotine/guillotineBestBall'
 import { readPeriodWeeks } from '@/lib/guillotine/eliminationPeriods'
 import { isBlindAuctionLeague } from '@/lib/guillotine/blindWaiverCutoff'
@@ -306,6 +306,7 @@ export function ruleSnapshotFromLeague(row: RulesLeagueRow): RuleSnapshot {
   if (format === 'guillotine') {
     snapshot.endgame = resolveGuillotineEndgame({ settings: row.settings, guillotineEndgame: row.guillotineEndgame ?? null }).format
     snapshot.faabOnChop = readFaabOnChop(row.settings)
+    snapshot.faabOnChopPercent = readFaabOnChopPercent(row.settings)
     // The waiver rule the claims hold enforces (lib/guillotine/blindWaiverCutoff.ts); the sport decides it.
     snapshot.blindAuction = isBlindAuctionLeague({ sport: row.sport ?? null, guillotineMode: true, leagueVariant: 'guillotine' })
     snapshot.bestBallLineups = readGuillotineBestBall(row.settings)
@@ -405,6 +406,7 @@ export type GuillotineRulesLike = {
   dangerMarginPoints?: number
   rosterReleaseTiming?: string
   faabOnChop?: string
+  faabOnChopPercent?: number
   /** Best ball lineups (League.settings.best_ball). */
   bestBall?: boolean
   /** Weeks per elimination period (League.settings.guillotine_period_weeks). */
@@ -422,6 +424,8 @@ export function guillotineRulesSnapshot(rules: GuillotineRulesLike, startWeek?: 
     dangerMarginPoints: nonNegNumber(rules.dangerMarginPoints),
     releaseTiming: rules.rosterReleaseTiming ?? null,
     faabOnChop: rules.faabOnChop ?? null,
+    // Only when the caller read it, as below: a key absent on one side is never a change.
+    ...(rules.faabOnChopPercent !== undefined ? { faabOnChopPercent: posInt(rules.faabOnChopPercent) } : {}),
     // Both are on the League rules page, so a change to either is announced like the rest. Only when the
     // caller read them: a key absent on one side is never a change, and absent never overwrites a known value.
     ...(typeof rules.bestBall === 'boolean' ? { bestBallLineups: rules.bestBall } : {}),

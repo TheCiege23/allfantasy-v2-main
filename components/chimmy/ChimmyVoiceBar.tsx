@@ -173,10 +173,10 @@ export default function ChimmyVoiceBar({
       )}
 
       {ttsUnavailable && (
-        <span className="text-[11px] text-white/40">Voice (unavailable)</span>
+        <span className="text-[11px] text-white/50">Voice (unavailable)</span>
       )}
       {speechInputUnavailable && onSpeechInputToggle && (
-        <span className="text-[11px] text-white/40">Mic unavailable</span>
+        <span className="text-[11px] text-white/50">Mic unavailable</span>
       )}
 
       {transcriptRef && <div ref={transcriptRef} className="sr-only" aria-hidden />}

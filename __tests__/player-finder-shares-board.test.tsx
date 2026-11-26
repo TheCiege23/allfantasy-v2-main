@@ -37,6 +37,11 @@ describe('PlayerSharesBoard', () => {
     // 2026-11-14: the count alone on the sub-line; the caveat moved to the foot, said once.
     expect(within(board).getByText(/^612 players across 49 rosters$/)).toBeInTheDocument()
     expect(within(board).getByTestId('pf-shares-not-counted').textContent).toBe("Not counted: 1 league on a platform we can't read yet.")
+    // 2026-11-24: how the list is ranked and what it could not count sit in one closed row under it.
+    const foot = within(board).getByTestId('pf-shares-foot') as HTMLDetailsElement
+    expect(foot.open).toBe(false)
+    expect(foot.querySelector('summary')?.textContent).toBe('How this list is ranked')
+    expect(foot.contains(within(board).getByTestId('pf-shares-not-counted'))).toBe(true)
     const items = within(board).getAllByRole('listitem')
     expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent('Malik Nabers')

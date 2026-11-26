@@ -16,7 +16,18 @@ import { useEffect, useState } from 'react'
  */
 export type TrialOffer = { days: number; skus: readonly string[]; eligible: boolean | null }
 
-const NONE: TrialOffer = { days: 0, skus: [], eligible: false }
+export const NO_TRIAL_OFFER: TrialOffer = { days: 0, skus: [], eligible: false }
+const NONE = NO_TRIAL_OFFER
+
+/** Read the endpoint's answer. Anything malformed, or `days: 0`, is no offer. */
+export function parseTrialOffer(j: unknown): TrialOffer {
+  if (!j || typeof j !== 'object') return NONE
+  const v = j as Record<string, unknown>
+  const days = typeof v.days === 'number' && Number.isInteger(v.days) && v.days > 0 ? v.days : 0
+  const skus = Array.isArray(v.skus) ? v.skus.filter((s): s is string => typeof s === 'string') : []
+  const eligible = v.eligible === true ? true : v.eligible === null ? null : false
+  return days > 0 ? { days, skus, eligible } : NONE
+}
 
 export function useTrialOffer(enabled = true): TrialOffer {
   const [offer, setOffer] = useState<TrialOffer>(NONE)
@@ -27,11 +38,7 @@ export function useTrialOffer(enabled = true): TrialOffer {
       .then((r) => (r.ok ? r.json() : null))
       .then((j: unknown) => {
         if (cancelled || !j || typeof j !== 'object') return
-        const v = j as Record<string, unknown>
-        const days = typeof v.days === 'number' && Number.isInteger(v.days) && v.days > 0 ? v.days : 0
-        const skus = Array.isArray(v.skus) ? v.skus.filter((s): s is string => typeof s === 'string') : []
-        const eligible = v.eligible === true ? true : v.eligible === null ? null : false
-        setOffer(days > 0 ? { days, skus, eligible } : NONE)
+        setOffer(parseTrialOffer(j))
       })
       .catch(() => undefined)
     return () => {

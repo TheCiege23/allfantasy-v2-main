@@ -2,6 +2,9 @@ name: Guilly chop week integration
 # A Guilly season chopped week by week against a real, throwaway PostgreSQL
 # (__tests__/guillotine/chop-week-db.test.ts): scoring, tiebreak, the elimination engine, the chop
 # audit and its row lock, roster release, the automation locks and the season finish, unmocked.
+# The same database then runs the scheduled roster changes (__tests__/guillotine/roster-schedule-db.test.ts):
+# the save, the weekly run, a crash at each step, three passes at once and a stale settings write, and a
+# starting spot taken away through the real lineup engine, with the finished week's score kept.
 on:
   pull_request:
     paths:
@@ -13,6 +16,15 @@ on:
       - 'app/api/redraft/score-sync/**'
       - 'prisma/schema.prisma'
       - '__tests__/guillotine/chop-week-db.test.ts'
+      - '__tests__/guillotine/roster-schedule-db.test.ts'
+      - 'lib/roster-engine/**'
+      - 'lib/nfl-roster/**'
+      - 'lib/league/lineupStarterSlots.ts'
+      - 'lib/league/lineupSlotPositions.ts'
+      - 'lib/redraft/rosterConfigResolver.ts'
+      - 'lib/redraft/weekLineupSlots.ts'
+      - 'lib/roster-lineup-engine/**'
+      - 'lib/roster/LineupTemplateValidation.ts'
       - '.github/workflows/guillotine-chop-week-db.yml'
   workflow_dispatch:
 permissions:
@@ -40,6 +52,7 @@ jobs:
       DATABASE_URL: postgresql://chopweek:chopweek-test-only@127.0.0.1:55478/chopweek
       DIRECT_URL: postgresql://chopweek:chopweek-test-only@127.0.0.1:55478/chopweek
       RUN_GUILLOTINE_CHOP_WEEK_DB: '1'
+      RUN_GUILLOTINE_ROSTER_SCHEDULE_DB: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,3 +65,5 @@ jobs:
         run: node scripts/prisma-cli-guard.cjs db push --skip-generate
       - name: Chop weeks, reruns, two replicas, a tiebreak and the season finish
         run: npx vitest run __tests__/guillotine/chop-week-db.test.ts
+      - name: Scheduled roster changes, reruns, crashes, three passes at once and a stale settings write
+        run: npx vitest run __tests__/guillotine/roster-schedule-db.test.ts

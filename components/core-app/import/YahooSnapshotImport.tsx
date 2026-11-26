@@ -48,6 +48,8 @@ interface PreviewView {
   scoring: string | null
   rosterSlots: string[]
   draftPicks: number
+  /** The preview's managers: `rosterId` is the team's source id, what the commit's claim takes. */
+  teams: Array<{ id: string; name: string; manager: string | null }>
 }
 
 function toPreviewView(data: unknown): PreviewView {
@@ -60,7 +62,32 @@ function toPreviewView(data: unknown): PreviewView {
     scoring: league.settings?.scoringLabel ?? d.formatSummary?.detectedFormat ?? null,
     rosterSlots: Array.isArray(d.rosterPositions) ? d.rosterPositions.map(String) : [],
     draftPicks: Number(d.draftPickCount ?? 0),
+    teams: Array.isArray(d.managers)
+      ? d.managers
+          .map((m: Record<string, unknown>) => ({
+            id: String(m.rosterId ?? ''),
+            name: String(m.teamName ?? m.displayName ?? ''),
+            manager: typeof m.displayName === 'string' && m.displayName && m.displayName !== m.teamName ? m.displayName : null,
+          }))
+          .filter((t: { id: string; name: string }) => t.id && t.name)
+      : [],
   }
+}
+
+/** "Which team is yours?" — a team's source id, or this for a commissioner who runs no team. */
+export const YAHOO_NO_TEAM = 'none'
+
+/**
+ * Why the Import button is disabled, as one line, or null when it is not. The button used to grey out
+ * with no word of explanation until the commissioner box was ticked.
+ */
+export function yahooImportBlockedHint(isCommissioner: boolean, teamChoice: string): string | null {
+  const needs: string[] = []
+  if (!teamChoice) needs.push('pick your team')
+  if (!isCommissioner) needs.push('tick “I’m the commissioner of this league”')
+  if (needs.length === 0) return null
+  const line = needs.join(' and ')
+  return `To import, ${line}.`
 }
 
 /** "QB, RB, RB, BN, BN" -> "QB, 2 RB, 2 BN" — first-seen order, each slot named once. */
@@ -90,6 +117,7 @@ export function YahooSnapshotImport() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [isCommissioner, setIsCommissioner] = useState(false)
+  const [teamChoice, setTeamChoice] = useState('')
   const [alreadyImported, setAlreadyImported] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const bookmarkRef = useRef<HTMLAnchorElement>(null)
@@ -218,16 +246,29 @@ export function YahooSnapshotImport() {
       setError(null)
       setBusy(true)
       try {
+        /* The picked team is claimed for the importer (and gets the commissioner's C); nothing on a
+           pasted page says which team is theirs, so without it the league lands with no owner. */
+        const claimSourceTeamId = teamChoice && teamChoice !== YAHOO_NO_TEAM ? teamChoice : undefined
         const result = await submitImportCreation(
           'yahoo',
           sourceId,
           '',
           { accepted: true, statement: 'I am the commissioner of this Yahoo league.' },
-          force ? { force: true } : undefined,
+          { ...(force ? { force: true } : {}), ...(claimSourceTeamId ? { claimSourceTeamId } : {}) },
         )
         if (!result.ok || !result.data?.league) {
           setAlreadyImported(result.code === 'LEAGUE_ALREADY_IMPORTED')
           setError(result.error ?? 'The import did not finish. Try again.')
+          return
+        }
+        /*
+         * ⚠ A SECOND PLAIN IMPORT OF THE SAME LEAGUE IS A 200 THAT WROTE NOTHING: the server matched the
+         * earlier completed run and returned it untouched (`existed`). Saying "Imported" there told the
+         * commissioner their new pages and team pick had landed when they had not.
+         */
+        if (!force && result.existed) {
+          setAlreadyImported(true)
+          setError('This league is already in your account. Update it with the pages you pasted?')
           return
         }
         setPhase({ k: 'done', leagueId: result.data.league.id, name: result.data.league.name, updated: force })
@@ -235,7 +276,7 @@ export function YahooSnapshotImport() {
         setBusy(false)
       }
     },
-    [sourceId],
+    [sourceId, teamChoice],
   )
 
   const startOver = useCallback(async () => {
@@ -250,12 +291,18 @@ export function YahooSnapshotImport() {
     setError(null)
     setAlreadyImported(false)
     setIsCommissioner(false)
+    setTeamChoice('')
     setPhase({ k: 'start' })
   }, [checklist])
 
   if (!enabled) return null
 
   const rostersAdded = checklist?.teams.filter((t) => t.hasRoster).length ?? 0
+  /* A preview with no teams has nothing to pick from, so only the commissioner box can block it. */
+  const blockedHint =
+    phase.k === 'review'
+      ? yahooImportBlockedHint(isCommissioner, phase.preview.teams.length > 0 ? teamChoice : YAHOO_NO_TEAM)
+      : null
 
   return (
     <details ref={detailsRef} id="af-yahoo-copy-paste" className="af-im-ys" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
@@ -472,6 +519,25 @@ export function YahooSnapshotImport() {
             <p className="af-im-fx-note">
               Check these match Yahoo. If something is off, go back and paste that page again.
             </p>
+            {phase.preview.teams.length > 0 ? (
+              <label className="af-im-fx-field">
+                <span>Which team is yours?</span>
+                <select
+                  className="af-im-ys-input"
+                  value={teamChoice}
+                  onChange={(e) => setTeamChoice(e.target.value)}
+                  disabled={busy}
+                >
+                  <option value="">Pick your team</option>
+                  {phase.preview.teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.manager ? `${t.name} (${t.manager})` : t.name}
+                    </option>
+                  ))}
+                  <option value={YAHOO_NO_TEAM}>I don&apos;t have a team in this league</option>
+                </select>
+              </label>
+            ) : null}
             <label className="af-im-fx-check af-im-ys-attest">
               <input type="checkbox" checked={isCommissioner} onChange={(e) => setIsCommissioner(e.target.checked)} />
               I&apos;m the commissioner of this league
@@ -481,15 +547,20 @@ export function YahooSnapshotImport() {
                 ← Back
               </button>
               {alreadyImported ? (
-                <button type="button" className="af-im-fx-go" onClick={() => void commit(true)} disabled={busy || !isCommissioner}>
+                <button type="button" className="af-im-fx-go" onClick={() => void commit(true)} disabled={busy || blockedHint !== null}>
                   {busy ? 'Updating…' : 'Update my existing league'}
                 </button>
               ) : (
-                <button type="button" className="af-im-fx-go" onClick={() => void commit(false)} disabled={busy || !isCommissioner}>
+                <button type="button" className="af-im-fx-go" onClick={() => void commit(false)} disabled={busy || blockedHint !== null}>
                   {busy ? 'Importing…' : 'Import league'}
                 </button>
               )}
             </div>
+            {blockedHint ? (
+              <p className="af-im-fx-note" data-testid="yahoo-import-blocked-hint">
+                {blockedHint}
+              </p>
+            ) : null}
           </>
         ) : null}
 

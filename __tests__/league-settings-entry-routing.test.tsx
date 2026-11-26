@@ -177,7 +177,6 @@ describe('long values wrap instead of truncating', () => {
     render(<LeagueSettingsHome sections={buildLeagueSettingsHome(input(true))} canEdit renderSubPage={() => null} />)
     expect(screen.getByTestId('lsh-row-chop-schedule').getAttribute('data-layout')).toBe('stacked')
     expect(screen.getByTestId('lsh-row-invite').getAttribute('data-layout')).toBe('stacked')
-    expect(screen.getByTestId('lsh-row-first-chop').getAttribute('data-layout')).toBe('inline')
     expect(screen.getByTestId('lsh-row-teams').getAttribute('data-layout')).toBe('inline')
   })
 

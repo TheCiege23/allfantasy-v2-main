@@ -118,6 +118,8 @@ export type RuleSnapshot = {
   dangerMarginPoints?: number | null
   releaseTiming?: string | null
   faabOnChop?: string | null
+  /** The share of a chopped team's FAAB that is passed on, 1 to 100 (lib/guillotine/faabOnChop.ts). */
+  faabOnChopPercent?: number | null
   /** Guilly: claims are held before each waiver run and settled as one blind FAAB auction (fixed by sport). */
   blindAuction?: boolean | null
   /** Guilly: best ball — lineups set themselves; each team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */

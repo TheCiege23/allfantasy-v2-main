@@ -98,6 +98,10 @@ describe('NativeLineupScreen', () => {
     await screen.findByText('Jalen Hurts')
     const lockedBtn = screen.getByRole('button', { name: 'Locked' }) as HTMLButtonElement
     expect(lockedBtn.disabled).toBe(true)
+    // The row says only until when; the full reason is the button's description, not a paragraph on the row.
+    const lock = lockedBtn.closest('.nls-lock') as HTMLElement
+    expect(lock.querySelector('.nls-lock-when')?.textContent).toBe('Game started')
+    expect(document.getElementById(lockedBtn.getAttribute('aria-describedby')!)?.textContent).toBe('His game has started.')
     expect(screen.getByText(/PHI · vs NYG/)).toBeTruthy()
     // Moving the bench RB in offers the RB slot only; the QB never appears as a target.
     fireEvent.click(screen.getAllByRole('button', { name: 'Move' }).at(-1)!)
@@ -158,6 +162,21 @@ describe('NativeLineupScreen', () => {
     render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
     await screen.findByText('Jalen Hurts')
     expect(screen.queryByTestId('daily-day-picker')).toBeNull()
+  })
+
+  it('reaches Trades from one place: "Propose trade", with no "Trade block" card repeating it (2026-11-24)', async () => {
+    stubFetch({
+      '/api/league/roster': roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4)]),
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Jalen Hurts')
+    expect(screen.getByText('Roster moves')).toBeTruthy()
+    expect(screen.queryByText('Trade block')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open trade block' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Propose trade' })).toBeTruthy()
   })
 
   const saves = (calls: Array<{ url: string; init?: RequestInit }>) =>

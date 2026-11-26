@@ -295,6 +295,9 @@ const VIEWER_SESSION_KEYS = [
   // Changes when a manager switches auto-pick on or off, which moves no pick — so it must be
   // applied even when the board surface is unchanged, or the AUTO badge lags a whole pick.
   'autoDraftRosterIds',
+  // The same change seen from the viewer's own switch: a missed clock turns "Auto-pick me" on from
+  // the server, sometimes a moment after the pick that caused it is already on the board.
+  'viewerAutopick',
   'aiManagerEnabled',
   'orphanDrafterMode',
   'orphanAiProviderAvailable',
@@ -307,6 +310,15 @@ const VIEWER_SESSION_KEYS = [
   // preserve across merges so the mirrored-from-Sleeper chrome cannot flicker between polls.
   'sleeperDraftId',
 ] as const
+
+/** Two plain objects with the same primitive fields (the shape of `viewerAutopick`). */
+function sameFlatRecord(a: unknown, b: unknown): boolean {
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false
+  const ra = a as Record<string, unknown>
+  const rb = b as Record<string, unknown>
+  const keys = Object.keys(ra)
+  return keys.length === Object.keys(rb).length && keys.every((key) => ra[key] === rb[key])
+}
 
 function snapshotRecord(s: DraftSessionSnapshot): Record<string, unknown> {
   return s as unknown as Record<string, unknown>
@@ -351,6 +363,9 @@ export function mergeDraftSessionSnapshot(
         continue
       }
       if (Array.isArray(nv) && Array.isArray(pv) && nv.length === pv.length && nv.every((v, i) => v === pv[i])) continue
+      // A fresh object every poll: compare its fields, or each poll would re-render the room. A
+      // snapshot built for no particular viewer carries null, which says nothing about this one.
+      if (key === 'viewerAutopick' && (nv == null || sameFlatRecord(nv, pv))) continue
       if (nv !== undefined && nv !== pv) {
         if (out === prev) out = { ...prev }
         ;(snapshotRecord(out) as Record<string, unknown>)[key] = nv
@@ -377,7 +392,7 @@ export function mergeDraftSessionSnapshot(
         }
         continue
       }
-      if (nv === undefined && pv !== undefined) {
+      if ((nv === undefined || (key === 'viewerAutopick' && nv === null)) && pv != null) {
         if (merged === base) merged = { ...base }
         snapshotRecord(merged)[key] = pv
       }

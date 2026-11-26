@@ -147,3 +147,41 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── "Why it matters", closed under the headline (2026-11-24) ──────────────────────────────────── */
+.af-core.af-ml .af-mlg-whyfold {
+  margin: 0 0 12px;
+}
+
+/*
+ * ── A phone card is two rows, not three (2026-11-24, the simplify pass) ──────────────────────────
+ * The "Open league" button sat on its own full-width row under every card, so an "In season, nothing
+ * to do" league cost ~210px. On a phone it now sits beside the reason and matchup line, still 44px
+ * tall and still the card's one button. The tile/name row and a hub's member links keep the width.
+ */
+@media (max-width: 720px) {
+  .af-core.af-ml .af-ml-card[data-view='grid'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 10px;
+    row-gap: 10px;
+    align-items: end;
+  }
+  .af-core.af-ml .af-ml-card[data-view='grid'] > .af-ml-card-top,
+  .af-core.af-ml .af-ml-card[data-view='grid'] > .af-ml-hub-members {
+    grid-column: 1 / -1;
+  }
+  .af-core.af-ml .af-ml-card[data-view='grid'] > .af-ml-card-body {
+    grid-column: 1;
+    min-width: 0;
+  }
+  .af-core.af-ml .af-ml-card[data-view='grid'] > .af-ml-card-actions {
+    grid-column: 2;
+    justify-self: end;
+  }
+  .af-core.af-ml .af-ml-card[data-view='grid'] .af-ml-open {
+    width: auto;
+    padding: 0 14px;
+    white-space: nowrap;
+  }
+}

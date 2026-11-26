@@ -49,6 +49,7 @@ export const CHANGEABLE_RULE_KEYS: readonly RuleKey[] = [
   'dangerMarginPoints',
   'releaseTiming',
   'faabOnChop',
+  'faabOnChopPercent',
   'chopPeriodWeeks',
   'bestBallLineups',
   'keeperCount',

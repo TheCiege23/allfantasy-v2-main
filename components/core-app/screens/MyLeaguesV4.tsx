@@ -27,6 +27,7 @@ import '@/components/core-app/af-my-leagues.css'
 import '@/components/core-app/af-my-leagues-redesign.css'
 // The plain-words guide (2026-11-14): the headline, the honest groups and the folds.
 import '@/components/core-app/af-my-leagues-guide.css'
+import '@/components/core-app/home/af-home-guide.css'
 import { myLeaguesGuideMessages } from '@/lib/core-app/messages/myLeaguesGuide'
 import { extraChips, myLeaguesHeadline, parseReason, type GuideReason } from '@/lib/core-app/myLeaguesGuide'
 
@@ -264,7 +265,9 @@ export function MyLeaguesV4({
         title={headline}
         sub={
           <>
-            <span className="af-mlg-intro">{counts.live === 0 ? g.introEmpty : g.intro}</span>
+            {/* 2026-11-24 (the simplify pass): the page's intro sentence went; only the empty page keeps
+                one, because it is the only place that says where leagues come from. */}
+            {counts.live === 0 ? <span className="af-mlg-intro">{g.introEmpty}</span> : null}
             {headChips.length > 0 ? (
               <span className="af-mlg-chips">
                 {headChips.map((c) => (
@@ -274,7 +277,6 @@ export function MyLeaguesV4({
                 ))}
               </span>
             ) : null}
-            {why ? <span className="af-mlg-why" data-testid="my-leagues-why">{why}</span> : null}
           </>
         }
         actions={
@@ -288,6 +290,15 @@ export function MyLeaguesV4({
           </>
         }
       />
+
+      {/* "Why it matters" is one closed row under the headline (2026-11-24): read once, it was a
+          paragraph on every visit. It sits outside the header because the header's sub is a <p>. */}
+      {why ? (
+        <details className="af-hg-whyfold af-mlg-whyfold" data-testid="my-leagues-why">
+          <summary>{head.lead === 'clear' ? g.whyClearLabel : g.whyLabel}</summary>
+          <p>{why}</p>
+        </details>
+      ) : null}
 
       {/* ── Search and sport stay in view; everything else folds ─────────── */}
       <div className="af-ml-controls af-mlg-controls">

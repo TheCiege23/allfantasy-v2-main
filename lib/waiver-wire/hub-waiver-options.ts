@@ -20,6 +20,7 @@ export const HUB_WAIVER_OPTION_KEYS = [
   'waiverFreeAgencyMode',
   'waiverFaabRollover',
   'waiverHoldHoursByPosition',
+  'waiverBenchDropsAfterLock',
 ] as const
 
 /**
@@ -137,6 +138,11 @@ type HubWaiverOptions = {
   faabRolloverRule?: FaabRolloverRule
   /** Per-position after-drop periods (lib/waiver-wire/hold-by-position.ts); `{}` clears them. */
   holdHoursByPosition?: Record<string, number>
+  /**
+   * `can_drop_bench_after_lock` (lib/waiver-wire/transaction-eligibility.ts): may a BENCH player whose
+   * game has started be dropped. Unset or false = no (owner's default, 2026-11-25).
+   */
+  benchDropsAfterLock?: boolean
 }
 
 /**
@@ -214,6 +220,11 @@ export function parseHubWaiverOptions(
     options.faabRolloverRule = v as FaabRolloverRule
   }
 
+  if (body.waiverBenchDropsAfterLock !== undefined) {
+    if (typeof body.waiverBenchDropsAfterLock !== 'boolean') return { ok: false, error: 'Invalid waiverBenchDropsAfterLock' }
+    options.benchDropsAfterLock = body.waiverBenchDropsAfterLock
+  }
+
   if (body.waiverHoldHoursByPosition !== undefined) {
     const parsed = parseHoldHoursByPositionInput(body.waiverHoldHoursByPosition)
     if (!parsed.ok) return { ok: false, error: parsed.error }
@@ -235,6 +246,7 @@ export function hubWaiverEngineConfigPatch(options: HubWaiverOptions): Record<st
     ...(options.freeAgencyMode !== undefined ? { free_agency_mode: options.freeAgencyMode } : {}),
     ...(options.faabRolloverRule !== undefined ? { faab_rollover_rule: options.faabRolloverRule } : {}),
     ...(options.holdHoursByPosition !== undefined ? { [HOLD_HOURS_BY_POSITION_KEY]: options.holdHoursByPosition } : {}),
+    ...(options.benchDropsAfterLock !== undefined ? { can_drop_bench_after_lock: options.benchDropsAfterLock } : {}),
   }
 }
 

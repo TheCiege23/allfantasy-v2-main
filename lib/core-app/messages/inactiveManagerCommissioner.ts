@@ -7,6 +7,31 @@ import { defineMessages } from '@/lib/i18n/messages'
  * relocation, not a rewrite. The "managed since" date arrives already formatted by the component
  * (`toLocaleDateString(getAppIntlLocale())`), so this file imports nothing at runtime.
  */
+/** The 21 manager styles in Spanish: [label, summary]. English comes from lib/inactive-manager/managerProfile.ts. */
+const ES_PERSONALITIES: Record<string, [string, string]> = {
+  BALANCED: ['Equilibrado', 'Ecuánime. Acepta tratos justos y mantiene un plantel estable.'],
+  NEED_BASED: ['Cubre necesidades', 'Busca lo que le falta a la alineación.'],
+  BEST_PLAYER_AVAILABLE: ['El mejor jugador', 'Quiere al mejor jugador de cualquier trato, sea cual sea la posición.'],
+  ADP_VALUE_HUNTER: ['Cazador de valor', 'Busca gangas y rara vez paga de más.'],
+  UPSIDE_SWINGER: ['Apuesta por el potencial', 'Persigue jugadores a punto de despuntar y se arriesga.'],
+  FLOOR_SAFE: ['Va a lo seguro', 'Prefiere jugadores constantes y sanos. Hace pocos movimientos.'],
+  ZERO_RB: ['Receptores primero', 'Construye alrededor de receptores y vende corredores con gusto.'],
+  HERO_RB: ['Un corredor estrella', 'Conserva un corredor estrella e intercambia el resto.'],
+  RB_HEAVY: ['Corredores', 'Colecciona corredores.'],
+  WR_HEAVY: ['Receptores', 'Colecciona receptores.'],
+  ELITE_QB: ['Mariscal estrella', 'Paga lo que haga falta por un gran mariscal.'],
+  LATE_QB: ['Espera al mariscal', 'Nunca paga mucho por un mariscal.'],
+  EARLY_TE: ['Ala cerrada estrella', 'Paga lo que haga falta por un gran ala cerrada.'],
+  YOUTH_DYNASTY_UPSIDE: ['Talento joven', 'Prefiere jugadores jóvenes con margen de mejora.'],
+  WIN_NOW_VETERAN: ['Veteranos probados', 'Prefiere jugadores probados que puntúan ya.'],
+  STACK_TEAM_CORRELATION: ['Junta compañeros', 'Le gusta emparejar a un mariscal con sus receptores.'],
+  BYE_WEEK_DIVERSIFIER: ['Planifica', 'Reparte las semanas de descanso y mantiene profundidad.'],
+  INJURY_AVOIDANT: ['Evita lesiones', 'Se aleja de los jugadores lesionados.'],
+  CONTRARIAN_CHAOS: ['Impredecible', 'Hace muchas ofertas y movimientos raros.'],
+  HOMER_TEAM_FAVORITE: ['Fiel a su equipo', 'Le encantan los jugadores de su equipo favorito.'],
+  IDP_SPECIALIST: ['Especialista en defensa', 'Valora a los defensivos más que la mayoría.'],
+}
+
 export const inactiveManagerCommissionerMessages = defineMessages({
   en: {
     loadFailed: 'Commissioner permission or a connection is required.',
@@ -14,7 +39,7 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     turnedOn: 'On. AllFantasy will set this lineup within the hour.',
     saveFailed: 'Could not save. Refresh and try again.',
     autopilotOn:
-      'Chimmy is running this team: the lineup, plus a waiver claim when a starter cannot play. Trade offers to it are refused while it does.',
+      'Chimmy is running this team: the lineup, plus a waiver claim when a starter cannot play. It answers trade offers unless you switch that off.',
     autopilotOff: 'Autopilot off. AllFantasy still sets the lineup until you stop it.',
     draftAsMeOn: 'On. A missed draft pick is made the way that manager usually drafts.',
     draftAsMeOff: 'Off. A missed draft pick uses the standard autopick.',
@@ -48,6 +73,20 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     autopilotUpsell: 'Let Chimmy run this team (AF Pro)',
     otherTeams: 'Other teams',
     chimmyManagersTitle: 'Chimmy as a manager',
+    /** Who Chimmy is for this team. English comes from the server (lib/inactive-manager/managerProfile.ts). */
+    chimmyPersonality: (_id: string, label: string, summary: string) => `Manager style: ${label}. ${summary}`,
+    managerStyle: 'Manager style',
+    chimmyPersonalityLabel: (_id: string, label: string) => label,
+    chimmyPersonalitySummary: (_id: string, summary: string) => summary,
+    personalitySaved: 'Saved. Chimmy runs this team that way from the next hour.',
+    chimmyPersonalityNote: 'Only commissioners see this.',
+    tradeOffers: 'Trade offers',
+    tradesAnswer: 'Chimmy answers them',
+    tradesAnswerAndSend: 'Chimmy answers them and sends its own',
+    tradesSendSaved: 'Saved. Chimmy will also send an offer of its own now and then, at most one a day.',
+    tradesOff: 'Refuse all',
+    tradesAnswerSaved: 'Saved. Chimmy will accept or decline offers to this team, usually within the hour.',
+    tradesOffSaved: 'Saved. Offers to this team are refused.',
     chimmyManagersIntro:
       'Hand an empty seat or an absent manager’s team to Chimmy. Chimmy drafts it (in any draft type) and runs it all season: lineups, free agents, Tribal Council votes. When a real manager joins, assign them the team and Chimmy steps off.',
     chimmyCount: (n: number, limit: number) => `Chimmy runs ${n} of ${limit} teams`,
@@ -64,7 +103,7 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     turnedOn: 'Activado. AllFantasy pondrá esta alineación en menos de una hora.',
     saveFailed: 'No se pudo guardar. Actualiza e inténtalo de nuevo.',
     autopilotOn:
-      'Chimmy dirige este equipo: la alineación y un reclamo cuando un titular no puede jugar. Se rechazan las ofertas de intercambio mientras tanto.',
+      'Chimmy dirige este equipo: la alineación y un reclamo cuando un titular no puede jugar. Responde a las ofertas de intercambio salvo que lo desactives.',
     autopilotOff: 'Piloto automático apagado. AllFantasy sigue poniendo la alineación hasta que lo detengas.',
     draftAsMeOn: 'Activado. Una selección perdida se hace como suele elegir ese mánager.',
     draftAsMeOff: 'Desactivado. Una selección perdida usa la selección automática estándar.',
@@ -98,6 +137,22 @@ export const inactiveManagerCommissionerMessages = defineMessages({
     autopilotUpsell: 'Que Chimmy dirija este equipo (AF Pro)',
     otherTeams: 'Otros equipos',
     chimmyManagersTitle: 'Chimmy como mánager',
+    chimmyPersonality: (id, label, summary) => {
+      const [l, x] = ES_PERSONALITIES[id] ?? [label, summary]
+      return `Estilo de mánager: ${l}. ${x}`
+    },
+    managerStyle: 'Estilo de mánager',
+    chimmyPersonalityLabel: (id, label) => ES_PERSONALITIES[id]?.[0] ?? label,
+    chimmyPersonalitySummary: (id, summary) => ES_PERSONALITIES[id]?.[1] ?? summary,
+    personalitySaved: 'Guardado. Chimmy dirige este equipo así a partir de la próxima hora.',
+    chimmyPersonalityNote: 'Solo lo ven los comisionados.',
+    tradeOffers: 'Ofertas de intercambio',
+    tradesAnswer: 'Chimmy las responde',
+    tradesAnswerAndSend: 'Chimmy las responde y envía las suyas',
+    tradesSendSaved: 'Guardado. Chimmy también enviará alguna oferta propia, como máximo una al día.',
+    tradesOff: 'Rechazar todas',
+    tradesAnswerSaved: 'Guardado. Chimmy aceptará o rechazará las ofertas a este equipo, normalmente en menos de una hora.',
+    tradesOffSaved: 'Guardado. Se rechazan las ofertas a este equipo.',
     chimmyManagersIntro:
       'Entrega a Chimmy un puesto vacío o el equipo de un mánager ausente. Chimmy lo elige en el draft (cualquier tipo de draft) y lo dirige toda la temporada: alineaciones, agentes libres y votos en el Consejo Tribal. Cuando llegue un mánager real, asígnale el equipo y Chimmy se retira.',
     chimmyCount: (n, limit) => `Chimmy dirige ${n} de ${limit} equipos`,

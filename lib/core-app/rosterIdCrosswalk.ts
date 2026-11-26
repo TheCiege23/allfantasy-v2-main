@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { reduceCrosswalk } from './crosswalkRules'
+import { declaredSleeperId } from './declaredSleeperId'
 import { rosterIdSpaceOf, type RosterIdSport } from './rosterIdSpace'
 import { teamDefenseSleeperId, type TeamDefenseRosterRow } from './teamDefenseCrosswalk'
 
@@ -86,13 +87,23 @@ export async function crosswalkToSleeperIds(
   sport: string,
   rosterIds: string[],
 ): Promise<Map<string, string>> {
-  const out = new Map<string, string>()
+  /*
+   * An id that DECLARES its Sleeper id (`sleeper:<id>`, written by the pasted-Yahoo import — see
+   * `declaredSleeperId.ts`) translates by its own spelling, with no read. No identity column ever
+   * holds such a string, so it cannot meet a column row below.
+   */
+  const declared = new Map<string, string>()
+  for (const id of rosterIds) {
+    const sid = declaredSleeperId(id)
+    if (sid) declared.set(id, sid)
+  }
   const column = ID_COLUMN_BY_PLATFORM[platform.trim().toLowerCase()]
-  if (!column || rosterIds.length === 0) return out
+  const undeclared = rosterIds.filter((id) => !declared.has(id))
+  if (!column || undeclared.length === 0) return declared
 
   const rows = await prisma.playerIdentityMap
     .findMany({
-      where: { sport: sport.trim().toUpperCase(), [column]: { in: rosterIds } },
+      where: { sport: sport.trim().toUpperCase(), [column]: { in: undeclared } },
       select: { espnId: true, fleaflickerId: true, mflId: true, sleeperId: true },
     })
     .catch(() => [] as Array<{ espnId: string | null; fleaflickerId: string | null; mflId: string | null; sleeperId: string | null }>)
@@ -102,7 +113,9 @@ export async function crosswalkToSleeperIds(
    * loading prisma — see `crosswalkRules.ts` for why an ambiguous id must be
    * dropped rather than resolved to whichever row came back first.
    */
-  return reduceCrosswalk(rows.map((r) => ({ from: r[column], to: r.sleeperId })))
+  const out = reduceCrosswalk(rows.map((r) => ({ from: r[column], to: r.sleeperId })))
+  for (const [from, to] of declared) out.set(from, to)
+  return out
 }
 
 /**

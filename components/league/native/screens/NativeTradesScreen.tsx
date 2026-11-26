@@ -231,19 +231,14 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
       {panel ? (
         <div className="nls-cols">
           <div className="nls nls-stack">
-            <Card label="Build a trade">
-              <p>Pick a partner, choose what you give and what you get, and AF grades the deal for both sides before you send it.</p>
-              <div className="nls-actions nls-actions-top">
-                <button type="button" className="nls-btn" data-variant="primary" onClick={() => { setCounterTradeId(null); setBuilderOpen(true) }}>Open trade builder</button>
-              </div>
-            </Card>
+            {/* The "Build a trade" card went 2026-11-24 (the simplify pass): "Propose a trade" at the top opens the same builder. */}
             <Card label="Your open offers">
               {outgoing.length ? (
                 <ul className="nls-list">
                   {outgoing.map((t) => {
                     const state = rd ? tradeCardState(t.status) : null
                     return (
-                    <li key={t.id} className="nls-toolbar">
+                    <li key={t.id} className="nls-toolbar nls-offer-out">
                       <span className="nls-grow">
                         To <b>{t.partnerName}</b>: {t.sent.map((a) => a.label).join(', ') || 'nothing'} for {t.received.map((a) => a.label).join(', ') || 'nothing'}
                       </span>

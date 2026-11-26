@@ -9,6 +9,7 @@ import { pickClockPlannerMessages } from '@/lib/core-app/messages/pickClockPlann
 import { resolveNotificationPreferences } from '@/lib/notification-settings/NotificationPreferenceResolver'
 import type { NotificationChannelPrefs, NotificationPreferences } from '@/lib/notification-settings/types'
 import {
+  clockTimePlaceholder,
   crossesQuietWindow,
   describeEta,
   effectiveDueAt,
@@ -121,27 +122,50 @@ export function PickClockPlanner(props: PickClockPlannerProps) {
   const long = isLongPickClock(props.timerSeconds)
   const quiet = props.quietWindow
   const { state: alerts, turnOn } = useDraftAlertsPreference(long)
-  const [nowMs, setNowMs] = useState(() => Date.now())
+  // ⚠ HYDRATION: null until mount. The server and the browser's first render run seconds apart and
+  // in different time zones, so every time on these cards would differ between them and React would
+  // discard the tree. Before mount the cards render from props alone, with an invisible placeholder
+  // holding each time's place; the mount effect sets the real now, then refreshes it every minute.
+  const [nowMs, setNowMs] = useState<number | null>(null)
 
   useEffect(() => {
     if (!long && !quiet) return
+    setNowMs(Date.now())
     const id = window.setInterval(() => setNowMs(Date.now()), 60_000)
     return () => window.clearInterval(id)
   }, [long, quiet])
 
   if (!long && !quiet) return null
-  const now = new Date(nowMs)
+  const now = nowMs == null ? null : new Date(nowMs)
+  const timePlaceholder = clockTimePlaceholder(locale)
 
   // ── Next pick ────────────────────────────────────────────────────────────
   // `mobileBody` drops the pick count: the phone clock bar already says "~N picks until your turn".
-  let next: { eyebrow: string; headline: string; body: string; mobileBody: string } | null = null
+  // `pending`: the headline is a placeholder (before mount) and is rendered invisibly.
+  let next: { eyebrow: string; headline: string; pending: boolean; body: string; mobileBody: string } | null = null
   if (long && props.picksAway != null) {
     const eyebrow = props.nextLabel ? m.nextPickEyebrow(props.nextLabel) : m.nextPickEyebrowNoLabel
     const queueLine = props.queueTop ? m.queueTop(props.queueTop.name, props.queueTop.position ?? '') : ''
     if (props.isOnClock || props.picksAway <= 0) {
       const endMs = props.timerEndAtIso ? Date.parse(props.timerEndAtIso) : NaN
-      const due = Number.isFinite(endMs) ? formatClockTime(effectiveDueAt(nowMs, endMs, quiet), locale) : null
-      next = { eyebrow, headline: due ? m.onClockHeadline(due) : m.nextPickEyebrowNoLabel, body: queueLine, mobileBody: queueLine }
+      if (!Number.isFinite(endMs)) {
+        next = { eyebrow, headline: m.nextPickEyebrowNoLabel, pending: false, body: queueLine, mobileBody: queueLine }
+      } else if (nowMs == null) {
+        next = { eyebrow, headline: m.onClockHeadline(timePlaceholder), pending: true, body: queueLine, mobileBody: queueLine }
+      } else {
+        const due = formatClockTime(effectiveDueAt(nowMs, endMs, quiet), locale)
+        next = { eyebrow, headline: m.onClockHeadline(due), pending: false, body: queueLine, mobileBody: queueLine }
+      }
+    } else if (nowMs == null || now == null) {
+      // Before mount: the count and the queue are props; the time and "the clock stops overnight"
+      // depend on now, so they wait for the mounted render.
+      next = {
+        eyebrow,
+        headline: m.etaToday(timePlaceholder),
+        pending: true,
+        body: `${m.picksToGo(props.picksAway)}.${queueLine ? ` ${queueLine}` : ''}`,
+        mobileBody: queueLine,
+      }
     } else {
       const pace = estimatePickPaceSeconds(props.pickTimesMs, props.timerSeconds as number)
       const eta = estimateNextPickAt({ nowMs, picksAway: props.picksAway, paceSeconds: pace, quietWindow: quiet })
@@ -151,6 +175,7 @@ export function PickClockPlanner(props: PickClockPlannerProps) {
       next = {
         eyebrow,
         headline,
+        pending: false,
         body: `${m.picksToGo(props.picksAway)}${crosses ? m.overnightSuffix : ''}.${queueLine ? ` ${queueLine}` : ''}`,
         mobileBody: [crosses ? m.clockStopsOvernight : '', queueLine].filter(Boolean).join(' '),
       }
@@ -162,10 +187,12 @@ export function PickClockPlanner(props: PickClockPlannerProps) {
   if (quiet) {
     const startMin = parseClockMinutes(quiet.start) as number
     const endMin = parseClockMinutes(quiet.end) as number
-    const zone = shortZoneName(quiet.timezone, now, locale)
+    // Before mount, a fixed instant names the zone (the league's zone is explicit, so this is the
+    // same on server and browser) and only the server's own "paused for quiet hours" flag counts.
+    const zone = shortZoneName(quiet.timezone, now ?? new Date(0), locale)
     const startLabel = formatWallMinutes(startMin, locale)
     const endLabel = formatWallMinutes(endMin, locale)
-    const inWindow = props.pausedForQuietHours || isInQuietWindow(now, quiet)
+    const inWindow = props.pausedForQuietHours || (now != null && isInQuietWindow(now, quiet))
     quietCard = {
       chip: m.quietChip(startLabel, endLabel, zone),
       range: `${startLabel}–${endLabel} ${zone}`,
@@ -222,7 +249,14 @@ export function PickClockPlanner(props: PickClockPlannerProps) {
         {next ? (
           <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-white/10 bg-[#0b1426] px-4 py-3" data-testid="pick-clock-next">
             <span className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-cyan-300">{next.eyebrow}</span>
-            <span className="text-base font-extrabold text-white" data-testid="pick-clock-next-headline">{next.headline}</span>
+            <span
+              className={`text-base font-extrabold text-white${next.pending ? ' invisible' : ''}`}
+              aria-hidden={next.pending || undefined}
+              data-pending={next.pending ? 'true' : undefined}
+              data-testid="pick-clock-next-headline"
+            >
+              {next.headline}
+            </span>
             {next.body ? <span className="text-[13px] leading-snug text-white/70">{next.body}</span> : null}
           </div>
         ) : null}
@@ -256,7 +290,9 @@ export function PickClockPlanner(props: PickClockPlannerProps) {
         {next ? (
           <>
             <span className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-cyan-300">{next.eyebrow}</span>
-            <span className="text-[15px] font-extrabold text-white">{next.headline}</span>
+            <span className={`text-[15px] font-extrabold text-white${next.pending ? ' invisible' : ''}`} aria-hidden={next.pending || undefined}>
+              {next.headline}
+            </span>
             {next.mobileBody ? <span className="text-xs leading-snug text-white/70">{next.mobileBody}</span> : null}
           </>
         ) : null}

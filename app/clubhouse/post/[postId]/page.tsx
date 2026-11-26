@@ -13,7 +13,10 @@ import {
   loginHref,
 } from '@/components/community/CommunityBits'
 import { PostActions, ReactionBar, ReplyActions, ReplyComposer } from '@/components/community/ClubhouseClient'
-import { IdeaCredit, IdeaFacts, IdeaStatusPill } from '@/components/community/IdeaBits'
+import { IdeaAttachments, IdeaCredit, IdeaFacts, IdeaStatusPill } from '@/components/community/IdeaBits'
+import { IdeaPlanPanel } from '@/components/community/IdeaPlanPanel'
+import { listIdeaAttachments } from '@/lib/community/ideaFiles'
+import { getIdeaPlan } from '@/lib/community/ideaPlanRunner'
 import { IdeaStatusControl, UpvoteButton } from '@/components/community/IdeaClient'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +37,12 @@ export default async function ClubhousePostPage({ params }: Props) {
   const viewer = await getCommunityViewer()
   const post = await getPost(postId, viewer)
   if (!post) notFound()
+
+  const isIdea = Boolean(post.idea)
+  const [attachments, planView] = await Promise.all([
+    isIdea ? listIdeaAttachments(post.id) : Promise.resolve([]),
+    isIdea && viewer.isModerator ? getIdeaPlan(post.id) : Promise.resolve(null),
+  ])
 
   const channel = getChannel(post.channel)
   const now = Date.now()
@@ -104,12 +113,21 @@ export default async function ClubhousePostPage({ params }: Props) {
           <AuthorLine author={post.author} at={post.createdAt} edited={Boolean(post.editedAt)} now={now} />
         </div>
         <PostBody text={post.body} />
+        <IdeaAttachments files={attachments} />
         <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
           <ReactionBar targetType="post" targetId={post.id} initial={post.reactions} signedIn={signedIn} loginHref={login} />
         </div>
         {post.idea && viewer.isModerator && !post.removed && (
           <div className="mt-4">
             <IdeaStatusControl postId={post.id} status={post.idea.status} />
+            <IdeaPlanPanel
+              postId={post.id}
+              ideaTitle={post.title}
+              authorUsername={post.author.username}
+              isOwnIdea={viewer.userId === post.author.id}
+              view={planView}
+              now={now}
+            />
           </div>
         )}
         <div className="mt-2">

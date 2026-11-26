@@ -222,7 +222,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
         ].filter((c): c is string => Boolean(c))}
         title={lg?.name || 'The Outbreak'}
         headline={statusLine(summary, myChip, turned, total)}
-        blurb={`Whisperers lead the outbreak. Lose to a Whisperer${lossToZombieInfects ? ' or a Zombie' : ''} and you turn. Serums cure, weapons are earned by big weeks, and league standings track the outbreak.`}
+        // No blurb (2026-11-24, the simplify pass): it restated "Rules in 30 seconds" further down the page.
         actions={[
           { label: 'My matchup', onClick: scrollToMatchup, primary: true },
           { label: 'Infection night', onClick: () => setView('infection'), testId: 'zombie-open-infection-night' },
@@ -316,7 +316,8 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
                 {turned}/{total} turned
               </span>
             </div>
-            <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
+            {/* Two across on a phone (2026-11-24): one team per row made twelve rows ~720px. */}
+            <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]" data-testid="zombie-outbreak-grid">
               {cells.map((s) => {
                 const chip = chipFor(s.rosterId, s.status)
                 const isMe = s.rosterId === summary.myRosterId
@@ -446,8 +447,12 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
           </section>
 
           {/* Rules in 30 seconds — the engine's numbers for this sport. */}
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Rules in 30 seconds</h2>
+          {/* Closed until asked for (2026-11-24): the rules are read once; the summary is a 44px row. */}
+          <details className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="zombie-rules-30s">
+            <summary className="flex min-h-[44px] cursor-pointer items-center">
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Rules in 30 seconds</h2>
+              <span className="ml-auto text-[13px] text-white/40" aria-hidden>▾</span>
+            </summary>
             <ol className="mt-3 space-y-2.5 text-[13px] leading-snug text-white/80">
               {[
                 'Managers start as Survivors or Whisperers.',
@@ -469,7 +474,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
             <Link href={`${hub}/rules`} className="mt-3 inline-block text-xs font-semibold text-lime-300 hover:underline">
               Full rules
             </Link>
-          </section>
+          </details>
         </aside>
       </div>
 

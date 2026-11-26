@@ -3,7 +3,8 @@
  * Returns 404 when league is not a guillotine league.
  *
  * PATCH: commissioner-only edit of the first chop week (`{ eliminationStartWeek }`), of the chop
- * schedule and immunity (`{ advanced }`, AF Commissioner — lib/guillotine/chopSchedule.ts), or of the
+ * schedule and immunity (`{ advanced }`, AF Commissioner — lib/guillotine/chopSchedule.ts), of the scheduled
+ * roster changes (`{ rosterSchedule }`, AF Commissioner — lib/guillotine/rosterSchedule.ts), or of the
  * league rules (`{ rules }`, lib/guillotine/guillotineRules.ts; `GET ?view=rules` reads them). It lives on
  * this existing path rather than its own route file because the app is at the route-count ceiling
  * (too_many_routes — see app/api/leagues/join/route.ts). Rules in lib/guillotine/guillotineFirstChopWeek.ts.
@@ -27,14 +28,18 @@ import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryService'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
-import { findViewerRosterId, resolveGuillotineLiveWeek } from '@/lib/guillotine/guillotineCurrentWeek'
+import { findViewerRosterId, resolveGuillotineCalendarWeek, resolveGuillotineLiveWeek } from '@/lib/guillotine/guillotineCurrentWeek'
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
+import { readRosterScheduleView, saveRosterSchedule } from '@/lib/guillotine/rosterScheduleSave'
+import { loadLastWordsState, removeLastWords, saveLastWords } from '@/lib/guillotine/lastWordsStore'
 import { MAX_FAAB_AMOUNT, describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
 import { loadChopWatch } from '@/lib/guillotine/chopWatchLoad'
+import { loadGuillotineField } from '@/lib/guillotine/guillotineField'
+import { loadSurvivalOutlook } from '@/lib/guillotine/survivalOutlookLoad'
 import { loadNextChopPickState, saveNextChopPick } from '@/lib/guillotine/nextChopPickStore'
 import { decideCommissionerTiebreak, loadCommissionerTiebreaks } from '@/lib/guillotine/commissionerTiebreakLoad'
 import { loadChopUndoState, undoLatestChop } from '@/lib/guillotine/chopUndoService'
@@ -45,6 +50,7 @@ import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { providerLabel } from '@/lib/guillotine/importedLeagueGuard'
 import { readPeriodWeeks } from '@/lib/guillotine/eliminationPeriods'
+import { readChopListOrder } from '@/lib/guillotine/chopListOrder'
 import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
@@ -83,7 +89,10 @@ export async function GET(
       return NextResponse.json({ error: 'Only the commissioner can edit league rules.' }, { status: 403 })
     }
     const view = await readGuillotineRules(leagueId, userId)
-    return view ? NextResponse.json(view) : NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+    if (!view) return NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+    // Scheduled roster changes ride along so the page needs one request. A failed read hides the section.
+    const roster = await bestEffort(() => readRosterScheduleView(leagueId))
+    return NextResponse.json({ ...view, roster })
   }
 
   // `?view=tiebreak`: chop ties left to the commissioner (lib/guillotine/commissionerTiebreak.ts). Free — the step
@@ -126,7 +135,10 @@ export async function GET(
     ? Math.max(1, parseInt(weekParam, 10)) || 1
     : await resolveGuillotineLiveWeek(leagueId, config)
 
-  const [summary, myEscapes, myRosterId, home, advanced, watch] = await Promise.all([
+  // `?outlook=1` (the Matchup tab's survival board only): players and games left and the projection for
+  // them, per team (lib/guillotine/survivalOutlookLoad.ts). The current week only. Never fails the summary.
+  const wantOutlook = !weekParam && req.nextUrl.searchParams?.get('outlook') === '1'
+  const [summary, myEscapes, myRosterId, home, advanced, watch, outlook, calendarWeek] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),
     // Your escapes from chops that happened — shareable moments (2026-09-14). Never fails the summary.
     getGuillotineEscapesForUser(leagueId, userId).catch(() => []),
@@ -142,6 +154,11 @@ export async function GET(
     // Chop Watch (lib/guillotine/chopWatch.ts): this week's chop line, live, by the chop's own rules.
     // The current week only — a past week's line is the one its chop already settled.
     weekParam ? Promise.resolve(null) : loadChopWatch(leagueId, weekOrPeriod),
+    wantOutlook ? loadSurvivalOutlook(leagueId, weekOrPeriod).catch(() => null) : Promise.resolve(null),
+    // The league's calendar week (the native runner moves it with the sport). It differs from
+    // `weekOrPeriod` before chops start: a league that drafted mid-week, or whose commissioner set a later
+    // first chop, plays weeks that do not count, and a surface must be able to say so.
+    resolveGuillotineCalendarWeek(leagueId).catch(() => null),
   ])
   // For the commissioner only: may they change the AF Commissioner guillotine rules? The SAME check
   // the chop-rules and league-rules saves enforce, so no page shows an editor the save will refuse.
@@ -151,18 +168,31 @@ export async function GET(
 
   if (!summary) return NextResponse.json({ error: 'Summary not available' }, { status: 500 })
 
+  // Who is in the field when there is no chop line yet (lib/guillotine/guillotineField.ts): after the draft
+  // and before anyone scores, so no surface reads "no chop line" as "no season". Empty before the draft.
+  const noLine = !(watch?.dangerTiers?.length) && !((summary as { dangerTiers?: unknown[] }).dangerTiers?.length)
+  const field = noLine ? await loadGuillotineField(leagueId) : null
+
   // "Who's next?" for chopped managers. Never fails the summary.
   const nextChopPick = await loadNextChopPickState(leagueId, myRosterId).catch(() => null)
+  // Chopped managers' last words (lib/guillotine/lastWords.ts). Never fails the summary either.
+  const lastWords = await loadLastWordsState(leagueId, myRosterId).catch(() => null)
   // 2 in an MLB two-week league (lib/guillotine/eliminationPeriods.ts): the home's tiebreak copy says "last period".
-  const periodWeeks = readPeriodWeeks((await (async () => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))().catch(() => null))?.settings)
+  const leagueSettings = (await (async () => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))().catch(() => null))?.settings
+  const periodWeeks = readPeriodWeeks(leagueSettings)
 
   return NextResponse.json({
     ...summary,
     nextChopPick,
+    // `canRemove`: the commissioner can take one down. The POST checks again; this only draws the button.
+    lastWords: lastWords ? { ...lastWords, canRemove: canEditPaidRules !== null } : null,
     ...(watch ? { dangerTiers: watch.dangerTiers } : {}),
     chopWatch: watch ? { live: true, week: watch.week, chopCount: watch.chopCount, chopLine: watch.chopLine } : null,
     myEscapes,
     myRosterId,
+    ...(field ? { field } : {}),
+    calendarWeek,
+    ...(wantOutlook ? { outlook } : {}),
     home: home && watch ? { ...home, scores: watch.scores } : home,
     config: config
       ? {
@@ -176,6 +206,8 @@ export async function GET(
           scheduleLines: advanced ? describeSchedule(advanced, config.teamsPerChop, config.eliminationStartWeek) : [],
           canEditPaidRules,
           periodWeeks,
+          // Which end of the Chop page's list the chop zone sits at (lib/guillotine/chopListOrder.ts).
+          chopListOrder: readChopListOrder(leagueSettings),
         }
       : null,
   })
@@ -200,7 +232,23 @@ export async function POST(
   if (!(await canAccessLeagueDraft(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!(await isGuillotineLeague(leagueId))) return NextResponse.json({ error: 'Not a Guilly league' }, { status: 404 })
 
-  const body = (await req.json().catch(() => null)) as { action?: unknown; week?: unknown; rosterId?: unknown; key?: unknown; rosterIds?: unknown; chopInstead?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { action?: unknown; week?: unknown; rosterId?: unknown; key?: unknown; rosterIds?: unknown; chopInstead?: unknown; text?: unknown } | null
+  // A chopped manager's last words (`{ action: 'last_words', text }`, lib/guillotine/lastWordsStore.ts).
+  if (body?.action === 'last_words') {
+    const viewerRosterId = await findViewerRosterId(leagueId, userId).catch(() => null)
+    const saved = await saveLastWords({ leagueId, viewerRosterId, userId, text: body.text })
+    if (!saved.ok) return NextResponse.json({ error: saved.error, code: saved.code }, { status: saved.status })
+    return NextResponse.json({ ok: true, lastWords: await loadLastWordsState(leagueId, viewerRosterId) })
+  }
+  // The commissioner takes a team's last words down (`{ action: 'remove_last_words', rosterId }`).
+  if (body?.action === 'remove_last_words') {
+    if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
+      return NextResponse.json({ error: 'Only the commissioner can remove last words.' }, { status: 403 })
+    }
+    const removed = await removeLastWords({ leagueId, rosterId: body.rosterId, userId })
+    if (!removed.ok) return NextResponse.json({ error: removed.error }, { status: removed.status })
+    return NextResponse.json({ ok: true, lastWords: await loadLastWordsState(leagueId, await findViewerRosterId(leagueId, userId).catch(() => null)) })
+  }
   // The commissioner picks who goes in a tied chop (`{ action: 'commissioner_tiebreak', key, rosterIds }`).
   if (body?.action === 'commissioner_tiebreak') {
     if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
@@ -259,7 +307,21 @@ export async function PATCH(
 
   const formatLocked = await formatRulesLockedResponse(leagueId)
   if (formatLocked) return formatLocked
-  const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown; rules?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown; rules?: unknown; rosterSchedule?: unknown } | null
+  if (body && 'rosterSchedule' in body) {
+    try {
+      const saved = await saveRosterSchedule(leagueId, userId, body.rosterSchedule)
+      if (!saved.ok) {
+        const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : saved.error === 'busy' ? 409 : 400
+        return NextResponse.json({ error: saved.message, code: saved.error }, { status })
+      }
+      await logFormatRulesChange({ leagueId, userId, format: 'guillotine', fields: ['rosterSchedule'] })
+      return NextResponse.json({ ok: true, roster: saved.view })
+    } catch (e) {
+      console.error('[guillotine/summary PATCH rosterSchedule]', e instanceof Error ? e.message : 'unknown error')
+      return NextResponse.json({ error: 'Could not save the roster changes' }, { status: 500 })
+    }
+  }
   if (body && 'rules' in body) {
     try {
       const before = await bestEffort(() => readGuillotineRules(leagueId, userId))

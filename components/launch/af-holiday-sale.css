@@ -1,0 +1,172 @@
+/*
+ * The Black Friday → Cyber Monday banner (components/launch/HolidaySaleStrip.tsx).
+ *
+ * Warm amber rather than the app's cyan accent, on purpose: it is the one thing on the page that is
+ * temporary, and it has to read as different from the permanent founding line and launch strip.
+ * Colours are literal with `.af-core` light-mode overrides, the same two-world rule af-launch.css
+ * documents (it also renders on /upgrade, which has no `.af-core` scope).
+ */
+
+.af-hs {
+  --hs-ink: #fff7e6;
+  --hs-muted: #f5d9a8;
+  --hs-amber: #fbbf24;
+  --hs-amber-ink: #1a1203;
+  --hs-bg: linear-gradient(100deg, rgba(251, 191, 36, 0.16), rgba(244, 63, 94, 0.12));
+  --hs-line: rgba(251, 191, 36, 0.45);
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--hs-line);
+  background: var(--hs-bg);
+  color: var(--hs-ink);
+  text-align: left;
+}
+
+html[data-mode='light'] .af-core .af-hs,
+html[data-mode='light'] .af-hs {
+  --hs-ink: #2a1a02;
+  --hs-muted: #6b4a12;
+  --hs-amber: #b45309;
+  --hs-amber-ink: #ffffff;
+  --hs-bg: linear-gradient(100deg, rgba(251, 191, 36, 0.22), rgba(244, 63, 94, 0.1));
+  --hs-line: rgba(180, 83, 9, 0.4);
+}
+
+.af-hs-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.af-hs-tag {
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--hs-amber);
+  color: var(--hs-amber-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.af-hs-title {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--hs-ink);
+}
+
+.af-hs-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--hs-muted);
+}
+
+.af-hs-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.af-hs-clock {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--hs-ink);
+  white-space: nowrap;
+}
+
+.af-hs-clock-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hs-muted);
+}
+
+.af-hs-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+  background: var(--hs-amber);
+  color: var(--hs-amber-ink);
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.af-hs-cta:hover {
+  filter: brightness(1.08);
+}
+
+.af-hs-cta:focus-visible {
+  outline: 2px solid var(--hs-ink);
+  outline-offset: 2px;
+}
+
+/* Sale price on a plan card: the regular price struck through beside the sale price. */
+.af-hs-was {
+  margin-left: 8px;
+  font-size: 0.55em;
+  font-weight: 600;
+  color: var(--muted, #a3aacb);
+  text-decoration: line-through;
+}
+
+.af-hs-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+html[data-mode='light'] .af-hs-note {
+  color: #b45309;
+}
+
+@media (max-width: 560px) {
+  .af-hs {
+    padding: 12px 14px;
+  }
+  .af-hs-title {
+    font-size: 18px;
+  }
+  .af-hs-side {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* Surface wrappers: below the landing hero, and a full-width band above the sign-up form. */
+.af-lp-sale-wrap:has(.af-hs) {
+  width: min(1120px, calc(100% - 32px));
+  margin: 8px auto 24px;
+}
+
+.af-hs-signup-wrap:has(.af-hs) {
+  padding: 12px 16px 0;
+  background: var(--bg);
+}
+
+.af-hs-signup-wrap .af-hs {
+  max-width: 560px;
+  margin: 0 auto;
+}

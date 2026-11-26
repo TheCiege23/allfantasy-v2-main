@@ -47,6 +47,13 @@ const anthropicApiKey = process.env.ANTHROPIC_API_KEY?.trim() ?? ''
 const MODELS = {
   quickask: process.env.ANTHROPIC_MODEL_QUICKASK?.trim() || 'claude-haiku-4-5-20251001',
   specialist: process.env.ANTHROPIC_MODEL_SPECIALIST?.trim() || 'claude-sonnet-4-6',
+  /**
+   * The live-draft look-ahead rewrites a few lines of queue copy while a manager is on the clock, so it
+   * has to be FAST. On the specialist model it measured ~11.2 s a call against the router's 12 s
+   * per-provider limit (2026-11-25, 142 calls): 61% timed out, then the fallback spent another 12 s.
+   * The quick model answers this size of job in a few seconds. Override with ANTHROPIC_MODEL_LOOKAHEAD.
+   */
+  lookahead: process.env.ANTHROPIC_MODEL_LOOKAHEAD?.trim() || process.env.ANTHROPIC_MODEL_QUICKASK?.trim() || 'claude-haiku-4-5-20251001',
   orchestrator: process.env.ANTHROPIC_MODEL_ORCHESTRATOR?.trim() || 'claude-haiku-4-5-20251001',
   deep:
     process.env.ANTHROPIC_MODEL_DEEP?.trim() ||
@@ -1953,7 +1960,7 @@ export async function runDraftLookaheadAgent(
   return callClaude({
     system: buildRuntimeSystemPrompt(rawPrompt, ctx, null),
     userMessage: buildSpecialistRequestPayload(payload, ctx),
-    model: MODELS.specialist,
+    model: MODELS.lookahead,
     maxTokens: 900,
     image: ctx.image,
     // Metering only: its own label, because it is the one automatic Anthropic spender.

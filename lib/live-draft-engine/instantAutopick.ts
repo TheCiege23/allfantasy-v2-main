@@ -21,7 +21,21 @@ import { readPlayableChimmyLineups } from '@/lib/inactive-manager/chimmyPlayable
  * through the same paths and locks, so nothing about WHAT is picked changes — only WHEN. A league's
  * "skip on timeout" rule does not apply: these teams asked for a pick.
  */
-export type InstantAutopickReason = 'autopilot' | 'autopick_me'
+export type InstantAutopickReason = 'autopilot' | 'autopick_me' | 'computer_timed_out'
+
+/**
+ * 🛑 A MISSED CLOCK NOW PUTS THE TEAM ON AUTO FOR THE REST OF THE DRAFT (2026-11-24, owner's rule for
+ * every sport and draft type). Before, a team the system picked for on an expired clock got the FULL
+ * clock again on its next turn, so one absent seat stalled the room every round.
+ *
+ *   - A team with a manager: `markTeamAutoAfterTimeout` switches their "Auto-pick me" on — the
+ *     board shows AUTO and the manager turns it off with the same switch, as on Sleeper.
+ *   - A team with nobody to switch it off (an open seat, an imported orphan, an AI-manager seat):
+ *     derived instead — any `source: 'auto'` pick of theirs in this draft keeps them on auto.
+ */
+function hasNoManager(userId: string): boolean {
+  return !userId || isSeatPlaceholderUserId(userId)
+}
 
 /**
  * Pure: is this roster Chimmy-run in these league settings? With `currentOwnerId`, a team that has
@@ -53,7 +67,13 @@ export async function instantAutopickReason(args: {
   if (isAutopilotIn(playable, args.rosterId, roster?.platformUserId ?? null)) return 'autopilot'
 
   const userId = (roster ? rosterManagerKey(roster) : null) ?? ''
-  if (!userId || isSeatPlaceholderUserId(userId)) return null
+  if (hasNoManager(userId)) {
+    const autoPick = await prisma.draftPick.findFirst({
+      where: { sessionId: args.draftSessionId, rosterId: args.rosterId, source: 'auto' },
+      select: { id: true },
+    })
+    return autoPick ? 'computer_timed_out' : null
+  }
   const pref = await prisma.liveDraftAutopickPreference.findUnique({
     where: { draft_session_user_unique: { draftSessionId: args.draftSessionId, userId } },
     select: { enabled: true },
@@ -95,6 +115,15 @@ export async function listAutoDraftRosterIds(args: {
       select: { userId: true },
     }),
   ])
+  const autoPickedRosters = new Set(
+    (
+      await prisma.draftPick.findMany({
+        where: { sessionId: args.draftSessionId, source: 'auto' },
+        select: { rosterId: true },
+        distinct: ['rosterId'],
+      })
+    ).map((p) => p.rosterId),
+  )
   const playable = await readPlayableChimmyLineups({ id: args.leagueId, settings })
   const autoUsers = new Set(prefs.map((p) => p.userId))
   const out: string[] = []
@@ -104,8 +133,28 @@ export async function listAutoDraftRosterIds(args: {
       continue
     }
     const userId = rosterManagerKey(roster) ?? ''
-    if (!userId || isSeatPlaceholderUserId(userId)) continue
+    if (hasNoManager(userId)) {
+      if (autoPickedRosters.has(roster.id)) out.push(roster.id)
+      continue
+    }
     if (autoUsers.has(userId)) out.push(roster.id)
   }
   return out
+}
+
+/**
+ * After the system picks for a team whose clock ran out: a manager's "Auto-pick me" goes on, so their
+ * next picks are made as soon as they are on the clock. Their chosen mode is kept when they already
+ * had a row. A seat with no manager needs nothing stored (see `hasNoManager` above).
+ */
+export async function markTeamAutoAfterTimeout(args: { draftSessionId: string; rosterId: string }): Promise<boolean> {
+  const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { platformUserId: true, managerUserId: true } })
+  const userId = (roster ? rosterManagerKey(roster) : null) ?? ''
+  if (hasNoManager(userId)) return false
+  await prisma.liveDraftAutopickPreference.upsert({
+    where: { draft_session_user_unique: { draftSessionId: args.draftSessionId, userId } },
+    create: { draftSessionId: args.draftSessionId, userId, enabled: true, mode: 'standard' },
+    update: { enabled: true },
+  })
+  return true
 }
