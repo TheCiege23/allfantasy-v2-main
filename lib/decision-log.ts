@@ -257,8 +257,17 @@ export async function evaluateOutcome(input: EvaluateOutcomeInput) {
   return outcome
 }
 
-export async function getDecisionSummary(userId: string, leagueId?: string): Promise<DecisionSummary> {
-  const where: any = { userId }
+/**
+ * The `where` for one decision-log key, or for all of a manager's keys (`scope=mine`). A list matches any
+ * of them; the username half case-insensitively, the way the route's own-key check compares it.
+ */
+export function decisionUserWhere(userKeys: string | readonly string[]): Record<string, unknown> {
+  if (typeof userKeys === 'string') return { userId: userKeys }
+  return { OR: userKeys.map((k) => ({ userId: { equals: k, mode: 'insensitive' } })) }
+}
+
+export async function getDecisionSummary(userKeys: string | readonly string[], leagueId?: string): Promise<DecisionSummary> {
+  const where: any = decisionUserWhere(userKeys)
   if (leagueId) where.leagueId = leagueId
 
   const logs = await prisma.decisionLog.findMany({

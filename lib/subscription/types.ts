@@ -78,6 +78,8 @@ export type SubscriptionFeatureId =
   | 'war_room_pipeline_analysis'
   /** League hub AI Coaching tab + long-term coaching API (AF Pro — `af_pro_monthly` / `af_pro_yearly`). */
   | 'league_ai_coaching'
+  /** /core/decisions — your logged decisions with their trade and outcome grades, and GET /api/legacy/decision-log. AF Pro (Supreme inherits it); not AF Commissioner alone. 2026-11-26. */
+  | 'decision_log_history'
   /** Commissioner-level AI waiver tools: settings health, suspicious behavior, collusion risk (AF Commissioner). */
   | 'commissioner_waiver_ai'
   // /af-legacy deep-action gates (AF Legacy — war_room). Preview/description content on each

@@ -9,6 +9,7 @@ import { canonicalCoreScreen } from '@/lib/core-app/leagueNavigation'
 import { cookies, headers } from 'next/headers'
 import { LANG_COOKIE_KEY, resolveLanguage } from '@/lib/i18n/constants'
 import { ScreenUnavailable } from '@/components/core-app/ScreenUnavailable'
+import { decisionLeagueNames } from '@/lib/core-app/decisionLogView'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { getServerSession } from 'next-auth'
 
@@ -59,7 +60,7 @@ import {
   LeagueSchedule, ConnectedFranchiseWarRoom, TradeCenter, FormatHub, DraftArchive, Scout,
   GamePlan, WarRoomWeek, WarTradeIdeas, WarStrategyBrief, WarCampaign, WarChest, WarPlayoffReady, WarRace, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
   Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
-  SeasonOutlookLeague, LiveScores, LiveGameView, Standings, NotificationsCenter,
+  SeasonOutlookLeague, LiveScores, LiveGameView, Standings, NotificationsCenter, DecisionLogScreen,
   CareerShare,
   MyLeaguesV4,
 } from '@/components/core-app/screens/LazyScreens'
@@ -370,6 +371,8 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
    */
   leagues: 'my-leagues',
   career: 'career',
+  /* My decisions (2026-11-26): the decision log with trade and outcome grades. AF Pro / AF Supreme. */
+  decisions: 'decisions',
   rankings: 'rankings',
   commissioner: 'commissioner',
   tools: 'tools',
@@ -489,6 +492,10 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   portfolio: { title: 'Portfolio', description: 'Every league you hold, in one table.' },
   leagues: { title: 'My Leagues', description: 'Every league you play, sorted by what needs you.' },
   career: { title: 'Your career', description: 'Seasons, titles and records across every league you have played.' },
+  decisions: {
+    title: 'My decisions',
+    description: 'Every trade, waiver and lineup call you asked AllFantasy about, with its trade grade and how it turned out.',
+  },
   // (league-scoped career shares this key; the title is accurate either way)
   rankings: { title: 'Rankings', description: 'Community, portfolio and league rankings — normalised, filterable and explained.' },
   commissioner: { title: 'Commissioner', description: 'League health, disputes and settings.' },
@@ -5896,6 +5903,25 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
             language={language}
             title="Season Outlook"
             body="We could not run the simulations just now. This is a read failure on our side, not a season with nothing left to decide."
+          />
+        )
+      ) : activeKey === 'decisions' ? (
+        /*
+         * My decisions (2026-11-26). 🛑 THE LOCK IS DRAWN FROM THE SERVER'S PAYWALL READ and the screen —
+         * the only thing that fetches the log — is not rendered for a locked viewer; GET
+         * /api/legacy/decision-log refuses the same viewers on its own (`decision_log_history`).
+         */
+        corePaywall?.decision_history && !corePaywall.decision_history.unlocked ? (
+          <DecisionLogScreen leagueNames={{}} locked />
+        ) : (
+          <DecisionLogScreen
+            leagueNames={decisionLeagueNames(playedLeagues)}
+            initialLeagueId={
+              selectedLeagueId
+                ? ((playedLeagues.find((l) => l.id === selectedLeagueId) as { platformLeagueId?: string | null } | undefined)
+                    ?.platformLeagueId ?? null)
+                : null
+            }
           />
         )
       ) : activeKey === 'notifications' ? (

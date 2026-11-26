@@ -251,6 +251,9 @@ export type CoreNavKey =
   | 'draft-hq'
   | 'portfolio'
   | 'career'
+  /* My decisions (2026-11-26) — the decision log with its trade and outcome grades. Shown to everyone;
+     the screen itself is the AF Pro lock for a viewer without the plan (CoreDepthLock). */
+  | 'decisions'
   | 'rankings'
   | 'commissioner'
   | 'tools'
@@ -874,6 +877,12 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
         ? `/core/career?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/career',
     },
+    /*
+     * My decisions (2026-11-26), beside Your career: both are your own history across leagues. Not
+     * league-scoped in the href — the screen lists every league and filters by one. Listed for every
+     * viewer: the AF Pro lock is the screen, drawn from the server's paywall read, not a missing row.
+     */
+    { key: 'decisions', label: 'My decisions', glyph: '✓', href: '/core/decisions' },
     // 26b — replaces the dashboard entry that pointed at /af-legacy?tab=pulse.
     // 38a scopes it to one league's full standings table when a league is held.
     /*

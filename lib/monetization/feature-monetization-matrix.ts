@@ -392,6 +392,26 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
       components: ["AICoachingTab"],
     },
   },
+  /*
+   * 2026-11-26: the "My decisions" screen. requiredPlanId "pro" ONLY: the matrix accepts exactly one plan,
+   * AF Supreme reaches it through SUPREME_INCLUDED_PLAN_IDS (supreme → pro, commissioner), and AF
+   * Commissioner alone does not — which is the point; it is not `af_intelligence`.
+   */
+  {
+    key: "decision_log_history",
+    title: "Your decision history",
+    accessType: "subscription_only",
+    requiredPlanId: "pro",
+    tokenRuleCode: null,
+    lockedReason: "Your decision history — every logged call with its trade grade and how it turned out — is part of AF Pro.",
+    backendEnforcement: "requireFeatureEntitlement(decision_log_history) on GET /api/legacy/decision-log (every view), plus the /core/decisions screen drawn as a CoreDepthLock from the server-side paywall read.",
+    frontendGateBehavior: "CoreDepthLock (from=lock_decision_history) in place of the screen; the list is never fetched for a locked viewer.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/core/decisions"],
+      components: ["DecisionLogScreen"],
+    },
+  },
   {
     key: "guillotine_ai",
     title: "Guilly Chimmy",
