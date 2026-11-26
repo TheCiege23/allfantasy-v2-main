@@ -46,12 +46,15 @@ import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
 import { indexBoard, meetsSampleBar, MIN_SAMPLE_GAMES, resolveBoardPlayer, type BoardPlayer } from './sportPointsValue'
 
-/** Sports whose guillotine trades are graded here. */
-export type GuillotineTradeSport = 'NFL' | 'NBA' | 'NHL' | 'MLB'
+/**
+ * Sports whose guillotine trades are graded here. College basketball and soccer joined 2026-11-26 (owner's
+ * fix): before that they had no guillotine rule and were graded as whole-season points leagues.
+ */
+export type GuillotineTradeSport = 'NFL' | 'NBA' | 'NHL' | 'MLB' | 'NCAAB' | 'SOCCER'
 
 export function guillotineTradeSport(sport: string | null | undefined): GuillotineTradeSport | null {
   const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'NFL' || s === 'NBA' || s === 'NHL' || s === 'MLB' ? s : null
+  return s === 'NFL' || s === 'NBA' || s === 'NHL' || s === 'MLB' || s === 'NCAAB' || s === 'SOCCER' ? s : null
 }
 
 /** A supported guillotine league — graded here, never on the market chart. Not `survivor_guillotine`: no trades. */

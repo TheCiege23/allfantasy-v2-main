@@ -22,7 +22,8 @@ vi.mock('@/lib/decision-os/trade/tradePlayers', async (importOriginal) => ({
 import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrader'
 import { loadNcaafRedraftBase, ncaafTradeScoringRules, rosteredIdsOf, type NcaafRedraftBaseResult } from '@/lib/decision-os/trade/ncaafRedraftContext'
 import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
-import { NCAAF_PICKS_UNPRICED_REASON } from '@/lib/decision-os/trade/ncaafRedraftValue'
+import { NCAAF_C2C_PICK_REASON, NCAAF_SEASON_ONLY_PICKS_REASON } from '@/lib/decision-os/trade/ncaafRedraftValue'
+import { NCAAF_KEEPER_REASON, NCAAF_SALARY_CAP_REASON, NCAAF_UNCONFIRMED_REASON } from '@/lib/decision-os/trade/conceptGradingRegistry'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 
@@ -207,11 +208,65 @@ describe('createNcaafLeagueGrader', () => {
     expect(db.roster.findMany).toHaveBeenCalledTimes(1)
   })
 
-  it('another college league type is left to the chart path — unless the deal carries a pick', async () => {
+  /*
+   * 🛑 EVERY COLLEGE CONCEPT IS GRADED ON COLLEGE EVIDENCE (owner-approved, 2026-11-26). Before this a
+   * college league that was neither redraft nor dynasty returned null here, and the one grader priced
+   * the deal on the NFL market chart. The basis now comes from the concept registry.
+   */
+  it.each(['best_ball', 'survivor', 'tournament', 'big_brother', 'guillotine', 'pirate', 'efl', 'survivor_guillotine'])(
+    '%s is graded on the college rest-of-season basis — the same numbers as college redraft',
+    async (type) => {
+      const grader = createNcaafLeagueGrader({ id: 'L1', platform: null, settings: RULES.settings, leagueType: { ...redraft, type } })
+      const view = await grader.grade([p('Arch Manning')], [p('Jeremiah Smith', '102')])
+      expect(view).toMatchObject({ graded: true, giveValue: 40, getValue: 66, letter: 'A' })
+      // The rosters do not carry over, so a pick has nothing to be used in.
+      expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1 }])).toEqual({ graded: false, reason: NCAAF_SEASON_ONLY_PICKS_REASON, basis: null })
+    },
+  )
+
+  it('devy is graded on the college dynasty basis: class years and freshman-priced picks', async () => {
+    const grader = createNcaafLeagueGrader({
+      id: 'L1', platform: null, settings: RULES.settings, leagueType: { ...dynasty, type: 'devy' },
+      leagueSize: 4, season: 2026, status: 'in_season',
+    }, { loadBase: loadNcaafRedraftBase, loadClassYears: async () => new Map([['101', 1], ['102', 4]]) })
+    const trade = await grader.grade([p('Arch Manning')], [p('Jeremiah Smith', '102')])
+    // A freshman QB is worth more than one season of his points: the later seasons count.
+    expect(trade).toMatchObject({ graded: true, getValue: 66, basis: expect.stringContaining('recorded class year') })
+    if (trade?.graded) expect(trade.giveValue).toBeGreaterThan(40)
+    expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1, overall: 1 }])).toMatchObject({ graded: true, basis: expect.stringContaining('rostered freshmen') })
+  })
+
+  it('c2c is graded on the college dynasty basis; a Campus pick is priced, a Canton or undesignated pick is withheld', async () => {
+    const grader = createNcaafLeagueGrader({
+      id: 'L1', platform: null, settings: RULES.settings, leagueType: { ...dynasty, type: 'c2c' },
+      leagueSize: 4, season: 2026, status: 'in_season',
+    }, { loadBase: loadNcaafRedraftBase, loadClassYears: async () => new Map([['101', 1], ['102', 4]]) })
+    const trade = await grader.grade([p('Arch Manning')], [p('Jeremiah Smith', '102')])
+    expect(trade).toMatchObject({ graded: true, basis: expect.stringContaining('recorded class year') })
+    expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1, overall: 1, draftSide: 'campus' }])).toMatchObject({ graded: true })
+    for (const pick of [{ draftSide: 'canton' as const }, {}]) {
+      expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1, overall: 1, ...pick }]))
+        .toEqual({ graded: false, reason: NCAAF_C2C_PICK_REASON, basis: null })
+    }
+  })
+
+  it.each([
+    ['keeper', () => NCAAF_KEEPER_REASON],
+    ['salary_cap', () => NCAAF_SALARY_CAP_REASON],
+    ['imported', () => NCAAF_UNCONFIRMED_REASON],
+  ])('%s has no college form of its format adjustment: withheld with the reason, nothing loaded, never the chart', async (type, reason) => {
     const loadBase = vi.fn()
-    const grader = createNcaafLeagueGrader({ id: 'L1', platform: null, settings: RULES.settings, leagueType: { ...dynasty, type: 'keeper' } }, { loadBase })
-    expect(await grader.grade([p('Arch Manning')], [p('Jeremiah Smith')])).toBeNull()
-    expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1 }])).toEqual({ graded: false, reason: NCAAF_PICKS_UNPRICED_REASON, basis: null })
+    const grader = createNcaafLeagueGrader({ id: 'L1', platform: null, settings: RULES.settings, leagueType: { ...dynasty, type } }, { loadBase })
+    expect(reason()).toMatch(/not graded/)
+    expect(await grader.grade([p('Arch Manning')], [p('Jeremiah Smith')])).toEqual({ graded: false, reason: reason(), basis: null })
+    expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1 }])).toEqual({ graded: false, reason: reason(), basis: null })
+    expect(loadBase).not.toHaveBeenCalled()
+  })
+
+  it('a Zombie college league is the Zombie grader’s, not this one’s', async () => {
+    const loadBase = vi.fn()
+    const grader = createNcaafLeagueGrader({ id: 'L1', platform: null, settings: RULES.settings, leagueType: { ...dynasty, type: 'zombie' } }, { loadBase })
+    expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1 }])).toBeNull()
     expect(loadBase).not.toHaveBeenCalled()
   })
 

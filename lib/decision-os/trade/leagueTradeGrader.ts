@@ -462,7 +462,7 @@ export async function createLeagueTradeGrader(args: {
   const campusDraft = grading.format === 'c2c_campus' ? createFootballCampusDraftGrader({
     id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, leagueSize: leagueRow.leagueSize, status: leagueRow.status, type: leagueType.type,
   }) : null
-  // College football redraft and dynasty use the league’s stored projections and scoring.
+  // Every college football concept uses the league’s stored projections and scoring, on the basis the registry names.
   const college =
     rule.grader === 'ncaaf_college'
       ? createNcaafLeagueGrader({
@@ -489,7 +489,7 @@ export async function createLeagueTradeGrader(args: {
     },
   })
   /*
-   * An NFL or NBA guillotine league: points over the free agent for the same lineup slot, over the weeks a team
+   * A guillotine league (NFL and every daily sport incl. NCAAB and soccer): points over the free agent for the same lineup slot, over the weeks a team
    * can expect to survive, and FAAB at its purchasing power (`./guillotineGrader.ts`, Guap 2026-10-11).
    * Its view is final — the market chart priced a 4 FLEX + 1 SUPER_FLEX lineup on the 2-QB board and FAAB
    * as a flat share of the budget.
@@ -541,13 +541,9 @@ export async function createLeagueTradeGrader(args: {
           return { graded: false, reason: rule.reason ?? 'This league type has no trade-grading rule yet, so this deal is not graded.', basis: null }
         case 'zombie':
           return zombie ? await zombie.grade(give, get) : unwired
-        case 'ncaaf_college': {
-          const collegeView = college ? await college.grade(give, get) : null
-          if (collegeView) return collegeView
-          // The declared fall-through (`collegeFallback`): only a deal the college grader declined reaches the chart.
-          if (rule.collegeFallback !== 'market_chart') return unwired
-          break
-        }
+        case 'ncaaf_college':
+          // Final, like every sub-grader here: an NCAAF deal never falls through to the NFL chart (2026-11-26).
+          return (college ? await college.grade(give, get) : null) ?? unwired
         case 'guillotine':
           return guillotine ? await guillotine.grade(give, get) : unwired
         case 'sport_points':

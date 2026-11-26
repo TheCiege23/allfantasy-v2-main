@@ -234,6 +234,51 @@ describe('the grader routes a dynasty league to the five-season grade', () => {
   })
 })
 
+/*
+ * 🛑 PIRATE AND EFL SIT ON A BOOK, AND THE BOOK DECIDES THE SEASONS (owner-approved, 2026-11-26). Before this
+ * the points grader saw `pirate` / `efl`, neither of which contains "dynasty", and graded this season only —
+ * a dynasty Pirate or EFL league valued a 21-year-old exactly like a 33-year-old. The loader stub below
+ * answers like the real one (`loadSportPointsBase` adds the five-season context only for a dynasty type),
+ * so what is asserted is the type the grader hands it.
+ */
+describe('Pirate and EFL outside football grade on the league’s book', () => {
+  const seen: Array<string | null> = []
+  const loadBase = async ({ league }: { league: { leagueType: string | null } | null }): Promise<SportPointsBaseResult> => {
+    seen.push(league?.leagueType ?? null)
+    return { ok: true, ctx: { ...ctx({ teams: 3 }), ...(isDynastyLeagueType(league?.leagueType) ? { dynasty: dynasty() } : {}) } }
+  }
+  const confirmedPirate = (baseFormat: 'dynasty' | 'redraft') => ({ leagueTypeConfirmation: { type: 'pirate', baseFormat } })
+  const grade = (sport: string, leagueType: string, settings: unknown) =>
+    createSportPointsGrader({ sport, league: { id: 'L', settings, leagueType, leagueSize: 3 } }, { loadBase })!
+
+  it.each([
+    ['NBA', 'pirate', confirmedPirate('dynasty')],
+    // A Pirate league with no stated base is dynasty — the value book's default.
+    ['NBA', 'pirate', {}],
+    ['NHL', 'efl', {}],
+    ['MLB', 'efl', {}],
+  ])('%s %s on the dynasty book: a young player’s later seasons count, and a pick is priced', async (sport, type, settings) => {
+    seen.length = 0
+    const view = await grade(sport, type, settings).grade([player('vet')], [player('young')])
+    expect(seen).toEqual(['dynasty'])
+    expect(view.graded).toBe(true)
+    if (!view.graded) return
+    // Equal producers this season: only the five-season horizon separates them, and it favours the 21-year-old.
+    expect(view.percentDiff).toBeGreaterThan(0)
+    expect(view.basis).toMatch(/^Dynasty value/)
+    expect(await grade(sport, type, settings).grade([player('mid')], [pick(2027, 1)])).toMatchObject({ graded: true })
+  })
+
+  it('NBA Pirate on a confirmed redraft base keeps the this-season grade', async () => {
+    seen.length = 0
+    const view = await grade('NBA', 'pirate', confirmedPirate('redraft')).grade([player('vet')], [player('young')])
+    expect(seen).toEqual(['redraft'])
+    expect(view).toMatchObject({ graded: true, percentDiff: 0 })
+    expect(await grade('NBA', 'pirate', confirmedPirate('redraft')).grade([player('mid')], [pick(2027, 1)]))
+      .toMatchObject({ graded: false, reason: expect.stringContaining('Draft picks have no NBA price') })
+  })
+})
+
 describe('reading ages and the next draft', () => {
   it('takes one age per player, Sleeper first, and drops sources more than a year apart', () => {
     const ids = [

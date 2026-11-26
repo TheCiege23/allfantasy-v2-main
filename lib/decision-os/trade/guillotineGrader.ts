@@ -6,7 +6,7 @@ import { loadGuillotineContext, type GuillotineContextResult, type GuillotineLea
 import { gradeGuillotineDeal, isGuillotineTradeLeague } from './guillotineValue'
 
 /**
- * The guillotine half of the one grade (`createLeagueTradeGrader`): an NFL or NBA guillotine league is graded on
+ * The guillotine half of the one grade (`createLeagueTradeGrader`): a guillotine league (NFL, NBA, NHL, MLB, NCAAB, soccer) is graded on
  * points over the free agent for the same lineup slot and FAAB's purchasing power (`./guillotineValue.ts`),
  * never on the market chart. Null for every other league.
  *

@@ -8,6 +8,8 @@ const h = vi.hoisted(() => ({
   chart: [] as Array<{ player: { name: string; position: string }; value: number }>,
   needCalls: 0,
   pricePickCalls: 0,
+  /** Every NFL market-chart player price — how a test proves a deal never reached the chart. */
+  pricePlayerCalls: 0,
   leagueType: 'dynasty',
   needFactor: 1,
   rosterNeedCalls: [] as unknown[],
@@ -117,6 +119,7 @@ vi.mock('@/lib/hybrid-valuation', () => {
   return {
     compositeScore: (v: { marketValue: number }) => v.marketValue,
     pricePlayer: async (name: string) => {
+      h.pricePlayerCalls += 1
       const mv = h.prices.get(name)
       return mv == null ? { ...asset(name, 0), unpriced: true, source: 'unknown' } : asset(name, mv)
     },
@@ -129,6 +132,7 @@ vi.mock('@/lib/hybrid-valuation', () => {
 })
 
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { NCAAF_KEEPER_REASON } from '@/lib/decision-os/trade/conceptGradingRegistry'
 import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
 import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
@@ -149,6 +153,7 @@ beforeEach(() => {
   ]
   h.needCalls = 0
   h.pricePickCalls = 0
+  h.pricePlayerCalls = 0
   h.needFactor = 1
   h.rosterNeedCalls = []
   h.sport = 'NFL'
@@ -449,6 +454,39 @@ describe('P0 package and team-direction regression through the shared league gra
     const view = graded(await grader!.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'faab', amount: 50 }], viewerSide: false }))
     expect(view.lines.map((l) => l.valueSource)).toEqual(['guillotine_points', 'guillotine_faab'])
     expect(h.guillotineLoads).toEqual([expect.objectContaining({ id: 'L1', sport: 'NBA' })])
+  })
+
+  /*
+   * Concept registry fixes (owner-approved, 2026-11-26). Each was a row the registry author flagged:
+   * the deal reached a sub-grader whose basis does not fit the concept.
+   */
+  it('an NCAAF keeper deal is withheld with its reason and never touches the NFL chart', async () => {
+    h.sport = 'NCAAF'
+    h.leagueType = 'keeper'
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const view = await grader.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: false })
+    expect(view).toMatchObject({ graded: false, reason: NCAAF_KEEPER_REASON })
+    expect(h.pricePlayerCalls).toBe(0)
+  })
+
+  it.each(['best_ball', 'guillotine', 'pirate', 'devy', 'c2c'])('an NCAAF %s deal is graded by the college grader, never the NFL chart', async (type) => {
+    h.sport = 'NCAAF'
+    h.leagueType = type
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const view = await grader.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: false })
+    // The college base reads the (stubbed, empty) database and refuses — the college grader's own answer.
+    expect(view).toMatchObject({ graded: false, reason: expect.stringMatching(/college values could not be loaded/) })
+    expect(h.pricePlayerCalls).toBe(0)
+  })
+
+  it.each(['NCAAB', 'SOCCER'])('a %s Guilly league is graded on the guillotine survival basis, not whole-season points', async (sport) => {
+    h.leagueType = 'guillotine'
+    h.sport = sport
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const view = graded(await grader.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'faab', amount: 50 }], viewerSide: false }))
+    // Survival-weighted: (20 − 12) a week × W(0) = 1 expected week = 8 — not a season of points.
+    expect(view.lines.map((l) => [l.leagueValue, l.valueSource])).toEqual([[8, 'guillotine_points'], [10, 'guillotine_faab']])
+    expect(h.guillotineLoads).toEqual([expect.objectContaining({ id: 'L1', sport })])
   })
 
   it('uses the Zombie free-agent replacement basis and withholds unpriced item deals', async () => {
