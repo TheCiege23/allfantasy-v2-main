@@ -12,6 +12,13 @@
 
 export const DISCORD_SUPPORT_CHANNEL_ENV = 'DISCORD_SUPPORT_CHANNEL_ID'
 
+/**
+ * The public, never-expiring invite into the AllFantasy Support server's #support channel (created
+ * 2026-11-26). Public by design: it is shown to every member on /help and in the support form.
+ * If it is ever revoked, make a new never-expiring invite to #support and replace it here.
+ */
+export const DISCORD_SUPPORT_INVITE_URL = 'https://discord.gg/rkxqXNCKkE'
+
 /** The support channel's id, or null when support-by-Discord is switched off. */
 export function discordSupportChannelId(env: Record<string, string | undefined> = process.env): string | null {
   const id = env[DISCORD_SUPPORT_CHANNEL_ENV]?.trim()

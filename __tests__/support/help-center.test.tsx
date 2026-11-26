@@ -9,6 +9,21 @@ import { HelpCenter } from '@/components/support/HelpCenter'
 afterEach(() => cleanup())
 
 describe('the help page', () => {
+  it('offers the Discord #support channel, signed in or out, as a new tab', () => {
+    // The never-expiring invite into #support (lib/support/discordSupportCore.ts), owner's call 2026-11-26.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ threads: [] }), { status: 200 })))
+    for (const signedIn of [false, true]) {
+      render(<HelpCenter signedIn={signedIn} />)
+      const link = screen.getByTestId('help-discord-link') as HTMLAnchorElement
+      expect(link.href).toBe('https://discord.gg/rkxqXNCKkE')
+      expect(link.target).toBe('_blank')
+      expect(link.rel).toContain('noopener')
+      expect(screen.getByTestId('help-discord').textContent).toContain('the channel is public')
+      cleanup()
+    }
+    vi.unstubAllGlobals()
+  })
+
   it('signed out: asks them to sign in, with the email as a fallback', () => {
     render(<HelpCenter signedIn={false} />)
     expect(screen.getByTestId('help-signed-out').textContent).toContain('support@allfantasy.ai')
