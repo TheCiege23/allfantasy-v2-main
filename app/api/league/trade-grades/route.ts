@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getImportedTradeLedger } from '@/lib/trade-intel/importedTradeLedgerService'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
-import { draftPickTradeGraderSource, gradeDraftPickSwap } from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
+import { draftPickTradeGraderSource, leagueGradeForDraftPickSwap } from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
 import { getReconciledTradeGrades } from '@/lib/core-app/sleeperTradeHistory'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -173,7 +173,7 @@ export async function GET(req: NextRequest) {
      */
     const grader = draftPickTradeGraderSource({ leagueId: league.id, userId })
     const page = proposals.slice(0, 50)
-    const grades = await Promise.all(page.map(p => gradeDraftPickSwap(grader, p.session, {
+    const grades = await Promise.all(page.map(p => leagueGradeForDraftPickSwap(grader, p.session, {
       give: { round: p.receiveRound, slot: p.receiveSlot },
       get: { round: p.giveRound, slot: p.giveSlot },
     })))

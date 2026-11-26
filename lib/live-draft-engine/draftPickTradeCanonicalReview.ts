@@ -104,7 +104,7 @@ export function draftPickSwapSeason(session: DraftPickSwapSession): number | nul
  * THE grade of one swap, for the side that gives `give`. League value only (`viewerSide: false`): need
  * never changes the letter, and roster reads stay off a live-draft request path.
  */
-export async function gradeDraftPickSwap(
+export async function leagueGradeForDraftPickSwap(
   grader: DraftPickGraderSource,
   session: DraftPickSwapSession,
   swap: DraftPickSwap,
@@ -204,6 +204,6 @@ export async function reviewDraftPickSwap(
   swap: DraftPickSwap,
   partnerName?: string | null,
 ): Promise<{ tradeGrade: DraftPickTradeGrade; review: DraftPickTradeReview }> {
-  const tradeGrade = await gradeDraftPickSwap(grader, session, swap)
+  const tradeGrade = await leagueGradeForDraftPickSwap(grader, session, swap)
   return { tradeGrade, review: draftPickTradeReviewFromGrade(tradeGrade, { session, swap, partnerName }) }
 }

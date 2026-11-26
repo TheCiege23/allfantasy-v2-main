@@ -30,7 +30,7 @@ import { livePickValue, priceLeagueTradePick } from '@/lib/trade-value-console/l
 import { draftPickGradeAsset, pickInRound } from '@/lib/live-draft-engine/draftPickTradeGrade'
 import {
   draftPickTradeGraderSource,
-  gradeDraftPickSwap,
+  leagueGradeForDraftPickSwap,
   reviewDraftPickSwap,
   type DraftPickSwapSession,
 } from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
@@ -201,10 +201,10 @@ describe('reviewDraftPickSwap: the verdict is the grade', () => {
 
   it('an unreadable league or a throwing grader is withheld, never a verdict', async () => {
     graderMock.create.mockRejectedValueOnce(new Error('db down'))
-    expect(await gradeDraftPickSwap(draftPickTradeGraderSource({ leagueId: 'L' }), ROOKIE, { give: { round: 1, slot: 1 }, get: { round: 1, slot: 2 } }))
+    expect(await leagueGradeForDraftPickSwap(draftPickTradeGraderSource({ leagueId: 'L' }), ROOKIE, { give: { round: 1, slot: 1 }, get: { round: 1, slot: 2 } }))
       .toEqual({ graded: false, reason: 'This league’s values could not be loaded just now.' })
     graderMock.grade.mockRejectedValueOnce(new Error('boom'))
-    expect(await gradeDraftPickSwap(draftPickTradeGraderSource({ leagueId: 'L' }), ROOKIE, { give: { round: 1, slot: 1 }, get: { round: 1, slot: 2 } }))
+    expect(await leagueGradeForDraftPickSwap(draftPickTradeGraderSource({ leagueId: 'L' }), ROOKIE, { give: { round: 1, slot: 1 }, get: { round: 1, slot: 2 } }))
       .toEqual({ graded: false, reason: 'This trade could not be graded just now.' })
   })
 })

@@ -30,7 +30,7 @@ import type { SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/t
 import {
   draftPickLabel,
   draftPickTradeGraderSource,
-  gradeDraftPickSwap,
+  leagueGradeForDraftPickSwap,
 } from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
 import type { DraftPickTradeGrade } from '@/lib/live-draft-engine/draftPickTradeGrade'
 
@@ -270,12 +270,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   /*
    * THE grade of each candidate, from your side (you give `give`). One grader for the request; a draft
-   * the chart cannot price never loads it (`gradeDraftPickSwap` withholds before asking for it).
+   * the chart cannot price never loads it (`leagueGradeForDraftPickSwap` withholds before asking for it).
    */
   const grader = draftPickTradeGraderSource({ leagueId, userId })
   const grades = await Promise.all(
     validated.map((row) =>
-      gradeDraftPickSwap(grader, draftSession, {
+      leagueGradeForDraftPickSwap(grader, draftSession, {
         give: { round: row.give.round, slot: row.give.slot },
         get: { round: row.recv.round, slot: row.recv.slot },
       }),
