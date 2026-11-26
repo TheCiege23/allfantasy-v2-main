@@ -28,7 +28,6 @@
   font: 800 30px/1.1 Archivo, system-ui, sans-serif;
   letter-spacing: -0.02em;
 }
-.fl-hero-intro { margin: 4px 0 0; max-width: 68ch; color: var(--muted); font-size: 14px; line-height: 1.5; }
 
 @media (max-width: 760px) {
   .fl-hero-title { font-size: 26px; }

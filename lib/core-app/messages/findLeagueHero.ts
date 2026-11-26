@@ -10,12 +10,10 @@ export const findLeagueHeroMessages = defineMessages({
     home: '← Home',
     eyebrow: 'Public leagues · every sport',
     title: 'Find a league to join',
-    intro: 'Pick a league with an open seat and press Join.',
   },
   es: {
     home: '← Inicio',
     eyebrow: 'Ligas públicas · todos los deportes',
     title: 'Encuentra una liga para unirte',
-    intro: 'Elige una liga con una plaza libre y pulsa Unirse.',
   },
 })
