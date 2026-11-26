@@ -22,6 +22,7 @@ import { applyDailySportOutlook, isDayKey, loadDailySportOutlook } from '@/lib/p
 import { loadTaxiTenureView, type TaxiTenureView } from '@/lib/taxi/taxiMaxYears'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { afJson, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
+import { fillStoredHeadshots } from '@/lib/player-media/fillStoredHeadshots'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -308,6 +309,10 @@ export async function GET(req: NextRequest) {
       season: league.season ?? null }, unifiedRoster.map(p => p.id), { day: isDayKey(selectedDay) ? selectedDay : null,
       // Priced with or without AF's learned factors per the viewer's plan (afJson reverts them as well).
       afIntelligence: (await readAfIntelligenceAccess(sessionUserId)).unlocked })
+
+    // Every sport but the NFL: the stored player photo where the roster row has none
+    // (lib/player-media/fillStoredHeadshots.ts). The NFL already carries its Sleeper headshot.
+    unifiedRoster = await fillStoredHeadshots(leagueSport, unifiedRoster)
 
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
     // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the

@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LeagueHome } from '@/components/core-app/screens/LeagueHome'
+import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
 import { homeFixture } from '@/app/e2e/redraft-core/home/fixture'
 
 /**
@@ -44,6 +47,51 @@ describe('LeagueHome redraft deck', () => {
     expect(text(container.querySelector('[data-testid=redraft-recap]'))).toContain('Top score')
     // The deck's track replaces the timeline panel.
     expect(container.querySelector('.af-lh-timeline-panel')).toBeNull()
+  })
+
+  it('lists the teams once: the playoff race replaces the Standings panel (2026-11-24)', () => {
+    const { data } = homeFixture('nfl', { identity: true })
+    const { container } = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />)
+    expect(container.querySelector('[data-testid=redraft-playoff-race]')).not.toBeNull()
+    expect(container.querySelector('[data-testid=league-home-standings-all]')).toBeNull()
+    expect(container.querySelector('.af-standings-wrap')).toBeNull()
+    // Without the deck the Standings panel is still there.
+    const { container: plain } = render(<LeagueHome data={{ ...data, redraft: null }} otherLeagueIssueCount={0} identityInShell />)
+    expect(plain.querySelector('[data-testid=league-home-standings-all]')).not.toBeNull()
+  })
+
+  it('the league scoreboard shows your game, with the other games in one closed row (2026-11-24)', () => {
+    const { data } = homeFixture('nfl', { identity: true })
+    const { container } = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />)
+    const panel = container.querySelector('.af-lh-scoreboard-panel')!
+    const more = panel.querySelector('[data-testid=scoreboard-other-games]') as HTMLDetailsElement
+    expect(more).not.toBeNull()
+    expect(more.open).toBe(false)
+    const shown = [...panel.querySelectorAll('.af-sb-game')].filter((g) => !more.contains(g))
+    expect(shown.length).toBe(1)
+    expect(shown[0].getAttribute('data-yours')).toBe('true')
+    const folded = more.querySelectorAll('.af-sb-game').length
+    expect(folded).toBeGreaterThan(0)
+    expect(more.querySelector('summary')?.textContent).toBe(`The other ${folded} games`)
+  })
+
+  it('the scoreboard folds nothing unless asked: the schedule shows every game', () => {
+    const { data } = homeFixture('nfl', { identity: true })
+    if (!data.scoreboard.available) throw new Error('fixture has no scoreboard')
+    const { container } = render(<LeagueScoreboardPanel board={data.scoreboard.data} />)
+    expect(container.querySelector('[data-testid=scoreboard-other-games]')).toBeNull()
+    expect(container.querySelectorAll('.af-sb-game').length).toBe(data.scoreboard.data.games.length)
+  })
+
+  it('on a phone the recap is three rows and "This week" keeps its two cells side by side (2026-11-24)', () => {
+    const strip = (f: string) => readFileSync(join(process.cwd(), f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    const rd = strip('components/core-app/af-league-home-redraft.css')
+    const phone = rd.slice(rd.lastIndexOf('@media (max-width:720px)'))
+    expect(phone).toMatch(/\.af-lh-rd-recap-grid\{grid-template-columns:minmax\(0,1fr\)/)
+    expect(phone).toMatch(/\.af-lh-rd-recap-grid dd\{display:contents\}/)
+    const og = strip('components/core-app/af-league-overview-guide.css')
+    const narrow = og.slice(og.indexOf('@media (max-width: 800px)'))
+    expect(narrow.slice(0, narrow.indexOf('}\n}'))).not.toContain('grid-template-columns: minmax(0, 1fr)')
   })
 
   it('puts the page tools at the foot of a redraft Home in the shell, and names the platform properly', () => {

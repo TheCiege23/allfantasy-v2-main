@@ -15,8 +15,14 @@ describe('Trade Center Spanish orientation', () => {
     render(<TradeCenter league={null} />)
     // The all-leagues page leads with the trades guide (2026-11-13): what it is for, in Spanish.
     expect(screen.getByRole('heading', { level: 1, name: 'Intercambios en tus ligas' })).toBeTruthy()
-    expect(document.body.textContent).toContain('Revisa una oferta antes de aceptarla')
+    // 2026-11-24 (the simplify pass): no intro sentence; "Check a trade" is one closed row titled in Spanish.
+    expect(document.body.textContent).not.toContain('Revisa una oferta antes de aceptarla')
     expect(screen.getByRole('heading', { name: 'Revisa un intercambio' })).toBeTruthy()
+    const check = document.querySelector('[data-testid="trades-check-fold"]') as HTMLDetailsElement
+    expect(check.open).toBe(false)
+    expect(check.querySelector('summary h2')?.textContent).toBe('Revisa un intercambio')
+    // Its lesson and the market's are closed too.
+    expect([...document.querySelectorAll<HTMLDetailsElement>('[data-testid="home-why"]')].every((d) => !d.open)).toBe(true)
   })
 
   it('keeps the calculator, its folds and the trade handoff understandable', () => {

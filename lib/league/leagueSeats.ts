@@ -21,6 +21,9 @@ import type { Prisma } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
+/** Drafts whose seat labels follow a claim or a release: not yet started, under way, or paused. */
+const SEAT_LABEL_DRAFT_STATUSES = ['pre_draft', 'in_progress', 'paused']
+
 type Db = Prisma.TransactionClient
 
 /**
@@ -292,9 +295,11 @@ export async function assignLeagueSeat(
   // must also replace that draft-room label and open flag — in EVERY native league. This was Survivor-
   // only (#2313), so a dynasty or redraft draft room kept showing each joined manager as "Open Team N"
   // until the draft (found by the dynasty simulation, 2026-11-09: 11 of 12 joined managers).
+  // A draft already under way too (2026-11-25): a seat claimed mid-draft stayed "Open Team N" on the
+  // board and on the clock for the rest of it. The label and flag are display only; no pick is touched.
   if (native) {
     const draft = await tx.draftSession.findFirst({
-      where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      where: { leagueId, status: { in: SEAT_LABEL_DRAFT_STATUSES } }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, slotOrder: true },
     })
     if (draft && Array.isArray(draft.slotOrder)) {
@@ -389,10 +394,10 @@ export async function releaseLeagueSeat(
     })
   }
   await tx.leagueEntrySlot.updateMany({ where: { leagueId, rosterId }, data: { status: 'OPEN' } })
-  // The reverse of the claim above: a seat given up before the draft reads "Open Team N" again.
+  // The reverse of the claim above: a seat given up before or during the draft reads "Open Team N" again.
   if (native) {
     const draft = await tx.draftSession.findFirst({
-      where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      where: { leagueId, status: { in: SEAT_LABEL_DRAFT_STATUSES } }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, slotOrder: true },
     })
     if (draft && Array.isArray(draft.slotOrder)) {

@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { AUTOPILOT_FAAB_SHARE, autopilotFaabBid, planAutopilotWaivers, unfillableSlots, type AutopilotPlayer } from '@/lib/inactive-manager/autopilotWaivers'
+import { planUpgradePickup, UPGRADE_MARGIN, UPGRADE_MIN_POINTS, UPGRADE_SLOT } from '@/lib/inactive-manager/autopilotWaivers'
 
 const slot = (index: number, label: string, allowedPositions: string[]): ExpandedStarterSlot =>
   ({ index, label, allowedPositions, isFlexible: allowedPositions.length > 1 }) as ExpandedStarterSlot
@@ -98,5 +99,47 @@ describe('autopilotFaabBid', () => {
 
   it('has no bid outside a FAAB league', () => {
     expect(autopilotFaabBid({ ...base, faab: false })).toBeNull()
+  })
+})
+
+describe('planUpgradePickup', () => {
+  const pl = (id: string, position: string, projectedPoints: number, extra: Record<string, unknown> = {}) => ({ id, position, projectedPoints, injuryStatus: null, yearsExp: 6, ...extra })
+  const roster = { wr1: pl('wr1', 'WR', 6), wr2: pl('wr2', 'WR', 3), te1: pl('te1', 'TE', 10) }
+  const plan = (freeAgents: ReturnType<typeof pl>[], over: Record<string, unknown> = {}) =>
+    planUpgradePickup({ style: 'win_now', activity: 'normal', bench: ['wr1', 'wr2', 'te1'], players: roster, freeAgents, ...over } as Parameters<typeof planUpgradePickup>[0])
+
+  it('swaps the weakest bench player at a position for a clearly better free agent there', () => {
+    expect(plan([pl('fa', 'WR', 9)])).toEqual({ slot: UPGRADE_SLOT, addPlayerId: 'fa', dropPlayerId: 'wr2' })
+  })
+
+  it('takes the biggest gain when several qualify', () => {
+    // WR: 9 over 3 is +6. TE: 18 over 10 is +8.
+    expect(plan([pl('fa', 'WR', 9), pl('fte', 'TE', 18)])).toMatchObject({ addPlayerId: 'fte', dropPlayerId: 'te1' })
+  })
+
+  it('needs a real edge: the manager margin and at least two points', () => {
+    // 25% better than 3 is 3.75, but +1 is noise.
+    expect(plan([pl('fa', 'WR', 4)])).toBeNull()
+    // 13 on a 10-point tight end is 30% better: enough for a normal manager (25%), not a quiet one (40%).
+    expect(plan([pl('fte', 'TE', 13)])).toMatchObject({ addPlayerId: 'fte' })
+    expect(plan([pl('fte', 'TE', 13)], { activity: 'quiet' })).toBeNull()
+    expect(plan([pl('fte', 'TE', 14)], { activity: 'quiet' })).toMatchObject({ addPlayerId: 'fte' })
+    expect(UPGRADE_MARGIN.busy).toBeLessThan(UPGRADE_MARGIN.normal)
+    expect(UPGRADE_MIN_POINTS).toBe(2)
+  })
+
+  it('never drops a protected young player, a starter, or for a position it has no bench player at', () => {
+    const young = { ...roster, wr2: pl('wr2', 'WR', 3, { yearsExp: 1 }) }
+    // Dynasty owner protects the young receiver: the next weakest receiver is the 6, and 9 is +3 and 50% better.
+    expect(plan([pl('fa', 'WR', 9)], { style: 'dynasty_owner', players: young })).toMatchObject({ dropPlayerId: 'wr1' })
+    // Only bench players are ever dropped: a starter is not in `bench`, so he is not a candidate.
+    expect(plan([pl('fa', 'WR', 9)], { bench: ['te1'] })).toBeNull()
+    expect(plan([pl('fqb', 'QB', 30)])).toBeNull()
+  })
+
+  it('ignores a ruled-out free agent, one with no projection, and one already claimed', () => {
+    expect(plan([pl('fa', 'WR', 9, { injuryStatus: 'Out' })])).toBeNull()
+    expect(plan([pl('fa', 'WR', 0)])).toBeNull()
+    expect(plan([pl('fa', 'WR', 9)], { pendingAddIds: ['fa'] })).toBeNull()
   })
 })

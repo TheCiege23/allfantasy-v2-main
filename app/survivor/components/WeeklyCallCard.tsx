@@ -106,14 +106,16 @@ export function WeeklyCallCard({ leagueId }: { leagueId: string }) {
       ) : null}
 
       {board.leaderboard.length ? (
-        <div className="mt-5">
-          <h3 className="text-[11px] font-bold uppercase tracking-wider text-white/45">Season leaderboard</h3>
+        // Closed until asked for (2026-11-24, the simplify pass): nine rows of standings sat under every week's
+        // call. The summary keeps the count; a tap shows the table.
+        <details className="mt-5 rounded-xl border border-white/10 bg-black/20 p-3" data-testid="weekly-call-leaderboard">
+          <summary className="flex min-h-[44px] cursor-pointer items-center text-[11px] font-bold uppercase tracking-wider text-white/45">Season leaderboard ({Math.min(board.leaderboard.length, 10)})</summary>
           <ol className="mt-2 space-y-1 text-[13px] text-white/80">
             {board.leaderboard.slice(0, 10).map((row, index) => (
               <li key={row.userId} className="flex justify-between"><span>{index + 1}. {row.name}</span><span className="font-mono text-white/60">{row.correct} / {row.calls}</span></li>
             ))}
           </ol>
-        </div>
+        </details>
       ) : null}
     </section>
   )

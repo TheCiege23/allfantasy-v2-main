@@ -302,3 +302,15 @@ export async function sendChopZoneWarningsForSeason(
   if (!season) return { outcome: 'season_not_found' }
   return sendChopZoneWarnings({ leagueId: season.leagueId, seasonId: input.seasonId, sport: season.sport, season: season.season, week: input.week }, deps)
 }
+
+/**
+ * Shared with the live danger alerts (./survivalAlerts.ts), which reach the same people about the same week:
+ * who manages a roster, the league's name, when the week's last game starts, and whether the league sets its
+ * own lineups (best ball).
+ */
+export {
+  usersByRoster as chopAlertUsersByRoster,
+  leagueName as chopAlertLeagueName,
+  defaultLastGameStart as lastGameStartOfWeek,
+  leagueSetsLineups as leagueSetsItsOwnLineups,
+}

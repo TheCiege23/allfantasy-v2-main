@@ -10,7 +10,7 @@
  * 8 the banner repeated the league name the page header already shows.
  */
 import React from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 
 vi.mock('next/link', () => ({
@@ -39,6 +39,11 @@ function data(claims: unknown[], extra: Record<string, unknown> = {}) {
   }
 }
 
+// The fixtures carry fixed dates (deadline 2026-11-25T20:00Z, lock 2026-11-26), so the real clock turned
+// "nothing flagged" into "deadline passed" at 20:00Z on 2026-11-25 and the deck opened the review on its own.
+// Pin Date (only Date, so findBy* timers still run) to a moment those fixtures were written for.
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-23T12:00:00Z')) })
+afterAll(() => { vi.useRealTimers() })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 async function deck(payload: unknown, commissioner = true) {
@@ -59,6 +64,12 @@ describe('Pirate Deck reads in light mode (1)', () => {
   })
 })
 
+/**
+ * A claim deadline that has not passed. It was a fixed date (2026-11-25T20:00Z); the deck opens the
+ * commissioner review on an overdue claim, so the suite began failing the moment that date went by.
+ */
+const NOT_YET_DUE = new Date(Date.now() + 2 * 24 * 3600_000).toISOString()
+
 describe('A claim you must act on comes first (3)', () => {
   it('puts the claim board above the protection deck while you have a pick to make', async () => {
     await deck(data([claim({})]))
@@ -72,20 +83,26 @@ describe('A claim you must act on comes first (3)', () => {
 
 describe('Commissioner review folds away until it is needed (4)', () => {
   it('is closed on a claim with nothing flagged', async () => {
-    await deck(data([claim({ winnerRosterId: 'other', status: 'pending', playerId: 'q7', deadlineAt: '2026-11-25T20:00:00Z' })]))
+    await deck(data([claim({ winnerRosterId: 'other', status: 'pending', playerId: 'q7', deadlineAt: NOT_YET_DUE })]))
     const review = screen.getByTestId('pirate-commish-review-c') as HTMLDetailsElement
     expect(review.tagName).toBe('DETAILS')
     expect(review.open).toBe(false)
   })
-  it('opens itself when the losing lineup is flagged', async () => {
-    await deck(data([claim({})], { lineupPreviews: { c: { issues: ['TE slot empty at lock'], reason: 'No tight end started.' } } }))
+  it('opens itself when the losing lineup is flagged on another team’s claim', async () => {
+    await deck(data([claim({ winnerRosterId: 'other' })], { lineupPreviews: { c: { issues: ['TE slot empty at lock'], reason: 'No tight end started.' } } }))
     expect((screen.getByTestId('pirate-commish-review-c') as HTMLDetailsElement).open).toBe(true)
+  })
+  it('stays folded on the commissioner’s own claim, and says it needs a look (2026-11-24)', async () => {
+    await deck(data([claim({})], { lineupPreviews: { c: { issues: ['TE slot empty at lock'], reason: 'No tight end started.' } } }))
+    const review = screen.getByTestId('pirate-commish-review-c') as HTMLDetailsElement
+    expect(review.open).toBe(false)
+    expect(review.querySelector('summary')?.textContent).toBe('Commissioner review · needs a look')
   })
 })
 
 describe('Claim cards say what is happening (5)', () => {
   it('tells the losing manager who is taking whom', async () => {
-    await deck(data([claim({ winnerRosterId: 'other', loserRosterId: 'me', status: 'pending', playerId: 'p2', deadlineAt: '2026-11-25T20:00:00Z' })]), false)
+    await deck(data([claim({ winnerRosterId: 'other', loserRosterId: 'me', status: 'pending', playerId: 'p2', deadlineAt: NOT_YET_DUE })]), false)
     const card = screen.getByTestId('pirate-claim-c')
     expect(card.textContent).toMatch(/Jolly Rogers is taking Garrett Wilson from you/)
     expect(card.textContent).toMatch(/Waiting for your answer/)

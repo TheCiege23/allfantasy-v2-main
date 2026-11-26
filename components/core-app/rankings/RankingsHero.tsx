@@ -14,7 +14,7 @@ import {
 import type { RankingsData, YourRank } from '@/lib/core-app/rankings'
 import type { RankingsHeadline } from '@/lib/core-app/rankingsGuide'
 import { rankingsGuideMessages } from '@/lib/core-app/messages/rankingsGuide'
-import { headlineText, introText } from '@/components/core-app/rankings/RankingsGuide'
+import { headlineText } from '@/components/core-app/rankings/RankingsGuide'
 
 /**
  * Rankings hero (redraft Rankings board, 2026-11-01): eyebrow, title and the one-sentence promise
@@ -80,7 +80,11 @@ export function RankingsHero({
             intro (RankingsYouRow) carries them.
           */
           actions={actions ? <div className="af-rk-headact">{actions}</div> : undefined}
-          sub={introText(scope, g)}
+          /*
+            No intro sentence (2026-11-24, the simplify pass): the headline says where you stand, the row
+            under it how you moved, and every board row carries its own Why. `introText` stays exported
+            for the screens that still use it.
+          */
         />
         {belowHead}
         {computedLine ? <p className="af-rk-sub">{computedLine}</p> : null}
@@ -107,14 +111,21 @@ export function RankingsHero({
           >
             <i style={{ width: `${Math.max(0, Math.min(100, you.progressPct))}%` }} />
           </div>
-          <ul className="af-rk-earn" aria-label={m.earnAria}>
-            {earn.map(([label, xp]) => (
-              <li key={label}>
-                {label} <b>+{xp}</b>
-              </li>
-            ))}
-          </ul>
-          <p className="af-rk-levelcard-note">{m.levelNote}</p>
+          {/*
+            How XP is earned, closed until tapped (2026-11-24): four chips and a sentence on every visit
+            under a card whose job is "your level and how far to the next".
+          */}
+          <details className="af-rk-earnfold" data-testid="rk-earn-fold">
+            <summary>{m.earnAria}</summary>
+            <ul className="af-rk-earn" aria-label={m.earnAria}>
+              {earn.map(([label, xp]) => (
+                <li key={label}>
+                  {label} <b>+{xp}</b>
+                </li>
+              ))}
+            </ul>
+            <p className="af-rk-levelcard-note">{m.levelNote}</p>
+          </details>
         </section>
       ) : null}
     </section>

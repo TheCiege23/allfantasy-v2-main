@@ -88,9 +88,19 @@ html[data-mode='light'] .gl{
 .gl-chip[data-tone=warn]{background:var(--gl-warn-soft);border-color:color-mix(in srgb,var(--gl-warn) 35%,transparent);color:var(--gl-warn)}
 .gl-btn-primary{background:var(--gl-ember);color:var(--gl-ember-ink)}
 .gl-btn-primary:hover:not(:disabled){filter:brightness(1.08)}
+/* A second, quieter action beside a primary one (Cancel, Change it). */
+.gl-btn-quiet{border-color:var(--gl-line2);background:none;color:var(--gl-text)}
+.gl-btn-quiet:hover:not(:disabled){background:var(--gl-hover)}
 .gl-btn-good{border-color:color-mix(in srgb,var(--gl-good) 45%,transparent);color:var(--gl-good)}
 .gl-btn-good:hover:not(:disabled){background:var(--gl-good-soft)}
 .gl-field{background:var(--gl-surface2);border-color:var(--gl-line2);color:var(--gl-text)}
 .gl-pill{background:var(--gl-surface2);border:1px solid var(--gl-line2);color:var(--gl-text2)}
 .gl-pill:hover{background:var(--gl-hover)}
 .gl-pill[aria-pressed=true]{background:var(--gl-ember);border-color:var(--gl-ember);color:var(--gl-ember-ink)}
+/* A card that folds (2026-11-24, the simplify pass): Guilly Chimmy and Rules & Settings. The heading is the row
+   you tap, 44px tall at least, with a chevron that turns; no browser marker. */
+.gl-fold>.gl-fold-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;cursor:pointer;list-style:none}
+.gl-fold>.gl-fold-summary::-webkit-details-marker{display:none}
+.gl-fold>.gl-fold-summary::after{content:'▾';color:var(--gl-muted);font-size:13px;transition:transform .15s ease}
+.gl-fold[open]>.gl-fold-summary::after{transform:rotate(180deg)}
+.gl-fold>.gl-fold-summary:focus-visible{outline:2px solid var(--gl-ember-text);outline-offset:3px;border-radius:10px}

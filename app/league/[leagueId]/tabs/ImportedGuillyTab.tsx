@@ -1,15 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { ImportedGuillyTabData } from '@/lib/guillotine/importedGuillyHealthLoad'
-import { DEFAULT_DANGER_MARGIN_POINTS as IMPORTED_DANGER_NOTE_POINTS } from '@/lib/guillotine/constants'
+import type { TeamOutlook } from '@/lib/guillotine/survivalOutlook'
+import { boardFromImportedView } from '@/lib/guillotine/survivalBoardModel'
+import { GuillySurvivalBoard } from '@/components/guillotine/GuillySurvivalBoard'
 
 /**
- * The Guilly tab for an imported league (lib/guillotine/importedGuillyView.ts): this week's scores among
- * the teams still alive with the chop line marked, who has been chopped and when — all from the
- * provider's own scores, and labelled that way. When the reliability check doubts the picture
- * (lib/guillotine/importedGuillyHealth.ts) the tab says so and points at the league's Sync screen.
+ * The Chop tab of an IMPORTED Guilly league: the same survival board a league hosted here shows
+ * (components/guillotine/GuillySurvivalBoard.tsx), read from the provider's own weekly scores
+ * (../../../api/leagues/[leagueId]/guillotine/imported). The provider runs the chop; the board says so.
+ *
+ * It was two tabs — "Guilly" (a plain standings list of its own) and "Matchup" (the board) — showing the same
+ * scores twice. One page now (owner's decision, 2026-11-25): the board is the list, and what only the Guilly tab
+ * said — the reliability check's doubt, and a format we only recognised — sits above it when it applies.
  */
 const PLATFORM_NAMES: Record<string, string> = {
   sleeper: 'Sleeper',
@@ -20,107 +25,50 @@ const PLATFORM_NAMES: Record<string, string> = {
   fleaflicker: 'Fleaflicker',
 }
 
-type Loaded = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; data: ImportedGuillyTabData }
+type Data = ImportedGuillyTabData & { myRosterId?: string | null; outlook?: Record<string, TeamOutlook> | null }
 
 export function ImportedGuillyTab({ leagueId }: { leagueId: string }) {
-  const [state, setState] = useState<Loaded>({ kind: 'loading' })
+  const [data, setData] = useState<Data | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    let cancelled = false
-    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/imported`, { credentials: 'include', cache: 'no-store' })
+    const ac = new AbortController()
+    setData(null)
+    setError(null)
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/imported?outlook=1`, { credentials: 'include', cache: 'no-store', signal: ac.signal })
       .then(async (res) => {
         const d = await res.json().catch(() => ({}))
-        if (cancelled) return
-        if (!res.ok) setState({ kind: 'error', message: typeof d?.error === 'string' ? d.error : 'Could not load the Guilly standings.' })
-        else setState({ kind: 'ready', data: d as ImportedGuillyTabData })
+        if (!res.ok) setError(typeof d?.error === 'string' ? d.error : 'Could not load the chop line.')
+        else setData(d as Data)
       })
       .catch(() => {
-        if (!cancelled) setState({ kind: 'error', message: 'Could not reach the server. Try again.' })
+        if (!ac.signal.aborted) setError('Could not reach the server. Try again.')
       })
-    return () => {
-      cancelled = true
-    }
+    return () => ac.abort()
   }, [leagueId])
 
-  if (state.kind === 'loading') return <p className="p-4 text-[13px] text-white/50">Loading the Guilly standings…</p>
-  if (state.kind === 'error') return <p role="alert" className="p-4 text-[13px] text-amber-300">{state.message}</p>
-
-  const { data } = state
-  const platform = PLATFORM_NAMES[data.platform] ?? 'your platform'
-  const { view } = data
+  const board = useMemo(() => (data ? boardFromImportedView(data.view, data.myRosterId, data.outlook) : null), [data])
+  const platform = data ? PLATFORM_NAMES[data.platform] ?? 'your platform' : null
   const syncHref = `/core/sync?league=${encodeURIComponent(leagueId)}`
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 text-[#e6edf3] sm:p-4" data-testid="imported-guilly-tab">
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-lg font-semibold text-white">Guilly</h2>
-          <span className="text-[12px] text-white/55" data-testid="imported-guilly-source">Results from {platform}</span>
-        </div>
-        <p className="mt-1 text-[13px] text-white/60">
-          {platform} runs this league&apos;s chops. AllFantasy reads them from its weekly scores and never chops a team here.
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 sm:p-4" data-testid="imported-guilly-tab">
+      {data && platform && data.check.status === 'attention' ? (
+        <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100/90" data-testid="imported-guilly-doubt">
+          Some of this may be out of step with {platform}: {data.check.attention === 1 ? 'one thing needs' : `${data.check.attention} things need`} a look.{' '}
+          <Link href={syncHref} className="font-semibold underline">See the Sync check</Link>
         </p>
-        <p className="mt-3 text-[13px] text-white/80" data-testid="imported-guilly-summary">
-          {view.teamsAlive} {view.teamsAlive === 1 ? 'team' : 'teams'} alive
-          {view.chopped.length ? ` · ${view.chopped.length} chopped` : ''}
-          {view.week != null ? ` · week ${view.week}` : ''}
+      ) : data && data.check.format === 'detected' ? (
+        <p className="text-[12px] text-white/50" data-testid="imported-guilly-unconfirmed">
+          We recognised this as a Guilly league from its name or settings. <Link href={syncHref} className="underline">Confirm it on the Sync screen</Link>.
         </p>
-        {data.check.status === 'attention' ? (
-          <p className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100/90" data-testid="imported-guilly-doubt">
-            Some of this may be out of step with {platform}: {data.check.attention === 1 ? 'one thing needs' : `${data.check.attention} things need`} a look.{' '}
-            <Link href={syncHref} className="font-semibold underline">See the Sync check</Link>
-          </p>
-        ) : data.check.format === 'detected' ? (
-          <p className="mt-3 text-[12px] text-white/50" data-testid="imported-guilly-unconfirmed">
-            We recognised this as a Guilly league from its name or settings. <Link href={syncHref} className="underline">Confirm it on the Sync screen</Link>.
-          </p>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">
-          {view.week != null ? `Week ${view.week}` : 'This week'} · the chop line
-        </h3>
-        {view.scoredThisWeek > 0 ? (
-          <p className="mb-2 text-[12px] text-white/50" data-testid="imported-guilly-danger-note">
-            In danger: within {IMPORTED_DANGER_NOTE_POINTS} points of the chop line on {platform}&apos;s scores so far.
-          </p>
-        ) : null}
-        {view.scoredThisWeek === 0 ? (
-          <p className="text-[13px] text-white/55" data-testid="imported-guilly-no-scores">No scores yet this week. The chop line shows once games are played.</p>
-        ) : null}
-        <ol className="space-y-1" data-testid="imported-guilly-standings">
-          {view.standings.map((t, i) => (
-            <li
-              key={t.rosterId}
-              className={`flex items-center justify-between rounded-lg px-3 py-2 text-[13px] ${t.onChopLine ? 'border border-rose-500/40 bg-rose-500/10' : t.tier === 'danger' ? 'border border-amber-500/30 bg-amber-500/[0.06]' : 'bg-white/[0.02]'}`}
-              data-testid={`imported-guilly-team-${t.rosterId}`}
-            >
-              <span className="text-white/90">
-                <span className="mr-2 tabular-nums text-white/40">{i + 1}</span>
-                {t.name}
-                {t.onChopLine ? <span className="ml-2 text-[11px] font-semibold text-rose-300">on the chop line</span> : null}
-                {t.tier === 'danger' ? <span className="ml-2 text-[11px] font-semibold text-amber-300">in danger</span> : null}
-              </span>
-              <span className="tabular-nums text-white/80">{t.points.toFixed(2)}</span>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {view.chopped.length ? (
-        <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">Chopped</h3>
-          <ul className="space-y-1" data-testid="imported-guilly-chopped">
-            {view.chopped.map((c) => (
-              <li key={c.rosterId} className="flex justify-between text-[13px] text-white/70">
-                <span>{c.name}</span>
-                <span className="text-white/45">week {c.week}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
       ) : null}
+      <GuillySurvivalBoard
+        board={board}
+        loading={!data && !error}
+        error={error}
+        sourceNote={platform ? `Scores from ${platform}, which runs the chop. AllFantasy never chops a team here.` : null}
+      />
     </div>
   )
 }

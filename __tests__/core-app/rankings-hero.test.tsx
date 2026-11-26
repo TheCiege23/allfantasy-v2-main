@@ -115,3 +115,21 @@ describe('board rows', () => {
     expect(container.querySelector('a.af-rk-cellbtn')?.getAttribute('href')).toBe('?explain=a')
   })
 })
+
+/* The simplify pass (2026-11-24): no intro sentence under the headline, and "How XP is earned" is closed. */
+describe('RankingsHero, plain', () => {
+  it('has no intro sentence under the headline', () => {
+    const { container } = hero(true)
+    expect(container.querySelector('.af-rk-hero-intro')).toBeNull()
+    expect(container.textContent).not.toContain('Press Why on any row')
+  })
+
+  it('keeps how XP is earned behind one closed row inside the level card', () => {
+    hero(true)
+    const fold = screen.getByTestId('rk-earn-fold') as HTMLDetailsElement
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector('summary')?.textContent).toBe('How XP is earned')
+    expect(fold.textContent).toContain(`+${RANK_XP_PER_CHAMPIONSHIP}`)
+    expect(screen.getByTestId('rk-levelcard').contains(fold)).toBe(true)
+  })
+})

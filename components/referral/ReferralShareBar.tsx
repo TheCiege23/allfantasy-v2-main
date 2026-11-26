@@ -32,6 +32,11 @@ export interface ReferralShareBarProps {
   onShare?: (channel: InviteShareChannel) => void
   className?: string
   testIdPrefix?: string
+  /**
+   * Channels to leave out. Both callers pass `copy_link` (2026-11-25): each already has a "Copy link"
+   * button beside the link box, so the row repeated it.
+   */
+  omit?: InviteShareChannel[]
 }
 
 
@@ -41,6 +46,7 @@ export function ReferralShareBar({
   onShare,
   className = "",
   testIdPrefix = "referral-share",
+  omit = [],
 }: ReferralShareBarProps) {
   const [copiedChannel, setCopiedChannel] = useState<InviteShareChannel | null>(null)
   /*
@@ -87,7 +93,7 @@ export function ReferralShareBar({
       <span className="mr-1 text-xs font-medium" style={{ color: "var(--muted)" }}>
         Share:
       </span>
-      {CHANNELS.map(({ key, label, icon: Icon, action }) => {
+      {CHANNELS.filter(({ key }) => !omit.includes(key)).map(({ key, label, icon: Icon, action }) => {
         const copied = copiedChannel === key
         return (
           <button

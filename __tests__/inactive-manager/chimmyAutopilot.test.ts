@@ -46,6 +46,11 @@ vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({ getNormalizedPlaye
 import {
   AUTOPILOT_OFF_ACTION,
   AUTOPILOT_ON_ACTION,
+  applyChimmyAutopilot,
+  setChimmyTradeMode,
+  setChimmyPersonality,
+  PERSONALITY_ACTION,
+  TRADES_MODE_ACTION,
   isOwnerOnAutopilot,
   DRAFT_AS_ME_ACTION,
   setChimmyAutopilot,
@@ -113,7 +118,60 @@ describe('how many teams Chimmy may run', () => {
   })
 })
 
+describe('setChimmyPersonality', () => {
+  it('the commissioner chooses who Chimmy is for a team; it replaces the drafted one and survives a style change', async () => {
+    await applyChimmyAutopilot('L', 'commish', 'r1', undefined, { personality: 'ZERO_RB' })
+    expect(await setChimmyPersonality('L', 'commish', 'r1', 'FLOOR_SAFE')).toEqual({ ok: true, personality: 'FLOOR_SAFE' })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'dynasty_owner', personality: 'FLOOR_SAFE' } })
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: PERSONALITY_ACTION, metadata: { rosterId: 'r1', personality: 'FLOOR_SAFE' } }))
+    await setChimmyAutopilot('L', 'commish', 'r1', 'rebuild')
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'rebuild', personality: 'FLOOR_SAFE' } })
+  })
+
+  it('refuses a non-commissioner, an unknown style, and a team Chimmy is not running', async () => {
+    await setChimmyAutopilot('L', 'commish', 'r1', undefined)
+    expect(await setChimmyPersonality('L', 'commish', 'r1', 'TANK')).toMatchObject({ ok: false, status: 400 })
+    expect(await setChimmyPersonality('L', 'commish', 'r9', 'BALANCED')).toMatchObject({ ok: false, status: 409 })
+    m.elevated.mockResolvedValueOnce(false)
+    expect(await setChimmyPersonality('L', 'member', 'r1', 'BALANCED')).toMatchObject({ ok: false, status: 403 })
+  })
+})
+
+describe('setChimmyTradeMode', () => {
+  it('a Chimmy team answers offers by default; the commissioner can switch that off and it is kept through a style change', async () => {
+    await setChimmyAutopilot('L', 'commish', 'r1', undefined)
+    expect(readManagedLineups(m.state.settings).r1.autopilot).not.toHaveProperty('trades')
+    expect(await setChimmyTradeMode('L', 'commish', 'r1', 'off')).toEqual({ ok: true, trades: 'off' })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'dynasty_owner', trades: 'off' } })
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TRADES_MODE_ACTION, metadata: { rosterId: 'r1', trades: 'off' } }))
+    await setChimmyAutopilot('L', 'commish', 'r1', 'win_now')
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'win_now', trades: 'off' } })
+  })
+
+  it('refuses a non-commissioner, an unknown mode, and a team Chimmy is not running', async () => {
+    await setChimmyAutopilot('L', 'commish', 'r1', undefined)
+    expect(await setChimmyTradeMode('L', 'commish', 'r1', 'sometimes')).toMatchObject({ ok: false, status: 400 })
+    expect(await setChimmyTradeMode('L', 'commish', 'r9', 'off')).toMatchObject({ ok: false, status: 409 })
+    m.elevated.mockResolvedValueOnce(false)
+    expect(await setChimmyTradeMode('L', 'member', 'r1', 'off')).toMatchObject({ ok: false, status: 403 })
+  })
+})
+
 describe('setChimmyAutopilot', () => {
+  it('keeps the personality the team drafts with, through a later style change and a second handover', async () => {
+    expect(await applyChimmyAutopilot('L', 'commish', 'r1', undefined, { personality: 'ZERO_RB' })).toMatchObject({ ok: true })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'dynasty_owner', personality: 'ZERO_RB' } })
+    await setChimmyAutopilot('L', 'commish', 'r1', 'win_now')
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'win_now', personality: 'ZERO_RB' } })
+    await applyChimmyAutopilot('L', 'commish', 'r1', 'rebuild', { personality: 'RB_HEAVY' })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'rebuild', personality: 'ZERO_RB' } })
+  })
+
+  it('saves no personality when none is known or it is not one', async () => {
+    await applyChimmyAutopilot('L', 'commish', 'r1', undefined, { personality: 'TANK' })
+    expect(entry('r1')!.autopilot).not.toHaveProperty('personality')
+  })
+
   it('defaults to playing like a dynasty owner, turns lineup management on too, and logs it', async () => {
     expect(await setChimmyAutopilot('L', 'commish', 'r1', undefined)).toMatchObject({ ok: true, style: 'dynasty_owner' })
     expect(entry('r1')).toMatchObject({ byUserId: 'commish', autopilot: { style: 'dynasty_owner', byUserId: 'commish' } })

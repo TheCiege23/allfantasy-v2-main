@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { Anchor, Clock3, LockKeyhole, Shield, Skull, Sparkles, Trophy, X } from 'lucide-react'
+import { Anchor, Clock3, LockKeyhole, Shield, Skull, Sparkles, X } from 'lucide-react'
 import './pirate-identity.css'
 
 type Player = { id: string; playerId: string; playerName: string; position: string; team: string | null; slotType: string }
@@ -179,7 +179,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
       return
     }
     if (selected.length >= data.rules.protectionLimit) {
-      setError(`Only ${data.rules.protectionLimit} players can be protected. Remove a lock before adding another.`)
+      setError(`You can lock ${data.rules.protectionLimit} players. Unlock one before adding another.`)
       return
     }
     setError('')
@@ -201,13 +201,20 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
     || (claim.status === 'pending' && claim.loserRosterId === data?.myRosterId)
     || (claim.status === 'countered' && claim.winnerRosterId === data?.myRosterId))
 
+  const locksOpen = Boolean(data?.canEditProtections)
+  const lockedPlayers = myRoster?.players.filter((player) => selectedSet.has(player.playerId)) ?? []
   const protectionDeck = data ? (
     <section key="deck" data-testid="pirate-protection-deck" className="pr-card overflow-hidden rounded-[20px]">
       <div className="p-5 sm:p-6" style={{ borderBottom: '1px solid var(--pr-line)' }}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="pr-text text-xl font-black">Lock your players</h3>
-            <p className="pr-muted mt-1 text-sm leading-5">Locked players can’t be taken this week. Lock up to {data.rules.protectionLimit}, from your starters, bench or IR. Locks you don’t use are lost when games start.</p>
+            {/* 2026-11-24 audit: after the lock it still said "Lock your players · lock up to 3" over tappable rows. */}
+            <h3 className="pr-text text-xl font-black">{locksOpen ? 'Lock your players' : 'Your locks this week'}</h3>
+            <p className="pr-muted mt-1 text-sm leading-5">
+              {locksOpen
+                ? 'Locked players can’t be taken this week. Pick from your starters, bench or IR; unused locks are lost when games start.'
+                : 'Games have started. These players can’t be taken this week.'}
+            </p>
           </div>
           <LockKeyhole className="pr-gold shrink-0" size={24} aria-hidden />
         </div>
@@ -218,7 +225,17 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
         <div className="p-4 sm:p-6">
           {mySet?.status === 'void' && <p className="pr-alert mb-4 rounded-xl px-4 py-3 text-sm">All your locks were cancelled for this week: {mySet.voidReason === 'over_limit' ? 'too many players were submitted' : mySet.voidReason === 'illegal_lineup' ? 'the commissioner ruled your lineup illegal when a replacement was available' : 'a change was attempted after games began'}.</p>}
           <div className="grid gap-2">
-            {myRoster.players.map((player) => {
+            {!locksOpen ? (
+              lockedPlayers.length ? lockedPlayers.map((player) => (
+                <div key={player.id} data-testid={`pirate-locked-${player.playerId}`} className="pr-row flex min-h-[56px] items-center justify-between gap-3 rounded-xl px-3 py-2.5">
+                  <span className="min-w-0">
+                    <span className="pr-text block truncate text-sm font-semibold">{player.playerName}</span>
+                    <span className="pr-muted block text-xs">{player.position} · {player.team || 'FA'} · {slotWord(player.slotType)}</span>
+                  </span>
+                  <LockKeyhole className="pr-gold shrink-0" size={17} aria-hidden />
+                </div>
+              )) : <p className="pr-muted py-4 text-sm">You locked no one this week.</p>
+            ) : myRoster.players.map((player) => {
               const locked = selectedSet.has(player.playerId)
               return (
                 <button
@@ -238,7 +255,7 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                 </button>
               )
             })}
-            {!myRoster.players.length && <p className="pr-muted py-6 text-sm">Your roster is empty. Draft players before locking any.</p>}
+            {locksOpen && !myRoster.players.length && <p className="pr-muted py-6 text-sm">Your roster is empty. Draft players before locking any.</p>}
           </div>
           {data.canEditProtections && mySet?.status !== 'void' ? (
             <button
@@ -271,7 +288,8 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
           const claimable = loser?.players.filter((player) => !locked.has(player.playerId)) ?? []
           const overdue = ['pending', 'countered'].includes(claim.status) && Boolean(claim.deadlineAt) && new Date(claim.deadlineAt!).getTime() <= Date.now()
           // Review opens itself only when there is something to review.
-          const reviewOpen = Boolean(evidence) || (preview?.issues.length ?? 0) > 0 || claim.status === 'selection_expired' || overdue
+          const reviewNeeded = Boolean(evidence) || (preview?.issues.length ?? 0) > 0 || claim.status === 'selection_expired' || overdue
+          const reviewOpen = reviewNeeded && !isWinner && !isLoser
           return (
             <div key={claim.id} data-testid={`pirate-claim-${claim.id}`} className="pr-well rounded-2xl p-4">
               <div className="flex items-center justify-between gap-2">
@@ -304,18 +322,18 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                     <option value="">Or ask for a player back</option>
                     {winner?.players.map((player) => <option key={player.id} value={player.playerId}>{player.playerName} · {player.position}</option>)}
                   </select>
-                  <button disabled={busy || !counter[claim.id]} onClick={() => mutate(claimUrl(claim.id), { action: 'counter', counterPlayerId: counter[claim.id] })} className="pr-btn min-h-[44px] w-full rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-45">Send counteroffer</button>
+                  <button disabled={busy || !counter[claim.id]} onClick={() => mutate(claimUrl(claim.id), { action: 'counter', counterPlayerId: counter[claim.id] })} className="pr-btn min-h-[44px] w-full rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-45">Ask for this player</button>
                 </div>
               )}
               {claim.status === 'countered' && isWinner && (
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button disabled={busy} onClick={() => mutate(claimUrl(claim.id), { action: 'accept_counter' }, true)} className="pr-btn-good min-h-[44px] rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-50">Accept counter</button>
+                  <button disabled={busy} onClick={() => mutate(claimUrl(claim.id), { action: 'accept_counter' }, true)} className="pr-btn-good min-h-[44px] rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-50">Give them that player</button>
                   <button disabled={busy} onClick={() => mutate(claimUrl(claim.id), { action: 'decline_counter' }, true)} className="pr-btn min-h-[44px] rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-50">Take original claim</button>
                 </div>
               )}
               {isCommissioner && (
                 <details data-testid={`pirate-commish-review-${claim.id}`} open={reviewOpen} className="mt-4 pt-3" style={{ borderTop: '1px solid var(--pr-line)' }}>
-                  <summary className="pr-accent min-h-[36px] cursor-pointer text-xs font-bold">Commissioner review</summary>
+                  <summary className="pr-accent min-h-[36px] cursor-pointer text-xs font-bold">Commissioner review{reviewNeeded && !reviewOpen ? ' · needs a look' : ''}</summary>
                   {!evidence && (preview?.issues.length ?? 0) > 0 && <p className="pr-note mt-2 rounded-lg px-3 py-2 text-xs leading-5">Flagged now: {preview!.issues.join('; ')}. {preview!.reason}</p>}
                   {evidence && <details className="pr-well mt-3 rounded-xl p-3">
                     <summary className="pr-accent min-h-[44px] cursor-pointer text-sm font-bold">Captured lineup evidence · {evidence.snapshotCount} snapshots</summary>
@@ -349,8 +367,8 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                       <p className="pr-muted mt-1 text-xs leading-5">Judge only what was true before the lineup lock. If {nameOf(loser)} couldn’t fill every starting spot with active players or free agents, keep its locks. When in doubt, keep them.</p>
                       <textarea aria-label="Lock-time lineup and replacement evidence" maxLength={1000} placeholder="Which spot was empty, and which replacement was available before lock (or why none was)?" value={lineupReason[claim.id] ?? ''} onChange={(e) => setLineupReason({ ...lineupReason, [claim.id]: e.target.value })} className="pr-field mt-2 min-h-[80px] w-full rounded-lg px-3 py-2 text-sm" />
                       <div className="mt-2 grid grid-cols-2 gap-2">
-                        <button disabled={busy || (lineupReason[claim.id] ?? '').trim().length < 10} onClick={() => mutate(commissionerUrl(claim.id), { action: 'lineup_ruling', decision: 'excused', reason: lineupReason[claim.id] })} className="pr-btn-good min-h-[44px] rounded-lg px-3 text-xs font-bold disabled:opacity-45">Keep protections</button>
-                        <button disabled={busy || (lineupReason[claim.id] ?? '').trim().length < 10} onClick={() => mutate(commissionerUrl(claim.id), { action: 'lineup_ruling', decision: 'forfeit', reason: lineupReason[claim.id] })} className="pr-btn-bad min-h-[44px] rounded-lg px-3 text-xs font-bold disabled:opacity-45">Forfeit protections</button>
+                        <button disabled={busy || (lineupReason[claim.id] ?? '').trim().length < 10} onClick={() => mutate(commissionerUrl(claim.id), { action: 'lineup_ruling', decision: 'excused', reason: lineupReason[claim.id] })} className="pr-btn-good min-h-[44px] rounded-lg px-3 text-xs font-bold disabled:opacity-45">Keep locks</button>
+                        <button disabled={busy || (lineupReason[claim.id] ?? '').trim().length < 10} onClick={() => mutate(commissionerUrl(claim.id), { action: 'lineup_ruling', decision: 'forfeit', reason: lineupReason[claim.id] })} className="pr-btn-bad min-h-[44px] rounded-lg px-3 text-xs font-bold disabled:opacity-45">Remove locks</button>
                       </div>
                     </div>
                   )}
@@ -377,6 +395,12 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
         })}
         {!activeClaims.length && <p className="pr-muted rounded-xl px-4 py-6 text-center text-sm" style={{ border: '1px dashed var(--pr-line2)' }}>No open claims. A claim appears here when a matchup ends.</p>}
       </div>
+      {voidedClaims.length > 0 && (
+        <div data-testid="pirate-cancelled-claims" className="mt-4 pt-4" style={{ borderTop: '1px solid var(--pr-line)' }}>
+          <p className="pr-muted text-xs font-bold">Cancelled claims</p>
+          {voidedClaims.slice(0, 5).map((claim) => <p key={claim.id} className="pr-text2 mt-2 text-xs">Week {claim.week}: {claim.resolutionNote || 'No reason recorded'}</p>)}
+        </div>
+      )}
     </section>
   ) : null
 
@@ -396,14 +420,17 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
       {data && (
         <>
           {myRoster && data.league.rosterLimit > 0 && rosterOverflow > 0 && (
-            <p role="status" className="pr-note mt-5 rounded-xl px-4 py-3 text-sm leading-6">
-              Your crew has {myRoster.players.length} players in a {data.league.rosterLimit}-player roster after a steal. Free {rosterOverflow} {rosterOverflow === 1 ? 'spot' : 'spots'} before another acquisition{overflowGraceUntil ? ` and by ${dateText(overflowGraceUntil)}` : ''}. No player will be dropped automatically.
-            </p>
+            <div role="status" data-testid="pirate-roster-overflow" className="pr-alert mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl px-4 py-3 text-sm leading-6">
+              <p>
+                You have {myRoster.players.length} players and room for {data.league.rosterLimit}. Free {rosterOverflow} {rosterOverflow === 1 ? 'spot' : 'spots'}
+                {overflowGraceUntil ? ` by ${dateText(overflowGraceUntil)}` : ''} — nobody is dropped for you.
+              </p>
+              <Link href={`/league/${encodeURIComponent(leagueId)}?tab=roster`} className="pr-link inline-flex min-h-[40px] items-center text-sm font-bold">Free a spot</Link>
+            </div>
           )}
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <Stat icon={<Shield size={18} />} label="Locked" value={`${selected.length} of ${data.rules.protectionLimit}`} detail={mySet?.status === 'void' ? 'Cancelled this week' : data.canEditProtections ? 'You can change these until games start' : 'Set for this week'} />
-            <Stat icon={<Clock3 size={18} />} label="Locks close" value={dateText(data.lockAt)} detail={data.lockAt ? 'When the first game starts' : 'Waiting for the schedule'} />
-            <Stat icon={<Trophy size={18} />} label="Open claims" value={String(activeClaims.length)} detail={`${data.rules.claimHours} hours to answer a claim`} />
+          <div className="mt-5 grid grid-cols-2 gap-3" data-testid="pirate-stats">
+            <Stat icon={<Shield size={18} />} label="Locked" value={`${selected.length} of ${data.rules.protectionLimit}`} detail={mySet?.status === 'void' ? 'Cancelled this week' : locksOpen ? 'Change them until games start' : 'Set for this week'} />
+            <Stat icon={<Clock3 size={18} />} label={locksOpen ? 'Locks close' : 'Locks closed'} value={dateText(data.lockAt)} detail={data.lockAt ? (locksOpen ? 'When the first game starts' : 'The first game started') : 'Waiting for the schedule'} />
           </div>
 
           <div className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,.88fr)]">
@@ -418,11 +445,12 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
                   <div key={claim.id} className="pr-note rounded-xl p-4">
                     <p className="pr-gold text-xs font-bold">Week {claim.week}</p>
                     <p className="pr-text mt-1 text-sm font-semibold">{nameOf(byId.get(claim.winnerRosterId))} took {playerName(rosters, claim.playerId)} from {nameOf(byId.get(claim.loserRosterId))}</p>
-                    {isCommissioner && claim.scoreCorrectionNeedsReversal && <div className="mt-3 space-y-2">
-                      <p className="pr-bad text-xs font-semibold">The final score changed. Reverse this steal after checking both rosters.</p>
+                    {isCommissioner && claim.scoreCorrectionNeedsReversal && <details data-testid={`pirate-reversal-${claim.id}`} className="mt-3 space-y-2">
+                      <summary className="pr-bad min-h-[36px] cursor-pointer text-xs font-semibold">The final score changed — review this steal</summary>
+                      <p className="pr-muted text-xs">Reverse it after checking both rosters.</p>
                       <input aria-label="Score correction reversal reason" maxLength={500} placeholder="Reason for reversal" value={reviewReason[claim.id] ?? ''} onChange={(e) => setReviewReason({ ...reviewReason, [claim.id]: e.target.value })} className="pr-field min-h-[44px] w-full rounded-lg px-3 text-sm" />
-                      <button disabled={busy || (reviewReason[claim.id] ?? '').trim().length < 5} onClick={() => mutate(commissionerUrl(claim.id), { action: 'reverse', reason: reviewReason[claim.id] })} className="pr-btn-bad min-h-[44px] rounded-lg px-4 text-xs font-bold disabled:opacity-45">Reverse audited steal</button>
-                    </div>}
+                      <button disabled={busy || (reviewReason[claim.id] ?? '').trim().length < 5} onClick={() => mutate(commissionerUrl(claim.id), { action: 'reverse', reason: reviewReason[claim.id] })} className="pr-btn-bad min-h-[44px] rounded-lg px-4 text-xs font-bold disabled:opacity-45">Reverse this steal</button>
+                    </details>}
                     <button onClick={() => {
                       setCelebration({ winner: nameOf(byId.get(claim.winnerRosterId)), loser: nameOf(byId.get(claim.loserRosterId)) })
                       setShowVideo(true)
@@ -437,16 +465,10 @@ export function PirateHome({ leagueId, isCommissioner }: { leagueId: string; isC
             <section className="pr-card mt-6 rounded-[20px] p-5 sm:p-6">
               <h3 className="pr-text text-lg font-black">Commissioner</h3>
               <p className="pr-muted mt-1 text-sm">
-                {data.rules.protectionLimit} locks per team · {data.rules.selectionHours} hours to pick · {data.rules.claimHours} hours to answer · steals {data.rules.playoffClaims ? 'continue' : 'stop'} in the playoffs.
+                {data.rules.selectionHours} hours to pick · {data.rules.claimHours} hours to answer · steals {data.rules.playoffClaims ? 'continue' : 'stop'} in the playoffs.
               </p>
               {/* The one editor is Settings → Pirate rules (it had a second, differently-labelled copy here). */}
               <Link href={`/league/${encodeURIComponent(leagueId)}?tab=settings`} className="pr-link mt-3 inline-flex min-h-[40px] items-center text-sm">Change Pirate rules in League settings</Link>
-              {voidedClaims.length > 0 && (
-                <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--pr-line)' }}>
-                  <p className="pr-muted text-xs font-bold">Cancelled claims</p>
-                  {voidedClaims.slice(0, 5).map((claim) => <p key={claim.id} className="pr-text2 mt-2 text-xs">Week {claim.week}: {claim.resolutionNote || 'No reason recorded'}</p>)}
-                </div>
-              )}
             </section>
           )}
         </>

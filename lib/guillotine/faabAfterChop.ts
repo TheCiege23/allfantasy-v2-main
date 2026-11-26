@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { faabAfterChop, readAdvanced } from './chopSchedule'
-import { readFaabOnChop } from './faabOnChop'
+import { movesChoppedFaab, readFaabOnChop } from './faabOnChop'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 /**
@@ -29,7 +29,7 @@ export async function applyFaabAfterChop(input: { leagueId: string; seasonKey: s
     if (rule.mode === 'unchanged') return { applied: false, reason: 'rule_unchanged' } as const
     // Both rules on (saved before they were made exclusive, faabOnChop.ts): the split has already run for this
     // chop, and a reset after it would erase it. The split wins; the commissioner is told at the next save.
-    if (readFaabOnChop(league?.settings) === 'split') return { applied: false, reason: 'split_active' } as const
+    if (movesChoppedFaab(readFaabOnChop(league?.settings))) return { applied: false, reason: 'split_active' } as const
     const done = await tx.guillotineEventLog.findFirst({
       where: { leagueId: input.leagueId, eventType: 'faab_after_chop', metadata: { path: ['key'], equals: key } },
       select: { id: true },

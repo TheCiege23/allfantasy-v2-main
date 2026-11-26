@@ -218,6 +218,9 @@ describe('Standings & playoffs — playoff line, clinched / eliminated, bracket'
     expect((await screen.findByTestId('native-standings-playoff-line')).textContent).toBe('Playoff line · top 2')
     await waitFor(() => expect(screen.queryByTestId('native-standings-race-r1')).toBeNull())
     expect(screen.queryByText('Eliminated')).toBeNull()
+    // The labelled line says it, so no note under the table says it again (2026-11-24).
+    expect(screen.queryByText(/The labelled line is the playoff cut/)).toBeNull()
+    expect(screen.queryByText(/Order and tiebreaks follow/)).toBeNull()
   })
 
   it('redraft after generation: clinched and eliminated chips, and the bracket on Playoff picture', async () => {

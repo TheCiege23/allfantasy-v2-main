@@ -615,9 +615,24 @@ const XP_BAR_TONE: Record<XpRow['key'], string> = {
 function XpBreakdownCard({ data }: { data: RankingsData }) {
   if (!data.you || data.xpRows.length === 0) return null
   const rec = data.reconciliation
+  /*
+    Closed until tapped (2026-11-24, the simplify pass): the level card above already shows the total and
+    how far to the next level; the per-rule bars and the note were ~470px on a phone on every visit. A saved
+    total that disagrees with today's rules stays OUTSIDE the fold — that one is a warning, not a lesson.
+  */
   return (
     <section className="af-rk-card">
-      <p className="af-rk-eyebrow">Where your XP came from</p>
+      {rec && !rec.matches ? (
+        <p className="af-rk-note af-rk-note--warn">
+          Your saved total is {rec.stored?.toLocaleString(getAppIntlLocale())} XP, written {fmtDate(rec.storedAt)}. The published rules over
+          the leagues on file today give {rec.computed.toLocaleString(getAppIntlLocale())}, which is the figure shown here. They will agree
+          after your next import recalculates your rank.
+        </p>
+      ) : null}
+      <details className="af-rk-xpfold" data-testid="rk-xp-fold">
+      <summary className="af-rk-eyebrow">
+        Where your XP came from <span className="af-rk-xpfold-total">{data.you.xp.toLocaleString(getAppIntlLocale())} XP</span>
+      </summary>
       {data.xpRows.map((r) => (
         <div className="af-rk-xprow" key={r.key}>
           <div className="af-rk-xpline">
@@ -635,17 +650,11 @@ function XpBreakdownCard({ data }: { data: RankingsData }) {
         <b>Total</b>
         <span>{data.you.xp.toLocaleString(getAppIntlLocale())}</span>
       </div>
-      {rec && !rec.matches ? (
-        <p className="af-rk-note af-rk-note--warn">
-          Your saved total is {rec.stored?.toLocaleString(getAppIntlLocale())} XP, written {fmtDate(rec.storedAt)}. The published rules over
-          the leagues on file today give {rec.computed.toLocaleString(getAppIntlLocale())}, which is the figure shown here. They will agree
-          after your next import recalculates your rank.
-        </p>
-      ) : null}
       <p className="af-rk-note">
         XP is a ladder, not a ranking: losses never subtract, and imported seasons count the same
         as leagues played here. Playoff berths only count once games have been played.
       </p>
+      </details>
     </section>
   )
 }
@@ -710,9 +719,15 @@ function portfolioColumns(p: PortfolioView, data: RankingsData): RankColumn[] {
     { key: 'size', label: 'Teams', srLabel: 'Teams and playoff cut', align: 'right', hideOnPhone: true, ...col('size') },
     { key: 'record', label: 'Record', align: 'right', ...col('record') },
     { key: 'ppg', label: 'PPG', srLabel: 'Points per game', align: 'right', hideOnPhone: true },
-    { key: 'index', label: 'Index', srLabel: 'Scoring index, 100 is average for the format', align: 'right', ...col('index') },
+    /*
+      2026-11-24 (the simplify pass): Index sits behind a phone row's "More" with the other details, and the
+      score's chip says "Score" — together that puts Finish, Score and More on ONE line under the league, so
+      a season is two lines on a phone instead of three. The desktop table keeps every column; the full name
+      stays the column's accessible name.
+    */
+    { key: 'index', label: 'Index', srLabel: 'Scoring index, 100 is average for the format', align: 'right', hideOnPhone: true, ...col('index') },
     { key: 'finish', label: 'Finish' },
-    { key: 'score', label: 'Manager score', align: 'right' },
+    { key: 'score', label: 'Score', srLabel: 'Manager score', align: 'right' },
   ]
 }
 
@@ -925,7 +940,10 @@ function LeagueBody({ league }: { league: LeagueView }) {
             })}
             emptyText="No team in this league has a scored week yet."
           />
-          {/* Phone: drawn as horizontal bars (CSS), so ten team names fit in full instead of ten ellipses. */}
+          {/*
+            Not drawn on a phone since 2026-11-24 (CSS, the simplify pass): it is the table's PF column again
+            ("same data as the table") and was ~400px under it. On a wider screen it sits beside the table.
+          */}
           <div className="af-rk-pfchart">
             <WorkbookBarChart
               title="Points for"
@@ -1151,11 +1169,15 @@ function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
               emptyText="No rated weeks yet."
             />
           </div>
-          <p className="af-rk-note">
-            Your rating follows how you scored against <b>everyone in your league</b> that week, not only your matchup —
-            so a win while most of the league outscored you can still lower it, and a loss in a high-scoring week can raise
-            it. Every league you played that week folds into one update; the Leagues column shows each one&apos;s share.
-          </p>
+          {/* Closed until tapped (2026-11-24, the simplify pass): the same lesson under every visit's log. */}
+          <details className="af-rk-earnfold af-rk-classwhy" data-testid="rk-class-why">
+            <summary>How your rating moves</summary>
+            <p className="af-rk-note">
+              Your rating follows how you scored against <b>everyone in your league</b> that week, not only your matchup —
+              so a win while most of the league outscored you can still lower it, and a loss in a high-scoring week can raise
+              it. Every league you played that week folds into one update; the Leagues column shows each one&apos;s share.
+            </p>
+          </details>
         </section>
       ) : null}
 
@@ -1449,8 +1471,12 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
         }
         actions={g?.you ? null : headActions}
         you={data.you}
-        // My portfolio carries the full level card (crest, tier, XP breakdown) in its own body.
-        showLevel={data.scope !== 'portfolio'}
+        /*
+          The level card on the Community board only (2026-11-24, the simplify pass). My portfolio carries the
+          full level card in its own body; One league and Class are about one league's table and the Class
+          rating, which career XP plays no part in — there it was ~180px of something else above the page.
+        */
+        showLevel={data.scope === 'global'}
       />
 
       <ScopeTabs data={data} leagueId={leagueId} />

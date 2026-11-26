@@ -32,6 +32,7 @@ import { AiProviderHealthPanel } from "@/components/admin/AiProviderHealthPanel"
 import { EmailSegmentsPanel } from "@/components/admin/EmailSegmentsPanel"
 import { PlatformOsOperatorPanel } from "@/components/admin/PlatformOsOperatorPanel"
 import { StatReingestPanel } from "@/components/admin/StatReingestPanel"
+import { ContractCapturePanel } from "@/components/admin/ContractCapturePanel"
 import type {
   AdminProviderHealthRow,
   AdminProviderHealthStatus,
@@ -1935,6 +1936,11 @@ export default async function AdminPage(
         <div id="stat-reingest">
           <AccordionSection title="Re-ingest stats & rescore weeks" eyebrow="redraft scoring" defaultOpen={false}>
             <StatReingestPanel />
+          </AccordionSection>
+        </div>
+        <div id="contract-capture">
+          <AccordionSection title="Provider contract capture" eyebrow="yahoo · espn · owner only" defaultOpen={false}>
+            <ContractCapturePanel />
           </AccordionSection>
         </div>
 

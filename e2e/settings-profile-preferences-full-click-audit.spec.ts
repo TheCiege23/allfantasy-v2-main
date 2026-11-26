@@ -231,7 +231,8 @@ test.describe("@db @settings full settings profile preferences click audit", () 
     await expect(page.getByText("NCAA Football")).toBeVisible()
 
     // Quick links back into settings/preferences
-    await page.getByRole("link", { name: "Profile & settings" }).click()
+    // The card's Settings button (2026-11-25: the "Profile & settings" quick link repeated it).
+    await page.getByTestId("profile-settings-link").click()
     await expect(page).toHaveURL(/\/settings/)
     await page.getByRole("button", { name: "Preferences" }).click()
     await expect(page.getByRole("heading", { name: "Preferences" })).toBeVisible()

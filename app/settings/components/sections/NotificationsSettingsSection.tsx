@@ -64,6 +64,16 @@ const BULK_CATEGORY_IDS = VISIBLE_CATEGORY_IDS.filter((id) => !OPT_IN_NOTIFICATI
 
 const BULK_EMAIL_CATEGORY_IDS = BULK_CATEGORY_IDS.filter((id) => !isPushAndInAppOnly(id))
 
+/** The categories in the "By category" list — the imported-league ones have their own row below. */
+const NATIVE_CATEGORY_IDS = VISIBLE_CATEGORY_IDS.filter((id) => !id.startsWith("imported_"))
+
+/* A closed card whose summary is a 44px row (2026-11-25, the simplify pass). */
+const FOLD_CARD = "group rounded-xl border border-[var(--border)] bg-[var(--panel2)]"
+const FOLD_SUMMARY =
+  "flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2 px-4 py-2.5 [&::-webkit-details-marker]:hidden"
+const FOLD_BODY = "space-y-3 px-4 pb-4"
+const FOLD_CHEVRON = "text-xs text-[var(--muted)] transition-transform group-open:rotate-180"
+
 export function NotificationsSettingsSection({
   profile,
   onRefetch,
@@ -337,9 +347,10 @@ export function NotificationsSettingsSection({
         <h2 className="text-lg font-semibold text-[var(--text)]">
           {t("settings.notifications.title")}
         </h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          {t("settings.notifications.subtitle")}
-        </p>
+        {/*
+          No intro sentence (2026-11-25, the simplify pass): it listed the alert kinds the cards
+          below already name, one by one.
+        */}
       </div>
 
       <div
@@ -393,7 +404,7 @@ export function NotificationsSettingsSection({
             return (
               <label
                 key={level}
-                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 ${
                   selected ? "border-[var(--accent-cyan)] bg-[var(--panel)]" : "border-[var(--border)]"
                 }`}
                 data-testid={`notifications-live-level-${level}`}
@@ -414,9 +425,12 @@ export function NotificationsSettingsSection({
                   <span className="block text-sm font-medium text-[var(--text)]">
                     {t(LIVE_ALERT_LEVEL_LABEL_KEYS[level].name)}
                   </span>
-                  <span className="mt-0.5 block text-xs text-[var(--muted)]">
-                    {t(LIVE_ALERT_LEVEL_LABEL_KEYS[level].definition)}
-                  </span>
+                  {/* Only the chosen level spells itself out; the others are one line each. */}
+                  {selected ? (
+                    <span className="mt-0.5 block text-xs text-[var(--muted)]" data-testid="notifications-level-definition">
+                      {t(LIVE_ALERT_LEVEL_LABEL_KEYS[level].definition)}
+                    </span>
+                  ) : null}
                 </span>
               </label>
             )
@@ -443,7 +457,7 @@ export function NotificationsSettingsSection({
             return (
               <label
                 key={level}
-                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 ${
                   selected ? "border-[var(--accent-cyan)] bg-[var(--panel)]" : "border-[var(--border)]"
                 }`}
                 data-testid={`notifications-player-news-${level}`}
@@ -464,9 +478,11 @@ export function NotificationsSettingsSection({
                   <span className="block text-sm font-medium text-[var(--text)]">
                     {t(PLAYER_NEWS_LEVEL_LABEL_KEYS[level].name)}
                   </span>
-                  <span className="mt-0.5 block text-xs text-[var(--muted)]">
-                    {t(PLAYER_NEWS_LEVEL_LABEL_KEYS[level].definition)}
-                  </span>
+                  {selected ? (
+                    <span className="mt-0.5 block text-xs text-[var(--muted)]" data-testid="notifications-level-definition">
+                      {t(PLAYER_NEWS_LEVEL_LABEL_KEYS[level].definition)}
+                    </span>
+                  ) : null}
                 </span>
               </label>
             )
@@ -709,7 +725,27 @@ export function NotificationsSettingsSection({
         {/* Teams you follow — the permanent home for the one-time My Team prompt's choices. Its alerts
             use the "Teams you follow" category in the list right below. */}
         <TeamFollowsSettingsCard />
-        <p className="text-sm font-medium text-[var(--muted2)]">{t("settings.notifications.byCategory")}</p>
+      </div>
+
+      {/*
+        The ~27 per-category switches are a closed row (2026-11-25, the simplify pass): about 1,500px
+        open on a phone, under the level choices above that already set what most people want. The
+        summary says how many are on, so nothing is hidden about the state.
+      */}
+      <details className={FOLD_CARD} data-testid="notifications-categories">
+        <summary className={FOLD_SUMMARY}>
+          <span className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.byCategory")}</span>
+          <span className="flex items-center gap-2 text-xs text-[var(--muted)]">
+            <span data-testid="notifications-categories-count">
+              {tInterpolate("settings.notifications.categoriesOnCount", {
+                on: NATIVE_CATEGORY_IDS.filter((id) => (prefs.categories?.[id] ?? getDefaultCategoryPreferences(id)).enabled).length,
+                total: NATIVE_CATEGORY_IDS.length,
+              })}
+            </span>
+            <span aria-hidden="true" className={FOLD_CHEVRON}>▾</span>
+          </span>
+        </summary>
+        <div className={FOLD_BODY}>
         {profile?.phoneVerifiedAt && !smsConsented ? (
           <p className="text-xs text-[var(--muted2)]" data-testid="sms-needs-consent">
             {t("settings.notifications.smsNeedsConsent")}
@@ -726,7 +762,7 @@ export function NotificationsSettingsSection({
           </p>
         ) : null}
         <ul className="space-y-2">
-          {VISIBLE_CATEGORY_IDS.filter((id) => !id.startsWith("imported_")).map((categoryId) => (
+          {NATIVE_CATEGORY_IDS.map((categoryId) => (
             <li key={categoryId}>
               <NotificationCategoryRenderer
                 categoryId={categoryId}
@@ -740,10 +776,22 @@ export function NotificationsSettingsSection({
             </li>
           ))}
         </ul>
-      </div>
+        </div>
+      </details>
 
-      <section aria-labelledby="imported-league-alerts-title" className="space-y-2" data-testid="imported-league-alerts">
-        <h3 id="imported-league-alerts-title" className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.importedTitle")}</h3>
+      <section aria-labelledby="imported-league-alerts-title" data-testid="imported-league-alerts">
+        <details className={FOLD_CARD}>
+        <summary className={FOLD_SUMMARY}>
+          <h3 id="imported-league-alerts-title" className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.importedTitle")}</h3>
+          <span className="flex items-center gap-2 text-xs text-[var(--muted)]">
+            {tInterpolate("settings.notifications.categoriesOnCount", {
+              on: IMPORTED_NOTIFICATION_CATEGORY_IDS.filter((id) => prefs.categories?.[id]?.enabled === true).length,
+              total: IMPORTED_NOTIFICATION_CATEGORY_IDS.length,
+            })}
+            <span aria-hidden="true" className={FOLD_CHEVRON}>▾</span>
+          </span>
+        </summary>
+        <div className={FOLD_BODY}>
         <p className="text-xs text-[var(--muted)]">
           {t("settings.notifications.importedHint")}
         </p>
@@ -762,6 +810,8 @@ export function NotificationsSettingsSection({
             </li>
           ))}
         </ul>
+        </div>
+        </details>
       </section>
 
       {remoteUpdatePending && (
@@ -777,8 +827,12 @@ export function NotificationsSettingsSection({
         </div>
       )}
 
-      <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4">
-        <p className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.testTitle")}</p>
+      <details className={FOLD_CARD} data-testid="notifications-test-fold">
+        <summary className={FOLD_SUMMARY}>
+          <span className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.testTitle")}</span>
+          <span aria-hidden="true" className={FOLD_CHEVRON}>▾</span>
+        </summary>
+        <div className={FOLD_BODY}>
         <div className="flex flex-wrap items-center gap-2">
           <select
             aria-label={t("settings.notifications.testCategoryAria")}
@@ -814,15 +868,18 @@ export function NotificationsSettingsSection({
             {testResultMessage}
           </p>
         )}
-      </div>
+        </div>
+      </details>
 
-      <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4">
-        <div>
-          <p className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.chimmyTitle")}</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">
+      <details className={FOLD_CARD} data-testid="notifications-chimmy-fold">
+        <summary className={FOLD_SUMMARY}>
+          <span className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.chimmyTitle")}</span>
+          <span aria-hidden="true" className={FOLD_CHEVRON}>▾</span>
+        </summary>
+        <div className={FOLD_BODY}>
+          <p className="text-xs text-[var(--muted)]">
             {t("settings.notifications.chimmyHint")}
           </p>
-        </div>
         <ChimmyAlertPreferencesPanel />
         <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2">
           <label className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -843,7 +900,8 @@ export function NotificationsSettingsSection({
             <kbd className="rounded border border-[var(--border)] px-1 py-0.5">Ctrl/Cmd+Shift+K</kbd>
           </p>
         </div>
-      </div>
+        </div>
+      </details>
 
       {/*
         The save bar. Every switch above is a DRAFT until this saves, and on a phone this tab is
@@ -903,13 +961,7 @@ export function NotificationsSettingsSection({
         >
           {t("settings.notifications.sportsAlertsPage")}
         </a>
-        <a
-          href="/settings?tab=profile"
-          data-testid="notifications-back-to-profile-link"
-          className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text)]"
-        >
-          {t("settings.notifications.backToProfile")}
-        </a>
+        {/* No "Back to profile" (2026-11-25): "All settings" at the top already goes back. */}
       </div>
     </fieldset>
   )

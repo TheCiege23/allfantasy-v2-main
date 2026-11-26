@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { computeDraftCountdownSeconds } from '@/lib/draft/computeDraftCountdownSeconds'
+import {
+  computeDraftCountdownSeconds,
+  snapshotDraftCountdownSeconds,
+} from '@/lib/draft/computeDraftCountdownSeconds'
 
 type DraftCountdownPauseReason = 'commissioner' | 'overnight_window' | null | undefined
 
@@ -20,6 +23,12 @@ type UseDraftCountdownOpts = {
  * end time so the UI still ticks between polls (re-syncs whenever `serverRemainingSeconds` changes).
  *
  * Single interval per hook instance: cleans up on unmount and when timer inputs change.
+ *
+ * ⚠ HYDRATION: the server render and the browser's FIRST render must not read the clock — they run
+ * seconds apart, so a `Date.now()`-derived value differs (server "0:55", client "0:52") and React
+ * throws away the tree. Until mount both print the snapshot's own `serverRemainingSeconds` (see
+ * `snapshotDraftCountdownSeconds`); the mount effect then switches to the live clock, immediately.
+ * Same shape as `useLaunchClock`.
  */
 export function useDraftCountdownSeconds(
   timerStatus: 'running' | 'paused' | 'expired' | 'none',
@@ -27,10 +36,15 @@ export function useDraftCountdownSeconds(
   serverRemainingSeconds: number | null | undefined,
   opts?: UseDraftCountdownOpts,
 ): number | null {
-  const [tick, setTick] = useState(0)
+  /** `null` until mounted: the server and hydration renders never read `Date.now()`. */
+  const [tick, setTick] = useState<number | null>(null)
   const softDeadlineMs = useRef<number | null>(null)
   const pauseReason = opts?.pauseReason
   const overnightResumeAtIso = opts?.overnightResumeAtIso
+
+  useEffect(() => {
+    setTick((t) => t ?? 0)
+  }, [])
 
   useEffect(() => {
     softDeadlineMs.current = null
@@ -56,12 +70,12 @@ export function useDraftCountdownSeconds(
       softDeadlineMs.current = Date.now() + Math.ceil(sec) * 1000
     }
 
-    const id = window.setInterval(() => setTick((t) => t + 1), 1000)
+    const id = window.setInterval(() => setTick((t) => (t ?? 0) + 1), 1000)
     return () => window.clearInterval(id)
   }, [timerStatus, timerEndAtIso, serverRemainingSeconds, pauseReason, overnightResumeAtIso])
 
   return useMemo(() => {
-    void tick
+    if (tick === null) return snapshotDraftCountdownSeconds(timerStatus, serverRemainingSeconds)
     return computeDraftCountdownSeconds(
       timerStatus,
       timerEndAtIso,

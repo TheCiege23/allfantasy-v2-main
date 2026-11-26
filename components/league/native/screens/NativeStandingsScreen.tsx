@@ -287,10 +287,16 @@ function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { le
                     ))}
                   </tbody>
                 </table>
-                <p className="nls-table-note">
-                  {cut ? (rd ? `The labelled line is the playoff cut (top ${cut}). ` : `Cyan line = playoff cut (top ${cut}). `) : ''}Order and tiebreaks follow your league&apos;s settings.
-                  {!anyOdds ? ' Playoff odds appear after AF runs this week’s forecast.' : ''}
-                </p>
+                {/* Redraft labels its cut line in the table ("PLAYOFF LINE · TOP 6"), so its note only says what the
+                    table cannot (2026-11-24, the simplify pass): why the odds are missing. Other formats keep theirs. */}
+                {rd ? (
+                  !anyOdds ? <p className="nls-table-note">Playoff odds appear after AF runs this week’s forecast.</p> : null
+                ) : (
+                  <p className="nls-table-note">
+                    {cut ? `Cyan line = playoff cut (top ${cut}). ` : ''}Order and tiebreaks follow your league&apos;s settings.
+                    {!anyOdds ? ' Playoff odds appear after AF runs this week’s forecast.' : ''}
+                  </p>
+                )}
                 {divisionTables.length ? (
                   <div data-testid="native-standings-divisions">
                     {divisionTables.map((group) => (

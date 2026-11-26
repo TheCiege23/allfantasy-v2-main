@@ -68,6 +68,7 @@ function TinyHeadshot({
   teamLogoUrl,
   teamAbbr,
   size = 26,
+  badgeSize,
 }: {
   name: string | null
   src: string | null
@@ -78,6 +79,7 @@ function TinyHeadshot({
   teamLogoUrl?: string | null
   teamAbbr?: string | null
   size?: number
+  badgeSize?: number
 }) {
   /** E.1: delegate to the shared PlayerAvatar so the URL classifier (which rejects data URIs and
    * team logos) is applied uniformly. The board cell stays at 22px and skips the team-logo badge
@@ -90,6 +92,7 @@ function TinyHeadshot({
       teamAbbr={teamAbbr}
       position={position}
       size={size}
+      badgeSize={badgeSize}
       testIdBase="draft-board-cell-headshot"
     />
   )
@@ -110,6 +113,11 @@ type DraftBoardCellProps = {
   isDevyRound?: boolean
   isCollegeRound?: boolean
   pickHighlight?: PickHighlightTone
+  /**
+   * Set on an empty slot the viewer's team owns: the tile is outlined in white and says so
+   * ("Your pick"), so a manager can see when they pick without counting columns.
+   */
+  viewerUpcomingLabel?: string | null
   /** When set, show a trade affordance (opens pick-trade flow from parent). */
   onTradeFromCell?: () => void
   /**
@@ -185,6 +193,7 @@ function DraftBoardCellInner({
   isDevyRound = false,
   isCollegeRound = false,
   pickHighlight = 'none',
+  viewerUpcomingLabel = null,
   emptyCellDirection = 'forward',
   onTradeFromCell,
   onViewTradeHistory,
@@ -305,7 +314,7 @@ function DraftBoardCellInner({
         isCurrentPick
           ? 'bg-[radial-gradient(120%_140%_at_0%_0%,color-mix(in_srgb,var(--af-league-accent,#22d3ee)_28%,transparent),#0d1020_62%)] ring-2 ring-[color:var(--af-league-accent,#67e8f9)]'
           : isEmpty
-            ? 'bg-[#2a2f45]'
+            ? `bg-[#2a2f45] ${viewerUpcomingLabel ? 'ring-2 ring-inset ring-white/80' : ''}`
             : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300 ring-offset-2 ring-offset-[#0b1428]' : ''} ${highlightClass(pickHighlight)}`
       }`}
       style={openPlayer ? { ...tileStyle, cursor: 'pointer' } : tileStyle}
@@ -388,9 +397,10 @@ function DraftBoardCellInner({
         </button>
       ) : null}
 
-      {/* Pick number in the corner, as Sleeper does, so it never costs the name a line. */}
+      {/* Pick number in the corner, as Sleeper does, so it never costs the name a line.
+          /85 on a fill, not /70: at 11px, /70 measured 3.49:1 on the lightest position tints (AA is 4.5:1). */}
       <span
-        className={`pointer-events-none absolute right-1.5 top-1 tabular-nums text-[11px] font-bold leading-none ${onFill ? 'text-[#14172a]/70' : 'text-white/65'}`}
+        className={`pointer-events-none absolute right-1.5 top-1 tabular-nums text-[11px] font-bold leading-none ${onFill ? 'text-[#14172a]/85' : 'text-white/65'}`}
         aria-hidden
       >
         {compactLabel}
@@ -448,6 +458,14 @@ function DraftBoardCellInner({
           ${pick.slotSalary.salary}
         </span>
       ) : null}
+      {isEmpty && viewerUpcomingLabel && !isCurrentPick ? (
+        <span
+          className="mt-0.5 block truncate text-center text-[11px] font-bold leading-tight text-white"
+          data-testid={`draft-board-cell-your-pick-${pick.overall}`}
+        >
+          {viewerUpcomingLabel}
+        </span>
+      ) : null}
       {isEmpty ? (
         <div className="mt-auto flex min-w-0 items-center justify-between gap-1 text-white/45">
           {emptyCellDirection === 'reverse' ? (
@@ -466,31 +484,34 @@ function DraftBoardCellInner({
         </div>
       ) : (
         /*
-         * Room v2 (2026-11): the headshot sits centred at the top of the tile, the name under it
-         * as "A. Runner", then position · team. Centred rather than tucked into a corner is the
-         * AF tile; it also keeps the name from wrapping around the photo on narrow boards.
+         * Room v2 (2026-11): on a phone the photo sits centred at the top of the tile, the name under
+         * it as "A. Runner", then position · team. On a desktop board (a tile 150px or wider —
+         * `af-tile-*` in globals.css; 2026-11-24, owner's call) the photo and team logo sit on the
+         * LEFT and the text on the right. A crowded 12-team board's narrow tiles keep the stack.
+         * The logo is the avatar's corner badge, drawn larger than before and no longer clipped by a
+         * round frame (it had shrunk to a sliver).
          */
         <div
-          className={`flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-center ${onFill ? 'text-[#14172a]' : 'text-white'}`}
+          className={`af-tile-body flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-px text-center ${onFill ? 'text-[#14172a]' : 'text-white'}`}
           data-testid={`draft-board-cell-body-${pick.overall}`}
         >
           {/* Only a real photo: with none, an initials circle read as a dark blob over the name. A tile
-              already carrying a badge row (keeper, devy, trade) gives the photo's height to the text. */}
+              already carrying a badge row (keeper, devy, trade) gives the photo's height to the text.
+              `leading-[0]`: the avatar is an inline-block, so a line box made each wrapper 36px tall for a
+              32px photo. Measured 2026-11-25: that left the photo 1.4px from the tile's top edge. */}
           {hasRealHeadshot && !hasStatusBadges ? (
-            <div
-              className={`shrink-0 overflow-hidden rounded-full ${onFill ? 'bg-black/15 ring-2 ring-white/40' : 'ring-1 ring-white/20'}`}
-              data-testid={`draft-board-cell-headshot-wrap-${pick.overall}`}
-            >
-              <TinyHeadshot
-                name={pick.playerName}
-                src={headshotSrc}
-                position={pick.position}
-                teamLogoUrl={teamLogoSrc}
-                teamAbbr={pick.team}
-                size={26}
-              />
+            <div className="shrink-0" data-testid={`draft-board-cell-headshot-wrap-${pick.overall}`}>
+              <span className={`af-tile-photo-sm block rounded-full leading-[0] ${onFill ? 'bg-black/15 ring-2 ring-white/40' : 'ring-1 ring-white/20'}`}>
+                <TinyHeadshot name={pick.playerName} src={headshotSrc} position={pick.position}
+                  teamLogoUrl={teamLogoSrc} teamAbbr={pick.team} size={32} badgeSize={16} />
+              </span>
+              <span className={`af-tile-photo-lg hidden rounded-full leading-[0] ${onFill ? 'bg-black/15 ring-2 ring-white/40' : 'ring-1 ring-white/20'}`}>
+                <TinyHeadshot name={pick.playerName} src={headshotSrc} position={pick.position}
+                  teamLogoUrl={teamLogoSrc} teamAbbr={pick.team} size={46} badgeSize={22} />
+              </span>
             </div>
           ) : null}
+          <div className="af-tile-text flex min-w-0 max-w-full flex-col items-center gap-px">
           {viaOwner ? (
             <span
               className={`max-w-full truncate rounded-[3px] px-0.5 text-[11px] font-semibold leading-[12px] ${onFill ? 'bg-black/20 text-[#14172a]' : 'bg-white/15 text-white'}`}
@@ -500,10 +521,10 @@ function DraftBoardCellInner({
               {tInterpolate('draftRoom.board.viaOwner', { owner: viaOwner })}
             </span>
           ) : null}
-          <span className="block max-w-full truncate text-[12px] leading-[14px] tracking-tight" title={pick.playerName ?? undefined}>
+          <span className="af-tile-name block max-w-full truncate text-[12px] leading-[14px] tracking-tight" title={pick.playerName ?? undefined}>
             {/* "A. Runner" for the eye; the full name for screen readers and text search. */}
             <span aria-hidden>
-              {firstName ? <span className="font-medium opacity-80">{firstName.slice(0, 1)}. </span> : null}
+              {firstName ? <span className="font-medium opacity-90">{firstName.slice(0, 1)}. </span> : null}
               <span className="font-extrabold">{lastName}</span>
             </span>
             <span className="sr-only">{pick.playerName}</span>
@@ -511,13 +532,18 @@ function DraftBoardCellInner({
           {/*
             With a league signature chip the line stays ONE row: wrapping it pushed the player's name
             off an 84px tile (measured on phone and portrait tablet). The team truncates first — the
-            headshot already carries the team logo — and the ADP gap gives way below a 120px tile
-            (`af-tile-squeezable`, globals.css), where it no longer fits beside the chip.
+            headshot already carries the team logo.
+
+            ONE row on every tile, chip or not (2026-11-25). A 68px tile holds the photo and two lines
+            of text. Without a chip this line used to wrap, and a third line overflowed a stacked tile
+            by 13px: the photo rode up over the tile's top edge (seen on a 16-team board, 117px tiles).
+
+            NO ADP GAP HERE ("19 early" / "4 late"; owner's call, 2026-11-25). It was that third line,
+            it is the least useful thing on a tile this small, and the recap already names the best
+            steal and the biggest reach. `pick.adpDelta` is still passed in; nothing on the tile shows it.
           */}
           <span
-            className={`flex max-w-full min-w-0 items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80 ${
-              pick.signatureChip || pick.slotSalary ? 'flex-nowrap' : 'flex-wrap'
-            }`}
+            className="flex max-w-full min-w-0 flex-nowrap items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-90 af-tile-info"
             data-testid={`draft-board-cell-info-${pick.overall}`}
           >
             <span className="min-w-0 truncate">
@@ -559,25 +585,6 @@ function DraftBoardCellInner({
                 <Gavel className="h-2.5 w-2.5" aria-hidden />${pick.amount}
               </span>
             ) : null}
-            {pick.adpDelta != null && pick.adpDelta !== 0 ? (
-              <span
-                className={`shrink-0 rounded bg-black/25 px-0.5 font-bold tabular-nums ${pick.signatureChip || pick.slotSalary ? 'af-tile-squeezable' : ''}`}
-                title={
-                  pick.adpDelta > 0
-                    ? `Taken ${pick.adpDelta} picks after ADP`
-                    : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
-                }
-                aria-label={
-                  pick.adpDelta > 0
-                    ? `Taken ${pick.adpDelta} picks after ADP`
-                    : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
-                }
-                data-testid="draft-board-cell-adp-delta"
-              >
-                {/* Words, not a bare "−5": nobody could tell what an unlabelled minus number meant. */}
-                {pick.adpDelta > 0 ? `${pick.adpDelta} late` : `${Math.abs(pick.adpDelta)} early`}
-              </span>
-            ) : null}
           </span>
           {isKept ? (
             <span
@@ -601,6 +608,7 @@ function DraftBoardCellInner({
               ) : pick.isViewerKeeper ? `Costs your Rd ${pick.round}` : `Costs Rd ${pick.round}`}
             </span>
           ) : null}
+          </div>
         </div>
       )}
     </div>

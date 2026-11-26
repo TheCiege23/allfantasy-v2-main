@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ClipboardList, Search, SlidersHorizontal } from 'lucide-react'
+import { ClipboardList, Search } from 'lucide-react'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import type { UserLeague } from '@/app/dashboard/types'
 import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
@@ -502,8 +502,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
           </div>
         </div>
       ) : null}
-      <div className="rdp-bar sticky top-0 z-10 space-y-3 border-b border-white/[0.07] bg-[#07071a] px-5 pb-3 pt-4">
-        <div className="flex flex-wrap gap-1.5" data-testid="players-tab-waiver-subnav">
+      {/* Sticky from md up only (2026-11-24): on a phone the bar is ~600px, taller than the screen, and a sticky
+          block that tall would leave the list scrolling behind it. */}
+      <div className="rdp-bar z-10 space-y-3 md:sticky md:top-0 border-b border-white/[0.07] bg-[#07071a] px-5 pb-3 pt-4">
+        {/* One sideways-scrolling row on a phone, wrapping from sm up (2026-11-24): two rows of chips said nothing more. */}
+        <div className="flex flex-nowrap gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-visible [scrollbar-width:none]" data-testid="players-tab-waiver-subnav">
           {PLAYER_SUBTABS.map((tab) => (
             <button
               key={tab.id}
@@ -511,7 +514,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               onClick={() => setActiveSubtab(tab.id)}
               data-testid={`players-tab-subtab-${tab.id}`}
               aria-pressed={activeSubtab === tab.id}
-              className={`rdp-sub rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition ${
+              className={`rdp-sub shrink-0 whitespace-nowrap rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition ${
                 activeSubtab === tab.id
                   ? 'border-[#ff3d81]/60 bg-[#ff3d81]/20 text-[#ffd7e5]'
                   : 'border-white/10 bg-white/[0.03] text-white/55 hover:border-white/25 hover:text-white/80'
@@ -547,14 +550,14 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-nowrap gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-visible [scrollbar-width:none]" data-testid="players-tab-positions">
           {positionRow.map((p) => (
             <button
               key={p}
               type="button"
               onClick={() => setPos(p)}
               aria-pressed={pos === p}
-              className={`rdp-posbtn rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+              className={`rdp-posbtn shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                 pos === p
                   ? 'border-[#ff3d81] bg-[#ff3d81]/20 text-[#ff3d81]'
                   : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20'
@@ -650,36 +653,28 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             </button>
           ))}
 
-          <button
-            type="button"
-            className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] text-white/50"
-            aria-label="Advanced filters"
-            data-testid="players-tab-advanced-filters"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-          </button>
+          {/* The "Advanced filters" icon went 2026-11-24: it had no handler, so it was a button that did nothing. */}
         </div>
+        {/* What the list is, said once (2026-11-24, the simplify pass). The second sentence named the data
+            pipeline ("the normalized redraft player foundation"), which tells a manager nothing. */}
         <p className="rdp-note text-[11px] text-white/35">
-          Showing top <span className="text-white/55">100</span> by projected points for this filter.{' '}
-          {freeAgents ? 'Free agents are not on any roster in this league (when available).' : null}{' '}
-          {normalizedPlayerSurfaceEnabled
-            ? 'Stats, projections, images, and logos are loading from the normalized redraft player foundation.'
-            : (
-              <>
-                Stats, injury, and season fantasy totals appear from the league player feed when available.
-              </>
-            )}
+          Showing top <span className="text-white/55">100</span> by projected points for this filter.
+          {freeAgents ? ' Free agents are not on any roster in this league.' : null}
         </p>
 
-        <div className="rdp-compare rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-3">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/45">Start A vs B</p>
-          <StartVsComparisonLauncher
-            leagueId={league.id}
-            sport={resolvedSport}
-            weekOrPeriod={`Week ${weekNum}`}
-            showNameInputs
-          />
-        </div>
+        {/* Start A vs B, folded until asked for (2026-11-24) — as the Scores tab already does: open, its two empty
+            name fields and hint were ~300px between the filters and the list. */}
+        <details className="rdp-compare rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-3" data-testid="players-tab-compare">
+          <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wide text-white/45">Start A vs B</summary>
+          <div className="mt-2">
+            <StartVsComparisonLauncher
+              leagueId={league.id}
+              sport={resolvedSport}
+              weekOrPeriod={`Week ${weekNum}`}
+              showNameInputs
+            />
+          </div>
+        </details>
           </>
         )}
       </div>

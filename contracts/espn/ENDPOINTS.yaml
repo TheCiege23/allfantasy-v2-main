@@ -72,6 +72,7 @@ support_matrix:
     fantasy_league: { status: probed, fixture: fixtures/fantasy-league.NFL.2026.json, captured: 2026-11-08, see: fantasy_nfl }
     fantasy_communication: { status: http_401_without_cookies, captured: 2026-11-08, see: fantasy_nfl.communication }
     fantasy_matchup: { status: probed, fixture: fixtures/fantasy-matchup.NFL.2026.week11.json, captured: 2026-11-24, see: fantasy_nfl_matchup }
+    fantasy_pending_transactions: { status: not_yet_captured, see: fantasy_nfl_pending }
   # Every other sport: not in this contract. Adding one = probe + fixture + this
   # matrix, in one commit.
 
@@ -351,3 +352,19 @@ fantasy_nfl_matchup:
   unverified:
     - Whether scoringPeriodId=N returns week N's roster block for a PAST N (GAPS S-01). Here N was the current week, so the parameter's effect is not shown. A writer that reads the current week on each sync and keeps the last value for locked players does not need it.
     - Stat corrections ESPN applies after the week rolls over are not seen by such a writer.
+
+fantasy_nfl_pending:
+  # GAPS.md T-03. NOT CAPTURED. Recorded 2026-11-25 with the owner-only capture button
+  # (app/api/admin/contract-capture, lib/league-import/espn/espnContractCapture.ts), which reads the
+  # owner's OWN league with the owner's OWN stored cookies and downloads one redacted file.
+  base_url: https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl
+  path: /seasons/{season}/segments/0/leagues/{league_id}
+  requests:
+    league_teams_transactions: { query: view=mTeam&view=mTransactions2, basis: "both views already in fantasy_nfl.query", status: not_yet_captured }
+    pending_transactions_candidate:
+      query: view=mPendingTransactions
+      basis: CANDIDATE view name — not named anywhere in this repo before 2026-11-25
+      status: not_yet_captured
+      note: ESPN may ignore an unknown view and answer 200 with the base league object, so a 200 alone does not prove the view exists. Read the body.
+  auth: owner's espn_s2 + SWID cookies, Cookie header only (pending offers are expected to be visible only to the teams involved)
+  privacy: owner rule 2026-11-25 — keep and show only offers the signed-in user sent or received (GAPS.md T-03)

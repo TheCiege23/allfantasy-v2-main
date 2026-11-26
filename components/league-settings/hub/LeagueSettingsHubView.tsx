@@ -236,7 +236,7 @@ export function LeagueSettingsHubView({
       </div>
 
       <div className="af-lsh-body" id="af-lsh-panel" role="tabpanel" aria-labelledby={`af-lsh-tab-${tab}`}>
-        <nav className="af-lsh-jump" aria-label={t('On this page')}>
+        <nav className="af-lsh-jump" aria-label={t('On this page')} onClick={openLinkedSection}>
           <span className="af-lsh-jump-label">{t('On this page')}</span>
           {sections.map((s) => (
             <a key={s.id} href={`#af-lsh-${s.id}`}>{t(s.label)}</a>
@@ -248,7 +248,7 @@ export function LeagueSettingsHubView({
           </div>
         </nav>
         <div className="af-lsh-stack">
-          <nav className="af-lsh-chips" aria-label={t('Sections')}>
+          <nav className="af-lsh-chips" aria-label={t('Sections')} onClick={openLinkedSection}>
             {sections.map((s) => (
               <a key={s.id} href={`#af-lsh-${s.id}`}>{t(s.label)}</a>
             ))}
@@ -317,20 +317,47 @@ function sectionsFor(tab: HubTabId, data: HubViewData): Array<{ id: string; labe
 
 /* ------------------------------------------------------------ primitives */
 
-function Card({ id, title, sub, action, children }: { id: string; title: string; sub?: string; action?: ReactNode; children: ReactNode }) {
+/**
+ * A section card. `fold` makes it a <details> whose summary is the card's own head (2026-11-24, the
+ * simplify pass): League Setup drew every section open — ~5,600px on a phone — so all but General now
+ * start closed, as one row each. The Edit button stays in the head and works without opening the card
+ * (a click on a button inside a summary does not toggle it), and the section chips open what they jump to.
+ */
+function Card({ id, title, sub, action, children, fold }: { id: string; title: string; sub?: string; action?: ReactNode; children: ReactNode; fold?: 'open' | 'closed' }) {
   const { t } = useT()
+  const head = (
+    <>
+      <div>
+        <h2 id={`af-lsh-${id}-title`}>{t(title)}</h2>
+        {sub ? <p>{t(sub)}</p> : null}
+      </div>
+      {action}
+    </>
+  )
+  if (fold) {
+    return (
+      <section className="af-lsh-card" id={`af-lsh-${id}`} aria-labelledby={`af-lsh-${id}-title`} data-fold="true">
+        <details className="af-lsh-fold" open={fold === 'open' || undefined} data-testid={`league-settings-fold-${id}`}>
+          <summary className="af-lsh-card-head">{head}</summary>
+          {children}
+        </details>
+      </section>
+    )
+  }
   return (
     <section className="af-lsh-card" id={`af-lsh-${id}`} aria-labelledby={`af-lsh-${id}-title`}>
-      <div className="af-lsh-card-head">
-        <div>
-          <h2 id={`af-lsh-${id}-title`}>{t(title)}</h2>
-          {sub ? <p>{t(sub)}</p> : null}
-        </div>
-        {action}
-      </div>
+      <div className="af-lsh-card-head">{head}</div>
       {children}
     </section>
   )
+}
+
+/** A section link was tapped: open the folded card it points at, then let the browser jump to it. */
+function openLinkedSection(event: { target: EventTarget }) {
+  const link = (event.target as HTMLElement | null)?.closest?.('a[href^="#af-lsh-"]')
+  const id = link?.getAttribute('href')?.slice(1)
+  const fold = id ? document.getElementById(id)?.querySelector<HTMLDetailsElement>(':scope > details.af-lsh-fold') : null
+  if (fold) fold.open = true
 }
 
 function EditButton({ show, onClick, label = 'Edit' }: { show: boolean; onClick: () => void; label?: string }) {
@@ -710,17 +737,22 @@ function CommissionerHubTab({ data, cb, slots }: { data: HubViewData; cb: HubCal
       <Card id="season" title="Season controls" sub="Lineups, locks, members and points, for any team.">
         <HubLinks links={SEASON_LINKS} cb={cb} />
       </Card>
-      <Card id="schedule" title="Schedule" sub="Who plays whom each week.">
+      {/*
+        Below Season controls, one closed row each (2026-11-25, the simplify pass), as in League Setup:
+        open, the tab was ~2,700px on a phone. "Needs you" and Season controls — the queue and the tools
+        used week to week — stay open; the section chips open what they jump to.
+      */}
+      <Card id="schedule" fold="closed" title="Schedule" sub="Who plays whom each week.">
         <HubLinks links={SCHEDULE_LINKS} cb={cb} />
       </Card>
-      <Card id="rivalry" title="Rivalry Week" sub="Pick a week and pair each team with its biggest rival.">
+      <Card id="rivalry" fold="closed" title="Rivalry Week" sub="Pick a week and pair each team with its biggest rival.">
         {slots?.rivalryWeek ?? <HubLinks links={[{ label: 'Set up Rivalry Week', description: 'Preview the pairs, then apply them to that week.', panel: 'commissioner-tools:edit-schedule', testid: 'hub-rivalry-open' }]} cb={cb} />}
       </Card>
-      <Card id="options" title="League options" sub="The same settings as League Setup, with the editors that change them.">
+      <Card id="options" fold="closed" title="League options" sub="The same settings as League Setup, with the editors that change them.">
         {data.afOptions === undefined ? <Loading lines={2} /> : data.afOptions.length ? <AfOptionRows options={data.afOptions} cb={cb} canOpen /> : null}
         <HubLinks links={withoutAfDuplicates(leagueOptionLinks(data.kind, data.leagueId), data.afOptions)} cb={cb} />
       </Card>
-      <Card id="storyline" title="Storyline" sub="How Chimmy tells your season in the league chat.">
+      <Card id="storyline" fold="closed" title="Storyline" sub="How Chimmy tells your season in the league chat.">
         {slots?.storyline ?? <p className="af-lsh-empty">{t('Storyline loads here on the league page.')}</p>}
       </Card>
     </div>
@@ -806,6 +838,24 @@ function MyTab({ data, cb, slots }: { data: HubViewData; cb: HubCallbacks; slots
                 <Switch on={n.leagueEnabled} label={t('Alerts for this league')} onChange={cb.onToggleLeagueNotifications} />
               </div>
             </div>
+            {/*
+              The per-category switches behind one row (2026-11-25, the simplify pass): ~14 rows open on a
+              phone, under the one switch most people want here. The row says how many are on.
+            */}
+            <details className="af-lsh-subfold" data-testid="league-settings-notification-categories">
+              <summary className="af-lsh-row">
+                <span className="af-lsh-row-copy">
+                  <span>{t('By category')}</span>
+                  <span data-testid="league-settings-notification-count">
+                    {(() => {
+                      const all = n.groups.flatMap((g) => g.rows)
+                      const on = n.leagueEnabled ? all.filter((r) => n.on[r.id] !== false).length : 0
+                      return `${on} / ${all.length} ${t('on')}`
+                    })()}
+                  </span>
+                </span>
+                <span aria-hidden="true" className="af-lsh-subfold-chev">▾</span>
+              </summary>
             <GroupGrid
               groups={n.groups.map((g) => ({
                 key: g.key,
@@ -815,6 +865,7 @@ function MyTab({ data, cb, slots }: { data: HubViewData; cb: HubCallbacks; slots
               canEdit={n.leagueEnabled}
               onToggle={(field, next) => cb.onToggleNotification(field as NotificationCategoryId, next)}
             />
+            </details>
             <p className="af-lsh-empty">
               {t('Delivery channels (push, email, SMS) and quiet hours apply to every league.')} <a href="/settings?tab=notifications">{t('Manage them in account settings')}</a>.
             </p>
@@ -849,7 +900,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
 
   return (
     <>
-      <Card id="general" title="General Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('general')} />}>
+      <Card id="general" fold="open" title="General Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('general')} />}>
         <div className="af-lsh-card-body" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div className="af-lsh-avatar" aria-hidden>{data.leagueAvatarUrl ? <img src={data.leagueAvatarUrl} alt="" /> : initials(data.leagueName)}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
@@ -864,25 +915,25 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
         {data.general === undefined ? <Loading lines={5} /> : <GroupGrid groups={data.general} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
       </Card>
 
-      <Card id="waivers" title={data.kind === 'zombie' ? 'Free Agency' : 'Waiver Settings'} action={<EditButton show={edit} onClick={() => cb.onOpenEditor('waivers')} />}>
+      <Card id="waivers" fold="closed" title={data.kind === 'zombie' ? 'Free Agency' : 'Waiver Settings'} action={<EditButton show={edit} onClick={() => cb.onOpenEditor('waivers')} />}>
         {data.waivers === undefined ? <Loading /> : <GroupGrid groups={data.waivers} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
       </Card>
 
       {data.typeRules === undefined || data.typeRules.length ? (
-        <Card id="rules" title={meta.rulesTitle} sub={meta.blurb} action={<EditButton show={edit} onClick={() => cb.onOpenEditor(rulesEditorFor(data.kind))} />}>
+        <Card id="rules" fold="closed" title={meta.rulesTitle} sub={meta.blurb} action={<EditButton show={edit} onClick={() => cb.onOpenEditor(rulesEditorFor(data.kind))} />}>
           {data.typeRules === undefined ? <Loading /> : <GroupGrid groups={data.typeRules} canEdit={edit} />}
         </Card>
       ) : null}
 
       {data.afOptions === undefined || data.afOptions.length ? (
-        <Card id="afoptions" title="AllFantasy options" sub="Rules only AllFantasy has. Each one is also in the Commissioner Hub.">
+        <Card id="afoptions" fold="closed" title="AllFantasy options" sub="Rules only AllFantasy has. Each one is also in the Commissioner Hub.">
           {data.afOptions === undefined ? <Loading lines={2} /> : <AfOptionRows options={data.afOptions} cb={cb} canOpen={edit} tagged />}
         </Card>
       ) : null}
 
       <NotesCard note={data.commissionerNote} edit={edit} onSave={cb.onSaveNote} />
 
-      <Card id="roster" title="Roster Settings" sub="Starting positions and roster spots" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('roster')} />}>
+      <Card id="roster" fold="closed" title="Roster Settings" sub="Starting positions and roster spots" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('roster')} />}>
         {data.roster === undefined ? <Loading lines={4} /> : data.roster === null || data.roster.length === 0 ? (
           <p className="af-lsh-empty">{t('Roster positions aren’t available for this league yet.')}</p>
         ) : (
@@ -890,7 +941,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
         )}
       </Card>
 
-      <Card id="scoring" title="Scoring Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('scoring')} />}>
+      <Card id="scoring" fold="closed" title="Scoring Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('scoring')} />}>
         {scoring === undefined ? <Loading lines={4} /> : scoring === null || !activeCat ? (
           <p className="af-lsh-empty">{t('Scoring rules aren’t available for this league yet.')}</p>
         ) : (
@@ -909,7 +960,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
         )}
       </Card>
 
-      <Card id="draft" title="Draft Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('draft')} />}>
+      <Card id="draft" fold="closed" title="Draft Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('draft')} />}>
         {data.draft === undefined ? <Loading lines={4} /> : <GroupGrid groups={data.draft} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
         <div className="af-lsh-card-body" style={{ paddingTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
@@ -1073,7 +1124,11 @@ function MembersTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
   const members = data.members
   return (
     <>
-      <Card id="commissioners" title="Set Commissioners" sub="Co-commissioners can make roster and lineup changes for any team and manage league settings">
+      {/*
+        Folded (2026-11-25, the simplify pass): it listed every manager with a switch, and "Manage Members"
+        right below lists them again with their role. Only the head commissioner changes it.
+      */}
+      <Card id="commissioners" fold="closed" title="Set Commissioners" sub="Co-commissioners can make roster and lineup changes for any team and manage league settings">
         <div className="af-lsh-card-body">
           {members === undefined ? <Loading /> : (
             <div className="af-lsh-table">
@@ -1271,7 +1326,13 @@ function RecordTab({ data }: { data: HubViewData }) {
   const wk = (season: number | null | undefined, week: number | null | undefined) => `${season ?? ''}${week ? ` ${t('Wk')} ${week}` : ''}`
   return (
     <>
-      <Card id="history" title="League History" sub="Draft results and every past season">
+      {/*
+        Record Book, folded like League Setup (2026-11-25, the simplify pass): League History open, the
+        other four one closed row each. Open, the tab was ~4,400px on a phone — two 8-row high-score tables,
+        three paragraphs on how corrections work and a colour legend under the history. The section chips
+        open what they jump to.
+      */}
+      <Card id="history" fold="open" title="League History" sub="Draft results and every past season">
         <div className="af-lsh-card-body">
           <div className="af-lsh-split" data-even="true">
             <div className="af-lsh-list">
@@ -1297,7 +1358,7 @@ function RecordTab({ data }: { data: HubViewData }) {
         </div>
       </Card>
 
-      <Card id="standings" title="All-Time Standings" sub="Every season this league has played, added up">
+      <Card id="standings" fold="closed" title="All-Time Standings" sub="Every season this league has played, added up">
         <div className="af-lsh-card-body">
           {data.standings === undefined ? <Loading /> : !data.standings?.length ? (
             <p className="af-lsh-note" style={{ marginTop: 0 }}>{t('All-time standings start after the first completed season.')}</p>
@@ -1319,7 +1380,7 @@ function RecordTab({ data }: { data: HubViewData }) {
         </div>
       </Card>
 
-      <Card id="highs" title="All-Time High Scores" sub="The league’s biggest weeks, by team and by player">
+      <Card id="highs" fold="closed" title="All-Time High Scores" sub="The league’s biggest weeks, by team and by player">
         <div className="af-lsh-card-body">
           <div className="af-lsh-split" data-even="true">
             <div className="af-lsh-list">
@@ -1368,7 +1429,7 @@ function RecordTab({ data }: { data: HubViewData }) {
         </div>
       </Card>
 
-      <Card id="corrections" title="Stat Corrections" sub="Corrections are applied retroactively to each player’s total">
+      <Card id="corrections" fold="closed" title="Stat Corrections" sub="Corrections are applied retroactively to each player’s total">
         <CorrectionWeeks data={data.correctionWeeks} />
         <div className="af-lsh-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, lineHeight: 1.55, color: 'var(--lsh-muted)' }}>
           <span>{t('Our stats feed updates live during games, then posts official corrections over the next few days.')}</span>
@@ -1378,7 +1439,7 @@ function RecordTab({ data }: { data: HubViewData }) {
         </div>
       </Card>
 
-      <Card id="legend" title="League Legend" sub="What the colors and tags mean">
+      <Card id="legend" fold="closed" title="League Legend" sub="What the colors and tags mean">
         <div className="af-lsh-card-body">
           <div className="af-lsh-legend">
             <div>

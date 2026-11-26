@@ -8,15 +8,16 @@ import { DEFAULT_END_WEEK_BY_SPORT, getGuillotineConfig, upsertGuillotineConfig 
 import { resolveGuillotineEndgame } from './endgameRules'
 import { calendarFitMessage, guillotineCalendarFit } from './calendarFit'
 import { readGuillotineAdvanced } from './guillotineAdvancedSettings'
-import { DEFAULT_ADVANCED } from './chopSchedule'
+import { DEFAULT_ADVANCED, type GuillotineAdvanced } from './chopSchedule'
 import { hasFirstChopHappened } from './guillotineFirstChopWeek'
 import { normalizeGuillotineRulesPatch, paidFieldsChanged, RULE_DEFAULTS, AI_RECAP_AUTO_KEY, type GuillotineRuleField, type GuillotineRules } from './guillotineRules'
-import { FAAB_ON_CHOP_KEY, FAAB_RULES_CONFLICT_MESSAGE, readFaabOnChop } from './faabOnChop'
+import { DEFAULT_FAAB_ON_CHOP_PERCENT, FAAB_ON_CHOP_KEY, FAAB_ON_CHOP_PERCENT_KEY, FAAB_RULES_CONFLICT_MESSAGE, movesChoppedFaab, readFaabOnChop, readFaabOnChopPercent } from './faabOnChop'
 import { readAdvanced } from './chopSchedule'
 import { hasGuillotineAiRecapPlan } from './weeklyRecap'
 import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBestBall } from './guillotineBestBall'
 import { checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
 import { isPeriodEndWeek, PERIOD_WEEKS_KEY, readPeriodWeeks, supportsTwoWeekPeriods } from './eliminationPeriods'
+import { CHOP_LIST_ORDER_KEY, DEFAULT_CHOP_LIST_ORDER, readChopListOrder } from './chopListOrder'
 
 /**
  * Read and save the "League rules" page (rules and tiers in ./guillotineRules.ts).
@@ -47,6 +48,13 @@ export type GuillotineRulesView = {
   canEditPaid: boolean
   /** The viewer's plan includes Chimmy recaps (AF Pro or AF Commissioner), so `aiRecapAuto` takes effect. */
   aiRecapAvailable: boolean
+  /**
+   * The chop schedule, special weeks, immunity and FAAB after a chop (./chopSchedule.ts), as saved. The one Guilly
+   * rules page edits them beside the rules, and saves them through `{ advanced }` (./guillotineAdvancedSettings.ts).
+   */
+  advanced: GuillotineAdvanced
+  /** Teams in the league: what the rules page's season preview walks (./calendarFit.ts), as the save's check does. */
+  teamCount: number
 }
 
 export async function viewerCanEditPaidGuillotineRules(userId: string): Promise<boolean> {
@@ -62,10 +70,12 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
   if (!config || !league) return null
   const sport = normalizeToSupportedSport(league.sport) as LeagueSport
   const seasonWeeks = DEFAULT_END_WEEK_BY_SPORT[sport] ?? 18
-  const [endgameLocked, canEditPaid, aiRecapAvailable] = await Promise.all([
+  const [endgameLocked, canEditPaid, aiRecapAvailable, teamCount] = await Promise.all([
     hasFirstChopHappened(leagueId).catch(() => false),
     viewerCanEditPaidGuillotineRules(userId),
     hasGuillotineAiRecapPlan(userId).catch(() => false),
+    // The same count the calendar check below uses. Never fails the page: 0 simply draws no preview.
+    Promise.resolve().then(() => prisma.roster.count({ where: { leagueId } })).then((n) => n ?? 0).catch(() => 0),
   ])
   const settings = (league.settings as Record<string, unknown> | null) ?? {}
   return {
@@ -80,8 +90,10 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
       rosterReleaseTiming: config.rosterReleaseTiming === 'immediate' ? 'immediate' : 'next_waiver_run',
       aiRecapAuto: settings[AI_RECAP_AUTO_KEY] !== false,
       faabOnChop: readFaabOnChop(settings),
+      faabOnChopPercent: readFaabOnChopPercent(settings),
       bestBall: readGuillotineBestBall(settings),
       periodWeeks: readPeriodWeeks(settings),
+      chopListOrder: readChopListOrder(settings),
     },
     startWeek: config.eliminationStartWeek,
     seasonWeeks,
@@ -91,6 +103,8 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
     bestBallLocked: !canChangeGuillotineBestBall(league),
     canEditPaid,
     aiRecapAvailable,
+    advanced: readAdvanced(settings),
+    teamCount,
   }
 }
 
@@ -157,7 +171,9 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
   // (lib/guillotine/calendarFit.ts). Checked against the league's chop schedule and team count.
   if (patch.eliminationEndWeek !== undefined || patch.teamsPerChop !== undefined || patch.endgame !== undefined || patch.periodWeeks !== undefined) {
     const nextEndgame = resolveGuillotineEndgame({ settings: { guillotineEndgame: patch.endgame ?? current.rules.endgame } })
-    const teamCount = (await prisma.roster.count({ where: { leagueId } })) ?? 0
+    // The count `readGuillotineRules` took above. It reads 0 when that count failed, and then this asks again, so
+    // a count that cannot be made still fails the save rather than skipping the check.
+    const teamCount = current.teamCount > 0 ? current.teamCount : ((await prisma.roster.count({ where: { leagueId } })) ?? 0)
     const advanced = teamCount > 0 ? await readGuillotineAdvanced(leagueId) : null
     const calendar = {
       teamCount,
@@ -179,7 +195,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
     }
   }
 
-  const { endgame, aiRecapAuto, faabOnChop, bestBall, periodWeeks, ...configPatch } = patch
+  const { endgame, aiRecapAuto, faabOnChop, faabOnChopPercent, bestBall, periodWeeks, chopListOrder, ...configPatch } = patch
   if (Object.keys(configPatch).length > 0) {
     const row = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
     if (row) {
@@ -209,18 +225,30 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
   const faabChanged = faabOnChop !== undefined && faabOnChop !== current.rules.faabOnChop
   const bestBallChanged = bestBall !== undefined && bestBall !== current.rules.bestBall
   const periodChanged = periodWeeks !== undefined && periodWeeks !== current.rules.periodWeeks
-  if (endgameChanged || recapChanged || faabChanged || bestBallChanged || periodChanged) {
+  const listOrderChanged = chopListOrder !== undefined && chopListOrder !== current.rules.chopListOrder
+  const faabPercentChanged = faabOnChopPercent !== undefined && faabOnChopPercent !== current.rules.faabOnChopPercent
+  if (endgameChanged || recapChanged || faabChanged || faabPercentChanged || bestBallChanged || periodChanged || listOrderChanged) {
     // League.settings is shared by every settings writer: take the row lock (as chop rules do).
     const conflict = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
       // Split and "FAAB after a chop" cannot be on together (faabOnChop.ts); checked under the lock.
-      if (faabChanged && faabOnChop === 'split' && readAdvanced(row?.settings).faab.mode !== 'unchanged') return true
+      if (faabChanged && faabOnChop && movesChoppedFaab(faabOnChop) && readAdvanced(row?.settings).faab.mode !== 'unchanged') return true
       const settings: Record<string, unknown> = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
       if (endgameChanged) settings.guillotineEndgame = endgame
       if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
       if (faabChanged) settings[FAAB_ON_CHOP_KEY] = faabOnChop
+      // The default (all of it) is removed rather than stored, as the list order is.
+      if (faabPercentChanged) {
+        if (faabOnChopPercent === DEFAULT_FAAB_ON_CHOP_PERCENT) delete settings[FAAB_ON_CHOP_PERCENT_KEY]
+        else settings[FAAB_ON_CHOP_PERCENT_KEY] = faabOnChopPercent
+      }
       if (bestBallChanged) settings[GUILLOTINE_BEST_BALL_KEY] = bestBall
+      // The default is removed rather than stored, so a league that never chose reads the default wherever it changes.
+      if (listOrderChanged) {
+        if (chopListOrder === DEFAULT_CHOP_LIST_ORDER) delete settings[CHOP_LIST_ORDER_KEY]
+        else settings[CHOP_LIST_ORDER_KEY] = chopListOrder
+      }
       // One week is the default: the key is removed rather than stored, so the league reads as before.
       if (periodChanged) {
         if (periodWeeks === 2) settings[PERIOD_WEEKS_KEY] = 2

@@ -4,12 +4,18 @@ type AdpLikeEntry = {
   team?: string | null
   adp?: number | null
   aiAdp?: number | null
+  display?: { stats?: { projectedPointsPerGame?: number | null } | null } | null
 }
 
 function normalizeAdpValue(value: number | null | undefined): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   if (value <= 0) return null
   return value
+}
+
+function projectedRate(entry: AdpLikeEntry): number | null {
+  const value = entry.display?.stats?.projectedPointsPerGame
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
 export function resolvePreferredAdp(
@@ -38,6 +44,20 @@ export function compareDraftEntriesByStableRank(
   if (aiA != null && aiB != null && aiA !== aiB) return aiA - aiB
   if (aiA != null && aiB == null) return -1
   if (aiA == null && aiB != null) return 1
+
+  /*
+   * Neither has an ADP of any kind: the higher projected scorer first. Without this a sport with no
+   * ADP feed lists, and autopicks, alphabetically — NBA did until its ADP import (fantraxNbaAdp.ts),
+   * and college basketball did on 2026-11-25. Only the per-game projection key is read, so NFL, whose
+   * boards are ADP-ordered, is unaffected.
+   */
+  if (adpA == null && adpB == null && aiA == null && aiB == null) {
+    const projA = projectedRate(a)
+    const projB = projectedRate(b)
+    if (projA != null && projB != null && projA !== projB) return projB - projA
+    if (projA != null && projB == null) return -1
+    if (projA == null && projB != null) return 1
+  }
 
   const nameCmp = String(a.name ?? '').localeCompare(String(b.name ?? ''), undefined, { sensitivity: 'base' })
   if (nameCmp !== 0) return nameCmp

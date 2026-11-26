@@ -117,6 +117,8 @@ export default function MessagesContent() {
 
   const [threads, setThreads] = useState<PlatformChatThread[]>([])
   const [loadingThreads, setLoadingThreads] = useState(true)
+  /** True once the first thread list has come back — see the selection check below. */
+  const [threadsLoaded, setThreadsLoaded] = useState(false)
   const [activeTab, setActiveTab] = useState<"dm" | "groups" | "ai">(() => resolveMessagesTab(tabFromUrl))
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadIdFromUrl)
   const [messages, setMessages] = useState<PlatformChatMessage[]>([])
@@ -228,6 +230,7 @@ export default function MessagesContent() {
       setThreads(list)
     } finally {
       setLoadingThreads(false)
+      setThreadsLoaded(true)
     }
   }, [])
 
@@ -341,6 +344,13 @@ export default function MessagesContent() {
 
   useEffect(() => {
     if (!selectedThreadId) return
+    /*
+     * 🛑 Wait for the list (2026-11-25). A notification opens /messages?thread=<id>, so the page starts
+     * with that thread selected and NO threads loaded. Checking then found "not in the list", cleared
+     * the selection, and nothing set it again — every chat and @mention notification landed on the
+     * inbox instead of the conversation. Only a loaded list can say a thread is gone.
+     */
+    if (!threadsLoaded) return
     const selected = threads.find((t) => t.id === selectedThreadId)
     if (!selected) {
       setSelectedThreadId(null)
@@ -353,7 +363,7 @@ export default function MessagesContent() {
       if (selected.threadType === "dm") setActiveTab("dm")
       return
     }
-  }, [activeTab, selectedThreadId, threads])
+  }, [activeTab, selectedThreadId, threads, threadsLoaded])
 
   const loadMessages = useCallback(async (tid: string, options?: { refreshThreads?: boolean }) => {
     setLoadingMessages(true)
@@ -816,7 +826,14 @@ export default function MessagesContent() {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="mode-panel rounded-2xl p-3">
+      {/*
+        While a conversation is open on a phone the tabs step aside (2026-11-25, the simplify pass): the
+        conversation's Back arrow returns to the list they sit over.
+      */}
+      <section
+        className={`mode-panel rounded-2xl p-2 sm:p-3 ${selectedThreadId && activeTab !== "ai" ? "hidden md:block" : ""}`}
+        data-testid="messages-tabs"
+      >
         <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [-webkit-overflow-scrolling:touch]">
           {TABS.map((tab) => (
             <button
@@ -864,8 +881,8 @@ export default function MessagesContent() {
 
       {(activeTab === "dm" || activeTab === "groups") && (
         <section
-          className="mode-panel rounded-2xl border overflow-hidden"
-          style={{ borderColor: "var(--border)", minHeight: "420px" }}
+          className="mode-panel rounded-2xl border overflow-hidden md:min-h-[420px]"
+          style={{ borderColor: "var(--border)" }}
         >
           <div className="grid grid-cols-[minmax(0,1fr)] md:grid-cols-[280px_minmax(0,1fr)]">
             <div
@@ -1296,8 +1313,12 @@ export default function MessagesContent() {
                       </button>
                     </div>
                   )}
-                  <div className="flex gap-2 p-3 border-t" style={{ borderColor: "var(--border)" }}>
-                    <div className="flex items-center gap-0.5">
+                  {/*
+                    On a phone the five tool icons are their own row under the message box (2026-11-25, the
+                    simplify pass): beside it they left "Message." — about 90px to type in on a 390px screen.
+                  */}
+                  <div className="flex flex-wrap gap-2 p-3 border-t sm:flex-nowrap" style={{ borderColor: "var(--border)" }}>
+                    <div className="order-last flex w-full items-center gap-0.5 sm:order-none sm:w-auto" data-testid="messages-composer-tools">
                       {!selectedThreadIsDraftIntel && (
                         <>
                           <button

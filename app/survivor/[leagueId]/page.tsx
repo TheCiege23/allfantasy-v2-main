@@ -7,7 +7,7 @@ import { LeagueClipOverlayHost } from '@/components/league/LeagueClipOverlayHost
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { TribeCard } from '@/app/survivor/components/TribeCard'
-import { islandExileCountLine, islandHeroCopy, islandTribeTotals } from '@/lib/survivor/survivorIslandView'
+import { islandChallengeScopeWord, islandExileCountLine, islandHeroCopy, islandTribeTotals } from '@/lib/survivor/survivorIslandView'
 import type { SurvivorSeasonPlayer } from '@/lib/survivor/survivorUiTypes'
 import { SurvivorHubBanner } from '@/app/survivor/components/SurvivorHubBanner'
 import { legacyIslandScene } from '@/lib/survivor/survivorLegacyIsland'
@@ -222,7 +222,7 @@ export default function SurvivorIslandHomePage() {
             <>
               <p className="sv-h mt-2 text-lg">{ch.title || 'Island challenge'}</p>
               <p className="mt-1 text-[12px] text-white/55">
-                {(ch.scope ?? 'tribe').toUpperCase()} · {ch.submissionMode ?? 'tribe_chat'}
+                {islandChallengeScopeWord(ch.scope)}
               </p>
               <p className="mt-2 text-[13px] text-white/70">{ch.description || ch.instructions}</p>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -254,8 +254,8 @@ export default function SurvivorIslandHomePage() {
           <h2 className="sv-kicker text-[12px] !text-violet-200">Exile Island</h2>
           <p className="mt-2 text-[13px] text-white/70">
             {ctx.season.exileMembershipHidden === true && ctx.playerState !== 'exile'
-              ? 'Who is on Exile is secret in this league · Return path follows commissioner rules.'
-              : `${islandExileCountLine((ctx.season.players ?? []).filter((p) => p.playerState === 'exile').length)} · Return path follows commissioner rules.`}
+              ? 'Who is on Exile is secret in this league.'
+              : `${islandExileCountLine((ctx.season.players ?? []).filter((p) => p.playerState === 'exile').length)}. Exiles can earn their way back.`}
           </p>
           <Link href={`${base}/exile`} className="mt-2 inline-block text-[12px] text-violet-300">
             Open Exile →

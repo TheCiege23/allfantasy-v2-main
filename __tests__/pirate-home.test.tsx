@@ -47,8 +47,9 @@ describe('Pirate Deck', () => {
     }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => dashboard }))
     render(<PirateHome leagueId="league" isCommissioner />)
-    await waitFor(() => expect(screen.getByText(/free 1 spot before another acquisition/i)).toBeTruthy())
-    expect(screen.getByText('Commissioner review')).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('pirate-roster-overflow').textContent).toMatch(/Free 1 spot/))
+    // The commissioner is this claim's winner, so the review is folded and says it needs a look (2026-11-24).
+    expect(screen.getByText('Commissioner review · needs a look')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Start response window' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Void claim' })).toBeTruthy()
     expect(screen.getByText(/Automatic lineup ruling/)).toBeTruthy()

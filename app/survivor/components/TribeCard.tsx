@@ -54,11 +54,9 @@ export function TribeCard({
           <span className="sv-immune text-[11px] font-bold uppercase tracking-wide">🛡 Immune</span>
         ) : status === 'tribal' ? (
           <span className="tribal-dot-pulse text-[11px] font-bold uppercase tracking-wide text-[#f08a72]">
-            🔥 Tribal tonight
+            🔥 At Tribal Council
           </span>
-        ) : (
-          <span className="text-[11px] text-white/35">—</span>
-        )}
+        ) : null}
       </div>
     </article>
   )

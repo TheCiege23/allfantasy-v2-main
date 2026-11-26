@@ -18,9 +18,9 @@ describe('playable combined league screens', () => {
       teams: ['third', 'winner', 'runner-up'].map(team), ownRoster: {id:'winner',players:[],dailyLineups:[],faabRemaining:100,ownBid:null} }
     vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/operations') ? response({}, false) : response(data)))
     render(<SurvivorGuillotineLeague leagueId="L" />)
-    await screen.findByRole('heading', { name: 'Final standings' })
-    const list = screen.getByRole('heading', { name: 'Final standings' }).parentElement!.querySelector('ol')!
-    expect([...list.querySelectorAll('li')].map(li => li.textContent)).toEqual(['winner', 'runner-up', 'third'])
+    // 2026-11-24: the podium sits at the top of the island, with places.
+    const list = (await screen.findByTestId('sg-final')).querySelector('ol')!
+    expect([...list.querySelectorAll('li')].map(li => li.textContent)).toEqual(['1stwinner (you)', '2ndrunner-up', '3rdthird'])
     expect(screen.queryByLabelText('Vote for captain')).toBeNull()
   })
   it('lets the on-clock Gauntlet captain make a real manager pick', async () => {
