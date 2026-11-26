@@ -327,6 +327,8 @@ export async function submitImportCreation(
     leagueType?: string | null
     /** The other half of a college + pro league, picked on the confirm screen: linked once the league is built. */
     pairWithLeagueId?: string | null
+    /** "Had this season's rookie draft?" — only sent when the confirm screen asked. */
+    rookieDraftDone?: boolean | null
   }
 ): Promise<SubmitImportResult> {
   // A pasted Yahoo league (yahoo-snapshot:<id>) is allowed through; the server decides who may use it.
@@ -354,6 +356,7 @@ export async function submitImportCreation(
         ...(options?.reviewOverrides ? { reviewOverrides: options.reviewOverrides } : {}),
         ...(options?.leagueType ? { leagueType: options.leagueType } : {}),
         ...(options?.pairWithLeagueId ? { pairWithLeagueId: options.pairWithLeagueId } : {}),
+        ...(typeof options?.rookieDraftDone === 'boolean' ? { rookieDraftDone: options.rookieDraftDone } : {}),
       }),
     });
     const data = await readImportResponseBody(res);

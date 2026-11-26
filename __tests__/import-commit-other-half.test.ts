@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({
   persist: vi.fn(),
   applyAttestedCommissioner: vi.fn(async () => ({ teamsUpdated: 1 })),
   linkHalves: vi.fn(),
+  leagueFindUnique: vi.fn(),
+  leagueUpdate: vi.fn(async () => ({})),
 }))
 
 vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser, requireAgeConfirmedUser: h.requireVerifiedUser }))
@@ -41,7 +43,7 @@ vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
 
 vi.mock('@/lib/league/collegePro/linkHalves', () => ({ linkHalves: h.linkHalves }))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { league: { findUnique: vi.fn(async () => ({ name: 'Cream Bowl', userId: 'af-user-1' })) } },
+  prisma: { league: { findUnique: h.leagueFindUnique, update: h.leagueUpdate } },
 }))
 
 import { POST } from '@/app/api/leagues/import/commit/route'
@@ -76,6 +78,7 @@ beforeEach(() => {
   h.runPipeline.mockResolvedValue({ success: true, normalized: { source: { source_league_id: '1' }, rosters: [] } })
   h.persist.mockResolvedValue(persisted())
   h.linkHalves.mockResolvedValue({ ok: true })
+  h.leagueFindUnique.mockResolvedValue({ name: 'Cream Bowl', userId: 'af-user-1', season: 2026, settings: { scoring: 'ppr' } })
 })
 
 describe('the other half picked on the confirm screen', () => {
@@ -115,5 +118,36 @@ describe('the other half picked on the confirm screen', () => {
     const res = await commit({ provider: 'sleeper', sourceId: '1' })
     expect(h.linkHalves).not.toHaveBeenCalled()
     expect((await res.json()).pairLink).toBeNull()
+  })
+})
+
+describe('"had your rookie draft?" from the confirm screen', () => {
+  it('saves the answer for this season onto the league, keeping its settings', async () => {
+    const res = await commit({ provider: 'mfl', sourceId: '1', rookieDraftDone: false })
+    expect(res.status).toBe(200)
+    const data = (h.leagueUpdate.mock.calls[0] as unknown as [{ where: { id: string }; data: { settings: Record<string, unknown> } }])[0]
+    expect(data.where).toEqual({ id: 'peach' })
+    expect(data.data.settings.scoring).toBe('ppr')
+    expect(data.data.settings.rookieDraftDone).toMatchObject({ season: 2026, done: false, confirmedByUserId: 'af-user-1' })
+  })
+
+  it("only the league's own commissioner, and never on a join", async () => {
+    h.leagueFindUnique.mockResolvedValue({ name: 'x', userId: 'someone-else', season: 2026, settings: {} })
+    await commit({ provider: 'mfl', sourceId: '1', rookieDraftDone: true })
+    expect(h.leagueUpdate).not.toHaveBeenCalled()
+    h.leagueFindUnique.mockResolvedValue({ name: 'x', userId: 'af-user-1', season: 2026, settings: {} })
+    h.persist.mockResolvedValue(persisted({ joinedExisting: true }))
+    await commit({ provider: 'mfl', sourceId: '1', rookieDraftDone: true })
+    expect(h.leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('unanswered writes nothing, and a failed save does not fail the import', async () => {
+    await commit({ provider: 'mfl', sourceId: '1' })
+    expect(h.leagueUpdate).not.toHaveBeenCalled()
+    h.leagueUpdate.mockRejectedValue(new Error('db down'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const res = await commit({ provider: 'mfl', sourceId: '1', rookieDraftDone: true })
+    expect(res.status).toBe(200)
+    warn.mockRestore()
   })
 })
