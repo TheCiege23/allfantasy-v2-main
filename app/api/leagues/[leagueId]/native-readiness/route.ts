@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isCommissioner } from '@/lib/commissioner/permissions'
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { checkNativeReadiness } from '@/lib/league/nativeReadiness'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ leagueId: stri
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!(await isCommissioner(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // The one commissioner rule (lib/league/commissionerAccess.ts), head only: the switch is not a co-commissioner's call.
+  const refused = await commissionerAccessResponse(leagueId, userId, 'head')
+  if (refused) return refused
 
   try {
     const report = await checkNativeReadiness(prisma, leagueId)
