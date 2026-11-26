@@ -13,7 +13,7 @@ import { prisma } from '@/lib/prisma'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { STARTUP_COLLEGE_DRAFT_LABEL, STARTUP_PRO_DRAFT_LABEL } from '@/lib/draft-defaults/startupCollegeDraft'
 import { compactDraftPoolCacheKey } from './draftPoolCacheKey'
-import { collegeScopeSignature, readCollegeConferenceScope } from '@/lib/college/conferenceScope'
+import { collegeScopeSignature, collegeScopeSportFor, readCollegeConferenceScope } from '@/lib/college/conferenceScope'
 import {
   getEffectiveLeagueRosterTemplate,
   starterEligiblePlayerPositionsFromTemplate,
@@ -133,7 +133,7 @@ async function startupDraftPhaseSuffix(leagueId: string): Promise<string> {
 async function collegeScopeCacheSuffix(leagueId: string): Promise<string> {
   try {
     const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true } })
-    const scope = readCollegeConferenceScope(league?.settings, league?.sport)
+    const scope = readCollegeConferenceScope(league?.settings, collegeScopeSportFor(league?.sport))
     return scope ? `:college-${collegeScopeSignature(scope)}` : ''
   } catch {
     return ''

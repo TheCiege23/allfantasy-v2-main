@@ -46,6 +46,8 @@ interface PlayerDetailPlayer {
   yearsExp?: number | null
   college?: string | null
   jersey?: number | null
+  /** A college player's transfer-portal move, as one line (lib/devy/portalMoves.ts). */
+  transferNote?: string | null
 }
 
 interface LeagueContext {
@@ -454,6 +456,15 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                   <StatChip label="Exp" value={yearsExp == null ? '—' : yearsExp === 0 ? 'Rookie' : String(yearsExp)} />
                   <StatChip label="College" value={college ?? '—'} />
                 </div>
+                {player.transferNote ? (
+                  <p
+                    className="mt-2 inline-flex max-w-xl items-start gap-1.5 rounded-md border border-amber-300/30 bg-amber-400/10 px-2 py-1 text-[12px] font-semibold leading-snug text-amber-100"
+                    data-testid="player-detail-transfer-note"
+                  >
+                    <span className="shrink-0 rounded bg-amber-300/25 px-1 text-[11px] font-black uppercase tracking-wide">Portal</span>
+                    <span>{player.transferNote}</span>
+                  </p>
+                ) : null}
 
                 {/* Rankings bar */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[12px]">

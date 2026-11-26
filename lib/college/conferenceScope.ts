@@ -75,6 +75,17 @@ export function collegeScopePresets(sport: string): CollegeScopePresetOption[] {
   return []
 }
 
+/**
+ * The college sport whose schools a league's scope names: the league's own sport for a college league,
+ * the college side of a devy / C2C league (NFL → college football, NBA → college basketball).
+ */
+export function collegeScopeSportFor(leagueSport: string | null | undefined): CollegeScopeSport | null {
+  const s = String(leagueSport ?? '').trim().toUpperCase()
+  if (s === 'NCAAF' || s === 'NFL') return 'NCAAF'
+  if (s === 'NCAAB' || s === 'NBA') return 'NCAAB'
+  return null
+}
+
 export function isCollegeScopeSport(sport: string | null | undefined): sport is CollegeScopeSport {
   return (COLLEGE_SCOPE_SPORTS as readonly string[]).includes(String(sport ?? ''))
 }

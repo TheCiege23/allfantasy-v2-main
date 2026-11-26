@@ -2,6 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { getCFBPlayerStats, getCFBDraftPicksResult, getCFBTeamRosterResult, CfbdUnavailableError, getCFBRecruits, getCFBTransferPortal, getCFBReturningProduction, getCFBPlayerUsage, getCFBPlayerPPA, getCFBSPRatings, getCFBPlayerWEPAPassing, getCFBPlayerWEPARushing, getCFBPassingPlayerSeason, getCFBPassingTeamSeason, getCFBPassingPlays, type CFBDraftPick, type CFBRecruit, type CFBReturningProduction, type CFBPlayerUsage, type CFBPlayerPPA, type CFBTeamSPRating, type CFBPlayerWEPA, type CFBPassingProfile, type CFBTeamPassingSummary, type CFBPassingPlay } from '@/lib/cfb-player-data'
 import { rotateForFairness } from '@/lib/cron/runBudget'
+import { portalMoveFor, type PortalMove } from '@/lib/devy/portalMoves'
+import { notifyPortalMoves } from '@/lib/devy/portalMoveAlerts'
 import { describeCfbdFailure } from '@/lib/cfbd-fetch'
 import { computeAllDevyIntelMetrics } from '@/lib/devy-intel'
 import { buildNameIndex, normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
@@ -908,6 +910,7 @@ export async function ingestCFBDTransferPortal(season?: number): Promise<{ updat
   const year = season || currentYear
   let updated = 0
   const errors: string[] = []
+  const moves: PortalMove[] = []
 
   try {
     const transfers = await getCFBTransferPortal(year)
@@ -934,6 +937,11 @@ export async function ingestCFBDTransferPortal(season?: number): Promise<{ updat
           },
         })
         if (!existing) continue
+
+        // News for the managers holding him (lib/devy/portalMoveAlerts.ts), judged against what was
+        // stored BEFORE this update; a repeat read of the same list finds nothing.
+        const move = portalMoveFor(existing, { origin: t.origin, destination: t.destination, eligibility: t.eligibility })
+        if (move) moves.push(move)
 
         const updateData: any = {
           transferStatus: true,
@@ -970,6 +978,7 @@ export async function ingestCFBDTransferPortal(season?: number): Promise<{ updat
     errors.push(`Transfer portal fetch failed: ${err.message?.slice(0, 100)}`)
   }
 
+  if (moves.length > 0) await notifyPortalMoves(moves)
   return { updated, errors }
 }
 
