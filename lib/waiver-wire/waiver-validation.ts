@@ -11,7 +11,7 @@ export type ClaimLimitContext = {
   userId?: string | null
 }
 
-function startOfWeekUtc(d: Date): Date {
+export function startOfWeekUtc(d: Date): Date {
   const x = new Date(d)
   const day = x.getUTCDay()
   const diff = (day + 6) % 7

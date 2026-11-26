@@ -5,7 +5,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getLeagueWaiverState } from "@/lib/waiver-wire/waiver-state-service"
+import { getLeagueWaiverState, nextRunAtForSchedule } from "@/lib/waiver-wire/waiver-state-service"
+import { readDailyWaiverScheduleFromSettings } from "@/lib/waivers/dailyWaiverSchedule"
+import { formatLocalWaiverClear, readLocalWaiverClear } from "@/lib/waivers/leagueLocalWaiverClock"
+import { readWaiverExtras } from "@/lib/waivers/waiverExtras"
 import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire"
 
 /**
@@ -29,10 +32,37 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     return NextResponse.json({ error: "League not found" }, { status: 404 })
   }
 
-  const [state, settings] = await Promise.all([
+  const [storedState, settings, clockLeague] = await Promise.all([
     getLeagueWaiverState(leagueId),
     getEffectiveLeagueWaiverSettings(leagueId),
+    (prisma as any).league.findUnique({ where: { id: leagueId }, select: { settings: true, timezone: true } }).catch(() => null),
   ])
+  /*
+   * The next clear, even before anything has written it (a new league with no claims yet): worked out
+   * from the schedule — in the league's own time when it has a league-time clear — rather than shown as
+   * a bare weekday. Read-only: nothing is written here.
+   */
+  const computedNextRunAt = storedState?.nextRunAt
+    ? null
+    : nextRunAtForSchedule(
+        new Date(),
+        {
+          processingDayOfWeek: settings.processingDayOfWeek,
+          processingTimeUtc: settings.processingTimeUtc,
+          processingDays: settings.processingDays,
+          dailyScheduleEnabled: Boolean(readDailyWaiverScheduleFromSettings(clockLeague?.settings)?.enabled),
+        },
+        clockLeague,
+      )
+  const computedDate = computedNextRunAt ? new Date(computedNextRunAt) : null
+  const state = storedState
+    ? { ...storedState, nextRunAt: storedState.nextRunAt ?? computedDate }
+    : computedDate
+      ? { nextRunAt: computedDate, processingLocked: false }
+      : null
+  const localClear = readLocalWaiverClear(clockLeague?.settings)
+  /** "Wed 3:00 AM PT": when waivers clear, in the league's own zone (null when the league has no league-time clear). */
+  const leagueClearLabel = localClear ? formatLocalWaiverClear(localClear, clockLeague?.timezone) : null
 
   // Get user's FAAB balance and watchlist
   let faabBudget = 100
@@ -89,6 +119,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       claimLimitPerRun: settings.claimLimitPerRun,
       nextRunAt: state?.nextRunAt ?? null,
       processingLocked: state?.processingLocked ?? false,
+      leagueClearLabel,
+      conditionalClaims: readWaiverExtras(clockLeague?.settings).conditionalClaims,
     },
     faabBudget,
     balance: faabBudget,

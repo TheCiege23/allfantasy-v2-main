@@ -40,8 +40,8 @@ describe('native league navigation: Dynasty group', () => {
     expect(groups.map(group => group.id)).toEqual(['league'])
     expect(groups.map(group => group.title)).toEqual(['This league'])
     expect(groups[0].items.map(item => item.label)).toEqual(['Draft', 'Matchup', 'Team', 'League', 'Trade'])
-    // Legacy, once alone under "More tools", is a League sub-tab.
-    expect(groups[0].items.find(item => item.label === 'League')?.children.map(child => child.label)).toEqual(['Overview', 'Standings & playoffs', 'League chat', 'Legacy'])
+    // League history (Legacy), once alone under "More tools", is a League sub-tab; League opens on standings.
+    expect(groups[0].items.find(item => item.label === 'League')?.children.map(child => child.label)).toEqual(['Standings & playoffs', 'League history', 'League chat', 'Overview'])
   })
 
   it('labels and titles go through i18n: Spanish', () => {

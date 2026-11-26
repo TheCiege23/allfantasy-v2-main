@@ -34,7 +34,7 @@ import {
   hasAfCommissionerCreateEntitlement,
 } from '@/lib/league-creation/canonical/premiumCreateSettingsGate'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
-import { oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import { oddTeamCountNeedsAfCommissioner, oddTeamGateLeagueWord } from '@/lib/league/oddTeamLeagues'
 import { fillTestLeagueWithPlaceholders } from '@/lib/demo-league/testLeagueFill'
 
 const LOG_PREFIX = '[create-league-canonical]'
@@ -241,7 +241,7 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
     }
   }
 
-  // Odd keeper sizes are an AF Commissioner option (lib/league/oddTeamLeagues.ts). A carryover keeps
+  // Odd redraft and keeper sizes are an AF Commissioner option (lib/league/oddTeamLeagues.ts). A carryover keeps
   // the imported league's own size, so it is never refused here.
   if (!importedTeamCountAllowed && oddTeamCountNeedsAfCommissioner(catalogConcept, validated.data.teamCount)) {
     const hasPlan = await hasAfCommissionerPlan({ ...session.user, id: resolvedUser.appUserId })
@@ -249,11 +249,11 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
       return NextResponse.json(
         {
           success: false,
-          error: 'AF Commissioner is required for an odd-team keeper league',
+          error: `AF Commissioner is required for an odd-team ${oddTeamGateLeagueWord(catalogConcept)}league`,
           errors: [
             {
               path: 'teamCount',
-              message: `A ${validated.data.teamCount}-team keeper league is part of AF Commissioner. Choose an even team count or upgrade.`,
+              message: `A ${validated.data.teamCount}-team ${oddTeamGateLeagueWord(catalogConcept)}league is part of AF Commissioner. Choose an even team count or upgrade.`,
               code: 'ODD_TEAM_COUNT_REQUIRES_AF_COMMISSIONER',
             },
           ],

@@ -34,7 +34,7 @@ export function isAutopilotStyle(v: unknown): v is AutopilotStyle {
 }
 
 /**
- * Chimmy autopilot (AF Commissioner): everything inactive manager mode does, plus roster decisions in
+ * Chimmy autopilot (AF Pro / AF Supreme, owner 2026-11-22 — was AF Commissioner; see autopilotEntitled): everything inactive manager mode does, plus roster decisions in
  * the chosen style. Lineup-only management stays free; `autopilot` marks the paid upgrade.
  *
  * `personality` is the manager Chimmy is for this team in season (./managerProfile.ts): the one it

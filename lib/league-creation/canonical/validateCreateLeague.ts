@@ -16,7 +16,7 @@ import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 import { z } from 'zod'
 import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
-import { TE_PREMIUM_POINT_OPTIONS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
+import { TE_PREMIUM_MAX_POINTS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import type { LeagueSport } from '@prisma/client'
 import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { isImportedTeamCountAllowed } from '@/lib/league-creation/importedTeamCount'
@@ -294,7 +294,7 @@ export function validateCreatePayload(
       errors: [
         {
           path: 'draftType',
-          message: 'Choose snake, linear, auction, mock_draft, offline, or auto. Use a longer pick clock for a slow draft.',
+          message: 'Choose snake, linear, auction, offline, or auto. Use a longer pick clock for a slow draft.',
         },
       ],
     }
@@ -417,7 +417,7 @@ export function validateCreatePayload(
     if (sport !== 'NFL' || !isValidTePremiumPoints(tePremiumPoints)) {
       const message = sport !== 'NFL'
         ? 'TE premium is available for NFL leagues'
-        : `Choose a TE premium of ${TE_PREMIUM_POINT_OPTIONS.join(', ')} points per catch`
+        : `TE premium must be more than 0 and at most ${TE_PREMIUM_MAX_POINTS} points per catch, to two decimals`
       return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.tePremiumPoints', message }] }
     }
   }

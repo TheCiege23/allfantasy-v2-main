@@ -211,6 +211,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
         ? { ...(body.metadata as Record<string, unknown>) }
         : undefined
 
+    // Conditional claims (AF Commissioner waiver extra): "get A; if I lose A, try B". The group is a short
+    // label the manager's claims share; the engine honours it only when the league turned the extra on.
+    if (typeof body.conditionalGroup === "string" && body.conditionalGroup.trim()) {
+      metadataForCreate = { ...(metadataForCreate ?? {}), conditionalGroup: body.conditionalGroup.trim().slice(0, 40) }
+    }
+
     if (
       body.commissionerOverrides &&
       typeof body.commissionerOverrides === "object" &&

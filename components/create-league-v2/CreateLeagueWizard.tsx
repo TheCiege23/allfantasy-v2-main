@@ -51,7 +51,7 @@ import {
   resolveValidScoringPresetIdForSelection,
 } from '@/lib/create-league-v2/rules-engine'
 import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
-import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, lockedOddTeamCounts, teamCountOptionsForPlan } from '@/lib/league/oddTeamLeagues'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, lockedOddTeamCounts, oddTeamGateLeagueWord, teamCountOptionsForPlan } from '@/lib/league/oddTeamLeagues'
 import {
   IMPORT_LEAGUE_PROVIDERS,
   PREMIUM_ADVANCED_CREATE_KEYS,
@@ -65,7 +65,7 @@ import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/opti
 import { timezoneLabel, timezoneOptions } from '@/lib/create-league-v2/device-timezone'
 import { CheckBox, HelpTip } from '@/components/create-league-v2/WizardControls'
 import { SelectionCheck } from '@/components/ui/selection-check'
-import { TE_PREMIUM_POINT_OPTIONS } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
+import { TE_PREMIUM_MAX_POINTS, TE_PREMIUM_POINT_OPTIONS, normalizeTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import { ScoringLabel } from '@/components/league-labels/ScoringLabel'
 import { scoringLabelIdForWizard } from '@/lib/league-labels/liveValues'
@@ -141,6 +141,90 @@ function cx(...parts: Array<string | false | null | undefined>): string {
  * wizard magnified and scrolled sideways. 48px tall is the touch floor on Android (Material) and
  * clears Apple's 44pt.
  */
+/**
+ * TE premium amount: one-tap choices up to +2, or Custom for any decimal (0 < x ≤ 5).
+ * Custom keeps its own text so "1." can be typed on the way to "1.35".
+ */
+function TePremiumAmountPicker({
+  value,
+  onChange,
+  t,
+}: {
+  value: number | null
+  onChange: (points: number | null) => void
+  t: (key: string) => string
+}) {
+  const isPreset = typeof value === 'number' && (TE_PREMIUM_POINT_OPTIONS as readonly number[]).includes(value)
+  const [customOpen, setCustomOpen] = useState(typeof value === 'number' && !isPreset)
+  const [customText, setCustomText] = useState(typeof value === 'number' && !isPreset ? String(value) : '')
+  const customInvalid = customOpen && customText.trim() !== '' && normalizeTePremiumPoints(Number(customText)) === null
+  const chip = (active: boolean) =>
+    cx(
+      'min-h-11 rounded-lg border px-2 text-sm font-bold transition touch-manipulation',
+      active
+        ? 'border-violet-500 bg-violet-600 text-white'
+        : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] text-[color:var(--text-primary)] hover:border-violet-400',
+    )
+  return (
+    <div className="space-y-2" data-testid="g30-te-premium-points">
+      <span className="block text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
+        {tx(t, 'createLeague.g30.tePremium.amount', 'Extra points per TE catch')}
+      </span>
+      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7" role="group" aria-label={tx(t, 'createLeague.g30.tePremium.amount', 'Extra points per TE catch')}>
+        {TE_PREMIUM_POINT_OPTIONS.map((points) => (
+          <button
+            key={points}
+            type="button"
+            aria-pressed={!customOpen && value === points}
+            className={chip(!customOpen && value === points)}
+            onClick={() => {
+              setCustomOpen(false)
+              onChange(points)
+            }}
+            data-testid={`g30-te-premium-option-${points}`}
+          >
+            +{points}
+          </button>
+        ))}
+        <button
+          type="button"
+          aria-pressed={customOpen}
+          className={chip(customOpen)}
+          onClick={() => {
+            setCustomOpen(true)
+            onChange(normalizeTePremiumPoints(Number(customText)))
+          }}
+          data-testid="g30-te-premium-custom"
+        >
+          {tx(t, 'createLeague.g30.tePremium.custom', 'Custom')}
+        </button>
+      </div>
+      {customOpen ? (
+        <label className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-[color:var(--text-secondary)]">{tx(t, 'createLeague.g30.tePremium.customLabel', 'Custom +')}</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={customText}
+            placeholder="1.35"
+            onChange={(event) => {
+              const text = event.target.value.replace(/[^0-9.]/g, '')
+              setCustomText(text)
+              onChange(text.trim() === '' ? null : normalizeTePremiumPoints(Number(text)))
+            }}
+            className={cx(fieldClass(customInvalid || customText.trim() === ''), 'w-28')}
+            aria-invalid={customInvalid || undefined}
+            data-testid="g30-te-premium-custom-input"
+          />
+          <span className="text-xs text-[color:var(--text-tertiary)]">
+            {tx(t, 'createLeague.g30.tePremium.customHint', 'Any amount above 0, up to {{max}}').replace('{{max}}', String(TE_PREMIUM_MAX_POINTS))}
+          </span>
+        </label>
+      ) : null}
+    </div>
+  )
+}
+
 function fieldClass(hasError = false): string {
   return cx(
     'block min-h-12 w-full min-w-0 rounded-xl border bg-[color:var(--surface-card)] px-3 py-2 text-base font-semibold text-[color:var(--text-primary)] shadow-sm outline-none transition focus:ring-2 focus:ring-violet-500/25 sm:min-h-11 sm:text-sm',
@@ -1139,15 +1223,19 @@ export function LeagueBasicsStep({
             {/* One allowed size (NFL Survivor is 12) reads as that size, not as a range "12 to 12". */}
             {teamCountOptions.length === 1
               ? tx(t, 'createLeague.g30.teamCount.fixed', `${teamCountOptions[0]} teams. This format plays at one size.`)
-              : teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
+              : teamCountStep === 1
+                ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}`
+                : teamCountOptions.length > 10
+                  ? tx(t, 'createLeague.g30.teamCount.evenRange', `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}, even sizes`)
+                  : teamCountOptions.join(', ')}
           </span>
           <FieldError message={fieldErrors?.teamCount} />
           {lockedTeamCounts.length > 0 ? (
             <span className="block text-xs text-[color:var(--text-secondary)]" data-testid="g30-team-count-locked">
               <Lock aria-hidden="true" className="mr-1 inline h-3 w-3" />
               {lockedTeamCounts.includes(state.teamCount)
-                ? tx(t, 'createLeague.g30.teamCount.oddLockedChosen', `A ${state.teamCount}-team keeper league is part of AF Commissioner. Choose an even size, or upgrade.`)
-                : tx(t, 'createLeague.g30.teamCount.oddLocked', `Odd sizes (${lockedTeamCounts.join(', ')}) are part of AF Commissioner.`)}{' '}
+                ? tx(t, 'createLeague.g30.teamCount.oddLockedChosen', `A ${state.teamCount}-team ${oddTeamGateLeagueWord(getEffectiveLeagueType(state))}league is part of AF Commissioner. Choose an even size, or upgrade.`)
+                : tx(t, 'createLeague.g30.teamCount.oddLocked', `Odd sizes (${lockedTeamCounts.length > 8 ? `${lockedTeamCounts.slice(0, 3).join(', ')}…` : lockedTeamCounts.join(', ')}) are part of AF Commissioner.`)}{' '}
               <CoreDepthLockCta
                 href={upgradePathForPlan('af_commissioner')}
                 source="lock_league_creation_team_count"
@@ -1517,6 +1605,15 @@ export function DraftStep({
           </select>
           <FieldError message={fieldErrors?.scoringPreset} />
         </label>
+        {/* What makes the chosen preset different from the others, in one line. */}
+        {(() => {
+          const chosen = scoringPresets.find((preset) => preset.id === state.scoringPresetId)
+          return chosen?.hint ? (
+            <p className="-mt-2 text-sm text-[color:var(--text-secondary)]" data-testid="g30-scoring-preset-hint">
+              {tx(t, `createLeague.scoringPresetHint.${chosen.id}`, chosen.hint)}
+            </p>
+          ) : null
+        })()}
         {/* The chosen option's label plate. TE premium is part of the label (Full PPR + 0.5 = TE+). */}
         <ScoringLabel
           id={scoringLabelIdForWizard({
@@ -1553,25 +1650,11 @@ export function DraftStep({
             </span>
           </label>
           {state.tePremium === true ? (
-            <label className="block max-w-xs space-y-2">
-              <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
-                {tx(t, 'createLeague.g30.tePremium.amount', 'Extra points per TE catch')}
-              </span>
-              <select
-                value={typeof state.tePremiumPoints === 'number' ? String(state.tePremiumPoints) : ''}
-                onChange={(event) => onChange({ tePremiumPoints: event.target.value === '' ? null : Number(event.target.value) })}
-                className={fieldClass(typeof state.tePremiumPoints !== 'number')}
-                aria-invalid={typeof state.tePremiumPoints !== 'number' || undefined}
-                data-testid="g30-te-premium-points"
-              >
-                <option value="">{tx(t, 'createLeague.g30.tePremium.choose', 'Choose an amount')}</option>
-                {TE_PREMIUM_POINT_OPTIONS.map((points) => (
-                  <option key={points} value={String(points)}>
-                    +{points} {tx(t, 'createLeague.g30.tePremium.perCatch', 'per TE catch')}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <TePremiumAmountPicker
+              value={state.tePremiumPoints}
+              onChange={(points) => onChange({ tePremiumPoints: points })}
+              t={t}
+            />
           ) : null}
         </div>
       ) : null}

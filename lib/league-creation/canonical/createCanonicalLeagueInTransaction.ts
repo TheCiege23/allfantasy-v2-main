@@ -1,3 +1,4 @@
+import { LEAGUE_LOCAL_WAIVER_CLEAR_KEY, defaultLocalWaiverClear, engineScheduleFromLocalClear } from '@/lib/waivers/leagueLocalWaiverClock'
 import { careerXpLevel, decideCareerJoin } from '@/lib/league-join/careerJoinGate'
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
@@ -507,6 +508,14 @@ export async function createCanonicalLeagueInTransaction(
   if (sport === 'NFL' && typeof conceptSetupForPrivacy.tePremiumPoints === 'number') {
     mergedSettings.te_premium_points = conceptSetupForPrivacy.tePremiumPoints
   }
+  // Waivers clear at a time in the LEAGUE'S zone (owner, 2026-11-25), daylight saving included
+  // (lib/waivers/leagueLocalWaiverClock.ts). Redraft and keeper first — the anchor formats; others
+  // keep the UTC schedule until they are moved deliberately.
+  const leagueLocalClear =
+    formatId === 'redraft' || formatId === 'keeper'
+      ? defaultLocalWaiverClear({ dailyRuns: (waiverDefaults.processing_days?.length ?? 0) > 1 })
+      : null
+  if (leagueLocalClear) mergedSettings[LEAGUE_LOCAL_WAIVER_CLEAR_KEY] = leagueLocalClear
 
   const joinCode = await uniqueJoinCode(tx)
   const platformLeagueId = `manual-${randomUUID()}`
@@ -1113,19 +1122,28 @@ export async function createCanonicalLeagueInTransaction(
   })
 
   const defaultWaiverDaysList = defaultProcessingDaysList(waiverDefaults.processing_days)
+  // A league-time clear writes the UTC engine fields it stands for today, so every reader of those
+  // fields agrees; the waiver clock re-derives the real instant each week (DST-correct).
+  const localEngine = leagueLocalClear
+    ? engineScheduleFromLocalClear(leagueLocalClear, body.timezone ?? 'America/New_York', new Date())
+    : null
   await tx.leagueWaiverSettings.create({
     data: {
       leagueId: league.id,
       waiverType: waiverDefaults.waiver_type,
-      processingDayOfWeek: waiverDefaults.processing_days?.[0] ?? null,
-      processingTimeUtc: waiverDefaults.processing_time_utc ?? null,
+      processingDayOfWeek: localEngine ? localEngine.processingDayOfWeek : waiverDefaults.processing_days?.[0] ?? null,
+      processingTimeUtc: localEngine ? localEngine.processingTimeUtc : waiverDefaults.processing_time_utc ?? null,
       claimLimitPerPeriod: waiverDefaults.max_claims_per_period ?? null,
       faabBudget: waiverDefaults.FAAB_budget_default ?? null,
       tiebreakRule: (waiverDefaults.claim_priority_behavior as string) ?? null,
       lockType: (waiverDefaults.game_lock_behavior as string) ?? null,
       instantFaAfterClear: waiverDefaults.free_agent_unlock_behavior === 'instant',
       // Daily sports run on every default day; single-day sports (NFL) write no list — unchanged.
-      ...(defaultWaiverDaysList ? { processingDays: defaultWaiverDaysList } : {}),
+      ...(localEngine && localEngine.processingDays.length > 1
+        ? { processingDays: localEngine.processingDays }
+        : !localEngine && defaultWaiverDaysList
+          ? { processingDays: defaultWaiverDaysList }
+          : {}),
     },
   })
 

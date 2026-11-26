@@ -16,7 +16,9 @@ describe('workspace navigation for an imported league', () => {
   it('Decide is League › Overview', () => {
     const league = nativeNavTabFor(groups, 'decide')
     expect(league?.label).toBe('League')
-    expect(league?.children[0]).toMatchObject({ id: 'decide', label: 'Overview' })
+    // League opens on standings now (owner, 2026-11-25); the overview is still a League sub-tab.
+    expect(league?.children[0]).toMatchObject({ id: 'standings' })
+    expect(league?.children.find((c) => c.id === 'decide')).toMatchObject({ id: 'decide', label: 'Overview' })
   })
 
   it('Decide is not also a Trade sub-tab', () => {
@@ -30,7 +32,7 @@ describe('workspace navigation for a native league is unchanged', () => {
   it('keeps League home as Overview and Decision OS under Trade', () => {
     const native = ids('native_home', 'decide', 'roster', 'matchups', 'standings', 'trades', 'settings')
     const groups = buildNativeLeagueNavigation(native, false, false, undefined, { draftDone: true })
-    expect(nativeNavTabFor(groups, 'native_home')?.children[0]).toMatchObject({ id: 'native_home', label: 'Overview' })
+    expect(nativeNavTabFor(groups, 'native_home')?.children.find((c) => c.id === 'native_home')).toMatchObject({ id: 'native_home', label: 'Overview' })
     const trade = nativeNavTabFor(groups, 'decide')
     expect(trade?.label).toBe('Trade')
     expect(trade?.children.find((c) => c.id === 'decide')?.label).toBe('Decision OS')

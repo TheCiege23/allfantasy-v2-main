@@ -97,8 +97,13 @@ describe('TE premium scores the amount the commissioner chose', () => {
     expect(scorer(catchesOnly, 'TE')).toBeCloseTo(scorer(catchesOnly, 'WR'))
   })
 
-  it('ignores an amount that is not on the list', () => {
-    for (const bad of [0, 0.3, 2, '0.5', null]) {
+  it('takes any custom decimal above 0 up to 5, and ignores anything else', () => {
+    for (const good of [0.3, 1.35, 2, 5]) {
+      const seed = nflScoringSeedForCreate({ scoringPresetId: 'fb_ppr', tePremiumPoints: good })
+      expect(seed.enableTEPremium).toBe(true)
+      expect(seed.rules.te_premium).toBe(good)
+    }
+    for (const bad of [0, -1, 5.01, 1.234, Number.NaN, '0.5', null]) {
       const seed = nflScoringSeedForCreate({ scoringPresetId: 'fb_ppr', tePremiumPoints: bad })
       expect(seed.enableTEPremium).toBe(false)
       expect(seed.rules).not.toHaveProperty('te_premium')
@@ -128,12 +133,22 @@ describe('the wizard asks for the TEP amount', () => {
     expect(onChange).toHaveBeenCalledWith({ tePremium: true })
 
     view.rerender(<DraftStep state={{ ...nflDraft, tePremium: true }} onChange={onChange} fieldErrors={null} />)
-    const select = screen.getByTestId('g30-te-premium-points') as HTMLSelectElement
-    expect(select.value).toBe('')
-    expect(Array.from(select.options).map((o) => o.value)).toEqual(['', '0.25', '0.5', '0.75', '1'])
+    const picker = screen.getByTestId('g30-te-premium-points')
+    const chips = Array.from(picker.querySelectorAll('button')).map((b) => b.textContent)
+    expect(chips).toEqual(['+0.25', '+0.5', '+0.75', '+1', '+1.5', '+2', 'Custom'])
+    expect(picker.querySelector('[aria-pressed="true"]')).toBeNull()
     expect(screen.getByTestId('g30-te-premium').querySelector('[data-checked]')?.getAttribute('data-checked')).toBe('true')
-    fireEvent.change(select, { target: { value: '0.5' } })
-    expect(onChange).toHaveBeenLastCalledWith({ tePremiumPoints: 0.5 })
+    fireEvent.click(screen.getByTestId('g30-te-premium-option-2'))
+    expect(onChange).toHaveBeenLastCalledWith({ tePremiumPoints: 2 })
+
+    // Custom: any decimal, typed freely; an out-of-range value sends null so the form can't finish.
+    fireEvent.click(screen.getByTestId('g30-te-premium-custom'))
+    const input = screen.getByTestId('g30-te-premium-custom-input') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '1.35' } })
+    expect(onChange).toHaveBeenLastCalledWith({ tePremiumPoints: 1.35 })
+    fireEvent.change(input, { target: { value: '7' } })
+    expect(onChange).toHaveBeenLastCalledWith({ tePremiumPoints: null })
+    expect(input.getAttribute('aria-invalid')).toBe('true')
 
     fireEvent.click(screen.getByTestId('g30-te-premium-toggle'))
     expect(onChange).toHaveBeenLastCalledWith({ tePremium: false, tePremiumPoints: null })
@@ -152,7 +167,7 @@ describe('the wizard asks for the TEP amount', () => {
   })
 })
 
-describe('the server takes the amount, and only a listed one, and only for NFL', () => {
+describe('the server takes the amount, only in range, and only for NFL', () => {
   async function bodyFor(state: CreateLeagueV2State) {
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
@@ -178,10 +193,13 @@ describe('the server takes the amount, and only a listed one, and only for NFL',
     expect(body.conceptSetup as Record<string, unknown>).not.toHaveProperty('tePremiumPoints')
   })
 
-  it('refuses an unlisted amount and a non-NFL league', () => {
+  it('refuses an out-of-range amount and a non-NFL league', () => {
     const base = { concept: 'redraft', sport: 'NFL', scoringPreset: 'fb_ppr', teamCount: 12, draftType: 'snake', leagueName: 'TEP' }
     expect(validateCreatePayload({ ...base, conceptSetup: { tePremiumPoints: 1 } }).ok).toBe(true)
-    expect(validateCreatePayload({ ...base, conceptSetup: { tePremiumPoints: 0.3 } }).ok).toBe(false)
+    expect(validateCreatePayload({ ...base, conceptSetup: { tePremiumPoints: 1.35 } }).ok).toBe(true)
+    expect(validateCreatePayload({ ...base, conceptSetup: { tePremiumPoints: 0 } }).ok).toBe(false)
+    expect(validateCreatePayload({ ...base, conceptSetup: { tePremiumPoints: 5.5 } }).ok).toBe(false)
+    expect(validateCreatePayload({ ...base, conceptSetup: { tePremiumPoints: 1.234 } }).ok).toBe(false)
     expect(validateCreatePayload({ ...base, sport: 'NBA', scoringPreset: 'nba_points', conceptSetup: { tePremiumPoints: 0.5 } }).ok).toBe(false)
   })
 

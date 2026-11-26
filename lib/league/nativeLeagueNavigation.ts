@@ -190,14 +190,20 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
    */
   const nativeOverview = item('league.nav.overview', 'Overview', 'home', 'native_home', 'home')
   const overview = nativeOverview.length ? nativeOverview : item('league.nav.overview', 'Overview', 'home', 'decide')
+  /*
+   * League is Sleeper-simple (owner, 2026-11-25): it opens on Standings & playoffs, then History.
+   * After the draft the finished draft lives ONLY in History (owner: "only from history"): Draft HQ is
+   * no longer a League sub-tab, and `draft` is marked used so it cannot fall in as a leftover tab.
+   * History links to the draft results page. The League overview stays reachable, last.
+   */
+  if (options.draftDone) used.add('draft')
   const leagueChildren = [
-    ...overview,
     // Survivor and guillotine seasons end with the last team standing: neither has playoffs to name here.
     ...(isSurvivor || guilly ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')),
+    ...item('league.nav.leagueHistory', 'League history', 'legacy', 'legacy', 'history'),
     ...item('league.nav.activity', 'Activity', 'more', 'activity'),
     ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
-    ...item('league.nav.legacy', 'Legacy', 'legacy', 'legacy', 'history'),
-    ...(options.draftDone ? draftHq() : []),
+    ...overview,
   ]
   const trade = top('league.nav.tab.trade', 'Trade', 'trades', [
     ...item('league.nav.trades', 'Trades', 'trades', 'trades', 'transfers'),
@@ -295,4 +301,28 @@ export function leagueSectionHref(league: UserLeague, view: string) {
   const id = native?.[1] ?? imported?.[1]
   if (!id) return href
   return leagueSwitchHref({ id: decodeURIComponent(id), platform: native ? 'allfantasy' : 'imported' }, { view })
+}
+
+/**
+ * The tab a league opens on when the URL names none (owner, 2026-11-25):
+ * - before and during the draft, the first top tab — Draft (or Keepers while a keeper window is open);
+ * - after the draft, the first top tab — Matchup (Chop in a guillotine league).
+ * The tab last open in this league still wins (owner, 2026-11-19: "it resets to home"), EXCEPT the
+ * League overview and a Draft tab that no longer exists once the draft is done: those fall back to
+ * the phase's first tab, so a league that has drafted always opens on its matchup.
+ * Switching leagues carries `?view=` in the URL, which never reaches this function.
+ */
+export function nativeLeagueLandingTab(input: {
+  remembered: string | null
+  firstTopTabId: string | null
+  draftDone: boolean
+}): string | null {
+  const remembered = input.remembered?.trim() || null
+  const stale =
+    !remembered ||
+    remembered === 'native_home' ||
+    remembered === 'home' ||
+    remembered === 'decide' ||
+    (input.draftDone && remembered === 'draft')
+  return stale ? input.firstTopTabId : remembered
 }

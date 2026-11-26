@@ -144,15 +144,15 @@ const RULES: PresetRule[] = [
   ncaafPreset('ncaaf_half_ppr_college', 'College Half PPR', '0.5 per reception for college football.', { ppr: 'half' }),
   ncaafPreset('ncaaf_ppr', 'College Full PPR', '1.0 per reception for college football.', { ppr: 'full' }),
   ncaafPreset('ncaaf_ppr_college', 'College Full PPR', '1.0 per reception for college football.', { ppr: 'full' }),
-  fbPreset('fb_std', 'Standard', 'No PPR classic yardage + TD scoring.', { ppr: 'standard' }),
-  fbPreset('fb_ppr', 'Full PPR', '1.0 per reception, WR/TE friendly.', { ppr: 'full' }),
-  fbPreset('fb_half_ppr', 'Half PPR', '0.5 per reception — balanced modern default.', { ppr: 'half' }),
+  fbPreset('fb_std', 'Standard', '0 per catch. Only yards and touchdowns score, so running backs and big-play receivers matter most.', { ppr: 'standard' }),
+  fbPreset('fb_ppr', 'Full PPR', '1 per catch. Pass-catching backs, slot receivers and tight ends climb.', { ppr: 'full' }),
+  fbPreset('fb_half_ppr', 'Half PPR', '0.5 per catch. The middle ground between Standard and Full PPR, and the most common format.', { ppr: 'half' }),
   // A site's own default league scoring (2026). The NFL rules each one seeds live in
   // NflScoringPresets (espn_ppr / sleeper_default) via nflScoringSeedForCreate.
-  fbPreset('fb_espn_ppr', 'ESPN default (PPR)', "ESPN's default scoring: 1 per catch, -2 per interception.", { ppr: 'full' }),
-  fbPreset('fb_sleeper_ppr', 'Sleeper default (PPR)', "Sleeper's default scoring: 1 per catch, -1 per interception.", { ppr: 'full' }),
-  fbPreset('fb_standard', 'Classic (no PPR)', 'No points per catch — classic yardage + TD scoring.', { ppr: 'standard' }),
-  fbPreset('fb_full_ppr', 'Full PPR', '1.0 per reception — WR/TE friendly.', { ppr: 'full' }),
+  fbPreset('fb_espn_ppr', 'ESPN default (PPR)', "Full PPR with ESPN's tables: −2 per interception. Best when your league moved from ESPN.", { ppr: 'full' }),
+  fbPreset('fb_sleeper_ppr', 'Sleeper default (PPR)', "Full PPR with Sleeper's tables: −1 per interception, −2 per fumble lost, 2-pt conversions count. Best when your league moved from Sleeper.", { ppr: 'full' }),
+  fbPreset('fb_standard', 'Classic (no PPR)', '0 per catch. Only yards and touchdowns score.', { ppr: 'standard' }),
+  fbPreset('fb_full_ppr', 'Full PPR', '1 per catch. Pass-catching backs, slot receivers and tight ends climb.', { ppr: 'full' }),
   fbPreset('fb_te_premium', 'TE Premium', 'Half PPR + boosted TE scoring.', {
     ppr: 'half',
     tePremium: true,

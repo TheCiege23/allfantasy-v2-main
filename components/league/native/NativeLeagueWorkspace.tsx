@@ -22,7 +22,7 @@ import { RedraftSeasonTrack } from './RedraftSeasonTrack'
 import { importedPlatformLabel, isNativePlatform } from '@/lib/dashboard/platform-label'
 import { ALL_LEAGUES_DASHBOARD_HREF, leagueDashboardHref, leagueWorkspaceMode } from '@/lib/league/league-workspace-navigation'
 import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
-import { buildNativeLeagueNavigation, leagueSectionHref, nativeLeaguePhase, nativeLeagueRecordLinks, nativeLeagueRecordTitle, nativeNavTabFor, type NativeNavTab, type WorkspaceTab } from '@/lib/league/nativeLeagueNavigation'
+import { buildNativeLeagueNavigation, leagueSectionHref, nativeLeagueLandingTab, nativeLeaguePhase, nativeLeagueRecordLinks, nativeLeagueRecordTitle, nativeNavTabFor, type NativeNavTab, type WorkspaceTab } from '@/lib/league/nativeLeagueNavigation'
 import { adjacentLeagueId, unreadBadgeText } from '@/lib/league/leagueRailStatus'
 import { LeagueRailRow, useLeagueRail, type LeagueRailData, type LeagueRailRowView } from './LeagueRail'
 import { hideLeagueForAccount, RailLeagueMenu, saveLeaguePreference, useRailDrag, useRailHold } from '@/components/core-app/RailLeagueMenu'
@@ -207,12 +207,14 @@ export function NativeLeagueWorkspace({ native, sourceLeagueId = null, importAct
   const survivor = league.leagueVariant === 'survivor' || league.format.toLowerCase() === 'survivor'
   const { t } = useOptionalLanguage()
   const phase = nativeLeaguePhase(league)
-  const groups = buildNativeLeagueNavigation(tabs, isCommissioner, survivor, t, { draftDone: ['Regular season', 'Playoffs', 'Offseason'].includes(phase) })
+  const draftDone = ['Regular season', 'Playoffs', 'Offseason'].includes(phase)
+  const groups = buildNativeLeagueNavigation(tabs, isCommissioner, survivor, t, { draftDone })
   // A guillotine league, hosted here or imported: LeagueShell gives it the `guillotine` tab (lib/guillotine/importedGuillyView.ts).
   const guilly = tabs.some(tab => tab.id === 'guillotine')
   const shownPhase = guilly ? GUILLY_PHASE_NAME[phase] ?? phase : phase
   /** The six top tabs (Draft, Matchup, Team, League, Trade, News, Settings). */
   const primary = groups[0]?.items ?? []
+  const firstTopTabId = primary[0]?.id ?? null
   /** Every screen the sidebar reaches, sub-tabs included. */
   const leaves = groups.flatMap(group => group.items.flatMap(item => item.children))
   /** The phone bar's League slot: League home, else an imported league's first page (see buildNativeLeagueNavigation's Overview). */
@@ -311,7 +313,9 @@ export function NativeLeagueWorkspace({ native, sourceLeagueId = null, importAct
       if (restoredLeague.current !== league.id) {
         if (restoreWanted.current?.league !== league.id) {
           const explicit = new URLSearchParams(window.location.search)
-          const previous = explicit.has('view') || explicit.has('tab') ? null : localStorage.getItem(memoryKey(league.id))
+          const previous = explicit.has('view') || explicit.has('tab')
+            ? null
+            : nativeLeagueLandingTab({ remembered: localStorage.getItem(memoryKey(league.id)), firstTopTabId, draftDone })
           restoreWanted.current = { league: league.id, tab: previous, from: activeTab }
         }
         const wanted = restoreWanted.current.tab
@@ -321,7 +325,7 @@ export function NativeLeagueWorkspace({ native, sourceLeagueId = null, importAct
       }
       localStorage.setItem(memoryKey(league.id), activeTab)
     } catch { /* storage is optional */ }
-  }, [workspace, league.id, activeTab, tabs, onSelectTab])
+  }, [workspace, league.id, activeTab, tabs, onSelectTab, firstTopTabId, draftDone])
   useEffect(() => {
     const dialog = switcherRef.current
     if (switcherOpen && dialog && !dialog.open) { dialog.showModal(); searchRef.current?.focus() }

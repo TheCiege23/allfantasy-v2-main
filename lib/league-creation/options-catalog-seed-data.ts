@@ -180,10 +180,12 @@ const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
   },
   allowedDraftTypesByConcept: {
     // A slow Redraft is a snake draft with a longer pick clock, not a create API draft type.
-    redraft: ['snake', 'linear', 'auction', 'mock_draft', 'offline', 'auto'],
-    pirate: ['snake', 'linear', 'auction', 'mock_draft', 'offline', 'auto'],
+    // Mock drafts are not a league: every league's draft room has its own mock draft, so
+    // `mock_draft` is not offered at create (it only ever built a real snake draft).
+    redraft: ['snake', 'linear', 'auction', 'offline', 'auto'],
+    pirate: ['snake', 'linear', 'auction', 'offline', 'auto'],
     dynasty: ['snake', 'linear', 'auction', 'offline', 'auto'],
-    keeper: ['snake', 'linear', 'auction', 'slow_draft', 'mock_draft', 'offline', 'auto', 'team'],
+    keeper: ['snake', 'linear', 'auction', 'slow_draft', 'offline', 'auto', 'team'],
     best_ball: ['snake', 'linear', 'auction', 'offline', 'auto'],
     idp: ['snake', 'linear', 'auction', 'offline', 'auto'],
     salary_cap: ['auction'],

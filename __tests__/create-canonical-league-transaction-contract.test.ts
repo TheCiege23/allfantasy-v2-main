@@ -148,7 +148,8 @@ describe('createCanonicalLeagueInTransaction contract', () => {
     expect(homepage.pathname).toBe('/league/league-1')
     expect(homepage.searchParams.get('created')).toBe('1')
     expect(homepage.searchParams.get('showInvite')).toBe('1')
-    expect(homepage.searchParams.get('openChat')).toBe('league')
+    // Chat no longer opens over a league you just made (owner, 2026-11-25).
+    expect(homepage.searchParams.get('openChat')).toBeNull()
     expect(homepage.searchParams.get('playIntro')).toBe('1')
 
     expect(tx.league.create).toHaveBeenCalledWith(
@@ -632,6 +633,32 @@ describe('new NBA and NHL redraft leagues start in daily lineups', () => {
       await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ sport: 'NBA', scoringPreset: 'nba_points' }), buildEngine())
       expect(readLineupMode(settingsOf(tx), 'NBA')).toBe('weekly')
     }
+  })
+})
+
+describe('waivers clear at league time (owner, 2026-11-25)', () => {
+  it('a Pacific redraft league clears Wednesday 3:00 AM Pacific, and its UTC engine fields say the same moment', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-12-01T12:00:00Z'))
+    try {
+      const tx = buildTx()
+      await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ timezone: 'America/Los_Angeles' }), buildEngine())
+      const settings = (tx.league.create.mock.calls[0]![0] as { data: { settings: Record<string, unknown> } }).data.settings
+      expect(settings.af_waiver_clear_local).toEqual({ days: [3], hour: 3, minute: 0 })
+      // 3:00 AM PST = 11:00 UTC, still Wednesday.
+      expect(tx.leagueWaiverSettings.create.mock.calls[0]![0]).toMatchObject({
+        data: { processingDayOfWeek: 3, processingTimeUtc: '11:00' },
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('formats not yet moved keep their UTC schedule', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'dynasty' }), buildEngine({ leagueFormatId: 'dynasty' }))
+    const settings = (tx.league.create.mock.calls[0]![0] as { data: { settings: Record<string, unknown> } }).data.settings
+    expect(settings).not.toHaveProperty('af_waiver_clear_local')
   })
 })
 

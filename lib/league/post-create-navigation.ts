@@ -6,7 +6,7 @@
  * Query flags:
  * - `created=1` — post-create handoff; league page may skip legacy tournament redirect.
  * - `guide=settings` — setup guide affordance.
- * - `openChat=league` — open league chat.
+ * (No `openChat`: chat must not open over a league you just made — owner, 2026-11-25.)
  * - `showInvite=1` — invite panel when applicable.
  * - `playIntro=1` — reserve intro playback intent for league shell follow-up handling.
  *
@@ -30,7 +30,6 @@ type PostCreateLeagueHomeArgs = {
 function appendCommonLeagueQuery(q: URLSearchParams, args: PostCreateLeagueHomeArgs): void {
   q.set('created', '1')
   q.set('guide', 'settings')
-  q.set('openChat', 'league')
   q.set('playIntro', '1')
   if (args.allowInviteLink) q.set('showInvite', '1')
   const zt = args.zombieUniverseTier

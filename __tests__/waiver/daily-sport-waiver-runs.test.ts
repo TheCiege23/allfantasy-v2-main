@@ -41,7 +41,7 @@ vi.mock('@/lib/prisma', () => ({
       groupBy: async () => [...h.leagues.keys()].map((leagueId) => ({ leagueId, _count: { _all: 2 } })),
       count: async () => 2,
     },
-    waiverRun: { findFirst: async () => null },
+    waiverRun: { findFirst: async () => null, updateMany: async () => ({ count: 0 }) },
   },
 }))
 vi.mock('@/lib/automation/audit', () => ({ writeAutomationAuditLog: vi.fn(async () => undefined) }))

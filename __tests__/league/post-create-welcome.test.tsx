@@ -49,6 +49,8 @@ describe('the post-create handoff flags are read once, then cleared', () => {
     const href = buildPostCreateLeagueHomeHref({ leagueId: 'L1', leagueType: 'survivor', allowInviteLink: true, zombieUniverseTier: 'beta_trio' })
     const search = href.split('?')[1]
     expect(search).toContain('created=1')
+    // Chat must not open over a league you just made.
+    expect(search).not.toContain('openChat')
     expect(stripPostCreateHandoff(`?${search}&view=native_home`)).toBe('zombieTier=beta_trio&view=native_home')
   })
 
@@ -269,47 +271,27 @@ describe('"your league is ready"', () => {
     privacy: 'private',
   }
 
-  it('says what was created, offers the invite, and points at the draft time when there is none', () => {
-    const onOpenSettings = vi.fn()
+  it('is just the invite and a way out — no settings rows, no listing card, no setup steps', () => {
     const onClose = vi.fn()
-    render(<PostCreateWelcomeSheet league={league} inviteUrl="https://x.test/join?code=A" onClose={onClose} onOpenSettings={onOpenSettings} />)
+    render(<PostCreateWelcomeSheet league={league} inviteUrl="https://x.test/join?code=A" onClose={onClose} onOpenSettings={vi.fn()} />)
     expect(screen.getByRole('dialog', { name: 'Tight End Club is ready' })).toBeTruthy()
-    const info = screen.getByTestId('post-create-welcome-info').textContent ?? ''
-    for (const text of ['NFL · Redraft', '1 of 12 managers joined', 'Full PPR · TE premium +0.5 per catch', 'Not scheduled yet', 'Private (invite only)']) {
-      expect(info).toContain(text)
-    }
+    expect(screen.getByTestId('post-create-welcome-invite-line').textContent).toBe('Invite 11 more managers to fill the league.')
     expect(screen.getByTestId('post-create-invite-qr')).toBeTruthy()
-    fireEvent.click(screen.getByTestId('post-create-welcome-set-draft'))
-    expect(onOpenSettings).toHaveBeenCalledWith('draft')
+    expect(screen.queryByTestId('post-create-welcome-info')).toBeNull()
+    expect(screen.queryByTestId('post-create-welcome-set-draft')).toBeNull()
+    expect(screen.queryByTestId('find-league-listing-toggle')).toBeNull()
+    fireEvent.click(screen.getByTestId('post-create-welcome-done'))
+    expect(onClose).toHaveBeenCalledTimes(1)
     fireEvent.keyDown(document, { key: 'Escape' })
-    expect(onClose).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalledTimes(2)
   })
 
-  it('with a draft time it shows it in the league timezone and drops the set-draft step', () => {
-    render(
-      <PostCreateWelcomeSheet
-        league={{ ...league, draftDateIso: '2026-11-09T02:00:00.000Z', tePremiumPoints: null }}
-        inviteUrl=""
-        onClose={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
-    )
-    expect(screen.queryByTestId('post-create-welcome-set-draft')).toBeNull()
-    expect(screen.getByTestId('post-create-welcome-info').textContent).toContain('8:00')
+  it('says the league is full when every seat is taken, and shows no link without one', () => {
+    render(<PostCreateWelcomeSheet league={{ ...league, claimedSeats: 12 }} inviteUrl="" onClose={vi.fn()} onOpenSettings={vi.fn()} />)
+    expect(screen.getByTestId('post-create-welcome-invite-line').textContent).toBe('Every seat is filled.')
     expect(screen.getByTestId('post-create-invite-no-link')).toBeTruthy()
   })
 
-  it('offers to list the league in Find a League while it has open seats', async () => {
-    const calls: string[] = []
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      calls.push(`${init?.method ?? 'GET'} ${url}`)
-      return new Response(JSON.stringify({ listed: false, inviteReady: true, openSeats: 11, leagueSize: 12, seatsHeld: 1 }))
-    }))
-    render(<PostCreateWelcomeSheet league={league} inviteUrl="https://x.test/join?code=A" onClose={vi.fn()} onOpenSettings={vi.fn()} />)
-    expect((await screen.findByTestId('find-league-listing-seats')).textContent).toBe('11 open seats')
-    fireEvent.click(screen.getByTestId('find-league-listing-toggle'))
-    await waitFor(() => expect(calls).toContain('POST /api/commissioner/leagues/L1/league-finder'))
-  })
 
   it('formats the draft date in the league zone, and survives a bad zone', () => {
     expect(formatWelcomeDraftDate('2026-11-09T02:00:00.000Z', 'America/Chicago', 'en-US')).toMatch(/Sun, Nov 8, 8:00\s?PM CST/)

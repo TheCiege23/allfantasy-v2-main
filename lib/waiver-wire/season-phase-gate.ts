@@ -156,3 +156,13 @@ export async function loadWaiverRunPhaseGate(leagueId: string): Promise<(rosterI
     return policy.claimsAllowed ? null : policy.reason
   }
 }
+
+/**
+ * Rebuild priority (AF Commissioner waiver extra, lib/waivers/waiverExtras.ts): once the playoffs begin,
+ * the teams out of the title bracket. Empty before the playoffs, or when the bracket cannot be read.
+ */
+export async function loadRebuildPriorityRosterIds(leagueId: string): Promise<Set<string>> {
+  const ctx = await loadWaiverPhaseContext(leagueId)
+  if (ctx.phase !== 'playoffs' || !ctx.seasonId) return new Set()
+  return loadTitleBracketEliminatedRosterIds(leagueId, ctx.seasonId).catch(() => new Set<string>())
+}
