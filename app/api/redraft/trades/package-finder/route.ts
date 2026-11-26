@@ -6,8 +6,16 @@ import { assertLeagueMember } from '@/lib/league/league-access'
 import { assembleDiscoveryLeague } from '@/lib/trade-discovery/assembleRosters'
 import { findPackages } from '@/lib/trade-discovery/redraftTradeDiscovery'
 import { discoverySignals } from '@/lib/trade-block/redraftTradeBlockService'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { attachPackageGrades } from '@/lib/trade-discovery/packageGrades'
 
 export const dynamic = 'force-dynamic'
+
+/** Packages returned, after THE grade re-ranks them. */
+const PACKAGES_SHOWN = 5
+/** Packages generated and graded — more than are shown, so the grade, not the finder, picks the five. */
+const PACKAGES_GRADED = 8
+const GRADE_BUDGET_MS = 8_000
 
 /** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
 function isCommissionerOrOwner(leagueId: string, userId: string): Promise<boolean> {
@@ -55,8 +63,11 @@ export async function POST(req: NextRequest) {
   partnerRoster.blockPlayerIds = signals.blockPlayerIdsByRoster[partnerRosterId] ?? []
   myRoster.blockPlayerIds = signals.blockPlayerIdsByRoster[myRosterId] ?? []
 
+  // ONE grader for the league, loading while the packages are generated. Membership is checked above.
+  const grader = createLeagueTradeGrader({ leagueId, userId }).catch(() => null)
+
   const faabSupported = (myRoster.faabBalance ?? 0) > 0 || (partnerRoster.faabBalance ?? 0) > 0
-  const suggestedPackages = findPackages({
+  const generated = findPackages({
     myRoster,
     partnerRoster,
     sport: league.sport,
@@ -64,6 +75,22 @@ export async function POST(req: NextRequest) {
     draftPickTrading: league.draftPickTrading,
     targetPlayerId: body.targetPlayerId ?? null,
     outgoingPlayerId: body.outgoingPlayerId ?? null,
+    max: PACKAGES_GRADED,
+  })
+
+  /*
+   * 🛑 THE GRADE ON EVERY PACKAGE (2026-11-26, lib/trade-discovery/packageGrades.ts). The finder's
+   * values generate the packages; the band, totals, startability and order are the one grader's.
+   * Roster need is priced only when the caller IS the sending roster — a commissioner building from
+   * another team gets that team's deal on league value, never their own roster's need.
+   */
+  const suggestedPackages = await attachPackageGrades({
+    packages: generated,
+    grade: async (give, get) => gradeDeal(await grader, { give, get, viewerSide: owner === userId }),
+    faabSupported,
+    sport: league.sport,
+    max: PACKAGES_SHOWN,
+    budgetMs: GRADE_BUDGET_MS,
   })
 
   const warnings: string[] = []

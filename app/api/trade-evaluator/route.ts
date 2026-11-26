@@ -13,7 +13,7 @@ import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai
 import { checkAiRateLimit, getCachedResponse, setCachedResponse, buildCacheKey, getAiActionConfig } from '@/lib/ai-protection'
 import { buildHistoricalTradeContext, getDataInfo, calculateTradeConfidence, computeDualModeGrades } from '@/lib/historical-values'
 import { pricePlayer, pricePick, compositeScore, compositeTotal, idpCeilingCompositeBand, isEvidencedPrice, ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
-import { computeLineupDelta, computeLineupFairness, computeValueFairness, type LineupPlayer, type RosterSlots, type LineupDelta } from '@/lib/lineup-optimizer'
+import { computeLineupDelta, computeValueFairness, type LineupPlayer, type RosterSlots, type LineupDelta } from '@/lib/lineup-optimizer'
 import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converter'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
 import { getTotalIdpStarterSlots, canFieldLegalIdpLineup } from '@/lib/trade-engine/idp-lineup-check'
@@ -30,7 +30,7 @@ import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-logger'
 import { checkBehaviorRules, logRuleViolations } from '@/lib/ai/behavior-rules'
 import { detectTradeLabels, getPositiveLabels, getWarningLabels, TradeAsset } from '@/lib/trade-labels'
-import { evaluateVeto } from '@/lib/trade-veto'
+import { fairnessFromGrade, vetoRiskFromGrade } from '@/lib/decision-os/trade/gradeFairness'
 import { buildLeagueDecisionContext, summarizeLeagueDecisionContext, LeagueDecisionContext } from '@/lib/league-decision-context'
 import { buildUnifiedTradeContext, type LegacyAssetInput } from '@/lib/trade-engine/unified-context'
 import { computeDataCoverageTier } from '@/lib/trade-engine/trade-decision-context'
@@ -1030,9 +1030,6 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     const senderReceivedMarket = senderReceivedAssetsList.reduce((s, p) => s + p.assetValue.marketValue, 0)
       + faabValue(data.receiver.gives_faab)
 
-    const senderGivenTotal = senderGivenComposite
-    const senderReceivedTotal = senderReceivedComposite
-
     const teamANetValue = senderReceivedComposite - senderGivenComposite
 
     /*
@@ -1246,9 +1243,23 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     const senderGivenAssets = [...senderPlayerAssets, ...senderPickAssets]
     const receiverGivenAssets = [...receiverPlayerAssets, ...receiverPickAssets]
 
-    let fairnessScore: number
+    /*
+     * 🛑 FAIRNESS AND VETO RISK ARE THE ONE GRADE'S (2026-11-26). This route used to score fairness
+     * itself — `computeLineupFairness` over the lineup deltas, else `computeValueFairness` over its own
+     * composite totals — and feed that to `evaluateVeto` with ≤52 / <55 cut-offs of its own. So the page
+     * could show an "A" from the grader beside "likely veto" from here. Now both are read off the
+     * receipt's grade by `lib/decision-os/trade/gradeFairness.ts` — fairness = 100 − the grade's value
+     * gap, veto risk = the letter's band (the same rule the AI Commissioner watchlist's rewrite uses).
+     * A withheld grade withholds both, with the grader's reason — never a number.
+     *
+     * The lineup deltas below stay, as a labelled FACT (who starts, roster fit) — they no longer score.
+     */
+    const gradeForFairness = (await evaluationReceiptPromise).grade
+    const canonicalFairness = fairnessFromGrade(gradeForFairness)
+    const fairnessScore: number | null = canonicalFairness.fairnessScore
+    const fairnessWithheldReason: string | null = canonicalFairness.withheldReason
+    const fairnessMethod = 'canonical_grade' as const
     let lineupDeltas: { sender: LineupDelta; receiver: LineupDelta } | null = null
-    let fairnessMethod: 'lineup' | 'composite' = 'composite'
 
     const senderRoster = data.sender.roster || []
     const receiverRoster = data.receiver.roster || []
@@ -1333,14 +1344,9 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
         )
 
         lineupDeltas = { sender: deltaSender, receiver: deltaReceiver }
-        fairnessScore = computeLineupFairness(deltaSender, deltaReceiver)
-        fairnessMethod = 'lineup'
       } catch (lineupErr) {
-        console.warn('[TradeEval] Lineup optimization failed, falling back to composite:', (lineupErr as Error)?.message)
-        fairnessScore = computeValueFairness(senderReceivedComposite, senderGivenComposite)
+        console.warn('[TradeEval] Lineup impact unavailable (fairness is unaffected — it is the grade\'s):', (lineupErr as Error)?.message)
       }
-    } else {
-      fairnessScore = computeValueFairness(senderReceivedComposite, senderGivenComposite)
     }
 
     let idpLineupWarning: string | null = null
@@ -1400,7 +1406,8 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
       flipsWinner: boolean
       note: string
     } | null = null
-    if (idpCeilingBand) {
+    // ⚠ Only beside a real grade: a withheld grade has no verdict for the defender rate to flip.
+    if (idpCeilingBand && canonicalFairness.graded) {
       const lowFairness = computeValueFairness(idpCeilingBand.low.received, idpCeilingBand.low.gave)
       const highFairness = computeValueFairness(idpCeilingBand.high.received, idpCeilingBand.high.gave)
       const lo = Math.min(lowFairness, highFairness)
@@ -1424,20 +1431,10 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     const tradeLabels = detectTradeLabels({
       givenAssets: senderGivenAssets,
       receivedAssets: receiverGivenAssets,
-      fairnessScore,
-      givenValue: senderGivenTotal,
-      receivedValue: senderReceivedTotal,
+      gradeLetter: canonicalFairness.letter,
     })
 
-    const hasTierJump = tradeLabels.some(l => l.id === 'tier_jump_win')
-
-    const vetoResult = evaluateVeto({
-      givenAssets: senderGivenAssets,
-      receivedAssets: receiverGivenAssets,
-      fairnessScore,
-      leagueType: isSF ? 'SF' : '1QB',
-      hasTierJump,
-    })
+    const vetoResult = vetoRiskFromGrade(gradeForFairness)
 
     let confidenceInfo: { confidence: number; confidenceLabel: string; explanation: string } | null = null
     let dualModeGrades: Awaited<ReturnType<typeof computeDualModeGrades>> | null = null
@@ -1555,6 +1552,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
           netValue: teamANetValue,
           fairnessScore,
           fairnessMethod,
+          fairnessWithheldReason,
           marketGiven: senderGivenMarket,
           marketReceived: senderReceivedMarket,
           tierImpact: tierImpactA,
@@ -1566,8 +1564,10 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
           totalGiven: senderReceivedComposite,
           totalReceived: senderGivenComposite,
           netValue: teamBNetValue,
-          fairnessScore: 100 - fairnessScore,
+          // Symmetric: the partner's gap is the exact mirror, so its fairness is the same number.
+          fairnessScore,
           fairnessMethod,
+          fairnessWithheldReason,
           marketGiven: senderReceivedMarket,
           marketReceived: senderGivenMarket,
           tierImpact: tierImpactB,
@@ -1581,6 +1581,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
         vetoReason: vetoResult.vetoReason,
         warning: vetoResult.warning,
         warningText: vetoResult.warningText,
+        withheldReason: vetoResult.withheldReason,
       },
       leagueSettings: {
         format: data.league?.format ?? 'redraft',
@@ -1633,8 +1634,9 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     const confidenceInputs: Record<string, number> = { base: 50 }
     if (leagueDecisionCtx?.metadata.snapshotCompleteness === 'FULL') confidenceInputs.snapshotFull = 20
     if (leagueDecisionCtx?.metadata.snapshotCompleteness === 'PARTIAL') confidenceInputs.snapshotPartial = -10
-    if (Math.abs(fairnessScore - 50) > 10) confidenceInputs.clearValueDelta = 20
-    if (Math.abs(fairnessScore - 50) < 5) confidenceInputs.thinDelta = -10
+    // The grade's own bands: outside the even band is a clear gap, inside it is thin. Withheld: neither.
+    if (canonicalFairness.graded && canonicalFairness.controversyLevel !== 'low') confidenceInputs.clearValueDelta = 20
+    if (canonicalFairness.graded && canonicalFairness.controversyLevel === 'low') confidenceInputs.thinDelta = -10
     if (leagueDecisionCtx && data.sender.team_id && data.receiver.team_id) {
       const sTeam = leagueDecisionCtx.teams[data.sender.team_id]
       const rTeam = leagueDecisionCtx.teams[data.receiver.team_id]
@@ -1980,6 +1982,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
       netDeltaPct: senderGivenComposite > 0 ? Math.round(((senderReceivedComposite - senderGivenComposite) / senderGivenComposite) * 100) : 0,
       labels: getPositiveLabels(tradeLabels).map(l => ({ id: l.id, name: l.name, emoji: l.emoji, description: l.description })),
       warnings: getWarningLabels(tradeLabels).map(l => ({ id: l.id, name: l.name, emoji: l.emoji, description: l.description })),
+      ...(fairnessWithheldReason && { fairnessWithheldReason }),
       veto: vetoResult.veto,
       vetoReason: vetoResult.vetoReason,
       expertWarning: vetoResult.warning ? vetoResult.warningText : null,

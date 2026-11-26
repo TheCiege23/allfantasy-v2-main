@@ -306,8 +306,15 @@ describe('league scoring is the weekly scoring', () => {
 describe('wired into both grading surfaces', () => {
   it('the shared league grader returns its view before the NFL chart', () => {
     const src = readFileSync('lib/decision-os/trade/leagueTradeGrader.ts', 'utf8')
-    expect(src).toMatch(/^\s*const sportPoints = createSportPointsGrader\(/m)
-    expect(src).toMatch(/^\s*if \(sportPoints\) return await sportPoints\.grade\(give, get\)/m)
+    // Since the concept registry (`conceptGradingRegistry.ts`) the grader is built when its rule names it and
+    // dispatched by `switch (rule.grader)` — the same contract as the old if-chain, in table form.
+    expect(src).toMatch(/^\s*const sportPoints = rule\.grader !== 'sport_points' \? null : createSportPointsGrader\(/m)
+    expect(src).toMatch(/^\s*return sportPoints \? await sportPoints\.grade\(give, get\) : unwired/m)
+    // …and it returns BEFORE the NFL chart path is reached.
+    const dispatch = src.search(/^\s*return sportPoints \? await sportPoints\.grade\(give, get\)/m)
+    const chartPath = src.search(/^\s*const pickWhy = assets\.pickRefusal\(/m)
+    expect(dispatch).toBeGreaterThan(-1)
+    expect(chartPath).toBeGreaterThan(dispatch)
   })
 
   it('the Trade Center console grades with it in a league and in the open analyzer', () => {

@@ -2,7 +2,8 @@ import 'server-only'
 
 import { allocateFaabAcrossPool } from '@/lib/trade-intel/faabBid'
 import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
-import { getMarketValues } from '@/lib/trade-intel/marketValueService'
+import { createLeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { marketValuesFromLeagueChart } from '@/lib/trade-value-console/leagueChartValues'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import {
   assumedOneChopHorizon,
@@ -161,7 +162,14 @@ export async function computeFaabBidPlan(leagueId: string, userId: string, deps:
 
   const leagueSize = rows.rosters.length || 12
   const marketContext = marketContextFor(league.settings, league.leagueType, leagueSize)
-  const values = await getMarketValues(marketContext).catch(() => null)
+  /*
+   * 🛑 THE GRADER'S PRICE (2026-11-26). Values come from the league chart `createLeagueTradeGrader`
+   * prices every trade letter on (`marketValuesFromLeagueChart`), not from `marketValueService`'s own
+   * FantasyCalc request — so "what is he worth to bid on" and "what is he worth in a trade" are one
+   * number. The league was read through `leagueContextFor` above, which is the membership proof.
+   */
+  const grader = await createLeagueTradeGrader({ leagueId, userId }).catch(() => null)
+  const values = grader ? marketValuesFromLeagueChart(grader.chart) : null
   if (!values) return refuse('FAAB BID PLAN: no player values are loaded for this league\'s format yet, so nobody can be priced. Say so; do not estimate bids.')
 
   const rostered = new Set(rows.rosters.flatMap((r) => tradeRosterPlayerIds(r)))

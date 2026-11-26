@@ -57,14 +57,19 @@ interface ActionLogView {
   createdAt: string
 }
 
+/** THE grade for a completed trade (`lib/ai-commissioner/TradeFairnessAnalyzer.ts`). */
 interface TradeFairnessView {
   tradeId: string
   transactionId: string | null
-  createdAt: string
+  createdAt: string | null
   sport: SupportedSport
-  fairnessScore: number
-  imbalancePct: number
-  controversyLevel: 'low' | 'medium' | 'high'
+  graded: boolean
+  letter: string | null
+  partnerLetter: string | null
+  fairnessScore: number | null
+  imbalancePct: number | null
+  controversyLevel: 'low' | 'medium' | 'high' | 'unknown'
+  withheldReason: string | null
   summary: string
   relatedManagerIds: string[]
 }
@@ -913,7 +918,8 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
                   return (
                     <div key={trade.tradeId} className="rounded-md border border-white/10 bg-black/25 p-2">
                       <p className="text-[11px] text-white/80">
-                        {trade.summary} (fairness {trade.fairnessScore}/100)
+                        {trade.summary}
+                        {trade.graded ? ` (fairness ${trade.fairnessScore}/100)` : ''}
                       </p>
                       <Button
                         size="sm"

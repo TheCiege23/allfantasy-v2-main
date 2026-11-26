@@ -7,9 +7,9 @@ import 'server-only'
  * When a chat turn carries a leagueId (Sleeper-imported league), this builds a
  * compact, factual brief from the SAME engines the league dashboard renders:
  *  - LeagueContext envelope (variant, scoring, IDP emphasis, pirate house rule)
- *  - Market valuation chart in the league's exact format (FantasyCalc) + the
- *    labeled FAAB heuristic
- *  - Graded trade ledger summary (latest trade + grades)
+ *  - THE league trade grade's chart (`createLeagueTradeGrader`) as the trade-value basis
+ *  - Completed trade ledger summary, the latest trade graded by THE one grader
+ *    (`oneGradeForCompletedTrade`, its frozen original when one is stored) — 2026-11-26
  *  - H2H records highlights
  *
  * Every sub-fetch is bounded by a short timeout so a cold cache can never
@@ -20,9 +20,11 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
-import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
-import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
+import { createLeagueTradeGrader, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
+import { loadFrozenCompletedGrades } from '@/lib/decision-os/trade/frozenCompletedGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 import { isLeagueConceptType, leagueConceptLabel, resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import { getConceptById } from '@/lib/league-rules/conceptCatalog'
@@ -99,11 +101,31 @@ export async function resolveLeagueIntelligenceGrounding(args: {
     const context = await withTimeout(getLeagueContext(sid), 3000)
     if (!context) return null
 
-    const [values, grades, h2h] = await Promise.all([
-      withTimeout(getMarketValues(context), 2500),
+    /*
+     * 🛑 ONE GRADER (2026-11-26). The value basis and the latest trade's letter are THE grade's — the
+     * league chart and AllFantasy market every trade screen prices on — never `marketValueService`'s
+     * own board or the ledger's points-while-held letter. Membership was proven by the query above.
+     * The ledger (`getTradeGrades`) supplies the completed trades themselves: who, when, what moved.
+     */
+    const [grader, grades, h2h] = await Promise.all([
+      withTimeout<LeagueTradeGrader>(createLeagueTradeGrader({ leagueId, userId }), 3000),
       withTimeout(getTradeGrades(sid), 3500),
       withTimeout(getLeagueH2H(sid), 3500),
     ])
+    const latestTrade = grades?.trades[0] ?? null
+    const latestGrade: TradeGradeView | null =
+      latestTrade && grader
+        ? await withTimeout<TradeGradeView>(
+            (async () => {
+              const frozen = await loadFrozenCompletedGrades(leagueId, [latestTrade.id]).catch(() => new Map())
+              return oneGradeForCompletedTrade(leagueId, latestTrade, Number(context.season) || new Date().getUTCFullYear(), {
+                graderFor: async () => grader,
+                frozen,
+              })
+            })(),
+            2500,
+          )
+        : null
 
     const lines: string[] = []
     const leagueConcept = resolveLeagueConcept(league.settings, league.leagueType)
@@ -141,37 +163,26 @@ export async function resolveLeagueIntelligenceGrounding(args: {
     } else if (context.houseRules.pirate) {
       lines.push('Possible pirate house rule detected from the league name but NOT confirmed — do not assume it.')
     }
-    if (values) {
+    if (grader) {
+      const c = grader.chart
       lines.push(
-        `Trade values: use ${values.source}, ${values.mode} mode (${values.numQbs}QB, ${values.numTeams}-team, ${values.ppr} PPR). Draft picks have market values in dynasty mode. ${values.faab.formula}`,
+        `Trade values: this league's AllFantasy trade grade — the league chart (${c.chartIsDynasty ? 'dynasty' : 'redraft'}, ${c.isSuperFlex ? 'superflex' : '1QB'}, ${c.leagueSize}-team, ${c.pprNfl} PPR) and AllFantasy market every trade letter in the app is priced on. For a value or a grade on a specific deal, use the evaluate_trade tool; never quote a trade value from general knowledge.`,
       )
     }
-    if (grades && grades.trades.length > 0) {
-      const t = grades.trades[0]
+    if (grades && latestTrade) {
+      const t = latestTrade
       /*
-       * 🛑 A LETTER WITH NO POINTS BEHIND IT MUST NOT BE GROUNDED AS A FACT.
-       *
-       * The grade bands put net 0 in the middle of C (`letterFor`: C is -40..40) and the engine
-       * reports `tie` for it, so a trade where NOTHING has been credited yet — preseason, a
-       * league still drafting, picks that have not been used — produces "Manager: C (net +0 pts)
-       * — currently a tie" for every side. That is the repo's known trap, and `hasNoSignal` is
-       * the predicate written for it.
-       *
-       * ⚠ IT IS WORSE HERE THAN ON A SCREEN. The closing line of this packet tells the model
-       * these are "the ONLY league-specific truths" and to cite them, so a placeholder letter is
-       * not merely displayed — it is handed over as something to reason from and repeat.
+       * 🛑 THE LETTER IS THE ONE GRADER'S, OR THERE IS NONE. The ledger's own "points while held" letter
+       * (`currentGrade`) is a second scale — a 0-net trade read as a C "tie" for every side, which is why
+       * `hasNoSignal` existed. THE grade is on league value (sides[0] sends its `give`); a withheld grade
+       * publishes its reason, never a neutral letter standing in for missing data.
        */
-      const sideSummary = hasNoSignal(t)
-        ? t.sides.map((s) => s.managerName).join(' / ')
-        : t.sides
-            .map((s) => `${s.managerName}: ${s.currentGrade} (net ${s.cumulativeNet > 0 ? '+' : ''}${s.cumulativeNet.toFixed(0)} pts)`)
-            .join('; ')
-      const latest = hasNoSignal(t)
-        ? `Latest (${t.season} wk ${t.week}): ${sideSummary} — too early to grade, no points credited to either side yet. Do not call it even or close; nothing has been scored.`
-        : `Latest (${t.season} wk ${t.week}): ${sideSummary}${t.tie ? ' — currently a tie' : ''}.`
-      lines.push(
-        `Graded trade ledger: ${grades.trades.length} completed trades since ${grades.seasonsScanned[0]}. ${latest} Grades = net points while assets were held.`,
-      )
+      const names = t.sides.map((s) => s.managerName)
+      const latest =
+        latestGrade?.graded && t.sides.length === 2
+          ? `Latest (${t.season} wk ${t.week}): ${names[0]}: ${latestGrade.letter}; ${names[1]}: ${latestGrade.partnerLetter} — ${latestGrade.label} (league trade grade on this league's chart).`
+          : `Latest (${t.season} wk ${t.week}): ${names.join(' / ')} — not graded${latestGrade && !latestGrade.graded ? `: ${latestGrade.reason.replace(/\.$/, '')}` : ': the league trade grade could not be read just now'}. Do not call it even, close, or a win for either side.`
+      lines.push(`Completed trade ledger: ${grades.trades.length} completed trades since ${grades.seasonsScanned[0]}. ${latest}`)
     }
     if (h2h) {
       const bits: string[] = []

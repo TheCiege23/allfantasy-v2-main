@@ -407,12 +407,36 @@ function repricedAsset(p: PricedAsset, marketValue: number, source: PricedAsset[
  * follow when no evidenced value exists. Nothing is priced as zero: `unpriced` is the signal.
  */
 export async function priceLeagueTradePick(
-  pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null; originalRosterId?: string | null; overall?: number },
+  pick: {
+    year: number
+    round: number
+    tier?: 'early' | 'mid' | 'late' | null
+    originalRosterId?: string | null
+    overall?: number
+    roundPick?: number
+  },
   args: { nflCtx: ValuationContext; fcPlayers: FantasyCalcPlayer[]; pickSlots?: PickSlotProjection | null },
 ): Promise<{ priced: PricedAsset; dataSource: string; projection?: string }> {
   const curve = await pricePick({ year: pick.year, round: pick.round, tier: pick.tier ?? null }, args.nflCtx)
   const teams = args.nflCtx.numTeams ?? REFERENCE_TEAMS
   const large = args.nflCtx.largeLeagueRookiePicks
+  /*
+   * AN EXACT SLOT IN A DRAFT BEING RUN NOW (2026-11-26). The live draft room trades 1.04 for 1.09 —
+   * picks whose slot is known, not "a 2026 early 1st". The market prices exactly those once the order
+   * is known ("2026 Pick 1.04"), on this league's own board, so such a pick is that row. Only a caller
+   * that knows the slot sets `roundPick`; without the row the pick falls through to the tier/round
+   * rule below — the market's own coarser price, never an invented curve. A large league already
+   * prices from `overall` on the 12-team board (`largeLeaguePickValue`), so it is left to that path.
+   */
+  if (!large && pick.roundPick != null && Number.isInteger(pick.roundPick) && pick.roundPick >= 1 && pick.roundPick <= teams) {
+    const exact = chartSlotValue(args.fcPlayers, pick.year, pick.round, pick.roundPick)
+    if (exact != null && exact > 0) {
+      return {
+        priced: { ...repricedAsset(curve, exact, 'fantasycalc'), name: `${pick.year} Pick ${pick.round}.${String(pick.roundPick).padStart(2, '0')}` },
+        dataSource: 'fantasycalc_pick_slot',
+      }
+    }
+  }
   const projected = large || pick.tier ? null : projectedLivePick(args.fcPlayers, pick, args.pickSlots ?? null)
   if (projected) {
     return {

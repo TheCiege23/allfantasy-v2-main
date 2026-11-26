@@ -6,8 +6,9 @@
  *
  * Honesty contract: every proposal shows its full rationale (checkable facts:
  * which slot it fills, the ADP gap, the partner's counted trade activity), the
- * method line renders verbatim, and the panel is explicit that market ADP is a
- * conversation starter — not an AF valuation verdict. Honest empty states for
+ * method line renders verbatim. ADP only picks which pairs are considered; the
+ * values, "% apart" and the last rationale line are THE league trade grade
+ * (2026-11-26), and a withheld grade says why. Honest empty states for
  * unlinked accounts and no-match rosters.
  */
 

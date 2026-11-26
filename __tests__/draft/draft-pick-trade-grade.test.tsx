@@ -44,6 +44,7 @@ describe('pickTierInRound', () => {
       year: 2026,
       round: 2,
       tier: 'early',
+      roundPick: 2,
       label: '2026 early round 2 (#14)',
     })
   })
@@ -88,23 +89,31 @@ describe('DraftPickTradeGradeLine', () => {
 
 describe('wiring', () => {
   const route = code('app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts')
+  const review = code('lib/live-draft-engine/draftPickTradeCanonicalReview.ts')
   const root = code('components/app/draft-room/DraftPickTradePanelRoot.tsx')
 
-  it('the route grades rookie and combined draft picks through the league grader', () => {
-    expect(route).toMatch(/isRookieDraft\(draftSession\)\s*\?\s*await gradeDeal\(/)
-    expect(route).toMatch(/annualC2CDraftSeason\(draftSession\)/)
-    expect(route).toMatch(/draftPickGradeAsset\(\{[^}]*combined \}\)/)
-    expect(route).toMatch(/: \{ graded: false, reason: NOT_A_ROOKIE_DRAFT_REASON \}/)
-    expect(route).toMatch(/ok: true,\s*tradeGrade,/)
+  it('the route grades through the one draft-room review, which grades rookie and combined picks through the league grader', () => {
+    expect(route).toMatch(/reviewDraftPickSwap\(\s*draftPickTradeGraderSource\(\{ leagueId, userId \}\)/)
+    expect(review).toMatch(/if \(!isRookieDraft\(session\)\) return \{ graded: false, reason: NOT_A_ROOKIE_DRAFT_REASON \}/)
+    expect(review).toMatch(/annualC2CDraftSeason\(session\)/)
+    expect(review).toMatch(/draftPickGradeAsset\(\{[^}]*combined,\s*\}\)/)
+    expect(review).toMatch(/await gradeDeal\(await grader\(\)/)
+    expect(route).toMatch(/ok: true,\s*tradeGrade,\s*verdict: review\.verdict,/)
+    expect(route).not.toMatch(/buildDraftTradeAiReview/)
   })
 
-  it('the AI is handed the grade as the verdict, not the private one, when there is a grade', () => {
+  it('the AI is handed the grade as the verdict, or told the swap is not graded', () => {
     expect(route).toMatch(/If trade\.leagueGrade is present it is THE AllFantasy grade/)
     expect(route).toMatch(/tradeGrade\.graded\s*\?\s*\{\s*leagueGrade:/)
+    expect(route).toMatch(/: \{ gradeWithheld: tradeGrade\.reason \}/)
+    expect(route).not.toMatch(/deterministicVerdict/)
   })
 
-  it('🛑 the panel hides the verdict, fairness and move-quality chips when the swap is graded', () => {
+  it('🛑 the panel shows the grade line, draws no verdict chip when not graded, and has no fairness chips left', () => {
     expect(root).toMatch(/<DraftPickTradeGradeLine grade=\{builderAnalysis\.tradeGrade\}/)
-    expect(root.match(/builderAnalysis\.tradeGrade\?\.graded \? null :/g)).toHaveLength(2)
+    expect(root).toMatch(/<DraftPickTradeGradeLine grade=\{aiReview\.tradeGrade\}/)
+    expect(root).toMatch(/builderAnalysis\.verdict === 'not_graded' \? null :/)
+    expect(root).toMatch(/aiReview\.verdict === 'not_graded' \? null :/)
+    expect(root).not.toMatch(/structuredFairnessLabel|structuredGuidanceTone/)
   })
 })

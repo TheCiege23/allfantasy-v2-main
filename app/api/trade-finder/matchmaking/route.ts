@@ -1,6 +1,11 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { gradeMatchmakingPartners } from '@/lib/trade-finder/matchmakingGrades'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
@@ -72,6 +77,35 @@ type ParsedRoster = {
 
 const SKILL_POSITIONS = ['QB', 'RB', 'WR', 'TE']
 
+/**
+ * Partners graded per request: every qualified partner up to this many is graded, THEN ranked on the
+ * grade and cut to `maxResults` — ranking first and grading after would let a second engine pick
+ * which offers the user ever sees. A league rarely has more than this many other managers.
+ */
+const MATCHMAKING_GRADE_POOL = 12
+/** The grade must not hold the response hostage; an unanswered offer is shown as not graded. */
+const MATCHMAKING_GRADE_BUDGET_MS = 8_000
+
+/**
+ * The viewer's own AllFantasy copy of this Sleeper league, and ONE grader for it. Membership is
+ * proven by the query (owner or claimed team), as `createLeagueTradeGrader` requires of its caller.
+ * Never throws: no session, no AF row or a chart that will not load all mean null, and every offer is
+ * then shown as not graded with the reason.
+ */
+async function viewerLeagueGrader(platformLeagueId: string): Promise<LeagueTradeGrader | null> {
+  const session = (await getServerSession(authOptions as never).catch(() => null)) as { user?: { id?: string } } | null
+  const viewerId = session?.user?.id
+  if (!viewerId) return null
+  const af = await (prisma as any).league
+    .findFirst({
+      where: { platformLeagueId, OR: [{ userId: viewerId }, { teams: { some: { claimedByUserId: viewerId } } }] },
+      select: { id: true },
+    })
+    .catch(() => null)
+  if (!af?.id) return null
+  return createLeagueTradeGrader({ leagueId: af.id, userId: viewerId }).catch(() => null)
+}
+
 export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", tool: "TradeFinderMatchmaking" })(async (req: NextRequest) => {
   /*
    * "Find Best Partners" — open to anyone, signed in or not, while its button was locked to
@@ -135,6 +169,9 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
     if (!sleeperUser) {
       return NextResponse.json({ error: 'User not found in this league' }, { status: 404 })
     }
+
+    // THE grader loads its chart while this route prices the league for candidate generation.
+    const graderPromise = viewerLeagueGrader(leagueId).catch(() => null)
 
     const leagueSport = String(league.sport ?? 'nfl').toLowerCase()
     const sportPlayers = await getPlayersBySport(leagueSport).catch(() => ({} as Record<string, any>))
@@ -493,11 +530,24 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
       intelligence,
       pricedAssets,
       tendencies: tendenciesMap,
+      maxResults: Math.max(maxResults, MATCHMAKING_GRADE_POOL),
+    })
+
+    /*
+     * 🛑 THE GRADE ON EVERY OFFER (2026-11-26). The values above GENERATE the partners and the offer;
+     * the verdict — the letter, the fairness chip, the accept estimate and the order — is the one
+     * grader's, from the viewer's side, on this league's chart (lib/trade-finder/matchmakingGrades.ts).
+     */
+    const grader = await graderPromise
+    const gradedPartners = await gradeMatchmakingPartners({
+      partners: result.partners,
+      grade: (give, get) => gradeDeal(grader, { give, get, viewerSide: true }),
       maxResults,
+      budgetMs: MATCHMAKING_GRADE_BUDGET_MS,
     })
 
     const allOfferAssets: Array<{ assetId: string; teamAbbr: string | null; isPick: boolean }> = []
-    for (const p of result.partners) {
+    for (const p of gradedPartners) {
       if (p.suggestedOffer) {
         for (const a of [...p.suggestedOffer.userGives, ...p.suggestedOffer.partnerGives]) {
           if (!a.isPick) {
@@ -535,7 +585,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
 
     const enrichedResult = {
       ...result,
-      partners: result.partners.map(p => ({
+      partners: gradedPartners.map(p => ({
         ...p,
         suggestedOffer: p.suggestedOffer ? {
           ...p.suggestedOffer,
@@ -548,6 +598,8 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
     return NextResponse.json({
       success: true,
       ...enrichedResult,
+      /** Whether THE grader for this league loaded; false means every offer reads "not graded" with why. */
+      leagueGradeAvailable: grader !== null,
       /**
        * What the ranking was actually able to use. A caller that renders partners without
        * reading this is presenting a roster-overlap ranking as the full model.

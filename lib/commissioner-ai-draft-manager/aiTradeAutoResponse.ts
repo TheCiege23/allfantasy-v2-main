@@ -1,10 +1,14 @@
 /**
  * Auto-accept/reject/counter for trade proposals where the receiver is a commissioner AI team.
+ *
+ * 🛑 THE VERDICT IS THE LEAGUE GRADE (2026-11-26) — `draftPickTradeCanonicalReview`, the same one the
+ * human receiver is shown. A swap the chart cannot grade (a startup or redraft draft) is left PENDING for
+ * the commissioner: an AI manager never accepts or rejects on a judgement nobody made.
  */
 
 import { prisma } from '@/lib/prisma'
 import { appendDraftPickTrades } from '@/lib/live-draft-engine/DraftPickTradeService'
-import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
+import { draftPickTradeGraderSource, reviewDraftPickSwap } from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
 import { logAction } from '@/lib/orphan-ai-manager/OrphanAIManagerService'
 import { DEFAULT_TRADE_RULES } from './types'
 import {
@@ -12,6 +16,7 @@ import {
   parseCommissionerAiManagers,
 } from './CommissionerAiDraftManagerService'
 
+/** The commissioner's accept-confidence floor is read against these; an even (C) grade is the weakest accept. */
 function syntheticConfidence(verdict: string): number {
   if (verdict === 'accept') return 0.74
   if (verdict === 'reject') return 0.62
@@ -36,6 +41,11 @@ export async function maybeAutoRespondToTradeProposal(leagueId: string, proposal
       thirdRoundReversal?: boolean
       slotOrder: unknown
       commissionerAiManagers?: unknown
+      draftModeLabel?: string | null
+      playerPool?: string | null
+      c2cConfig?: unknown
+      startedAt?: Date | null
+      createdAt?: Date | null
     }
 
     const blob = parseCommissionerAiManagers(sessionRow.commissionerAiManagers)
@@ -43,20 +53,17 @@ export async function maybeAutoRespondToTradeProposal(leagueId: string, proposal
     const assign = getAssignmentForRoster(blob, proposal.receiverRosterId)
     if (!assign || assign.allowInbound === false || !rules.allowInbound) return
 
-    const teamCount = sessionRow.teamCount
-    const dt = (sessionRow.draftType ?? 'snake') as 'snake' | 'linear' | 'auction'
-    const review = buildDraftTradeAiReview({
-      giveRound: proposal.receiveRound,
-      giveSlot: proposal.receiveSlot,
-      receiveRound: proposal.giveRound,
-      receiveSlot: proposal.giveSlot,
-      teamCount,
-      draftType: dt,
-      thirdRoundReversal: Boolean(sessionRow.thirdRoundReversal),
-    })
+    // Receiver (the AI team) POV: it gives receive*, it gets give*. League value; no viewer.
+    const { review } = await reviewDraftPickSwap(draftPickTradeGraderSource({ leagueId }), sessionRow, {
+      give: { round: proposal.receiveRound, slot: proposal.receiveSlot },
+      get: { round: proposal.giveRound, slot: proposal.giveSlot },
+    }, proposal.proposerName ?? null)
+    if (review.verdict === 'not_graded') return
 
+    // An even grade is a fair swap: answered like an accept, at the weakest accept confidence.
+    const accepting = review.verdict === 'accept' || review.verdict === 'even'
     const conf = syntheticConfidence(review.verdict)
-    if (review.verdict === 'accept' && conf < rules.acceptConfidenceMin) {
+    if (accepting && conf < rules.acceptConfidenceMin) {
       await (prisma as any).draftPickTradeProposal.update({
         where: { id: proposalId },
         data: {

@@ -479,6 +479,17 @@ describe('P0 package and team-direction regression through the shared league gra
     expect(h.zombieLoads).toHaveLength(0)
   })
 
+  it('withholds a league type with no registered grading rule instead of pricing it on the default chart (Phase 5)', async () => {
+    h.leagueType = 'mystery_format'
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const view = await grader.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'player', name: 'Drake London' }], viewerSide: false })
+    expect(view).toMatchObject({ graded: false, reason: expect.stringContaining('“mystery_format”') })
+    expect(view.leagueType).toMatchObject({ type: 'mystery_format' })
+    // Nothing was priced: the market overlay and the chart are never reached.
+    expect(h.overlayCalls).toHaveLength(0)
+    expect(h.needCalls).toBe(0)
+  })
+
   it('leaves every other league on the market chart', async () => {
     h.leagueType = 'redraft'
     const grader = await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' })

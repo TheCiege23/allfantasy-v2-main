@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
-import { pricePlayer, pricePick, ValuationContext, PickInput } from '@/lib/hybrid-valuation'
+import { findPlayerByName, getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getCachedOpponentProfile, formatOpponentForPrompt } from '@/lib/opponent-tendencies'
@@ -12,34 +12,46 @@ import { autoLogDecision } from '@/lib/decision-log'
 import { computeConfidenceRisk, getHistoricalHitRate, type AssetContext } from '@/lib/analytics/confidence-risk-engine'
 import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { createLegacyPackageGrader, legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
-import { gradeInputsFromRosterAssets, type LegacyPackageGrade } from '@/lib/legacy/legacyPackageGrade'
+import { gradeInputsFromRosterAssets, rankByOneGrade, type LegacyPackageGrade } from '@/lib/legacy/legacyPackageGrade'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 /*
- * 🛑 EVERY PROPOSAL THIS GENERATOR SHOWS CARRIES THE ONE TRADE GRADE (2026-09-29).
+ * 🛑 EVERY PROPOSAL THIS GENERATOR SHOWS CARRIES THE ONE TRADE GRADE (2026-09-29), AND THE ONE GRADE
+ * NOW CHOOSES WHICH PROPOSALS IT SHOWS (2026-11-26).
  *
  * It used to score its own packages "fairness N/100" on its FantasyCalc totals, run a separate
- * acceptance model ("computed acceptance likelihood is N%"), rank the packages by that acceptance,
- * and label them "Slight Edge" / "Fair & Balanced" / "Overpay" — three verdicts, none of them the
- * letter the full analyzer on the same page gives the same deal.
+ * acceptance model, rank the packages by that acceptance, and label them "Slight Edge" / "Fair &
+ * Balanced" / "Overpay" — three verdicts, none of them the letter the full analyzer on the same page
+ * gives the same deal. After 2026-09-29 it printed the one grade, but still FILTERED its packages on
+ * `lib/hybrid-valuation.ts` prices (a build more than 20% off the ask was dropped), so which deals a
+ * manager saw was still decided by a second engine.
  *
- * It still BUILDS the packages the same way (value-matched combinations from your roster; the
- * FantasyCalc totals only choose which assets go in). What it SHOWS about each one is THE grade from
- * `lib/legacy/legacyOneGrade.ts`, from your side, taken before the AI writes a word — so the pitch
- * explains the letter instead of inventing one. The labels now say how a package was built, not who
- * wins it. No acceptance odds: nothing measured them.
+ * Now: the SEARCH reads the FantasyCalc board this route already loads (DB-first), only to propose
+ * candidate packages — several per band. Every candidate is graded by the one grader
+ * (`lib/legacy/legacyOneGrade.ts`), from your side, before the AI writes a word, and THAT grade
+ * filters and labels them (`rankByOneGrade`): a B is the lighter offer, a C the matched one, a D the
+ * stronger one, closest to even within each; an A or F is never proposed. When no candidate can be
+ * graded at all (no league, not your league), the search's best build per band comes back carrying
+ * the withheld reason — never ranked on the search's values as though those were a grade.
  */
 export const PROPOSAL_LABELS = {
-  /** You send less than you ask for, on the builder's values. */
+  /** Graded B for you: you send a little less than you get back, on the league's values. */
   lighter: 'Lighter offer',
-  /** About what you ask for. */
+  /** Graded C: even. */
   matched: 'Matched offer',
-  /** More than you ask for. */
+  /** Graded D for you: you send a little more than you get back. */
   stronger: 'Stronger offer',
 } as const
+
+/** Which label each proposable letter earns. Read off the one grade, never off the search's values. */
+const LABEL_FOR_LETTER: Record<'B' | 'C' | 'D', string> = {
+  B: PROPOSAL_LABELS.lighter,
+  C: PROPOSAL_LABELS.matched,
+  D: PROPOSAL_LABELS.stronger,
+}
 
 const RequestSchema = z.object({
   leagueId: z.string().min(1),
@@ -95,6 +107,7 @@ const RequestSchema = z.object({
   isSuperFlex: z.boolean().default(false),
 })
 
+/** A roster asset with the SEARCH value it is matched on. The value chooses candidates; it is never shown or graded on. */
 interface PricedRosterAsset {
   type: 'player' | 'pick'
   id?: string
@@ -102,142 +115,90 @@ interface PricedRosterAsset {
   pos?: string
   team?: string
   value: number
-  source: string
   pickYear?: number
   pickRound?: number
   pickSlot?: number | null
   originalOwner?: string
 }
 
-async function priceTeamAssets(
-  team: z.infer<typeof RequestSchema>['myTeam'],
-  ctx: ValuationContext
-): Promise<PricedRosterAsset[]> {
-  const playerPrices = await Promise.all(
-    team.players.map(async (p) => {
-      const priced = await pricePlayer(p.name, ctx)
-      return {
-        type: 'player' as const,
-        id: p.id,
-        name: p.name,
-        pos: p.pos,
-        team: p.team,
-        value: priced.value,
-        source: priced.source,
-      }
-    })
-  )
+type SearchBoard = { fcPlayers: FantasyCalcPlayer[]; isDynasty: boolean; numTeams: number }
 
-  const pickPrices = await Promise.all(
-    (team.draftPicks || []).map(async (pk) => {
-      const pickInput: PickInput = {
-        year: parseInt(pk.season) || new Date().getFullYear(),
-        round: pk.round,
-        tier: null,
-      }
-      const priced = await pricePick(pickInput, ctx)
-      return {
-        type: 'pick' as const,
-        name: priced.name,
-        value: priced.value,
-        source: priced.source,
-        pickYear: pickInput.year,
-        pickRound: pk.round,
-        pickSlot: pk.slot,
-        originalOwner: pk.originalOwner,
-      }
-    })
-  )
-
-  return [...playerPrices, ...pickPrices]
+/** The search value of a player: his row on the FantasyCalc board, or 0 (the search skips him). */
+function searchPlayerValue(board: SearchBoard, name: string, pos?: string, team?: string): number {
+  return findPlayerByName(board.fcPlayers, name, { position: pos ?? null, team: team ?? null })?.value ?? 0
 }
 
-async function priceDesiredAssets(
-  assets: z.infer<typeof RequestSchema>['desiredAssets'],
-  ctx: ValuationContext
-): Promise<PricedRosterAsset[]> {
-  return Promise.all(
-    assets.map(async (a) => {
-      if (a.type === 'player') {
-        const priced = await pricePlayer(a.name, ctx)
-        return {
-          type: 'player' as const,
-          id: a.id,
-          name: a.name,
-          pos: a.pos,
-          team: a.team,
-          value: priced.value,
-          source: priced.source,
-        }
-      } else {
-        const pickInput: PickInput = {
-          year: a.pickYear || new Date().getFullYear(),
-          round: a.pickRound || 1,
-          tier: null,
-        }
-        const priced = await pricePick(pickInput, ctx)
-        return {
-          type: 'pick' as const,
-          name: priced.name,
-          value: priced.value,
-          source: priced.source,
-          pickYear: a.pickYear,
-          pickRound: a.pickRound,
-          pickSlot: a.pickSlot,
-          originalOwner: a.originalOwner,
-        }
-      }
-    })
-  )
+function searchPickValue(board: SearchBoard, year: number, round: number, slot?: number | null): number {
+  return getPickValue(year, round, board.isDynasty, slot ?? undefined, board.numTeams)
 }
 
-function findBestCombination(
+function searchTeamAssets(team: z.infer<typeof RequestSchema>['myTeam'], board: SearchBoard): PricedRosterAsset[] {
+  const players = team.players.map((p) => ({
+    type: 'player' as const,
+    id: p.id,
+    name: p.name,
+    pos: p.pos,
+    team: p.team,
+    value: searchPlayerValue(board, p.name, p.pos, p.team),
+  }))
+  const picks = (team.draftPicks || []).map((pk) => {
+    const year = parseInt(pk.season) || new Date().getFullYear()
+    return {
+      type: 'pick' as const,
+      name: `${year} Round ${pk.round}`,
+      value: searchPickValue(board, year, pk.round, pk.slot),
+      pickYear: year,
+      pickRound: pk.round,
+      pickSlot: pk.slot,
+      originalOwner: pk.originalOwner,
+    }
+  })
+  return [...players, ...picks]
+}
+
+function searchDesiredAssets(assets: z.infer<typeof RequestSchema>['desiredAssets'], board: SearchBoard): PricedRosterAsset[] {
+  return assets.map((a) => {
+    if (a.type === 'player') {
+      return { type: 'player' as const, id: a.id, name: a.name, pos: a.pos, team: a.team, value: searchPlayerValue(board, a.name, a.pos, a.team) }
+    }
+    const year = a.pickYear || new Date().getFullYear()
+    const round = a.pickRound || 1
+    return {
+      type: 'pick' as const,
+      name: `${year} Round ${round}`,
+      value: searchPickValue(board, year, round, a.pickSlot),
+      pickYear: year,
+      pickRound: round,
+      pickSlot: a.pickSlot,
+      originalOwner: a.originalOwner,
+    }
+  })
+}
+
+/**
+ * Up to `limit` packages from your pool whose SEARCH total lands in [low, high], closest to `target`
+ * first. Candidates only: the one grade decides which (if any) are shown.
+ */
+function topCombinations(
   pool: PricedRosterAsset[],
-  targetValue: number,
-  toleranceLow: number,
-  toleranceHigh: number,
-  maxAssets: number = 5
-): PricedRosterAsset[] | null {
+  target: number,
+  low: number,
+  high: number,
+  limit: number,
+  maxAssets: number = 5,
+): PricedRosterAsset[][] {
   const sorted = [...pool]
     .filter(a => a.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, 25)
-
-  let bestCombo: PricedRosterAsset[] | null = null
-  let bestDiff = Infinity
-
+  const found: Array<{ combo: PricedRosterAsset[]; diff: number }> = []
   for (let size = 1; size <= Math.min(maxAssets, sorted.length); size++) {
-    const combos = getCombinations(sorted, size)
-    for (const combo of combos) {
+    for (const combo of getCombinations(sorted, size)) {
       const total = combo.reduce((s, a) => s + a.value, 0)
-      if (total >= toleranceLow && total <= toleranceHigh) {
-        const diff = Math.abs(total - targetValue)
-        if (diff < bestDiff) {
-          bestDiff = diff
-          bestCombo = combo
-        }
-      }
+      if (total >= low && total <= high) found.push({ combo, diff: Math.abs(total - target) })
     }
   }
-
-  if (!bestCombo) {
-    let closestCombo: PricedRosterAsset[] | null = null
-    let closestDiff = Infinity
-    for (let size = 1; size <= Math.min(maxAssets, sorted.length); size++) {
-      const combos = getCombinations(sorted, size)
-      for (const combo of combos) {
-        const total = combo.reduce((s, a) => s + a.value, 0)
-        const diff = Math.abs(total - targetValue)
-        if (diff < closestDiff && total >= toleranceLow * 0.85) {
-          closestDiff = diff
-          closestCombo = combo
-        }
-      }
-    }
-    bestCombo = closestCombo
-  }
-
-  return bestCombo
+  return found.sort((a, b) => a.diff - b.diff).slice(0, limit).map((f) => f.combo)
 }
 
 function getCombinations(arr: PricedRosterAsset[], size: number): PricedRosterAsset[][] {
@@ -253,31 +214,17 @@ function getCombinations(arr: PricedRosterAsset[], size: number): PricedRosterAs
   return result
 }
 
-function buildProposal(
-  myAssets: PricedRosterAsset[],
-  desiredAssets: PricedRosterAsset[],
-  desiredTotal: number,
-  label: string,
-  ratioLow: number,
-  ratioHigh: number,
-  ratioTarget: number
-): { label: string; myOffer: PricedRosterAsset[]; theirOffer: PricedRosterAsset[]; builtGapPct: number } | null {
-  const targetValue = desiredTotal * ratioTarget
-  const lowBound = desiredTotal * ratioLow
-  const highBound = desiredTotal * ratioHigh
+/** The search bands, as a share of what you ask for. Each contributes a few CANDIDATES; the grade picks. */
+const SEARCH_BANDS = [
+  { label: PROPOSAL_LABELS.lighter, low: 0.8, high: 0.96, target: 0.9 },
+  { label: PROPOSAL_LABELS.matched, low: 0.96, high: 1.06, target: 1.0 },
+  { label: PROPOSAL_LABELS.stronger, low: 1.06, high: 1.3, target: 1.15 },
+] as const
+const CANDIDATES_PER_BAND = 4
 
-  const combo = findBestCombination(myAssets, targetValue, lowBound, highBound)
-  if (!combo) return null
+type Candidate = { searchLabel: string; myOffer: PricedRosterAsset[]; theirOffer: PricedRosterAsset[] }
 
-  const myTotal = combo.reduce((s, a) => s + a.value, 0)
-  return {
-    label,
-    myOffer: combo,
-    theirOffer: desiredAssets,
-    // How far the BUILD landed from the ask, on the builder's own values. Only filters packages; never shown.
-    builtGapPct: Math.round((Math.abs(desiredTotal - myTotal) / Math.max(desiredTotal, 1)) * 100),
-  }
-}
+const comboKey = (combo: PricedRosterAsset[]) => combo.map((a) => `${a.type}:${a.name}`).sort().join('|')
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generator", tool: "LegacyTradeProposalGenerator" })(async (req: NextRequest) => {
   // CSRF protection only -- `requireAuthOrOrigin` stood here and authenticated nobody.
@@ -333,8 +280,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
       isSuperFlex,
     } = parsed.data
 
-    const today = new Date().toISOString().split('T')[0]
-    let fcPlayers: any[] | undefined
+    let fcPlayers: FantasyCalcPlayer[] = []
     try {
       fcPlayers = await getFantasyCalcValuesDbFirst({
         isDynasty: format === 'dynasty',
@@ -345,18 +291,11 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
     } catch {
       fcPlayers = []
     }
+    const board: SearchBoard = { fcPlayers, isDynasty: format === 'dynasty', numTeams: 12 }
 
-    const ctx: ValuationContext = {
-      asOfDate: today,
-      isSuperFlex,
-      fantasyCalcPlayers: fcPlayers,
-    }
-
-    const [pricedMyAssets, pricedDesired, pricedTargetAssets] = await Promise.all([
-      priceTeamAssets(myTeam, ctx),
-      priceDesiredAssets(desiredAssets, ctx),
-      priceTeamAssets(targetTeam, ctx),
-    ])
+    const pricedMyAssets = searchTeamAssets(myTeam, board)
+    const pricedDesired = searchDesiredAssets(desiredAssets, board)
+    const pricedTargetAssets = searchTeamAssets(targetTeam, board)
 
     const desiredTotal = pricedDesired.reduce((s, a) => s + a.value, 0)
 
@@ -369,34 +308,53 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
     const MIN_ASSET_VALUE = 5
     const availablePool = pricedMyAssets.filter(a => a.value >= MIN_ASSET_VALUE)
 
-    // Labels say how each package was BUILT (less, about the same, more than the ask on the builder's
-    // values). Whether it is a good deal is the one grade's call, below.
-    const lighter = buildProposal(availablePool, pricedDesired, desiredTotal, PROPOSAL_LABELS.lighter, 0.88, 0.96, 0.92)
-    const matched = buildProposal(availablePool, pricedDesired, desiredTotal, PROPOSAL_LABELS.matched, 0.96, 1.06, 1.00)
-    const stronger = buildProposal(availablePool, pricedDesired, desiredTotal, PROPOSAL_LABELS.stronger, 1.08, 1.25, 1.15)
+    // CANDIDATES from the search, a few per band, deduplicated. None of them is shown yet.
+    const seen = new Set<string>()
+    const candidates: Candidate[] = []
+    for (const band of SEARCH_BANDS) {
+      for (const combo of topCombinations(availablePool, desiredTotal * band.target, desiredTotal * band.low, desiredTotal * band.high, CANDIDATES_PER_BAND)) {
+        const key = comboKey(combo)
+        if (seen.has(key)) continue
+        seen.add(key)
+        candidates.push({ searchLabel: band.label, myOffer: combo, theirOffer: pricedDesired })
+      }
+    }
 
-    const MAX_BUILT_GAP_PCT = 20
-    const proposals = [lighter, matched, stronger]
-      .filter((p): p is NonNullable<typeof p> => p != null && p.builtGapPct <= MAX_BUILT_GAP_PCT)
-
-    if (proposals.length === 0) {
+    if (candidates.length === 0) {
       return NextResponse.json({
         error: 'Could not find viable trade combinations from your roster. The assets you want may be too valuable or your tradeable assets may not match well.',
       }, { status: 400 })
     }
 
     /*
-     * THE grade of every package, from your side (you send `myOffer`), BEFORE the AI is asked
-     * anything — so the pitch it writes explains the letter rather than deciding one.
+     * THE grade of every candidate, from your side (you send `myOffer`), BEFORE the AI is asked
+     * anything — so the pitch it writes explains the letter rather than deciding one. One league load.
      */
     const gradeOf = await createLegacyPackageGrader({
       suppliedLeagueId: parsed.data.leagueId,
       userId: await legacySessionUserId(),
       viewerSide: false,
     })
-    const grades: LegacyPackageGrade[] = await Promise.all(
-      proposals.map((p) => gradeOf(gradeInputsFromRosterAssets(p.myOffer), gradeInputsFromRosterAssets(p.theirOffer))),
+    const gradedCandidates = await Promise.all(
+      candidates.map(async (c) => ({ ...c, grade: await gradeOf(gradeInputsFromRosterAssets(c.myOffer), gradeInputsFromRosterAssets(c.theirOffer)) })),
     )
+
+    // The one grade filters, ranks and labels. Nothing graded: the search's best per band, each withheld.
+    const { ranked, ungraded } = rankByOneGrade(gradedCandidates)
+    const proposals: Array<(typeof gradedCandidates)[number] & { label: string }> = []
+    for (const band of SEARCH_BANDS) {
+      const pick = ungraded
+        ? ranked.find((c) => c.searchLabel === band.label)
+        : ranked.find((c) => c.grade.graded && LABEL_FOR_LETTER[c.grade.letter as 'B' | 'C' | 'D'] === band.label)
+      if (pick) proposals.push({ ...pick, label: band.label })
+    }
+
+    if (proposals.length === 0) {
+      return NextResponse.json({
+        error: 'None of the packages your roster can build grades within reach of even for this ask, on this league’s values. Try different assets.',
+      }, { status: 400 })
+    }
+    const grades: LegacyPackageGrade[] = proposals.map((p) => p.grade)
 
     const proposalSummaries = proposals.map((p, i) => {
       const g = grades[i]!
@@ -524,6 +482,7 @@ Respond in JSON format:
       }
     })
 
+    // Risk tags read the asked-for assets' SEARCH values (the FantasyCalc board). Not a grade; never shown as one.
     const proposalAssets: AssetContext[] = pricedDesired.map((a: any) => ({
       type: a.type === 'pick' ? 'pick' as const : 'player' as const,
       name: a.name,

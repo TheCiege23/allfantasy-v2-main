@@ -99,16 +99,32 @@ export interface AICommissionerOverview {
   actionLogs: AICommissionerActionLogView[]
 }
 
-export type TradeControversyLevel = 'low' | 'medium' | 'high'
+/** `unknown`: the one grade was WITHHELD for this trade, so it is neither fine nor lopsided. */
+export type TradeControversyLevel = 'low' | 'medium' | 'high' | 'unknown'
 
+/**
+ * A commissioner's fairness read of one completed trade — every value here is THE grade
+ * (`lib/decision-os/trade/completedTradeGrade.ts`, through `loadGradedLeagueTradeRows`), never a rule of
+ * this module's own. Withheld grades carry `graded: false`, null numbers and the grader's reason.
+ */
 export interface TradeFairnessInsight {
+  /** The platform transaction id — one per trade (mirrored `LeagueTrade` copies are collapsed). */
   tradeId: string
   transactionId: string | null
-  createdAt: string
+  createdAt: string | null
   sport: LeagueSport
-  fairnessScore: number
-  imbalancePct: number
+  graded: boolean
+  /** The letter for the row's side (what it received against what it gave), on this league's values. */
+  letter: 'A' | 'B' | 'C' | 'D' | 'F' | null
+  /** The other side's letter — the exact mirror. */
+  partnerLetter: 'A' | 'B' | 'C' | 'D' | 'F' | null
+  /** 100 minus the one grade's value gap, for the existing "fairness N/100" readout. Null when withheld. */
+  fairnessScore: number | null
+  /** The one grade's absolute value gap, in percent. Null when withheld. */
+  imbalancePct: number | null
   controversyLevel: TradeControversyLevel
+  /** Why the grade was withheld, in the grader's words. Null when graded. */
+  withheldReason: string | null
   summary: string
   relatedManagerIds: string[]
 }

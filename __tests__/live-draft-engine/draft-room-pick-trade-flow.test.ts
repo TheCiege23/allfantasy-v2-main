@@ -42,7 +42,6 @@ vi.mock('@/lib/tournament/seasonDraftMutationGate', () => ({ isSeasonTournamentD
 vi.mock('@/lib/draft-defaults/DraftUISettingsResolver', () => ({ getDraftUISettingsForLeague: vi.fn(async () => ({ pickTradeEnabled: true })) }))
 vi.mock('@/lib/commissioner/permissions', () => ({ isCommissioner: vi.fn(async () => false) }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: vi.fn() }))
-vi.mock('@/lib/live-draft-engine/DraftTradeAiReviewService', () => ({ buildDraftTradeAiReview: vi.fn() }))
 vi.mock('@/lib/trade-ai-dm/TradeAIDMService', () => ({ sendPrivateTradeAIDM: vi.fn() }))
 vi.mock('@/lib/commentary-engine', () => ({ onTradeReaction: vi.fn(async () => undefined) }))
 vi.mock('@/lib/chat-notifications/tradeOfferDm', () => ({ queueTradeStatusInDm: vi.fn(), postTradeOfferToDm: vi.fn() }))

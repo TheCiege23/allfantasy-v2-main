@@ -191,9 +191,9 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
         {draftProposals.length === 0 && <p>No accessible draft-pick proposals loaded.</p>}
         {draftProposals.slice(0, visible).map(p => <article key={p.id}>
           <strong>{p.title}</strong>
-          <p>{p.status}{p.involvesYou ? ' · Your trade' : ''} · Draft-capital verdict {p.grade}</p>
+          <p>{p.status}{p.involvesYou ? ' · Your trade' : ''} · {p.grade ? `Receiver's league grade ${p.grade}` : 'Not graded'}</p>
           <p>{p.assets.join(' · ')}</p><p>{p.explanation}</p>
-          <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain draft-pick proposal ${p.id}: ${p.title}, involving ${p.assets.join(', ')}. The stored deterministic receiver-side verdict is ${p.grade}. Does it fit my draft board, roster and this league's exact draft rules?`)}>Ask Chimmy</button>
+          <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain draft-pick proposal ${p.id}: ${p.title}, involving ${p.assets.join(', ')}. ${p.grade ? `The AllFantasy league grade for the receiver is ${p.grade}; explain it and do not contradict it.` : 'AllFantasy did not grade it; do not call it good or bad.'} Does it fit my draft board, roster and this league's exact draft rules?`)}>Ask Chimmy</button>
         </article>)}
         {!!tradeCenter?.historyTrades?.length && <>
           <h3>Recent league trade decisions</h3>

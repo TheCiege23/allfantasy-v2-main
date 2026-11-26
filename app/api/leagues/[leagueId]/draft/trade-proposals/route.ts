@@ -14,7 +14,7 @@ import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickTradingAllowedForLeague } from '@/lib/tournament-mode/safety'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
-import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
+import { draftPickTradeGraderSource, reviewDraftPickSwap } from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import {
   canAiProposeTrade,
@@ -264,15 +264,20 @@ export async function POST(
   let privateAiDmCounterSuggestion: string | null = null
   if (receiverUserId) {
     const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } })
-    const aiReview = buildDraftTradeAiReview({
-      giveRound: created.receiveRound,
-      giveSlot: created.receiveSlot,
-      receiveRound: created.giveRound,
-      receiveSlot: created.giveSlot,
-      teamCount: draftSession.teamCount,
-      draftType: draftSession.draftType as 'snake' | 'linear' | 'auction',
-      thirdRoundReversal: draftSession.thirdRoundReversal,
-    })
+    /*
+     * Receiver POV: they give receive*, they get give*. 🛑 THE ONE GRADE is the verdict (2026-11-26) —
+     * `draftPickTradeCanonicalReview`. League value only, so the receiver's own roster is never read here.
+     */
+    const { review: aiReview } = await reviewDraftPickSwap(
+      draftPickTradeGraderSource({ leagueId, userId }),
+      draftSession,
+      {
+        give: { round: created.receiveRound, slot: created.receiveSlot },
+        get: { round: created.giveRound, slot: created.giveSlot },
+      },
+      proposerName || null,
+    )
+    const suggestedActionText = aiReview.verdict === 'not_graded' ? 'not graded' : aiReview.verdict.toUpperCase()
     void createDraftNotification(receiverUserId, 'draft_trade_offer_received', {
       leagueId,
       leagueName: league?.name ?? undefined,
@@ -301,7 +306,10 @@ export async function POST(
       productType: 'app',
       type: 'draft_trade_ai_private_review',
       title: `Private Chimmy trade review${league?.name ? ` - ${league.name}` : ''}`,
-      body: `${aiReview.summary} Suggested action: ${aiReview.verdict.toUpperCase()}. Counter suggestion: ${privateAiDm.counterSuggestion}.`,
+      body:
+        aiReview.verdict === 'not_graded'
+          ? `${aiReview.summary} This offer is not graded.`
+          : `${aiReview.summary} League grade says: ${suggestedActionText}.${aiReview.verdict === 'counter' ? ` Counter suggestion: ${privateAiDm.counterSuggestion}.` : ''}`,
       actionHref: `/league/${leagueId}?tab=Draft`,
       actionLabel: 'Open draft trade panel',
       meta: {

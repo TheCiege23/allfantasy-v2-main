@@ -48,6 +48,7 @@ import { isPirateLeague } from '@/lib/trade-intel/pirateSteal'
 import { loadTradeMarketOverlay, sleeperIdOfLine } from '@/lib/trade-value-console/tradeMarketOverlay'
 import { bookKey } from '@/lib/trade-market/formatMarkets'
 import { lineupProfileFromSettings } from '@/lib/league/lineupProfile'
+import { resolveConceptGrading } from './conceptGradingRegistry'
 
 /**
  * 🛑 THE LEARNED MARKET IN EVERY GRADE (owner's call, 2026-11-22 — trade learning, step 4).
@@ -447,15 +448,23 @@ export async function createLeagueTradeGrader(args: {
     platform: leagueRow.platform ?? null,
   })
   const withType = (view: TradeGradeView): TradeGradeView => ({ ...view, leagueType })
-  const footballFormat = sport === 'NFL' ? createFootballTradeFormatGrader({ id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, type: leagueType.type }) : null
-  const combinedPickQuote = sport === 'NFL' && leagueType.type === 'c2c'
+  /*
+   * 🛑 WHICH SUB-GRADER GRADES THIS LEAGUE IS THE REGISTRY'S CALL (`./conceptGradingRegistry.ts`, Phase 5).
+   * Every concept × sport names its rule there, or is withheld with a reason; a league type with no
+   * entry is withheld rather than priced on the default chart. Each sub-grader below is built only
+   * when the rule names it, and still reads the league's raw type for its own costs and refusals.
+   */
+  const grading = resolveConceptGrading({ type: leagueType.type, variant: leagueRow.leagueVariant ?? null, sport })
+  const rule = grading.rule
+  const footballFormat = grading.format ? createFootballTradeFormatGrader({ id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, type: leagueType.type }) : null
+  const combinedPickQuote = grading.format === 'c2c_campus'
     ? createFootballCombinedPickQuote({ id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season }) : null
-  const campusDraft = sport === 'NFL' ? createFootballCampusDraftGrader({
+  const campusDraft = grading.format === 'c2c_campus' ? createFootballCampusDraftGrader({
     id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, leagueSize: leagueRow.leagueSize, status: leagueRow.status, type: leagueType.type,
   }) : null
   // College football redraft and dynasty use the league’s stored projections and scoring.
   const college =
-    sport === 'NCAAF'
+    rule.grader === 'ncaaf_college'
       ? createNcaafLeagueGrader({
           id: args.leagueId, platform: leagueRow.platform ?? null, settings: leagueRow.settings, leagueType,
           leagueSize: leagueRow.leagueSize, season: leagueRow.season, status: leagueRow.status,
@@ -466,7 +475,7 @@ export async function createLeagueTradeGrader(args: {
    * (`./sportPointsGrader.ts`, trade grade audit 2026-10-09). Before this they had no value source at
    * all and every deal was withheld. Its view is final — it never falls through to the NFL chart.
    */
-  const sportPoints = createSportPointsGrader({
+  const sportPoints = rule.grader !== 'sport_points' ? null : createSportPointsGrader({
     sport,
     league: {
       id: args.leagueId,
@@ -485,13 +494,13 @@ export async function createLeagueTradeGrader(args: {
    * Its view is final — the market chart priced a 4 FLEX + 1 SUPER_FLEX lineup on the 2-QB board and FAAB
    * as a flat share of the budget.
    */
-  const guillotine = createGuillotineGrader({
+  const guillotine = rule.grader !== 'guillotine' ? null : createGuillotineGrader({
     sport,
     leagueType: leagueType.type,
     leagueVariant: leagueRow.leagueVariant ?? null,
     league: { id: args.leagueId, platform: leagueRow.platform, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
   })
-  const zombie = createZombieGrader({
+  const zombie = rule.grader !== 'zombie' ? null : createZombieGrader({
     leagueType: leagueType.type,
     dynastyBase: leagueSnapshot.isDynasty,
     league: { id: args.leagueId, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null, sport },
@@ -525,12 +534,27 @@ export async function createLeagueTradeGrader(args: {
     },
   ): Promise<TradeGradeView> => {
     try {
-      if (zombie) return await zombie.grade(give, get)
-      const collegeView = college ? await college.grade(give, get) : null
-      if (collegeView) return collegeView
-      // Guillotine first: an NBA guillotine league has a points grader too, on the whole-season basis.
-      if (guillotine) return await guillotine.grade(give, get)
-      if (sportPoints) return await sportPoints.grade(give, get)
+      // A rule whose sub-grader did not build is a registry/factory disagreement: withhold, never fall through.
+      const unwired: TradeGradeView = { graded: false, reason: 'This league type’s grading rule could not be applied, so this deal is not graded.', basis: null }
+      switch (rule.grader) {
+        case 'withheld':
+          return { graded: false, reason: rule.reason ?? 'This league type has no trade-grading rule yet, so this deal is not graded.', basis: null }
+        case 'zombie':
+          return zombie ? await zombie.grade(give, get) : unwired
+        case 'ncaaf_college': {
+          const collegeView = college ? await college.grade(give, get) : null
+          if (collegeView) return collegeView
+          // The declared fall-through (`collegeFallback`): only a deal the college grader declined reaches the chart.
+          if (rule.collegeFallback !== 'market_chart') return unwired
+          break
+        }
+        case 'guillotine':
+          return guillotine ? await guillotine.grade(give, get) : unwired
+        case 'sport_points':
+          return sportPoints ? await sportPoints.grade(give, get) : unwired
+        case 'market_chart':
+          break
+      }
       const pickWhy = assets.pickRefusal([...give, ...get])
       if (pickWhy) return { graded: false, reason: pickWhy, basis: null }
       const dataGaps: string[] = []
@@ -618,7 +642,7 @@ export async function createLeagueTradeGrader(args: {
    * Only an NFL league with a market context prices on the stored FantasyCalc books. A college league
    * grades on its own model (`ncaafLeagueGrader`) and has no dated book to be priced on.
    */
-  const book = baseChart.marketCtx && sport === 'NFL' && !zombie ? marketBookFor(baseChart) : null
+  const book = baseChart.marketCtx && sport === 'NFL' && rule.grader !== 'zombie' ? marketBookFor(baseChart) : null
   // From the BASE chart's settings, which a `marketless` chart resolves too — the same profile today's
   // chart is (or would be) fetched with.
   const profile = book ? fantasyCalcSettingsForChart(baseChart) : null

@@ -7,12 +7,14 @@ vi.mock('@/lib/subscription/entitlement-middleware', () => ({
 import { NextRequest } from 'next/server'
 
 /*
- * The AF Legacy proposal generator (`/api/legacy/trade/proposal-generator`) still BUILDS packages on
- * its own values, and SHOWS each one's grade from the one grader — no "fairness N/100", no
- * acceptance model, no "Slight Edge / Fair & Balanced / Overpay" verdict-labels.
+ * The AF Legacy proposal generator (`/api/legacy/trade/proposal-generator`) SEARCHES for candidate
+ * packages on the FantasyCalc board, and the one grader decides which are shown and how they are
+ * labelled — no "fairness N/100", no acceptance model, no hybrid-valuation filter, no "Slight Edge /
+ * Fair & Balanced / Overpay" verdict-labels.
  *
- * The one grader is mocked at the legacy door so the test sees exactly what each package is graded
- * on; the acceptance model is mocked only to prove it is never asked again.
+ * The one grader is mocked at the legacy door so the test sees exactly what each candidate is graded
+ * on, and can change its verdict to prove the shown set follows it. `lib/hybrid-valuation` is mocked
+ * with spies only to prove it is never asked.
  */
 
 const mockCreateGrader = vi.hoisted(() => vi.fn())
@@ -51,9 +53,12 @@ const VALUES: Record<string, number> = {
   'Player D': 950,
   'Player E': 1100,
 }
-vi.mock('@/lib/hybrid-valuation', () => ({
-  pricePlayer: vi.fn(async (name: string) => ({ value: VALUES[name] ?? 0, source: 'test' })),
-  pricePick: vi.fn(async (p: { year: number; round: number }) => ({ name: `${p.year} Round ${p.round}`, value: 0, source: 'test' })),
+const mockHybridPrice = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/hybrid-valuation', () => ({ pricePlayer: mockHybridPrice, pricePick: mockHybridPrice, priceAssets: mockHybridPrice }))
+// The SEARCH board: FantasyCalc rows by name. Search values choose candidates only.
+vi.mock('@/lib/fantasycalc', () => ({
+  findPlayerByName: vi.fn((_players: unknown, name: string) => (VALUES[name] != null ? { value: VALUES[name] } : null)),
+  getPickValue: vi.fn(() => 0),
 }))
 vi.mock('@/lib/fantasycalc-db', () => ({ getFantasyCalcValuesDbFirst: vi.fn(async () => []) }))
 vi.mock('@/lib/opponent-tendencies', () => ({ getCachedOpponentProfile: vi.fn(async () => null), formatOpponentForPrompt: vi.fn(() => '') }))
@@ -71,16 +76,22 @@ vi.mock('@/lib/trade-engine/trade-event-logger', () => ({ logTradeOfferEvent: mo
 
 import { POST, PROPOSAL_LABELS } from '@/server/api-route-modules/legacy/trade/proposal-generator/route'
 
-const graded = (letter: 'A' | 'B' | 'C' | 'D' | 'F') => ({
+const graded = (letter: 'A' | 'B' | 'C' | 'D' | 'F', getValue = 5200) => ({
   graded: true as const,
   letter,
   partnerLetter: 'C' as const,
   label: letter === 'C' ? 'Even' : 'Slightly favors you',
   recommendation: 'Send it.',
   giveValue: 5000,
-  getValue: 5200,
+  getValue,
   basis: 'Dynasty · 12 teams · PPR',
 })
+
+/** The names a give-side GradeInputs carries, as one sorted key — which candidate a grader call is. */
+const giveKey = (give: { assets: Array<{ name?: string }> }) => give.assets.map((a) => a.name).sort().join('+')
+const gradeByGive = (table: Record<string, ReturnType<typeof graded> | { graded: false; reason: string }>, fallback: unknown = graded('F', 1000)) =>
+  mockGradeOf.mockImplementation(async (give: { assets: Array<{ name?: string }> }) => table[giveKey(give)] ?? fallback)
+const shownOffers = (data: any) => data.proposals.map((p: any) => [p.label, p.myOffer.map((a: any) => a.name).sort().join('+')])
 
 const BODY = {
   leagueId: 'sleeper-league-1',
@@ -128,23 +139,25 @@ describe('/api/legacy/trade/proposal-generator — packages carry the one grade'
     expect(mockCreateGrader).toHaveBeenCalledWith({ suppliedLeagueId: 'sleeper-league-1', userId: 'af-user-1', viewerSide: false })
   })
 
-  it('grades every package from your side: give = what you send, get = what you asked for, players by name', async () => {
-    const data = await (await post(BODY)).json()
-    expect(data.proposals.length).toBeGreaterThan(0)
-    expect(mockGradeOf).toHaveBeenCalledTimes(data.proposals.length)
-    data.proposals.forEach((p: any, i: number) => {
-      const [giveIn, getIn] = mockGradeOf.mock.calls[i]!
-      expect(giveIn).toEqual({ assets: p.myOffer.map((a: any) => ({ kind: 'player', name: a.name })), unpriceable: [] })
+  it('grades every CANDIDATE from your side: give = what you send, get = what you asked for, players by name', async () => {
+    await post(BODY)
+    expect(mockGradeOf.mock.calls.length).toBeGreaterThan(3)
+    for (const [giveIn, getIn] of mockGradeOf.mock.calls) {
+      expect(giveIn.unpriceable).toEqual([])
+      for (const a of giveIn.assets) expect(a).toEqual({ kind: 'player', name: expect.stringMatching(/^Player [A-E]$/) })
       expect(getIn).toEqual({ assets: [{ kind: 'player', name: 'Josh Allen' }], unpriceable: [] })
-    })
+    }
+  })
+
+  it('never prices anything through hybrid-valuation', async () => {
+    expect((await post(BODY)).status).toBe(200)
+    expect(mockHybridPrice).not.toHaveBeenCalled()
   })
 
   it('each package shows the grade the one grader gave it, and nothing of its own', async () => {
-    mockGradeOf.mockResolvedValueOnce(graded('B')).mockResolvedValueOnce(graded('C')).mockResolvedValueOnce({ graded: false, reason: 'Not your league.' })
+    gradeByGive({ 'Player A+Player B': graded('B', 5600), 'Player A+Player C': graded('C') })
     const data = await (await post(BODY)).json()
-    expect(data.proposals.map((p: any) => p.grade)).toEqual(
-      [graded('B'), graded('C'), { graded: false, reason: 'Not your league.' }].slice(0, data.proposals.length),
-    )
+    expect(data.proposals.map((p: any) => p.grade)).toEqual([graded('B', 5600), graded('C')])
     for (const p of data.proposals) {
       for (const key of ['fairnessScore', 'acceptanceModel', 'fairnessNote', 'myTotal', 'theirTotal', 'delta']) {
         expect(p, key).not.toHaveProperty(key)
@@ -155,7 +168,7 @@ describe('/api/legacy/trade/proposal-generator — packages carry the one grade'
     expect(mockAcceptance).not.toHaveBeenCalled()
   })
 
-  it('labels say how a package was built, never who wins it', async () => {
+  it('labels are read off the one grade (B lighter, C matched, D stronger), never who wins on the search values', async () => {
     const data = await (await post(BODY)).json()
     const allowed = Object.values(PROPOSAL_LABELS) as string[]
     for (const p of data.proposals) expect(allowed).toContain(p.label)
@@ -176,6 +189,56 @@ describe('/api/legacy/trade/proposal-generator — packages carry the one grade'
       expect(arg.acceptProb).toBeNull()
       expect(arg.verdict).toBe('C')
     }
+  })
+})
+
+describe('/api/legacy/trade/proposal-generator — the one grade filters, ranks and labels', () => {
+  it('a B, C and D become the lighter, matched and stronger offers; an A or F is never shown', async () => {
+    gradeByGive({
+      'Player D': graded('A', 9000),
+      'Player A+Player B': graded('B', 5600),
+      'Player A+Player C': graded('C'),
+      'Player E': graded('D', 4300),
+      'Player B+Player C': graded('F', 2000),
+    })
+    const data = await (await post(BODY)).json()
+    expect(shownOffers(data)).toEqual([
+      [PROPOSAL_LABELS.lighter, 'Player A+Player B'],
+      [PROPOSAL_LABELS.matched, 'Player A+Player C'],
+      [PROPOSAL_LABELS.stronger, 'Player E'],
+    ])
+  })
+
+  it('within a letter, the candidate closest to even is shown', async () => {
+    gradeByGive({ 'Player D': graded('C', 5400), 'Player A+Player C': graded('C', 5100) })
+    expect(shownOffers(await (await post(BODY)).json())).toEqual([[PROPOSAL_LABELS.matched, 'Player A+Player C']])
+  })
+
+  it('CHANGES when the one grade changes — same roster, same search, a different canonical verdict, a different offer', async () => {
+    gradeByGive({ 'Player A+Player C': graded('C') })
+    const first = shownOffers(await (await post(BODY)).json())
+    gradeByGive({ 'Player E': graded('C') })
+    const second = shownOffers(await (await post(BODY)).json())
+    expect(first).toEqual([[PROPOSAL_LABELS.matched, 'Player A+Player C']])
+    expect(second).toEqual([[PROPOSAL_LABELS.matched, 'Player E']])
+  })
+
+  it('every candidate graded A or F: nothing is proposed, and the route says so', async () => {
+    mockGradeOf.mockResolvedValue(graded('F', 1000))
+    const res = await post(BODY)
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/grades within reach of even/)
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('nothing gradeable (not your league): the search’s best build per band, each carrying the withheld reason', async () => {
+    mockGradeOf.mockResolvedValue({ graded: false, reason: 'Not your league.' })
+    const data = await (await post(BODY)).json()
+    expect(data.proposals.length).toBeGreaterThan(0)
+    for (const p of data.proposals) expect(p.grade).toEqual({ graded: false, reason: 'Not your league.' })
+    expect(data.proposals.map((p: any) => p.label)).toEqual(
+      Object.values(PROPOSAL_LABELS).filter((l) => data.proposals.some((p: any) => p.label === l)),
+    )
   })
 })
 

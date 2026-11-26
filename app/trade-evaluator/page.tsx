@@ -206,13 +206,15 @@ interface ApiTradeResponse {
       redLines?: string[]
     }
   }
+  /** Fairness and veto risk are read off `tradeGrade` server-side (gradeFairness.ts); null when it was withheld. */
   tradeInsights?: {
-    fairnessScore?: number
+    fairnessScore?: number | null
     fairnessMethod?: string
+    fairnessWithheldReason?: string
     netDeltaPct?: number
     labels?: Array<{ id: string; name: string; emoji: string; description: string }>
     warnings?: Array<{ id: string; name: string; emoji: string; description: string }>
-    veto?: boolean
+    veto?: boolean | null
     vetoReason?: string | null
     expertWarning?: string | null
     idpLineupWarning?: string | null
@@ -223,13 +225,13 @@ interface ApiTradeResponse {
       netValue?: number
       totalGiven?: number
       totalReceived?: number
-      fairnessScore?: number
+      fairnessScore?: number | null
     }
     teamB?: {
       netValue?: number
       totalGiven?: number
       totalReceived?: number
-      fairnessScore?: number
+      fairnessScore?: number | null
     }
   }
   serverConfidence?: {

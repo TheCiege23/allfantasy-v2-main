@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getTradeFinder } from '@/lib/trade-intel/tradeFinderService'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
 export const dynamic = 'force-dynamic'
@@ -55,7 +56,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ supported: true as const, linked: false as const, finder: null })
   }
 
-  const finder = await getTradeFinder(league.platformLeagueId, profile.sleeperUserId)
+  /*
+   * 🛑 THE GRADE ON EVERY PROPOSAL (2026-11-26). ONE grader for this league — membership was proven by
+   * the query above, as `createLeagueTradeGrader` requires — reused across every candidate. A grader
+   * that cannot load costs the letters (each proposal says why), never the finder.
+   */
+  const grader = createLeagueTradeGrader({ leagueId: league.id, userId }).catch(() => null) // loads while the finder reads rosters
+  const finder = await getTradeFinder(league.platformLeagueId, profile.sleeperUserId, {
+    grade: async (give, get) => gradeDeal(await grader, { give, get, viewerSide: true }),
+  })
   if (!finder) {
     return NextResponse.json(
       { supported: true as const, linked: true as const, finder: null, error: 'Trade finder temporarily unavailable' },

@@ -64,14 +64,17 @@ import { POST, GOAL_TIER_LABELS } from '@/server/api-route-modules/legacy/trade/
 
 const GRADED = {
   graded: true as const,
-  letter: 'F' as const,
-  partnerLetter: 'A' as const,
-  label: 'Major overpay',
-  recommendation: 'Do not send this.',
+  letter: 'D' as const,
+  partnerLetter: 'B' as const,
+  label: 'Slightly favors opponent',
+  recommendation: 'Costs you more than it adds.',
   giveValue: 9000,
-  getValue: 4000,
+  getValue: 8000,
   basis: 'Dynasty · 12 teams · PPR',
 }
+
+/** A graded view at a given letter and gap (getValue − giveValue on a 10,000 side). */
+const gradedAt = (letter: 'A' | 'B' | 'C' | 'D' | 'F', getValue: number) => ({ ...GRADED, letter, giveValue: 10000, getValue })
 
 const PACKAGE = {
   tier: 'aggressive',
@@ -139,7 +142,7 @@ describe('/api/legacy/trade/goal-proposals — each package carries the one grad
     )
   })
 
-  it('the card carries the grade — an engine "You Win" at 62% accept that the one grade calls F reads F', async () => {
+  it('the card carries the grade — an engine "You Win" at 62% accept that the one grade calls D reads D', async () => {
     const data = await (await post(BODY)).json()
     const p = data.partners[0].proposals[0]
     expect(p.grade).toEqual(GRADED)
@@ -196,5 +199,57 @@ describe('/api/legacy/trade/goal-proposals — "your roster" is the caller\u2019
     vi.mocked(validateRequestOrigin).mockReturnValueOnce(false)
     expect((await post(BODY)).status).toBe(403)
     expect(mockGenerate).not.toHaveBeenCalled()
+  })
+})
+
+describe('/api/legacy/trade/goal-proposals — the one grade decides what is shown, and in what order', () => {
+  const pkg = (name: string) => ({ ...PACKAGE, receive: [{ id: name, type: 'PLAYER', name, pos: 'WR', value: 1 }] })
+  const partner = (rosterId: number, names: string[]) => ({
+    rosterId, displayName: `Team ${rosterId}`, contenderTier: 'rebuild', matchReasons: [], proposals: names.map(pkg),
+  })
+  const gradesByReceived = (g: Record<string, unknown>) =>
+    mockGradeOf.mockImplementation(async (_give: unknown, get: { assets: Array<{ name: string }> }) => g[get.assets[0]!.name])
+  const shown = (data: any) => data.partners.map((pt: any) => [pt.rosterId, pt.proposals.map((p: any) => p.receive[0].name)])
+
+  beforeEach(() => {
+    mockGenerate.mockReturnValue({
+      goal: 'wr_depth', goalDescription: 'Add WR depth',
+      partners: [partner(2, ['a1', 'a2']), partner(3, ['b1', 'b2'])],
+      stats: { partnersEvaluated: 2, candidatesGenerated: 4, proposalsBuilt: 4 },
+    })
+  })
+
+  it('an A or an F is never proposed, and a partner with nothing proposable left is not shown', async () => {
+    gradesByReceived({ a1: gradedAt('F', 6000), a2: gradedAt('A', 14000), b1: gradedAt('C', 10000), b2: gradedAt('F', 5000) })
+    const data = await (await post(BODY)).json()
+    expect(shown(data)).toEqual([[3, ['b1']]])
+  })
+
+  it('packages closest to even first, and partners by their best package — not the engine order', async () => {
+    gradesByReceived({ a1: gradedAt('D', 8200), a2: gradedAt('B', 11200), b1: gradedAt('C', 9700), b2: gradedAt('D', 8500) })
+    const data = await (await post(BODY)).json()
+    // Partner 3's best is 3% from even, partner 2's is 11%: partner 3 first; within each, nearest even first.
+    expect(shown(data)).toEqual([[3, ['b1', 'b2']], [2, ['a2', 'a1']]])
+  })
+
+  it('CHANGES when the one grade changes — the same engine output, a different canonical verdict, a different card', async () => {
+    gradesByReceived({ a1: gradedAt('C', 10000), a2: gradedAt('D', 8000), b1: gradedAt('D', 8100), b2: gradedAt('F', 5000) })
+    const first = shown(await (await post(BODY)).json())
+    gradesByReceived({ a1: gradedAt('F', 5000), a2: gradedAt('F', 5000), b1: gradedAt('C', 10000), b2: gradedAt('B', 11000) })
+    const second = shown(await (await post(BODY)).json())
+    expect(first).toEqual([[2, ['a1', 'a2']], [3, ['b1']]])
+    expect(second).toEqual([[3, ['b1', 'b2']]])
+  })
+
+  it('a withheld package beside graded ones is dropped', async () => {
+    gradesByReceived({ a1: { graded: false, reason: 'Puka could not be found.' }, a2: gradedAt('C', 10000), b1: gradedAt('C', 9900), b2: { graded: false, reason: 'x' } })
+    expect(shown(await (await post(BODY)).json())).toEqual([[2, ['a2']], [3, ['b1']]])
+  })
+
+  it('nothing gradeable (not your league): the engine order is kept and every package says why', async () => {
+    mockGradeOf.mockResolvedValue({ graded: false, reason: 'This league is not one of yours on AllFantasy.' })
+    const data = await (await post(BODY)).json()
+    expect(shown(data)).toEqual([[2, ['a1', 'a2']], [3, ['b1', 'b2']]])
+    for (const pt of data.partners) for (const p of pt.proposals) expect(p.grade.graded).toBe(false)
   })
 })

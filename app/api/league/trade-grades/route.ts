@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getImportedTradeLedger } from '@/lib/trade-intel/importedTradeLedgerService'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
-import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
+import { draftPickTradeGraderSource, leagueGradeForDraftPickSwap } from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
 import { getReconciledTradeGrades } from '@/lib/core-app/sleeperTradeHistory'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -159,21 +159,27 @@ export async function GET(req: NextRequest) {
         proposerName: true, receiverName: true,
         giveRound: true, giveSlot: true,
         receiveRound: true, receiveSlot: true,
-        session: { select: { teamCount: true, draftType: true, thirdRoundReversal: true } },
+        session: {
+          select: {
+            teamCount: true, draftType: true, thirdRoundReversal: true,
+            draftModeLabel: true, playerPool: true, c2cConfig: true, startedAt: true, createdAt: true,
+          },
+        },
       },
     }) as Array<any>
+    /*
+     * 🛑 THE ONE GRADE (2026-11-26), receiver side: they give receive* and get give*. One grader for the
+     * page (membership was checked above); a startup or redraft draft's swap is withheld with the reason.
+     */
+    const grader = draftPickTradeGraderSource({ leagueId: league.id, userId })
+    const page = proposals.slice(0, 50)
+    const grades = await Promise.all(page.map(p => leagueGradeForDraftPickSwap(grader, p.session, {
+      give: { round: p.receiveRound, slot: p.receiveSlot },
+      get: { round: p.giveRound, slot: p.giveSlot },
+    })))
     return NextResponse.json({
-      proposals: proposals.slice(0, 50).map(p => {
-        // Receiver point of view: they give receive* and get give*.
-        const review = buildDraftTradeAiReview({
-          giveRound: p.receiveRound,
-          giveSlot: p.receiveSlot,
-          receiveRound: p.giveRound,
-          receiveSlot: p.giveSlot,
-          teamCount: p.session.teamCount,
-          draftType: p.session.draftType,
-          thirdRoundReversal: p.session.thirdRoundReversal,
-        })
+      proposals: page.map((p, i) => {
+        const grade = grades[i]
         return {
           id: p.id,
           status: p.status,
@@ -184,8 +190,10 @@ export async function GET(req: NextRequest) {
             `${p.proposerName || 'Proposer'} offers pick ${p.giveRound}.${String(p.giveSlot).padStart(2, '0')}`,
             `${p.receiverName || 'Receiver'} offers pick ${p.receiveRound}.${String(p.receiveSlot).padStart(2, '0')}`,
           ],
-          grade: review.verdict.toUpperCase(),
-          explanation: `Receiver-side draft-capital verdict: ${review.summary}`,
+          grade: grade.graded ? grade.letter : null,
+          explanation: grade.graded
+            ? `Receiver's league grade ${grade.letter} (${grade.label}): ${grade.recommendation}`
+            : `Not graded: ${grade.reason}`,
         }
       }),
       nextCursor: proposals.length > 50 ? proposals[49].id : null,

@@ -71,6 +71,17 @@ export async function POST(
     const smokeProviderEnabled = isAiResultCacheSmokeProviderEnabled()
 
     const fallback = explainTradeFairnessInsight(tradeInsight)
+    // A WITHHELD grade has no verdict to explain — the model would only invent one. Say why, plainly.
+    if (!tradeInsight.graded) {
+      return NextResponse.json({
+        narrative: fallback,
+        source: 'template' as const,
+        verdict: null,
+        sections: undefined,
+        factGuardWarnings: undefined,
+        context: { leagueId, type: 'trade_fairness', tradeFairness: tradeInsight },
+      })
+    }
     const tradeSport =
       typeof (tradeInsight as { sport?: string | null }).sport === 'string'
         ? (tradeInsight as { sport?: string | null }).sport
