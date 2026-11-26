@@ -93,3 +93,18 @@ describe('a college C2C league is sized by its pro side', () => {
     expect(validateCreatePayload(body('NCAAB', 180), { importedTeamCount: 9 }).ok).toBe(false)
   })
 })
+
+describe('IDP reaches the big-league sizes (2026-11-24)', () => {
+  it('an NFL IDP league stops at the real league, a college IDP league runs to 250', () => {
+    expect(Math.max(...getTeamCountOptions('NFL', 'idp'))).toBe(32)
+    const college = getTeamCountOptions('NCAAF', 'idp')
+    expect(college).toContain(140)
+    expect(Math.max(...college)).toBe(250)
+  })
+
+  it('an imported IDP league keeps its own size (Road To Glory NFL runs 34 teams)', () => {
+    const body = { concept: 'idp', sport: 'NFL', teamCount: 34, draftType: 'snake', leagueName: 'IDP size', scoringPreset: 'idp_balanced' }
+    expect(validateCreatePayload(body).ok).toBe(false)
+    expect(validateCreatePayload(body, { importedTeamCount: 34 }).ok).toBe(true)
+  })
+})

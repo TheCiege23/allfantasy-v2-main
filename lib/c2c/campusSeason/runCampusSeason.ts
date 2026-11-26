@@ -15,7 +15,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
-import { campusSport } from '@/lib/c2c/campusLineup'
+import { collegeLineupSport, DEVY_COLLEGE_SCORING_KEY, isScoringDevyLeague } from '@/lib/c2c/collegeLineupLeague'
 import { campusPointsForCfbWeek } from '@/lib/c2c/campusScoring'
 import { cfbWeeksByNflWeek } from '@/lib/c2c/campusWeeks'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
@@ -71,6 +71,12 @@ export async function loadCollegeCalendar(db: Pick<PrismaClient, 'sportsGame'>, 
   return { weeks, nflWeekOf }
 }
 
+/** The first college week (1 or later) that has not kicked off at `now`; 1 when the calendar is unknown. */
+export function collegeStartWeek(weeks: ReadonlyMap<number, CollegeWeek>, now: number): number {
+  const started = [...weeks.values()].filter((w) => w.week >= 1 && w.firstStart <= now).map((w) => w.week)
+  return started.length ? Math.max(...started) + 1 : 1
+}
+
 const toGame = (m: { week: number; homeRosterId: string; awayRosterId: string | null; homeScore: number; awayScore: number; status: string; kind: string }): CampusGame => ({ ...m })
 
 /** One tick for one league. Safe to run repeatedly; every step is idempotent. */
@@ -78,10 +84,13 @@ export async function runCampusSeasonTick(leagueId: string, opts: { now?: Date; 
   const db = opts.db ?? defaultPrisma
   const now = (opts.now ?? new Date()).getTime()
 
-  const league = await db.league.findUnique({ where: { id: leagueId }, select: { id: true, platform: true, sport: true, leagueVariant: true, settings: true } })
-  if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'football') return { status: 'skipped', reason: 'not a native NFL C2C league' }
-  const config = await getC2CConfig(leagueId).catch(() => null)
-  if (config?.standingsModel !== 'separate') return { status: 'skipped', reason: 'standings model is not separate' }
+  const league = await db.league.findUnique({ where: { id: leagueId }, select: { id: true, platform: true, sport: true, leagueVariant: true, leagueType: true, settings: true } })
+  if (!league || !isNativePlatform(league.platform) || collegeLineupSport(league) !== 'football') return { status: 'skipped', reason: 'not a native NFL C2C or scoring devy league' }
+  // A scoring devy league always plays its college lineup as its own season; C2C only on "separate".
+  if (!isScoringDevyLeague(league)) {
+    const config = await getC2CConfig(leagueId).catch(() => null)
+    if (config?.standingsModel !== 'separate') return { status: 'skipped', reason: 'standings model is not separate' }
+  }
 
   const proSeason = await db.redraftSeason.findFirst({ where: { leagueId }, orderBy: { season: 'desc' }, select: { id: true, season: true, medianGame: true } })
   if (!proSeason) return { status: 'skipped', reason: 'no season yet' }
@@ -91,17 +100,27 @@ export async function runCampusSeasonTick(leagueId: string, opts: { now?: Date; 
   const shape = readCampusSeasonShape(league.settings, rosters.length)
   const medianGame = statedMedianGame(league.settings) ?? proSeason.medianGame === true
 
+  const { weeks, nflWeekOf } = await loadCollegeCalendar(db, proSeason.season)
+
   // 1. The season and its regular-season schedule, once.
   let campus = await db.c2CCampusSeason.findUnique({ where: { leagueId_season: { leagueId, season: proSeason.season } } })
   let created = false
   if (!campus) {
+    // A college side turned on after college games began (a commissioner switching devy college scoring
+    // on, or C2C to separate, mid-year) starts with the next college week that has not kicked off, so no
+    // week already played is scored after the fact.
+    const startWeek = collegeStartWeek(weeks, now)
+    if (startWeek > shape.regularSeasonWeeks) return { status: 'skipped', reason: 'too late in the college season to start; it starts next season' }
+    const weeksLeft = shape.regularSeasonWeeks - startWeek + 1
     const divisions = await loadSeasonRosterDivisions(leagueId, rosters).catch(() => null)
-    const slots = generateSchedule(rosters, shape.regularSeasonWeeks, shape.regularSeasonWeeks + 1, 'NCAAF', {
+    const slots = generateSchedule(rosters, weeksLeft, weeksLeft + 1, 'NCAAF', {
       medianGame: false,
       divisionByRoster: divisions?.byRoster ?? null,
       divisionRivalsTwice: divisions?.rivalsTwice === true,
       gamesPerWeek: readGamesPerWeek(league.settings),
-    }).filter((s) => s.type !== 'median' && s.week <= shape.regularSeasonWeeks)
+    })
+      .filter((s) => s.type !== 'median' && s.week <= weeksLeft)
+      .map((s) => ({ ...s, week: s.week + startWeek - 1 }))
     campus = await db.c2CCampusSeason.create({
       data: {
         leagueId,
@@ -116,8 +135,6 @@ export async function runCampusSeasonTick(leagueId: string, opts: { now?: Date; 
     })
     created = true
   }
-
-  const { weeks, nflWeekOf } = await loadCollegeCalendar(db, proSeason.season)
 
   // 2-3. Score every week that has kicked off and is not sealed; seal 48 hours after its last kickoff.
   const open = await db.c2CCampusMatchup.findMany({ where: { campusSeasonId: campus.id, status: { not: 'final' } }, orderBy: [{ week: 'asc' }] })
@@ -216,7 +233,15 @@ export async function runCampusSeasonTick(leagueId: string, opts: { now?: Date; 
 /** Every native NFL C2C league on the separate model. Used by the score-sync cron. */
 export async function runCampusSeasonTicks(opts: { now?: Date; db?: Db; limit?: number } = {}): Promise<{ leagues: number; ok: number; failed: number; missingTables?: boolean }> {
   const db = opts.db ?? defaultPrisma
-  const rows = await db.c2CLeagueConfig.findMany({ where: { standingsModel: 'separate' }, select: { leagueId: true }, take: opts.limit ?? 200 })
+  const [c2c, devy] = await Promise.all([
+    db.c2CLeagueConfig.findMany({ where: { standingsModel: 'separate' }, select: { leagueId: true }, take: opts.limit ?? 200 }),
+    db.league.findMany({
+      where: { OR: [{ leagueVariant: { in: ['devy', 'devy_dynasty'] } }, { leagueType: 'devy' }], settings: { path: [DEVY_COLLEGE_SCORING_KEY], equals: true } },
+      select: { id: true },
+      take: opts.limit ?? 200,
+    }),
+  ])
+  const rows = [...new Set([...c2c.map((r) => r.leagueId), ...devy.map((r) => r.id)])].map((leagueId) => ({ leagueId }))
   let ok = 0
   let failed = 0
   for (const { leagueId } of rows) {

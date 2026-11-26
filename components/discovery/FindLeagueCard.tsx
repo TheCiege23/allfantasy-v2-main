@@ -99,11 +99,16 @@ function formatDraftType(draftType: string | null | undefined, t: T): string | n
   return raw ? codeLabel(t, "findLeague.card.draftType", raw) : null
 }
 
-function getSourceLabel(league: DiscoveryCard, t: T): string {
+/**
+ * The card's corner badge, or null. A plain public fantasy league has none (2026-11-25, the simplify
+ * pass): Find a League lists public leagues, so "Public league" on every card told nobody anything. The
+ * badge still marks what is different — a private league, a creator league, a bracket, another platform.
+ */
+function getSourceLabel(league: DiscoveryCard, t: T): string | null {
   const source = league.source
   if (league.joinMode === "request") return `Plays on ${platformLabel(league.externalPlatform)}`
   if (league.joinMode === "approval") return t("findLeague.card.privateLeague")
-  if (source === "fantasy") return t("findLeague.card.publicLeague")
+  if (source === "fantasy") return null
   if (source === "creator") return t("findLeague.card.creatorLeague")
   return t("findLeague.card.bracket")
 }
@@ -188,12 +193,15 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           >
             {league.name}
           </h3>
+          {getSourceLabel(league, t) ? (
           <span
             className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
             style={sourceBadgeStyle}
+            data-testid={`find-league-source-${league.id}`}
           >
             {getSourceLabel(league, t)}
           </span>
+          ) : null}
         </div>
 
         {/* League badges */}
@@ -394,7 +402,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
         )}
       </div>
       <div
-        className="p-3 sm:p-4 flex flex-wrap items-center gap-2 border-t"
+        className="px-3 py-2 sm:p-4 flex flex-wrap items-center gap-2 border-t"
         style={{ borderColor: "var(--border)" }}
       >
         {league.joinMode === "request" || isApproval ? null : (

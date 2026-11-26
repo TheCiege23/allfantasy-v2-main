@@ -209,8 +209,10 @@ export type NflRedraftLiveScoringRuntimeState = {
 }
 
 // MLB/NBA reserve slots (`il`, `il_plus`, `na`, MLB stash slots) never score either.
-const NON_SCORING_SLOTS = new Set(['bench', 'bn', 'ir', 'taxi', 'devy', 'reserve', 'il', 'il_plus', 'na', 'prospect', 'rights', 'minors'])
-const IR_SLOTS = new Set(['ir', 'reserve', 'il', 'il_plus', 'na'])
+// C2C rosters carry a second side's bench and IR (`C2C_BN`, `C2C_IL`, lib/nba-roster/NbaRosterTemplates.ts):
+// a bench is a bench whichever side it is on (2026-11-24: they counted as starters).
+const NON_SCORING_SLOTS = new Set(['bench', 'bn', 'ir', 'taxi', 'devy', 'reserve', 'il', 'il_plus', 'na', 'prospect', 'rights', 'minors', 'c2c_bn', 'c2c_il', 'c2c_ir'])
+const IR_SLOTS = new Set(['ir', 'reserve', 'il', 'il_plus', 'na', 'c2c_il', 'c2c_ir'])
 
 function roundScore(value: number): number {
   return Math.round(value * 100) / 100

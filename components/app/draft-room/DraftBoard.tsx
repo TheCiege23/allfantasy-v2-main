@@ -60,6 +60,8 @@ type DraftBoardProps = {
   aiManagedRosterIds?: string[]
   /** Teams picking by themselves right now (auto-pick on, or Chimmy-run). Marked AUTO in the header. */
   autoDraftRosterIds?: string[]
+  /** Auto draft (execution mode `auto`): the current tile reads "Picking", not "On the clock". */
+  autoDraft?: boolean
   orderSourceLabel?: string | null
   /** Open pick-trade modal from a cell with rounds / receiver prefilled (logged-in user must have a roster). */
   onCellTrade?: (ctx: {
@@ -196,6 +198,7 @@ function DraftBoardInner({
   currentUserRosterId = null,
   aiManagedRosterIds = [],
   autoDraftRosterIds = [],
+  autoDraft = false,
   orderSourceLabel,
   onCellTrade,
   onOpenTradeHistory,
@@ -973,6 +976,7 @@ function DraftBoardInner({
                             isDevyRound={devyRounds.includes(round) && isPickDisplayEmpty}
                             isCollegeRound={c2cCollegeRounds.includes(round) && isPickDisplayEmpty}
                             pickHighlight={isCurrentPick ? 'none' : pickHighlight(existing)}
+                            autoDraft={autoDraft}
                             viewerUpcomingLabel={
                               isPickDisplayEmpty && Boolean(currentUserRosterId) && pick.ownerRosterId === currentUserRosterId
                                 ? headerCopy.yourPick

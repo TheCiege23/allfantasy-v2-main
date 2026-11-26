@@ -196,6 +196,65 @@ describe('importPublicEspnLeagueAsMember', () => {
   })
 })
 
+describe('importPublicEspnLeagueAsMember — pasted Yahoo league', () => {
+  const YAHOO: any = {
+    source: { source_league_id: 'nfl.l.424242' },
+    league: { season: 2026, sport: 'NFL' },
+    rosters: [
+      { source_team_id: 'nfl.l.424242.t.1', source_manager_id: 'nfl.l.424242.t.1' },
+      { source_team_id: 'nfl.l.424242.t.2', source_manager_id: 'nfl.l.424242.t.2' },
+    ],
+  }
+  const persistYahoo = vi.fn(async (ownerUserId: string, _opts?: { allowUpdateExisting: boolean }) => {
+    if (!db.leagues.some((l) => l.id === 'LY')) {
+      db.leagues.push({ id: 'LY', name: 'Moonbase', sport: 'NFL', userId: ownerUserId, platform: 'yahoo', platformLeagueId: 'nfl.l.424242', season: 2026 })
+      for (const r of YAHOO.rosters) {
+        db.teams.push({ id: `LY-${r.source_team_id}`, leagueId: 'LY', externalId: r.source_team_id, claimedByUserId: null, isCommissioner: false, isCoCommissioner: false, platformUserId: r.source_manager_id })
+      }
+    }
+    return { league: { id: 'LY', name: 'Moonbase', sport: 'NFL' }, historicalBackfill: null, existed: false, joinedExisting: false } as any
+  })
+  beforeEach(() => persistYahoo.mockClear())
+  const run = (userId: string, team: string, extra: Record<string, unknown> = {}) =>
+    importPublicEspnLeagueAsMember({ userId, normalized: YAHOO, claimSourceTeamId: team, platform: 'yahoo', persistAsOwner: persistYahoo, ...extra })
+
+  it('owns the league by the SYSTEM account, keyed on platform yahoo, claim unconfirmed, no C', async () => {
+    // An ESPN system row with the same id is a different league and must not be joined.
+    db.leagues.push({ id: 'LE', name: 'x', sport: 'NFL', userId: 'SYSTEM', platform: 'espn', platformLeagueId: 'nfl.l.424242', season: 2026 })
+    const res = await run('alice', 'nfl.l.424242.t.2')
+    expect(res).toMatchObject({ ok: true, joinedExisting: false, league: { id: 'LY' } })
+    expect(persistYahoo).toHaveBeenCalledWith('SYSTEM')
+    const team = db.teams.find((t) => t.id === 'LY-nfl.l.424242.t.2')!
+    expect(team.claimedByUserId).toBe('alice')
+    expect(team.isCommissioner).toBe(false)
+    expect(db.claims).toEqual([expect.objectContaining({ afUserId: 'alice', isConfirmed: false })])
+  })
+
+  it('says Yahoo, not ESPN, when a team is taken', async () => {
+    await run('alice', 'nfl.l.424242.t.2')
+    const res = await run('bob', 'nfl.l.424242.t.2')
+    expect(res).toMatchObject({ ok: false, code: 'TEAM_ALREADY_CLAIMED' })
+    expect((res as { error: string }).error).not.toContain('ESPN')
+  })
+
+  it('refresh re-persists the system row only for a member who already holds a team in it', async () => {
+    await run('alice', 'nfl.l.424242.t.2')
+    persistYahoo.mockClear()
+    // A newcomer asking to "update" just joins — they never rewrite the shared row.
+    expect(await run('bob', 'nfl.l.424242.t.1', { refreshExisting: true })).toMatchObject({ ok: true, joinedExisting: true })
+    expect(persistYahoo).not.toHaveBeenCalled()
+    // The holder's update reaches the persist with allowUpdateExisting, as the system owner.
+    expect(await run('alice', 'nfl.l.424242.t.2', { refreshExisting: true })).toMatchObject({ ok: true, existed: true })
+    expect(persistYahoo).toHaveBeenCalledWith('SYSTEM', { allowUpdateExisting: true })
+  })
+
+  it('a member "update" of a league they run as commissioner is sent to the commissioner choice', async () => {
+    db.leagues.push({ id: 'LC', name: 'Mine', sport: 'NFL', userId: 'alice', platform: 'yahoo', platformLeagueId: 'nfl.l.424242', season: 2026 })
+    expect(await run('alice', 'nfl.l.424242.t.2', { refreshExisting: true })).toMatchObject({ ok: false, code: 'LEAGUE_IS_YOURS' })
+    expect(await run('alice', 'nfl.l.424242.t.2')).toMatchObject({ ok: true, existed: true })
+  })
+})
+
 describe('claimTeamUnconfirmed', () => {
   it('gives one person one team per league', async () => {
     seedTeams('L1')

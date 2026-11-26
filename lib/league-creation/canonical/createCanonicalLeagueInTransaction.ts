@@ -50,6 +50,7 @@ import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefa
 import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import { planStartupDrafts, STARTUP_COLLEGE_DRAFT_SETTINGS_KEY, supportsSeparateStartupDrafts } from '@/lib/draft-defaults/startupCollegeDraft'
 import { dailyLineupTablesExist, defaultsToDailyLineups, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
+import { DEVY_COLLEGE_SCORING_KEY } from '@/lib/c2c/collegeLineupLeague'
 
 type Tx = Prisma.TransactionClient
 
@@ -370,6 +371,9 @@ export async function createCanonicalLeagueInTransaction(
     third_round_reversal: thirdRoundReversal,
     draft_third_round_reversal: thirdRoundReversal,
     draftSettings: { ...engine.settingsSnapshot.draftSettings, rounds: draftRounds, thirdRoundReversal },
+    // Owner's decision, 2026-11-24: a new NFL devy league's college lineup scores, as its own college season
+    // (lib/c2c/collegeLineupLeague.ts). A league made before this stays stash-only until its commissioner opts in.
+    ...(formatId === 'devy' && sport === 'NFL' ? { [DEVY_COLLEGE_SCORING_KEY]: true } : {}),
     ...(formatId === 'dynasty' ? {
       starter_slots: foundationDefaults.rosterSettings.starter_slots,
       bench_slots: foundationDefaults.rosterSettings.benchSlots,
@@ -724,7 +728,11 @@ export async function createCanonicalLeagueInTransaction(
             ? 'zombie'
             : formatId === 'pirate'
               ? 'pirate'
-              : null,
+              // A pro-sport C2C league carries the C2C variant every C2C surface keys on (2026-11-24: a wizard
+              // C2C league had none, so it had no college lineup). A college-sport C2C league keeps none.
+              : formatId === 'c2c' && (sport === 'NFL' || sport === 'NBA')
+                ? 'c2c'
+                : null,
       timezone: body.timezone ?? 'America/New_York',
       language: body.language ?? 'en',
       joinCode,
@@ -977,7 +985,8 @@ export async function createCanonicalLeagueInTransaction(
         mergedStartupDraft: !c2cSeparateDrafts,
         separateStartupCollegeDraft: c2cSeparateDrafts,
         collegeRosterSize: readNumber(setup, 'collegeRosterSize', readNumber(foundationDefaults.rosterSettings, 'collegeRosterSlots', 20)),
-        collegeSports: [sport] as Prisma.InputJsonValue,
+        // The COLLEGE sport (an NFL league's college side is NCAAF); it stored the pro sport before 2026-11-24.
+        collegeSports: [sport === 'NFL' ? 'NCAAF' : sport === 'NBA' ? 'NCAAB' : sport] as Prisma.InputJsonValue,
         collegeScoringSystem: readString(setup, 'collegeScoringSystem', sport === 'NBA' || sport === 'NCAAB' ? 'points' : 'ppr'),
         mixProPlayers: setup.mixProPlayers !== false,
         taxiSize: readNumber(setup, 'taxiSize', readNumber(foundationDefaults.rosterSettings, 'taxiSlots', 6)),

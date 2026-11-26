@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { canMoveRosterPlayers } from '@/lib/league/rosterMoveAccess'
 import { getScoringEligibility, getWeeklyPointsBreakdownForRoster } from '@/lib/devy/scoringEligibilityEngine'
 import { moveToTaxi, promoteToActive } from '@/lib/devy/rosterEngine'
 
@@ -64,6 +65,9 @@ export async function PATCH(req: NextRequest) {
 
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  if (!(await canMoveRosterPlayers(leagueId, userId, rosterId))) {
+    return NextResponse.json({ error: 'That team is not yours.', code: 'NOT_YOUR_TEAM' }, { status: 403 })
+  }
 
   try {
     if (action === 'promote_to_active') {
