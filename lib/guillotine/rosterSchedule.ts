@@ -43,8 +43,13 @@ export type RosterChangeKind = 'add_starter' | 'add_bench' | 'bench_to_starter' 
 
 export type RosterChange = {
   id: string
-  /** The first week the new layout is in play. */
+  /** The first week the new layout is in play. With `teamsLeft`, the earliest week it can be. */
   week: number
+  /**
+   * "Once N teams are left" instead of a fixed week (owner's list, 2026-11-25: "bench grows as the league
+   * shrinks"). Absent = the change is set by week alone. Due when the teams still alive are N or fewer.
+   */
+  teamsLeft?: number
   kind: RosterChangeKind
   /** The starting spot (roster-engine slot key). Null for the two bench-only kinds. */
   slot: string | null
@@ -183,14 +188,15 @@ const ID = /^[A-Za-z0-9_-]{1,40}$/
 function shapeOf(item: unknown): RosterChange | null {
   const x = item && typeof item === 'object' ? (item as Record<string, unknown>) : null
   if (!x) return null
-  const { id, week, kind, slot, count } = x
+  const { id, week, kind, slot, count, teamsLeft } = x
   if (typeof id !== 'string' || !ID.test(id)) return null
   if (typeof week !== 'number' || !Number.isInteger(week) || week < 1 || week > MAX_WEEK) return null
   if (typeof kind !== 'string' || !KINDS.has(kind as RosterChangeKind)) return null
   if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > MAX_SPOTS_PER_CHANGE) return null
   const needsSlot = rosterChangeNeedsSlot(kind as RosterChangeKind)
   if (needsSlot && (typeof slot !== 'string' || !slot)) return null
-  return { id, week, kind: kind as RosterChangeKind, slot: needsSlot ? (slot as string) : null, count }
+  if (teamsLeft != null && (typeof teamsLeft !== 'number' || !Number.isInteger(teamsLeft) || teamsLeft < 2 || teamsLeft > 32)) return null
+  return { id, week, ...(teamsLeft != null ? { teamsLeft } : {}), kind: kind as RosterChangeKind, slot: needsSlot ? (slot as string) : null, count }
 }
 
 /** By week, keeping the commissioner's order inside a week (it decides which of two changes runs first). */
@@ -318,9 +324,20 @@ export function benchSpots(layout: Record<string, number>, spots: RosterSpots): 
 }
 
 /** Changes whose week has arrived and that have not run. */
-export function dueRosterChanges(schedule: RosterChange[], done: ReadonlyArray<string>, week: number): RosterChange[] {
+/**
+ * Changes whose time has come and that have not run. A "once N teams are left" change is due when `aliveNow` is N
+ * or fewer; a caller that does not know `aliveNow` never makes one due.
+ */
+export function dueRosterChanges(schedule: RosterChange[], done: ReadonlyArray<string>, week: number, aliveNow?: number): RosterChange[] {
   const ran = new Set(done)
-  return sortChanges(schedule.filter((c) => c.week <= week && !ran.has(c.id)))
+  return sortChanges(
+    schedule.filter((c) => c.week <= week && !ran.has(c.id) && (c.teamsLeft == null || (aliveNow != null && aliveNow <= c.teamsLeft))),
+  )
+}
+
+/** "Week 10" or "Once 8 teams are left": when a change happens, in the words the page and the chat use. */
+export function describeRosterChangeWhen(change: RosterChange): string {
+  return change.teamsLeft != null ? `Once ${change.teamsLeft} teams are left` : `Week ${change.week}`
 }
 
 const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`)

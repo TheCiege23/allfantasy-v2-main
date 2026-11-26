@@ -23,6 +23,7 @@ import {
   ROSTER_CHANGE_OPTIONS,
   describeLayout,
   describeRosterChange,
+  describeRosterChangeWhen,
   rosterChangeNeedsSlot,
   walkRosterSchedule,
   type RosterChange,
@@ -203,14 +204,15 @@ export function GuillotineRulesPage({
   const rosterWeeks = roster ? Array.from({ length: Math.max(0, roster.toWeek - roster.fromWeek + 1) }, (_, i) => roster.fromWeek + i) : []
   const rosterWalk = roster ? walkRosterSchedule(roster.layout, rosterChanges, roster.spots) : null
   const rosterBlocked = rosterWalk?.steps.find((s) => !s.ok)
-  const rosterByWeek: Array<{ week: number; text: string }> = []
+  const rosterByWeek: Array<{ when: string; text: string }> = []
   if (roster && rosterWalk && !rosterBlocked) {
     for (const s of rosterWalk.steps) {
       if (!s.ok) continue
       const text = describeLayout(s.slots, roster.spots)
+      const when = s.change.teamsLeft != null ? `Once ${s.change.teamsLeft} teams are left` : `From week ${s.change.week}`
       const last = rosterByWeek[rosterByWeek.length - 1]
-      if (last && last.week === s.change.week) last.text = text
-      else rosterByWeek.push({ week: s.change.week, text })
+      if (last && last.when === when) last.text = text
+      else rosterByWeek.push({ when, text })
     }
   }
   const rosterDone = roster ? roster.changes.filter((c) => roster.done.includes(c.id)) : []
@@ -665,14 +667,33 @@ export function GuillotineRulesPage({
             <p className="text-[12px] text-white/60" data-testid="guillotine-roster-now">Right now every team has {describeLayout(roster.layout, roster.spots)}.</p>
             {rosterDone.map((c) => (
               <p key={c.id} className="rounded-lg border border-white/10 px-3 py-2 text-[12px] text-white/50" data-testid={`guillotine-roster-done-${c.id}`}>
-                Week {c.week}: {describeRosterChange(c, roster.spots)}. {rosterSkipped.has(c.id) ? `Not made: ${rosterSkipped.get(c.id)}` : 'Done.'}
+                {describeRosterChangeWhen(c)}: {describeRosterChange(c, roster.spots)}. {rosterSkipped.has(c.id) ? `Not made: ${rosterSkipped.get(c.id)}` : 'Done.'}
               </p>
             ))}
             {rosterChanges.map((c) => (
-              <div key={c.id} className="grid grid-cols-2 items-end gap-2 rounded-lg border border-white/10 p-3 sm:grid-cols-[0.55fr_1.9fr_1.7fr_0.6fr_auto]" data-testid="guillotine-roster-change">
-                <label className="order-1 text-[11px] text-white/50 sm:order-none">Week
-                  <select className={inputClass} value={c.week} disabled={scheduleLocked} onChange={(e) => editRoster(c.id, { week: Number(e.target.value) })} data-testid="guillotine-roster-week">
-                    {[...new Set([...rosterWeeks, c.week])].sort((a, b) => a - b).map((w) => <option key={w} value={w}>{w}</option>)}
+              <div key={c.id} className="grid grid-cols-2 items-end gap-2 rounded-lg border border-white/10 p-3 sm:grid-cols-[0.9fr_1.8fr_1.6fr_0.6fr_auto]" data-testid="guillotine-roster-change">
+                <label className="order-1 text-[11px] text-white/50 sm:order-none">When
+                  {/* A week, or "once N teams are left" (the bench that grows as the league shrinks). */}
+                  <select
+                    className={inputClass}
+                    value={c.teamsLeft != null ? `t${c.teamsLeft}` : String(c.week)}
+                    disabled={scheduleLocked}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v.startsWith('t')) editRoster(c.id, { teamsLeft: Number(v.slice(1)), week: Math.min(c.week, rosterWeeks[0] ?? c.week) })
+                      else {
+                        const { teamsLeft: _gone, ...rest } = c
+                        updateRoster(rosterChanges.map((x) => (x.id === c.id ? { ...rest, week: Number(v) } : x)))
+                      }
+                    }}
+                    data-testid="guillotine-roster-week"
+                  >
+                    <optgroup label="In week">
+                      {[...new Set([...rosterWeeks, c.week])].sort((a, b) => a - b).map((w) => <option key={w} value={w}>Week {w}</option>)}
+                    </optgroup>
+                    <optgroup label="When only this many are left">
+                      {teamsLeftChoices.map((n) => <option key={`t${n}`} value={`t${n}`}>{n} teams left</option>)}
+                    </optgroup>
                   </select>
                 </label>
                 <label className="order-3 col-span-2 text-[11px] text-white/50 sm:order-none sm:col-span-1">What happens
@@ -713,7 +734,7 @@ export function GuillotineRulesPage({
               </p>
             ) : rosterByWeek.length > 0 ? (
               <ul className="space-y-0.5 text-[12px] text-white/60" data-testid="guillotine-roster-result">
-                {rosterByWeek.map((w) => <li key={w.week}>From week {w.week}: {w.text}.</li>)}
+                {rosterByWeek.map((w) => <li key={w.when}>{w.when}: {w.text}.</li>)}
               </ul>
             ) : null}
           </Field>

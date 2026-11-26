@@ -8,6 +8,7 @@ import {
   benchSpots,
   describeLayout,
   describeRosterChange,
+  describeRosterChangeWhen,
   dueRosterChanges,
   normalizeRosterSchedule,
   readRosterSchedule,
@@ -218,6 +219,34 @@ describe('saving a list', () => {
   it('says so when the season has no later week left', () => {
     const r = normalizeRosterSchedule([{ id: 'a', week: 17, kind: 'add_bench', count: 1 }], { ...ctx, fromWeek: 18, toWeek: 17 })
     expect(!r.ok && r.message).toMatch(/last week/)
+  })
+})
+
+describe('"once N teams are left"', () => {
+  const grow = [
+    change({ id: 'at8', week: 2, kind: 'add_bench', teamsLeft: 8 }),
+    change({ id: 'at4', week: 2, kind: 'add_bench', teamsLeft: 4 }),
+  ]
+
+  it('is due when the teams alive are N or fewer, whatever the week', () => {
+    expect(dueRosterChanges(grow, [], 9, 10).map((c) => c.id)).toEqual([])
+    expect(dueRosterChanges(grow, [], 9, 8).map((c) => c.id)).toEqual(['at8'])
+    expect(dueRosterChanges(grow, [], 9, 3).map((c) => c.id)).toEqual(['at8', 'at4'])
+    expect(dueRosterChanges(grow, ['at8'], 9, 3).map((c) => c.id)).toEqual(['at4'])
+  })
+
+  it('never before the earliest week it names, and never when the field size is not known', () => {
+    expect(dueRosterChanges(grow, [], 1, 3)).toEqual([])
+    expect(dueRosterChanges(grow, [], 9)).toEqual([])
+  })
+
+  it('is stored and read back with its trigger', () => {
+    const r = normalizeRosterSchedule([{ id: 'a', week: 2, teamsLeft: 8, kind: 'add_bench', count: 1 }], ctx)
+    expect(r.ok && r.value[0]).toEqual({ id: 'a', week: 2, teamsLeft: 8, kind: 'add_bench', slot: null, count: 1 })
+    expect(readRosterSchedule({ [ROSTER_SCHEDULE_KEY]: [{ id: 'a', week: 2, teamsLeft: 8, kind: 'add_bench', count: 1 }] })[0]?.teamsLeft).toBe(8)
+    expect(normalizeRosterSchedule([{ id: 'a', week: 2, teamsLeft: 1, kind: 'add_bench', count: 1 }], ctx)).toMatchObject({ ok: false, error: 'bad_change' })
+    expect(describeRosterChangeWhen(r.ok ? r.value[0]! : change({ kind: 'add_bench' }))).toBe('Once 8 teams are left')
+    expect(describeRosterChangeWhen(change({ kind: 'add_bench', week: 7 }))).toBe('Week 7')
   })
 })
 
