@@ -11,6 +11,8 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
 import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
+import { resolveNativeRosterPlayers } from '@/lib/player-identity/resolveNativeRosterPlayers'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getFantasyCalcValuesDbFirst, readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
 import { fantasyCalcSettingsForChart, LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
@@ -519,7 +521,11 @@ export async function GET(
       : Promise.resolve(null),
     platform === 'sleeper'
       ? resolveSleeperRosterPlayers(allRosterPlayerIds, String(league?.sport ?? 'NFL'))
-      : resolveProviderRosterPlayers(platform, allRosterPlayerIds, String(league?.sport ?? 'NFL')),
+      // A native league (`manual`) has no provider column: its ids are Sleeper ids in NFL and our
+      // player table's ids elsewhere (lib/player-identity/resolveNativeRosterPlayers.ts).
+      : isNativePlatform(platform)
+        ? resolveNativeRosterPlayers(allRosterPlayerIds, String(league?.sport ?? 'NFL'))
+        : resolveProviderRosterPlayers(platform, allRosterPlayerIds, String(league?.sport ?? 'NFL')),
     loadPlayoffProbabilities(leagueId, currentSeason, proposalMode),
     league && redraftLeague && isDraftPickTradingAllowed(league)
       ? loadRedraftPickBook(leagueId, undefined, league).catch(() => null)
