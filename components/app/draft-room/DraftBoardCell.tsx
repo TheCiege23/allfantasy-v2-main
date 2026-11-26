@@ -113,6 +113,8 @@ type DraftBoardCellProps = {
   isDevyRound?: boolean
   isCollegeRound?: boolean
   pickHighlight?: PickHighlightTone
+  /** Auto draft: the current tile reads "Picking", since nobody is on a clock. */
+  autoDraft?: boolean
   /**
    * Set on an empty slot the viewer's team owns: the tile is outlined in white and says so
    * ("Your pick"), so a manager can see when they pick without counting columns.
@@ -200,6 +202,7 @@ function DraftBoardCellInner({
   isDevyRound = false,
   isCollegeRound = false,
   pickHighlight = 'none',
+  autoDraft = false,
   viewerUpcomingLabel = null,
   emptyCellDirection = 'forward',
   isOwnPick = false,
@@ -454,7 +457,7 @@ function DraftBoardCellInner({
           className="pointer-events-none mt-auto self-center text-[11px] font-black uppercase tracking-[0.04em] text-[color:var(--af-league-accent,#67e8f9)]"
           data-testid={`draft-board-cell-on-clock-${pick.overall}`}
         >
-          {headerCopy.onTheClock}
+          {autoDraft ? headerCopy.picking : headerCopy.onTheClock}
         </span>
       ) : null}
       {isEmpty && pick.slotSalary ? (

@@ -49,9 +49,9 @@ describe('startsAtScheduledTimeRegardlessOfAutostart', () => {
     expect(starts({ ...REDRAFT, platform: 'espn' })).toBe(false)
   })
 
-  it('is false for an unsupported sport', () => {
-    expect(starts({ ...REDRAFT, sport: 'NCAAF' })).toBe(false)
-    expect(starts({ ...REDRAFT, sport: 'SOCCER' })).toBe(false)
+  it('is false for a sport no league is made in', () => {
+    expect(starts({ ...REDRAFT, sport: 'CRICKET' })).toBe(false)
+    expect(starts({ ...REDRAFT, sport: 'ncaab' })).toBe(false)
   })
 
   it('is false when the league data is missing, so the toggle stays visible', () => {
@@ -62,7 +62,8 @@ describe('startsAtScheduledTimeRegardlessOfAutostart', () => {
     expect(starts({ ...REDRAFT, sport: undefined })).toBe(false)
   })
 
-  it('covers exactly the four redraft sports', () => {
-    expect([...SCHEDULED_REDRAFT_SPORTS].sort()).toEqual(['MLB', 'NBA', 'NFL', 'NHL'])
+  it('covers every sport a native league is made in, college and soccer included', () => {
+    expect([...SCHEDULED_REDRAFT_SPORTS].sort()).toEqual(['MLB', 'NBA', 'NCAAB', 'NCAAF', 'NFL', 'NHL', 'SOCCER'])
+    for (const sport of ['NCAAB', 'NCAAF', 'SOCCER']) expect(starts({ ...REDRAFT, sport })).toBe(true)
   })
 })
