@@ -487,5 +487,6 @@ function buildImportReviewFacts(normalized: NormalizedImportResult): ImportRevie
     // Fantrax lists untraded picks too (`traded: false`); only the moved ones are "traded picks".
     tradedPickCount: (normalized.traded_picks ?? []).filter((p) => p.traded !== false).length,
     standingsCount: normalized.standings?.length ?? 0,
+    providerStatus: typeof l.status === 'string' ? l.status : null,
   }
 }

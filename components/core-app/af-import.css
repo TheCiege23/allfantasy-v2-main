@@ -2352,3 +2352,15 @@
 .af-im-other-half-name { font: 700 14px/1.3 var(--font-archivo, Archivo), system-ui, sans-serif; overflow-wrap: anywhere; }
 .af-im-other-half-meta { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
 .af-im-pair-note { margin: 0 0 4px; }
+
+/* ── "Had your rookie draft?" (components/import/ImportRookieDraftQuestion.tsx) ── */
+.af-im-rookie { display: flex; flex-direction: column; gap: 6px; margin: 18px 0 4px; }
+.af-im-rookie .af-label { margin: 0; }
+.af-im-rookie-choices { display: flex; gap: 8px; flex-wrap: wrap; }
+.af-im-rookie-choice {
+  box-sizing: border-box; min-height: 44px; padding: 10px 16px; border-radius: 10px;
+  border: 1px solid var(--line2); background: var(--surface2); color: var(--text); cursor: pointer;
+  font: 700 14px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif;
+}
+.af-im-rookie-choice[data-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.af-im-rookie-known { margin: 14px 0 0; }

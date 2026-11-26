@@ -64,6 +64,8 @@ import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
 import { ImportReviewPanel, type ImportReviewState } from '@/components/import/ImportReviewPanel'
 import { ImportLeagueTypePicker } from '@/components/import/ImportLeagueTypePicker'
 import { ImportOtherHalfPicker } from '@/components/import/ImportOtherHalfPicker'
+import { ImportRookieDraftQuestion } from '@/components/import/ImportRookieDraftQuestion'
+import { hasRookieDraft } from '@/lib/dynasty-core/rookieDraftDone'
 import {
   asksForOtherHalf,
   importOtherHalfHref,
@@ -1356,6 +1358,22 @@ export function ImportV4({
   useEffect(() => {
     if (phase.k === 'preview' && !askOtherHalf && otherHalfRef.current.kind !== 'none') setOtherHalf(NO_OTHER_HALF)
   }, [phase.k, askOtherHalf, setOtherHalf])
+  /*
+   * "Had your rookie draft?" — for a league type with one, asked only when the platform cannot say
+   * (lib/dynasty-core/rookieDraftDone.ts). Null is unanswered and sends nothing. A ref for the gates.
+   */
+  const rookieDraftDoneRef = useRef<boolean | null>(null)
+  const [rookieDraftDone, setRookieDraftDoneState] = useState<boolean | null>(null)
+  const setRookieDraftDone = useCallback((next: boolean | null) => {
+    rookieDraftDoneRef.current = next
+    setRookieDraftDoneState(next)
+  }, [])
+  const showRookieDraft =
+    phase.k === 'preview' && phase.review ? hasRookieDraft(leagueTypeChoice ?? phase.review.league.leagueType) : false
+  const askRookieDraft = showRookieDraft && phase.k === 'preview' && !phase.review?.league.rookieDraftFromPlatform
+  useEffect(() => {
+    if (phase.k === 'preview' && !askRookieDraft && rookieDraftDoneRef.current !== null) setRookieDraftDone(null)
+  }, [phase.k, askRookieDraft, setRookieDraftDone])
 
   const runPreview = useCallback(
     async (sourceId: string, attest = false) => {
@@ -1364,6 +1382,7 @@ export function ImportV4({
       setReviewState(null)
       setLeagueTypeChoice(null)
       setOtherHalf(NO_OTHER_HALF)
+      setRookieDraftDone(null)
       setPhase({ k: 'previewing', sourceId })
       const res = await fetchImportPreview(
         provider,
@@ -1483,7 +1502,8 @@ export function ImportV4({
           espnRunBy ||
           reviewOverridesRef.current ||
           leagueTypeChoiceRef.current ||
-          pairWithLeagueIdFor(otherHalfRef.current)
+          pairWithLeagueIdFor(otherHalfRef.current) ||
+          rookieDraftDoneRef.current !== null
           ? {
               ...(force ? { force: true } : {}),
               ...(confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
@@ -1494,6 +1514,7 @@ export function ImportV4({
               ...(pairWithLeagueIdFor(otherHalfRef.current)
                 ? { pairWithLeagueId: pairWithLeagueIdFor(otherHalfRef.current) }
                 : {}),
+              ...(rookieDraftDoneRef.current !== null ? { rookieDraftDone: rookieDraftDoneRef.current } : {}),
             }
           : undefined
       )
@@ -3495,6 +3516,15 @@ export function ImportV4({
               preferLeagueId={initialPairWith ?? null}
               value={otherHalf}
               onChange={setOtherHalf}
+            />
+          ) : null}
+          {phase.review && !phase.importBlockedReason && !previewImportState(provider, phase).espnMember && showRookieDraft ? (
+            <ImportRookieDraftQuestion
+              season={phase.review.league.season}
+              fromPlatform={phase.review.league.rookieDraftFromPlatform}
+              platformLabel={providerLabel}
+              value={rookieDraftDone}
+              onChange={setRookieDraftDone}
             />
           ) : null}
           {/*

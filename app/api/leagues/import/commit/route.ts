@@ -53,6 +53,33 @@ async function linkImportedHalf(
 }
 
 /**
+ * Save "had this season's rookie draft?" onto the league (lib/dynasty-core/rookieDraftDone.ts). The
+ * league's own commissioner only, and never fails the import: unanswered is how every league was before.
+ */
+async function saveImportedRookieDraftDone(leagueId: string, userId: string, done: boolean): Promise<void> {
+  try {
+    const [{ prisma }, { ROOKIE_DRAFT_DONE_KEY, buildRookieDraftDoneRecord }] = await Promise.all([
+      import('@/lib/prisma'),
+      import('@/lib/dynasty-core/rookieDraftDone'),
+    ])
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, season: true, settings: true } })
+    if (!league || league.userId !== userId || league.season == null) return
+    const settings = league.settings && typeof league.settings === 'object' ? (league.settings as Record<string, unknown>) : {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...settings,
+          [ROOKIE_DRAFT_DONE_KEY]: buildRookieDraftDoneRecord({ season: league.season, done, userId }),
+        } as never,
+      },
+    })
+  } catch (e) {
+    console.warn('[import commit] rookie draft answer not saved', { leagueId, error: e instanceof Error ? e.message : 'unknown' })
+  }
+}
+
+/**
  * Save the confirm screen's league type. Never fails the import: the league is already built, and the
  * type can still be set from League format afterwards.
  *
@@ -272,6 +299,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     leagueType?: unknown
     /** The other half of a college + pro league, picked on the confirm screen (an AF League id). */
     pairWithLeagueId?: unknown
+    /** "Have you had this season's rookie draft?" from the confirm screen; omitted when not asked. */
+    rookieDraftDone?: unknown
   }
   try {
     body = await req.json()
@@ -498,6 +527,11 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
       pairWithLeagueId && persisted.joinedExisting !== true
         ? await linkImportedHalf(persisted.league.id, pairWithLeagueId, auth.userId)
         : null
+
+    /* The rookie-draft answer, for a platform that cannot report it. Same owner-only rule as the type. */
+    if (typeof body.rookieDraftDone === 'boolean' && persisted.joinedExisting !== true) {
+      await saveImportedRookieDraftDone(persisted.league.id, auth.userId, body.rookieDraftDone)
+    }
 
     /*
      * ⚠ `existed` WAS COMPUTED AND THEN DROPPED HERE, AND IT IS THE WHOLE ANSWER
