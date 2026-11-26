@@ -67,6 +67,16 @@ beforeEach(() => {
 })
 
 describe('runAutopilotLeagueTradeAnswers', () => {
+  it('answers any deal carrying a draft pick on the trade screen grade, in every sport and league type', async () => {
+    m.state.trades = [trade([item('b1', 'rC', 'rA'), item('fdp:2027:1:rA', 'rA', 'rC', { itemType: 'future_pick' })])]
+    m.grade.mockResolvedValueOnce({ graded: false, reason: 'Draft picks are not part of a redraft league — there is no next season for them to be used in — so a deal carrying one is not graded.', basis: null })
+    expect(await runAutopilotLeagueTradeAnswers()).toMatchObject({ accepted: 0, rejected: 1, countered: 0 })
+    expect(m.grade).toHaveBeenCalledWith(expect.objectContaining({ proposerRosterId: 'rC' }))
+    expect(computeRedraftTradeValueSnapshot).not.toHaveBeenCalled()
+    expect(m.reject).toHaveBeenCalledWith(expect.objectContaining({ note: expect.stringMatching(/not part of a redraft league/) }))
+    expect(m.create).not.toHaveBeenCalled()
+  })
+
   it('in a devy or C2C league answers on the trade screen grade, from its own side, and never counters', async () => {
     const settings = (await m.prisma.league.findUnique()).settings
     m.prisma.league.findUnique.mockResolvedValue({ settings, leagueType: 'c2c', leagueVariant: null } as never)

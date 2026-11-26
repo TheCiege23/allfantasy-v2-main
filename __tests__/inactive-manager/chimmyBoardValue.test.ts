@@ -95,8 +95,13 @@ describe('Chimmy decides on board values', () => {
     expect(decideTradeOffer({ profile, snapshot: s, rosterId: 'chimmy', multiTeam: false, starterIds: [] }).code).toBe('not_enough')
   })
 
-  it('outside a dynasty league a pick is not priced on the board: the deal keeps the older pricing', () => {
-    expect(snap([{ fromRosterId: 'them', toRosterId: 'chimmy', assetType: 'draft_pick', pickSeason: 2027, pickRound: 1 }])).toBeNull()
+  it('outside a dynasty league a pick is refused, as the screen refuses it, so Chimmy declines', () => {
+    const s = snap([
+      { fromRosterId: 'chimmy', toRosterId: 'them', assetType: 'player', playerId: '833' },
+      { fromRosterId: 'them', toRosterId: 'chimmy', assetType: 'draft_pick', pickSeason: 2027, pickRound: 1 },
+    ])
+    expect(s?.coverage?.status).toBe('blocked')
+    expect(decideTradeOffer({ profile, snapshot: s, rosterId: 'chimmy', multiTeam: false, starterIds: [] }).code).toBe('cannot_value')
   })
 
   it('in a dynasty league a pick is priced on the same points curve', () => {
