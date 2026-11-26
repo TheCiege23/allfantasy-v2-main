@@ -19,7 +19,7 @@ import type { ChopListOrder } from '@/lib/guillotine/chopListOrder'
 import type { TeamOutlook } from '@/lib/guillotine/survivalOutlook'
 import { RELEASE_OPTIONS } from '@/lib/guillotine/guillotineRules'
 import { boardFromHistoryWeek, boardFromNativeSummary, historyWeeks } from '@/lib/guillotine/survivalBoardModel'
-import { choppedTeamNames, guillotineRuleRows, guillotineWeekLabel } from './guillotineHomeModel'
+import { choppedTeamNames, guillotineRuleRows, guillotineTradeWindowLine, guillotineWeekLabel, type GuillotineTradeWindow } from './guillotineHomeModel'
 import './guillotine-identity.css'
 
 /**
@@ -76,6 +76,12 @@ type Summary = {
     tiebreakerOrder: string[]
     dangerMarginPoints: number | null
     rosterReleaseTiming: string
+    /** 2 in a two-week league (lib/guillotine/eliminationPeriods.ts): weeks are periods keyed by their last week. */
+    periodWeeks?: number | null
+    /** Trades and when they close (lib/guillotine/guillotineTrades.ts). */
+    trades?: GuillotineTradeWindow | null
+    /** From this week chopped players skip waivers; null = never. */
+    freeAgencyFromWeek?: number | null
     /** Which end of the list the chop zone sits at (lib/guillotine/chopListOrder.ts). */
     chopListOrder?: ChopListOrder | null
   } | null
@@ -169,6 +175,7 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
   }, [pastWeek, summary, history, liveBoard])
 
   const myEscape = summary?.myEscapes?.[0] ?? null
+  const tradeWindow = guillotineTradeWindowLine(summary?.config?.trades)
   // The chop moment above already shows that week's scores and the cut, so the banner then keeps only the share.
   const escapeShownInChop = myEscape != null && summary?.home?.lastChop?.week === myEscape.weekOrPeriod
   const releaseLabel = summary?.config?.rosterReleaseTiming
@@ -203,7 +210,7 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
   const shownWeek = pastWeek ?? liveWeek
   const weekPicker: BoardWeekPicker | null =
     shownWeek != null && weeks.length > 1
-      ? { weeks, selected: shownWeek, label: guillotineWeekLabel(shownWeek, endWeek), onSelect: (w) => setPastWeek(w === liveWeek ? null : w) }
+      ? { weeks, selected: shownWeek, label: guillotineWeekLabel(shownWeek, endWeek, summary?.config?.periodWeeks), onSelect: (w) => setPastWeek(w === liveWeek ? null : w) }
       : null
   // A chopped manager has no roster to set and cannot bid, and a member with no team has neither: no buttons.
   const playing = liveBoard != null && liveBoard.status !== 'chopped' && liveBoard.status !== 'spectator'
@@ -226,13 +233,20 @@ export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
       <GuillySurvivalBoard
         board={board}
         actions={actions}
-        weekLabel={shownWeek != null ? guillotineWeekLabel(shownWeek, endWeek) : null}
+        weekLabel={shownWeek != null ? guillotineWeekLabel(shownWeek, endWeek, summary?.config?.periodWeeks) : null}
         chopAt={pastWeek == null ? summary?.home?.nextChopAt ?? null : null}
         weekPicker={weekPicker}
         // The latest chop's moment sits with this week's list, not with a replayed one.
         extra={pastWeek == null ? <GuillotineChopExtras leagueId={leagueId} home={summary?.home} lastWords={summary?.lastWords?.entries} boardHasOdds={liveBoard?.hasOdds} /> : null}
         onRemoveLastWords={summary?.lastWords?.canRemove ? removeLastWords : undefined}
       />
+
+      {/* When trades close (lib/guillotine/guillotineTrades.ts): said before a manager makes an offer. */}
+      {pastWeek == null && tradeWindow ? (
+        <p className="gl-card gl-text2 rounded-2xl border px-4 py-3 text-sm" data-testid="guillotine-trade-window">
+          {tradeWindow}
+        </p>
+      ) : null}
 
       {/*
         Your latest escape — from a chop that HAPPENED, never the live projection — with a share button

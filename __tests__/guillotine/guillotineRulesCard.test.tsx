@@ -99,3 +99,40 @@ describe('Guilly Rules & Settings, in words', () => {
     expect(screen.getByTestId('guillotine-release-timing').textContent).toBe('Chopped players are released: Right after the chop')
   })
 })
+
+describe('trades on the home (owner, 2026-11-26): said before a manager makes an offer', () => {
+  const trades = (over: Record<string, unknown> = {}) => ({ tradesAllowed: true, tradesCloseAtTeamsLeft: 4, tradesClosed: false, teamsLeft: 7, ...over })
+
+  it('trades on with a closing point: one line on the home, and a row in the rules', async () => {
+    const card = await rulesCard({ ...CONFIG, trades: trades() })
+    expect(screen.getByTestId('guillotine-trade-window').textContent).toBe('Trades close once 4 teams are left. 7 are left now.')
+    expect(value(card, 'Trades').textContent).toBe('On until 4 teams are left')
+  })
+
+  it('once closed it says so', async () => {
+    const card = await rulesCard({ ...CONFIG, trades: trades({ tradesClosed: true, teamsLeft: 4 }) })
+    expect(screen.getByTestId('guillotine-trade-window').textContent).toBe('Trades are closed. They closed once 4 teams were left.')
+    expect(value(card, 'Trades').textContent).toBe('Closed')
+  })
+
+  it('[control] trades off, or on with no closing point: no line, nothing to warn about', async () => {
+    const off = await rulesCard({ ...CONFIG, trades: { tradesAllowed: false, tradesCloseAtTeamsLeft: null, tradesClosed: false, teamsLeft: null } })
+    expect(screen.queryByTestId('guillotine-trade-window')).toBeNull()
+    expect(value(off, 'Trades').textContent).toBe('Off')
+    cleanup()
+    vi.unstubAllGlobals()
+    await rulesCard({ ...CONFIG, trades: trades({ tradesCloseAtTeamsLeft: null }) })
+    expect(screen.queryByTestId('guillotine-trade-window')).toBeNull()
+  })
+
+  it('a skip-waivers week shows as a rule row', async () => {
+    const card = await rulesCard({ ...CONFIG, freeAgencyFromWeek: 12 })
+    expect(value(card, 'Chopped players skip waivers').textContent).toBe('From week 12')
+  })
+
+  it('a two-week league labels the week being played as its period', async () => {
+    const { guillotineWeekLabel } = await import('@/components/guillotine/guillotineHomeModel')
+    expect(guillotineWeekLabel(4, 18, 2)).toBe('Weeks 3–4 of 18')
+    expect(guillotineWeekLabel(4, 18)).toBe('Week 4 of 18')
+  })
+})
