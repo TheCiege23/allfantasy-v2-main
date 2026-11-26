@@ -753,7 +753,11 @@ export async function buildSessionSnapshot(
     autoDraftRosterIds:
       session.status === 'completed'
         ? []
-        : await listAutoDraftRosterIds({ leagueId, draftSessionId: session.id }).catch(() => []),
+        : await listAutoDraftRosterIds({
+            leagueId,
+            draftSessionId: session.id,
+            executionMode: uiSettings.executionMode ?? null,
+          }).catch(() => []),
     currentUserRosterId: viewerUserId
       ? (await getCurrentUserRosterIdForLeague(leagueId, viewerUserId).catch(() => null)) ?? undefined
       : undefined,
