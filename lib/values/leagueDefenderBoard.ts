@@ -283,7 +283,9 @@ export async function loadLeagueDefenderBoard(
   const allIds = [...leagueIds]
   const rows = await args.prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: allIds } },
+      // NFL by construction: a defender board is IDP, an NFL format. Sleeper reuses ids across
+      // sports, so the sport is part of the key.
+      where: { sport: 'NFL', sleeperId: { in: allIds } },
       select: { sleeperId: true, name: true, team: true, position: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
     })

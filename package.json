@@ -176,6 +176,7 @@
     "verify:deploy": "node scripts/verify-deployed-redirects.mjs",
     "verify:deploy:self-test": "node scripts/verify-deployed-redirects.mjs --self-test",
     "guard:external-id-namespace": "node scripts/check-external-id-namespace.mjs",
+    "guard:sleeper-id-sport-scope": "node scripts/check-sleeper-id-sport-scope.mjs",
     "guard:inflight-build": "node scripts/check-inflight-prod-build.mjs",
     "guard:push-queue": "node scripts/push-queue.mjs check",
     "push:main": "node scripts/push-queue.mjs push",

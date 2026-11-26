@@ -146,7 +146,10 @@ async function resolvePlayers(
     const rows = (await prisma.playerIdentityMap.findMany({
       where: {
         [column]: { in: ids },
-        ...(column === 'sleeperId' ? {} : { sport: sport.toUpperCase() }),
+        // Every column is held to the sport, `sleeperId` included: it is unique in this table only
+        // because NBA Sleeper ids live in `sleeperNbaId`, so an NBA draft's `1466` read here is NFL
+        // Travis Kelce. Scoped, an NBA id finds nothing and falls through to `SportsPlayer` below.
+        sport: sport.toUpperCase(),
       },
       select: { [column]: true, canonicalName: true, position: true },
     } as any)) as unknown as Array<Record<string, string | null>>
@@ -170,7 +173,8 @@ async function resolvePlayers(
     if (missing.length === 0) continue
 
     const players = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: missing } },
+      // 🛑 Held to the draft's sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+      where: { sport: sport.toUpperCase(), sleeperId: { in: missing } },
       select: { sleeperId: true, name: true, position: true },
     })
     for (const row of players) {

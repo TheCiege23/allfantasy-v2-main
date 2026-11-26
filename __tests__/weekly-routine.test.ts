@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   teamFind: vi.fn(),
   scoreFind: vi.fn(),
   playerFind: vi.fn(),
+  leagueFindUnique: vi.fn(async () => ({ sport: 'NFL' })),
   h2hCache: vi.fn(),
   upsets: vi.fn(),
 }))
@@ -21,6 +22,8 @@ vi.mock('@/lib/prisma', () => ({
     leagueTeam: { findMany: h.teamFind },
     leaguePlayerWeeklyScore: { findMany: h.scoreFind },
     sportsPlayer: { findMany: h.playerFind },
+    // The top scorer is named in his own league's sport (Sleeper reuses ids across sports).
+    league: { findUnique: h.leagueFindUnique },
   },
 }))
 vi.mock('@/lib/core-app/weekAll', () => ({ getWeekAll: h.weekAll }))
@@ -68,6 +71,7 @@ const step = (d: ReturnType<typeof build>, key: string) => d.steps.find((s) => s
 beforeEach(() => {
   for (const f of Object.values(h)) f.mockReset()
   h.upsets.mockResolvedValue([])
+  h.leagueFindUnique.mockResolvedValue({ sport: 'NFL' })
 })
 
 describe('routineDayFor', () => {
@@ -216,6 +220,8 @@ describe('getRoutineFacts', () => {
     h.playerFind.mockResolvedValue([{ sleeperId: '9221', name: 'Jahmyr Gibbs', position: 'RB', team: 'DET', sport: 'NFL', imageUrl: null }])
     const out = await getRoutineFacts({ userId: 'u1', leagues: [ICE, DYN], currentWeek: 2 })
     expect(out.topScorer).toEqual({ name: 'Jahmyr Gibbs', points: 28.4, leagueName: 'Ice Kings' })
+    // Named in his league's sport, never by the bare Sleeper id (NFL 1466 Kelce / NBA 1466 McGee).
+    expect(h.playerFind.mock.calls[0][0].where).toMatchObject({ sport: 'NFL', sleeperId: '9221' })
     expect(h.teamFind.mock.calls[0][0].where).toEqual({ leagueId: { in: ['af-ice', 'af-dyn'] }, claimedByUserId: 'u1' })
     expect(h.scoreFind.mock.calls[0][0]).toMatchObject({
       where: {

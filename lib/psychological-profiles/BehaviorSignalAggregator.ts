@@ -398,7 +398,8 @@ export async function aggregateBehaviorSignals(
       // SportsPlayer is the table keyed by Sleeper id, which is the id space
       // draft facts actually use.
       prisma.sportsPlayer.findMany({
-        where: { sleeperId: { in: ids } },
+        // The league's sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+        where: { sport: String(sportNorm).toUpperCase(), sleeperId: { in: ids } },
         select: { sleeperId: true, position: true },
       }),
     ])

@@ -85,7 +85,8 @@ export async function recordStartVsAdvice(args: {
   const identities = composePlayerIdentities(
     ids.length
       ? await prisma.sportsPlayer.findMany({
-          where: { sleeperId: { in: ids } },
+          // The league's sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+          where: { sport: String(league.sport).toUpperCase(), sleeperId: { in: ids } },
           select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
         })
       : [],

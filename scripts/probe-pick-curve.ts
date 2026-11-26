@@ -78,7 +78,7 @@ function leastSquares(rows: number[][], targets: number[], n: number): number[] 
 
 async function main() {
   const leagues = await prisma.league.findMany({
-    select: { id: true, name: true, settings: true, leagueType: true },
+    select: { id: true, name: true, settings: true, leagueType: true, sport: true },
   })
 
   const rows: number[][] = []
@@ -108,7 +108,8 @@ async function main() {
     if (ids.size === 0) continue
 
     const players = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: [...ids] } },
+      // The league's sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+      where: { sport: String(league.sport ?? 'NFL').toUpperCase(), sleeperId: { in: [...ids] } },
       select: { sleeperId: true, position: true },
     })
     const posOf = new Map<string, string | null>()

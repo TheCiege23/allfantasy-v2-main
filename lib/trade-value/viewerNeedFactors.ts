@@ -108,7 +108,8 @@ async function learnedInputsFor(args: { book: string | null; leagueId: string; t
     posture = team ? postureOf(team, games + 1) : null
     const ids = args.get.flatMap((l) => (l.sleeperId ? [l.sleeperId] : []))
     if (posture && ids.length) {
-      const rows = await prisma.sportsPlayer.findMany({ where: { sleeperId: { in: ids } }, select: { sleeperId: true, age: true } })
+      // NFL by construction: every other sport returned above. Sleeper reuses ids across sports.
+      const rows = await prisma.sportsPlayer.findMany({ where: { sport: 'NFL', sleeperId: { in: ids } }, select: { sleeperId: true, age: true } })
       ages = new Map(rows.flatMap((r) => (r.sleeperId ? [[r.sleeperId, r.age ?? null] as const] : [])))
     }
   }
@@ -308,7 +309,8 @@ async function rosterNeedFactors(args: {
     if (rosterIds.length === 0) return none(give, get, 'your roster in this league, which has no players on file')
 
     const rows = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: rosterIds } },
+      // The league's own sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+      where: { sport: String(league?.sport ?? args.sport).toUpperCase(), sleeperId: { in: rosterIds } },
       select: { sleeperId: true, position: true, name: true, team: true },
     })
     /*

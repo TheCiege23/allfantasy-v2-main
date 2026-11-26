@@ -307,7 +307,9 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
    */
   const rows = await args.prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: myIds } },
+      // NFL by construction: IDP is an NFL scoring format. Held to NFL because Sleeper reuses ids
+      // across sports (NBA 1466 is JaVale McGee, NFL 1466 Travis Kelce).
+      where: { sport: 'NFL', sleeperId: { in: myIds } },
       select: { sleeperId: true, name: true, team: true, position: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
     })

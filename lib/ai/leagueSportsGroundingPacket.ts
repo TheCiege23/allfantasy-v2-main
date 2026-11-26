@@ -561,7 +561,7 @@ function unnamedRosterPlayer(playerId: string): LeagueGroundingRosterPlayer {
  */
 async function resolveRosterPlayerNames(
   ids: readonly string[],
-  /** The league's sport. Only NFL rows carry a `sleeperId`; without it another sport's id reads as an NFL player. */
+  /** The league's sport. Sleeper ids are per sport (NFL and NBA both carry them); without it nothing is looked up. */
   sport: string | null | undefined,
 ): Promise<Map<string, LeagueGroundingRosterPlayer>> {
   const out = new Map<string, LeagueGroundingRosterPlayer>()
@@ -586,6 +586,12 @@ async function resolveRosterPlayerNames(
   }
 
   if (lookups.length === 0) return out
+  /*
+   * 🛑 NO SPORT, NO LOOKUP. Sleeper numbers each sport separately — NFL 1466 is Travis Kelce, NBA
+   * 1466 is JaVale McGee — so an unscoped read hands Chimmy whichever row is fresher. Leaving the
+   * ids unnamed is honest; naming them from the wrong sport is not.
+   */
+  if (!sport || !String(sport).trim()) return out
 
   /*
    * 🛑 BY SLEEPER ID ONLY (`sleeperIdWhere`), never a bare id against `externalId`. These are
@@ -597,7 +603,7 @@ async function resolveRosterPlayerNames(
    */
   const rows = await prisma.sportsPlayer
     .findMany({
-      where: sleeperIdWhere(lookups, sport ?? undefined),
+      where: sleeperIdWhere(lookups, String(sport)),
       select: { name: true, position: true, team: true, sleeperId: true, source: true },
       take: 400,
     })

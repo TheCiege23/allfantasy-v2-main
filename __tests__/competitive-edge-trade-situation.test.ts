@@ -5,8 +5,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
-const m = vi.hoisted(() => ({ leagueTrade: vi.fn(), sportsPlayer: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { leagueTrade: { findMany: m.leagueTrade }, sportsPlayer: { findMany: m.sportsPlayer } } }))
+const m = vi.hoisted(() => ({ leagueTrade: vi.fn(), sportsPlayer: vi.fn(), league: vi.fn(async () => ({ sport: 'NFL' })) }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: { leagueTrade: { findMany: m.leagueTrade }, sportsPlayer: { findMany: m.sportsPlayer }, league: { findUnique: m.league } },
+}))
 const audits = vi.hoisted(() => ({ read: vi.fn(async () => [] as unknown[]) }))
 vi.mock('@/lib/integrity/tradeValueAudit', () => ({ readTradeValueAudits: audits.read }))
 
@@ -119,13 +121,20 @@ describe('reading the situation', () => {
       { transactionId: 'a', contextSnapshot: { other: 'side row' }, history: { sleeperLeagueId: 'L1' } },
     ])
     m.sportsPlayer.mockResolvedValue([{ sleeperId: 'oldqb', age: 29 }])
-    const r = await readTradeSituation(trades, NOW)
+    const r = await readTradeSituation(trades, NOW, 'league-1')
     const where = m.leagueTrade.mock.calls[0]![0].where
     expect(where.transactionId.in.sort()).toEqual(['a', 'b', 'c', 'd'])
     expect(where.history.sleeperLeagueId.in).toEqual(['L1'])
     expect(r.contexts.get('L1:a')).toEqual(contexts.get('L1:a'))
     expect(r.contexts.size).toBe(1)
     expect(r.ages.get('oldqb')).toBe(29)
+    // Ages are read in the league's sport (Sleeper reuses ids across sports: NFL 1466 Kelce, NBA 1466 McGee).
+    expect(m.sportsPlayer.mock.calls[0]![0].where.sport).toBe('NFL')
+    // With no league to name the sport, no age read at all — never an unscoped one.
+    m.sportsPlayer.mockClear()
+    const noLeague = await readTradeSituation(trades, NOW)
+    expect(m.sportsPlayer).not.toHaveBeenCalled()
+    expect(noLeague.ages.size).toBe(0)
     expect(managerTradeSituationOn({})).toBe(true)
     expect(managerTradeSituationOn({ MANAGER_TRADE_SITUATION: 'off' })).toBe(false)
   })

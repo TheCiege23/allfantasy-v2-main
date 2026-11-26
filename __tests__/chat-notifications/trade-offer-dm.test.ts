@@ -81,7 +81,8 @@ vi.mock('@/lib/prisma', () => {
         findMany: async () => h.rosters,
         findUnique: async () => h.draftRoster,
       },
-      league: { findUnique: async () => ({ name: 'Pirate League' }) },
+      // `sport` scopes the Sleeper-id player read (Sleeper reuses ids across sports).
+      league: { findUnique: async () => ({ name: 'Pirate League', sport: 'NFL' }) },
       leagueTeam: {
         findMany: async () => [{ claimedByUserId: 'uA', platformUserId: 'uA', externalId: 'rA', teamName: 'Dana Dynasty' }],
         findFirst: async ({ where }: { where: { claimedByUserId?: unknown } }) =>

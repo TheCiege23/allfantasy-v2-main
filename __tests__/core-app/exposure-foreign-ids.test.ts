@@ -19,13 +19,14 @@ vi.mock('@/lib/prisma', () => ({
     },
     roster: {
       findMany: vi.fn(async () => [
-        { leagueId: 'L1', playerData: { players: ['6038', '6039'], starters: ['6038'] }, league: { platform: db.platform } },
+        { leagueId: 'L1', playerData: { players: ['6038', '6039'], starters: ['6038'] }, league: { platform: db.platform, sport: 'NFL' } },
       ]),
     },
     sportsPlayer: {
-      findMany: vi.fn(async ({ where }: { where: { sleeperId: { in: string[] } } }) =>
-        where.sleeperId.in.includes('6038')
-          ? [{ sleeperId: '6038', name: 'Wrong Player', position: 'WR', team: 'NYJ' }]
+      // The read is sport-scoped: `{ OR: [{ sport, sleeperId: { in } }, …] }`, one branch per sport.
+      findMany: vi.fn(async ({ where }: { where: { OR: Array<{ sport: string; sleeperId: { in: string[] } }> } }) =>
+        where.OR.some((b) => b.sport === 'NFL' && b.sleeperId.in.includes('6038'))
+          ? [{ sleeperId: '6038', sport: 'NFL', name: 'Wrong Player', position: 'WR', team: 'NYJ' }]
           : [],
       ),
     },
@@ -58,7 +59,7 @@ describe('getCrossLeagueExposure — foreign roster ids', () => {
   it('CONTROL: a Sleeper roster holding only unresolvable descriptors keeps the import reason', async () => {
     db.platform = 'sleeper'
     vi.mocked(prisma.roster.findMany).mockResolvedValueOnce([
-      { leagueId: 'L1', playerData: { players: ['name:Lamar Jackson:QB:BAL'], starters: [] }, league: { platform: 'sleeper' } },
+      { leagueId: 'L1', playerData: { players: ['name:Lamar Jackson:QB:BAL'], starters: [] }, league: { platform: 'sleeper', sport: 'NFL' } },
     ] as any)
     const panel = await getCrossLeagueExposure('u1', ['L1'])
     expect(panel).toEqual({ available: false, reason: 'your rosters imported with no resolvable player ids' })

@@ -366,9 +366,11 @@ export function defaultTradeContextBackfillDeps(budget: { remainingMs: () => num
         orderBy: { season: 'desc' },
         select: { sport: true, season: true, leagueSize: true, scoring: true, isDynasty: true, leagueVariant: true, leagueType: true, settings: true },
       }),
-    loadPositions: async (_sport, playerIds) => {
+    loadPositions: async (sport, playerIds) => {
       const rows = await prisma.sportsPlayer.findMany({
-        where: { sleeperId: { in: playerIds } },
+        // The trade's own sport — this used to be ignored, and Sleeper reuses ids across sports
+        // (NFL 1466 Travis Kelce / NBA 1466 JaVale McGee), so a position came from either.
+        where: { sport: String(sport || 'NFL').toUpperCase(), sleeperId: { in: playerIds } },
         select: { sleeperId: true, position: true, team: true },
       })
       return new Map(rows.flatMap((r) => (r.sleeperId ? [[r.sleeperId, { position: r.position, team: r.team }] as const] : [])))

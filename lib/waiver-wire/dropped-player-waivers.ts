@@ -143,7 +143,9 @@ export async function loadDroppedPlayerPositions(ids: readonly string[], sport: 
   if (ids.length === 0) return out
   const list = [...ids]
   const sportsRows = (await prisma.sportsPlayer.findMany({
-    where: ourIdOrSleeperIdWhere(list, sport ?? undefined),
+    // No sport → our own row ids only (globally unique). A bare Sleeper id names a different person
+    // in each sport (NFL 1466 Travis Kelce / NBA 1466 JaVale McGee), so it is not read unscoped.
+    where: sport ? ourIdOrSleeperIdWhere(list, sport) : { id: { in: list } },
     select: { id: true, externalId: true, sleeperId: true, position: true },
   })) as Array<{ id: string; externalId: string | null; sleeperId: string | null; position: string | null }>
   const wanted = new Set(list)

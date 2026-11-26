@@ -11,6 +11,7 @@ import { untranslatedLiterals } from './helpers/untranslatedLiterals'
 
 const m = vi.hoisted(() => ({
   leagueWaiverSettings: { findUnique: vi.fn() },
+  league: { findUnique: vi.fn() },
   waiverRun: { findFirst: vi.fn() },
   waiverClaim: { count: vi.fn() },
   roster: { findMany: vi.fn() },
@@ -26,6 +27,8 @@ const NOW = new Date('2026-09-15T12:00:00Z')
 
 beforeEach(() => {
   for (const d of Object.values(m)) for (const fn of Object.values(d)) (fn as ReturnType<typeof vi.fn>).mockReset()
+  // The league's sport scopes the claim-name read (Sleeper reuses ids across sports).
+  m.league.findUnique.mockResolvedValue({ sport: 'NFL' })
   m.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'rolling', faabBudget: 1000, processingDayOfWeek: 2, processingTimeUtc: '07:00', processingDays: null })
   m.waiverRun.findFirst.mockResolvedValue({
     id: 'run1', runAt: new Date('2026-09-15T07:00:00Z'), runType: 'scheduled', status: 'completed',

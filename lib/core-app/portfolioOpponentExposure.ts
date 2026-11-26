@@ -1,5 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { sleeperIdsBySportWhere } from '@/lib/player-identity/externalIdNamespace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { sleeperReadableRosters } from './rosterIdSpace'
 import type { MyTeamRow } from './myTeamPulse'
@@ -34,7 +35,9 @@ export async function portfolioOpponentExposure(rows: MyTeamRow[]): Promise<Oppo
   }
   const ids=[...new Set([...opposing.keys()].map(k=>k.slice(k.lastIndexOf(':')+1)))]
   if(!ids.length)return []
-  const players=await prisma.sportsPlayer.findMany({where:{sleeperId:{in:ids}},select:{sleeperId:true,name:true,sport:true}})
+  // Read in each id's own sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+  // The join below already matched on sport; this stops the other sport's rows being fetched at all.
+  const players=await prisma.sportsPlayer.findMany({where:sleeperIdsBySportWhere([...opposing].map(([k,v])=>[v.sport,[k.slice(k.lastIndexOf(':')+1)]] as const)),select:{sleeperId:true,name:true,sport:true}})
   const result=new Map<string,OpponentExposure>()
   for(const [key,value] of opposing){const id=key.slice(key.lastIndexOf(':')+1);const p=players.find(p=>p.sleeperId===id && String(p.sport)===value.sport);if(!p)continue;const k=`${value.sport}:${id}`;const item=result.get(k)??{id,name:p.name,sport:value.sport,leagues:[]};item.leagues.push(value.league);result.set(k,item)}
   return [...result.values()].sort((a,b)=>b.leagues.length-a.leagues.length)

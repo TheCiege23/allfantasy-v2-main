@@ -63,7 +63,9 @@ export async function GET(req: Request) {
     const sleeperIds = exposures.filter(isNflSleeperId).map((e) => e.playerId).filter(Boolean)
     const catalog = await prisma.sportsPlayer
       .findMany({
-        where: { OR: [{ sleeperId: { in: sleeperIds } }, { id: { in: ids } }] },
+        // The Sleeper arm is NFL ids, so it reads NFL rows: NBA 1466 (JaVale McGee) is not NFL 1466
+        // (Travis Kelce), and unscoped both came back under one id for `indexBySleeperId` to pick.
+        where: { OR: [{ sport: 'NFL', sleeperId: { in: sleeperIds } }, { id: { in: ids } }] },
         select: { id: true, sleeperId: true, source: true, name: true, position: true, team: true },
       })
       .catch(() => [] as Array<{ id: string; sleeperId: string | null; source: string; name: string | null; position: string | null; team: string | null }>)

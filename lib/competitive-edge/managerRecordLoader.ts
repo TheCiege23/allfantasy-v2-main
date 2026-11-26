@@ -204,8 +204,20 @@ export async function readTradeSituation(
   }
   const ids = [...new Set(trades.flatMap((t) => t.sides.flatMap((s) => s.playersIn.flatMap((p) => (p.playerId ? [p.playerId] : [])))))]
   const ages = new Map<string, number | null>()
-  for (let i = 0; i < ids.length; i += 1000) {
-    const rows = await prisma.sportsPlayer.findMany({ where: { sleeperId: { in: ids.slice(i, i + 1000) } }, select: { sleeperId: true, age: true } })
+  /*
+   * 🛑 AGES ARE READ IN THE LEAGUE'S SPORT, OR NOT AT ALL. Sleeper reuses ids across sports — NFL
+   * 1466 is Travis Kelce (37), NBA 1466 is JaVale McGee — so an unscoped read dates a trade's
+   * players by whichever row is fresher. With no league to name the sport, no ages: the record
+   * loses that line rather than printing a stranger's age.
+   */
+  const sport = leagueId
+    ? await prisma.league
+        .findUnique({ where: { id: leagueId }, select: { sport: true } })
+        .then((l) => (l?.sport ? String(l.sport).toUpperCase() : null))
+        .catch(() => null)
+    : null
+  for (let i = 0; sport && i < ids.length; i += 1000) {
+    const rows = await prisma.sportsPlayer.findMany({ where: { sport, sleeperId: { in: ids.slice(i, i + 1000) } }, select: { sleeperId: true, age: true } })
     for (const r of rows) if (r.sleeperId && !ages.has(r.sleeperId)) ages.set(r.sleeperId, r.age ?? null)
   }
   // What each trade's sides were worth on the league's values when it happened — the commissioner audit's rows.
