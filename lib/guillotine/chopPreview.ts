@@ -14,6 +14,7 @@
  */
 import { applyImmunity, immuneRosterIds, scheduledChops, type GuillotineAdvanced } from './chopSchedule'
 import { resolveTiebreak, type DraftSlotByRoster } from './GuillotineTiebreakResolver'
+import { draftSlotTiebreakLastWeek } from './eliminationPeriods'
 import { DEFAULT_FAAB_ON_CHOP_PERCENT, distributeChoppedFaab, faabTakenFromChopped, movesChoppedFaab, type FaabOnChop } from './faabOnChop'
 import { chopAnnouncementText } from './chopAnnouncement'
 import { RELEASE_OPTIONS, tiebreakLabel, type GuillotineRules } from './guillotineRules'
@@ -133,7 +134,7 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
       ? { ...base, outcome: 'season_over', headline: 'One team is left — the season is decided.' }
       : { ...base, outcome: 'final_stage', headline: `${teams(alive)} left: the final stage decides the champion, with no more chops.` }
   }
-  const weekChops = scheduledChops(input.advanced, input.week, input.teamsPerChop)
+  const weekChops = scheduledChops(input.advanced, input.week, input.teamsPerChop, alive)
   if (weekChops === 0) {
     return { ...base, outcome: 'no_chop_week', headline: `Week ${input.week} is a no-chop week on your schedule. Scores still count for tiebreaks.` }
   }
@@ -153,6 +154,7 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
     teamsPerChop: chopCount,
     weekOrPeriod: input.week,
     draftSlotByRoster: input.draftSlotByRoster,
+    draftSlotLastWeek: draftSlotTiebreakLastWeek(input.eliminationStartWeek, input.periodWeeks ?? 1),
     tiebreakSeed: input.tiebreakSeed,
   })
   const chopped = new Set(choppedRosterIds)

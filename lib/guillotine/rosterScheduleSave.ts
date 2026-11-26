@@ -52,7 +52,7 @@ export async function readRosterScheduleView(leagueId: string): Promise<RosterSc
 
 export type SaveRosterScheduleError = RosterScheduleError | 'not_entitled' | 'not_found' | 'unsupported' | 'busy'
 
-const same = (a: RosterChange, b: RosterChange) => a.week === b.week && a.kind === b.kind && a.slot === b.slot && a.count === b.count
+const same = (a: RosterChange, b: RosterChange) => a.week === b.week && a.teamsLeft === b.teamsLeft && a.kind === b.kind && a.slot === b.slot && a.count === b.count
 
 export async function saveRosterSchedule(
   leagueId: string,

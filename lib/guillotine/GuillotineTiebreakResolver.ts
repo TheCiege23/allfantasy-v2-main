@@ -9,6 +9,8 @@ export function resolveTiebreak(args: {
   teamsPerChop: number
   weekOrPeriod: number
   draftSlotByRoster: DraftSlotByRoster
+  /** The last week `draft_slot` applies (./eliminationPeriods.ts `draftSlotTiebreakLastWeek`). Absent = 1. */
+  draftSlotLastWeek?: number
   commissionerChoppedRosterIds?: string[]
   /**
    * Fixes the `random` step and the last-resort order (see `seededOrder`). Pass the league and season
@@ -74,7 +76,7 @@ export function resolveTiebreak(args: {
       stepUsed = step
       return args.random ? shuffleAndTake(rows, needed, args.random) : seededOrder(rows, seed, weekOrPeriod).slice(0, needed)
     }
-    if (step === 'draft_slot' && weekOrPeriod > 1) return breakTie(rows, needed, index + 1)
+    if (step === 'draft_slot' && weekOrPeriod > (args.draftSlotLastWeek ?? 1)) return breakTie(rows, needed, index + 1)
     const key = (row: PeriodScoreRow) => {
       if (step === 'bench_points') return row.benchPoints ?? 0
       if (step === 'season_points') return row.seasonPointsCumul

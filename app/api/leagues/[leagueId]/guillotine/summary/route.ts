@@ -355,6 +355,10 @@ export async function PATCH(
           ? 'Chop schedules, immunity and FAAB after a chop are part of AF Commissioner.'
           : saved.error === 'bad_faab'
             ? `FAAB after a chop must be a whole dollar amount up to ${MAX_FAAB_AMOUNT}.`
+            : saved.error === 'bad_remaining'
+              ? 'Each "teams left" rule needs its own number of teams, from 2 up, and up to 4 chops.'
+              : saved.error === 'bad_bonus'
+                ? `The top scorer's bonus must be a whole dollar amount up to ${MAX_FAAB_AMOUNT}.`
             : ('message' in saved && saved.message) || saved.error
       return NextResponse.json({ error: message, code: saved.error }, { status })
     }

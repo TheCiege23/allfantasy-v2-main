@@ -50,7 +50,7 @@ export function guillotineCalendarFit(input: CalendarFitInput): CalendarFit {
   const periodWeeks = Math.max(1, Math.floor(input.periodWeeks ?? 1))
   // A period's chop lands on its last week, so a period that ends after `endWeek` never chops.
   for (let week = input.startWeek + periodWeeks - 1; week <= input.endWeek && alive > input.threshold; week += periodWeeks) {
-    const chops = Math.min(scheduledChops(input.advanced, week, input.baseChops), alive - input.threshold)
+    const chops = Math.min(scheduledChops(input.advanced, week, input.baseChops, alive), alive - input.threshold)
     if (chops > 0) {
       alive -= chops
       lastChopWeek = week
@@ -94,7 +94,7 @@ export function guillotineSeasonPreview(input: CalendarFitInput): { weeks: Seaso
       weeks.push({ week, kind: 'waiting', chops: 0, aliveAfter: alive })
       continue
     }
-    const chops = Math.min(scheduledChops(input.advanced, week, input.baseChops), alive - input.threshold)
+    const chops = Math.min(scheduledChops(input.advanced, week, input.baseChops, alive), alive - input.threshold)
     alive -= Math.max(0, chops)
     weeks.push({ week, kind: chops > 0 ? 'chop' : 'no_chop', chops: Math.max(0, chops), aliveAfter: alive })
   }

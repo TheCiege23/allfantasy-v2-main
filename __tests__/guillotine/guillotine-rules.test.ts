@@ -316,9 +316,14 @@ describe('two-week elimination periods (lib/guillotine/eliminationPeriods.ts)', 
     expect(leagueUpdate.mock.calls[0]![0].data.settings).not.toHaveProperty('guillotine_period_weeks')
   })
 
-  it('refused outside MLB (400) and after the first chop (409); nothing written', async () => {
+  it('every sport may switch to two weeks now (owner, 2026-11-25): an NBA league saves it', async () => {
+    getGuillotineConfig.mockResolvedValue({ ...CONFIG, sport: 'NBA', eliminationStartWeek: 1, eliminationEndWeek: 24 })
     leagueFindUnique.mockResolvedValue(league({ sport: 'NBA' }))
-    expect(await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })).toMatchObject({ ok: false, status: 400, field: 'periodWeeks' })
+    expect(await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })).toMatchObject({ ok: true })
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.guillotine_period_weeks).toBe(2)
+  })
+
+  it('refused after the first chop (409); nothing written', async () => {
     leagueFindUnique.mockResolvedValue(league())
     hasFirstChopHappened.mockResolvedValue(true)
     expect(await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })).toMatchObject({ ok: false, status: 409, field: 'periodWeeks' })

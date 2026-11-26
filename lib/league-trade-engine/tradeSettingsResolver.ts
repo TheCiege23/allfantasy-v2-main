@@ -96,8 +96,9 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
    */
   let tradesAllowed = !league.lockAllMoves && !nativeBestBall
   if (league.guillotineMode) {
-    const g = (snap as Record<string, unknown>).guillotineSettings as { tradesAllowed?: boolean } | undefined
-    tradesAllowed = tradesAllowed && Boolean(g?.tradesAllowed ?? false)
+    // The commissioner's switch, and the "closed once N teams are left" mark (lib/guillotine/guillotineTrades.ts).
+    const g = ((snap ?? {}) as Record<string, unknown>).guillotineSettings as { tradesAllowed?: boolean; tradesClosed?: boolean } | undefined
+    tradesAllowed = tradesAllowed && Boolean(g?.tradesAllowed ?? false) && g?.tradesClosed !== true
   }
   if (league.leagueVariant === 'survivor_guillotine') {
     const raw = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
