@@ -28,6 +28,9 @@ import type { TradeValueSnapshot } from '@/lib/trade-value/types'
 import { AF_MANAGED_LINEUPS_KEY, readManagedLineups } from './inactiveManagerMode'
 import { resolveManagerProfile, type ManagerProfile } from './managerProfile'
 import { TRADE_ANSWER_DELAY_MS, decideTradeOffer, planCounterOffer, type AskablePlayer, type TradeAnswer } from './autopilotTrades'
+import { isDevyFormatLeague } from '@/lib/core-app/dynastyRosterMarkers'
+import type { TradeAssetInput as EngineTradeAsset } from '@/lib/league-trade-engine/types'
+import { decideOnLeagueGrade } from './chimmyGradeDecision'
 
 export const LEAGUE_TRADE_ACCEPT_ACTION = 'chimmy_autopilot.league_trade_accept'
 export const LEAGUE_TRADE_REJECT_ACTION = 'chimmy_autopilot.league_trade_reject'
@@ -88,10 +91,15 @@ type LeagueCtx = {
   /** Roster.id → { redraft roster id, season id, eliminated, playerData } for this league's current season. */
   rosters: Map<string, { redraftId: string | null; seasonId: string | null; eliminated: boolean; playerData: unknown }>
   season: { id: string; sport: string; season: number | null } | null
+  /**
+   * A devy or campus-to-canton league: rosters mix pro and college players, so Chimmy answers on the
+   * trade screen's own grade of the deal (./chimmyGradeDecision.ts), not a per-player price.
+   */
+  devyFormat: boolean
 }
 
 async function loadLeague(leagueId: string): Promise<LeagueCtx> {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, leagueType: true, leagueVariant: true } })
   const teams = await chimmyTradeTeams(leagueId)
   const rows = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, redraftRosterId: true, playerData: true } })
   const redraftIds = rows.map((r) => r.redraftRosterId).filter((id): id is string => Boolean(id))
@@ -106,7 +114,13 @@ async function loadLeague(leagueId: string): Promise<LeagueCtx> {
   }
   const seasonId = [...rosters.values()].find((r) => r.seasonId)?.seasonId ?? null
   const season = seasonId ? await prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId }, select: { id: true, sport: true, season: true } }) : null
-  return { managed: readManagedLineups(league?.settings), teams, rosters, season: season ? { id: season.id, sport: season.sport, season: season.season ?? null } : null }
+  return {
+    managed: readManagedLineups(league?.settings),
+    teams,
+    rosters,
+    season: season ? { id: season.id, sport: season.sport, season: season.season ?? null } : null,
+    devyFormat: isDevyFormatLeague(league),
+  }
 }
 
 async function priceDeal(ctx: LeagueCtx, leagueId: string, proposerRosterId: string, receiverRosterId: string, assets: NonNullable<ReturnType<typeof pricingAsset>>[]) {
@@ -163,7 +177,8 @@ export async function runAutopilotLeagueTradeAnswers(opts?: { now?: Date; deadli
       const multiTeam = participants.length > 2
 
       const verdict = await decide({ ctx, leagueId: trade.leagueId, trade, chimmyId, profile, multiTeam })
-      const counter = verdict.code === 'not_enough' && !multiTeam && !ctx.teams.has(trade.proposerRosterId)
+      // No counter in a devy or C2C league: the screen grades a whole deal, so there is no per-player price to ask with.
+      const counter = verdict.code === 'not_enough' && !multiTeam && !ctx.devyFormat && !ctx.teams.has(trade.proposerRosterId)
         ? await sendCounter({ ctx, leagueId: trade.leagueId, trade, chimmyId, actorUserId: team.actorUserId, profile, now }).catch((e) => {
             console.warn('[chimmy-autopilot] league counter-offer skipped', { tradeId: trade.id, error: String(e) })
             return null
@@ -209,6 +224,24 @@ async function decide(args: { ctx: LeagueCtx; leagueId: string; trade: { propose
   const mine = ctx.rosters.get(chimmyId)
   const theirs = ctx.rosters.get(trade.proposerRosterId)
   if (mine?.eliminated || theirs?.eliminated) return reject('eliminated', 'One of these teams is out of the league, so Chimmy passed.')
+  if (ctx.devyFormat) {
+    // Loaded only here: the trade screen's grader pulls in the whole trade evaluation engine.
+    const { proposalOneGrade } = await import('@/lib/league-trade-engine/serverTradeDecision')
+    const grade = await proposalOneGrade({
+      leagueId: args.leagueId,
+      // Graded from Chimmy's side: `give` is what Chimmy sends. No user: Chimmy's team need is not priced.
+      proposerRosterId: chimmyId,
+      proposedByUserId: null,
+      assets: trade.items as unknown as EngineTradeAsset[],
+    })
+    return decideOnLeagueGrade({
+      grade,
+      rosterId: chimmyId,
+      items: trade.items,
+      starterIds: getNormalizedLineupSections(mine?.playerData).starters.map((row) => String(row.id)).filter(Boolean),
+      fairness: profile.fairness,
+    })
+  }
   if (!ctx.season || !mine?.redraftId || !theirs?.redraftId) return reject('cannot_value', 'Chimmy could not put a value on this deal, so it passed.')
   const redraftIdOf = (id: string) => ctx.rosters.get(id)?.redraftId ?? undefined
   const assets = trade.items.map((i) => pricingAsset(i, redraftIdOf))
