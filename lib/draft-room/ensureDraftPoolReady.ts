@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { STARTUP_COLLEGE_DRAFT_LABEL, STARTUP_PRO_DRAFT_LABEL } from '@/lib/draft-defaults/startupCollegeDraft'
 import { compactDraftPoolCacheKey } from './draftPoolCacheKey'
+import { collegeScopeSignature, readCollegeConferenceScope } from '@/lib/college/conferenceScope'
 import {
   getEffectiveLeagueRosterTemplate,
   starterEligiblePlayerPositionsFromTemplate,
@@ -129,6 +130,16 @@ async function startupDraftPhaseSuffix(leagueId: string): Promise<string> {
   }
 }
 
+async function collegeScopeCacheSuffix(leagueId: string): Promise<string> {
+  try {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true } })
+    const scope = readCollegeConferenceScope(league?.settings, league?.sport)
+    return scope ? `:college-${collegeScopeSignature(scope)}` : ''
+  } catch {
+    return ''
+  }
+}
+
 export async function resolveDraftPoolCacheContext(
   leagueId: string,
   options?: { effectiveLeagueTemplate?: EffectiveLeagueTemplate },
@@ -148,7 +159,10 @@ export async function resolveDraftPoolCacheContext(
   // different pool in each draft, and this cache is per league: the college draft must not be served the
   // pro draft's board (lib/draft-defaults/startupCollegeDraft.ts).
   const scope = draft?.draftModeLabel === ANNUAL_C2C_DRAFT ? `:${draft.id}` : ''
-  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + scope + (await startupDraftPhaseSuffix(leagueId))
+  // A college league's conference scope changes which players the board holds, so it is part of the
+  // key: changing it must never serve the board cached for the old one.
+  const collegeScope = await collegeScopeCacheSuffix(leagueId)
+  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + scope + collegeScope + (await startupDraftPhaseSuffix(leagueId))
   return {
     effectiveLeagueTemplate,
     rosterFp,
