@@ -39,7 +39,8 @@ import { TRADE_ANSWER_DELAY_MS, decideTradeOffer, planCounterOffer, type Askable
 import { createRedraftTradeProposal, type TradeAssetInput } from '@/lib/redraft/createTradeProposal'
 import { createAfLeagueTrade } from '@/lib/league-trade-engine/tradeService'
 import { engineRefusalCode } from './autopilotLeagueTrades'
-import { computeRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
+// NBA, college basketball and NHL deals are priced on the league's value board (./chimmyBoardPricing.ts).
+import { priceChimmyDeal } from './chimmyBoardPricing'
 import type { ManagerProfile } from './managerProfile'
 
 /** Who answered, in decision records and audit rows. Not a user: `system:` actors are never FK-written. */
@@ -242,7 +243,7 @@ async function sendCounterOffer(args: {
     .slice(0, MAX_BENCH_PRICED)
   let askable: AskablePlayer[] = []
   if (bench.length > 0) {
-    const priced = await computeRedraftTradeValueSnapshot({
+    const priced = await priceChimmyDeal({
       seasonId: proposal.seasonId,
       leagueId: proposal.leagueId,
       proposerRosterId: otherId,
@@ -309,7 +310,7 @@ type SeasonCtx = { leagueId: string; seasonId: string; sport: string; season: nu
 /** Players priced on the trade engine's scale: one read for one team's players, going one way. */
 async function pricePlayers(ctx: SeasonCtx, fromRosterId: string, toRosterId: string, players: Array<{ playerId: string; playerName: string | null }>): Promise<PricedPlayer[]> {
   if (players.length === 0) return []
-  const priced = await computeRedraftTradeValueSnapshot({
+  const priced = await priceChimmyDeal({
     seasonId: ctx.seasonId,
     leagueId: ctx.leagueId,
     proposerRosterId: fromRosterId,

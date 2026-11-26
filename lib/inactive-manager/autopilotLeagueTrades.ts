@@ -22,7 +22,8 @@ import { logAction } from '@/server/services/auditService'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { acceptAfLeagueTrade, createAfLeagueTrade, rejectAfLeagueTrade } from '@/lib/league-trade-engine/tradeService'
 import { chimmyTradeTeams } from '@/lib/league-trade-engine/chimmyActor'
-import { computeRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
+// NBA, college basketball and NHL deals are priced on the league's value board (./chimmyBoardPricing.ts).
+import { priceChimmyDeal } from './chimmyBoardPricing'
 import type { TradeValueSnapshot } from '@/lib/trade-value/types'
 import { AF_MANAGED_LINEUPS_KEY, readManagedLineups } from './inactiveManagerMode'
 import { resolveManagerProfile, type ManagerProfile } from './managerProfile'
@@ -109,7 +110,7 @@ async function loadLeague(leagueId: string): Promise<LeagueCtx> {
 }
 
 async function priceDeal(ctx: LeagueCtx, leagueId: string, proposerRosterId: string, receiverRosterId: string, assets: NonNullable<ReturnType<typeof pricingAsset>>[]) {
-  return computeRedraftTradeValueSnapshot({
+  return priceChimmyDeal({
     seasonId: ctx.season!.id,
     leagueId,
     proposerRosterId,

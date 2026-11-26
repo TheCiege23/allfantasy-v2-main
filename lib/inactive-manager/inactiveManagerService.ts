@@ -843,6 +843,28 @@ export type AutopilotWaiverRunResult = {
  * already has a claim pending on a player does not claim him again. A league whose owner no longer
  * holds AF Commissioner is skipped, not switched off: the commissioner decides that.
  */
+/** A board league's per-game rates for the waiver planner, or null when the league is not on a board. */
+async function loadBoardRates(leagueId: string): Promise<{ learn: (ids: string[]) => Promise<void>; rate: (id: string) => number | null } | null> {
+  const { loadLeagueValueBoard } = await import('@/lib/sport-values/leagueValueBoard')
+  const { indexBoard } = await import('@/lib/decision-os/trade/sportPointsValue')
+  const { boardRateFor } = await import('./chimmyBoardValue')
+  const { loadRosterIdentities } = await import('./chimmyBoardPricing')
+  const board = await loadLeagueValueBoard(leagueId).catch(() => null)
+  if (board?.kind !== 'ok') return null
+  const index = indexBoard(board.ctx.board)
+  // An NHL TheSportsDB id is read as the same player's Rolling Insights number (our own tables, no vendor call).
+  const alias = new Map<string, string>()
+  return {
+    learn: async (ids) => {
+      const tsdb = [...new Set(ids.filter((id) => id.startsWith('tsdb_') && !alias.has(id)))]
+      if (tsdb.length === 0) return
+      const found = await loadRosterIdentities(board.ctx.sport, tsdb).catch(() => new Map<string, { alias?: string | null }>())
+      for (const [id, i] of found) if (i.alias) alias.set(id, i.alias)
+    },
+    rate: (id) => boardRateFor(board.ctx, index, [id, alias.get(id)]),
+  }
+}
+
 export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: number }): Promise<AutopilotWaiverRunResult> {
   const deadline = opts?.deadline ?? Date.now() + 25_000
   const result: AutopilotWaiverRunResult = { leagues: 0, teams: 0, claims: 0, skipped: {}, failures: [] }
@@ -899,7 +921,15 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
       const slots = resolveLineupStarterSlots(league as never, template)
       const benchCapacity = template ? template.slots.reduce((sum, s) => sum + (s.benchCount ?? 0), 0) || null : null
       const pool = (await getNormalizedPlayerData({ surface: 'waivers', leagueId, limit: 300 })).map(serializeUnifiedPlayerForApi)
-      const freeAgents = pool.map((p) => ({ id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }))
+      /*
+       * NBA, college basketball, NHL (every board sport): a player's number is his rate per game on the
+       * league's value board — the board the trade grade prices on — pulled toward the best free agent when
+       * his sample is thin, and 0 when he has no games to price. One unit for the whole wire and roster.
+       */
+      const board = await loadBoardRates(leagueId)
+      await board?.learn(pool.map((p) => p.id))
+      const rate = (p: { id: string; projectedPoints: number | null }) => (board ? board.rate(p.id) ?? 0 : p.projectedPoints)
+      const freeAgents = pool.map((p) => ({ id: p.id, position: p.position, projectedPoints: rate(p), injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }))
       const playerNames = new Map(pool.map((p) => [p.id, p.name]))
       const waiverSettings = await getEffectiveLeagueWaiverSettings(leagueId)
 
@@ -926,9 +956,10 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
           }
           const lists = buildLineupListsFromPlayerData(roster.playerData, slots.length)
           const rows = await getNormalizedPlayerData({ surface: 'roster', leagueId, userId: roster.platformUserId, limit: 200 })
+          await board?.learn(rows.map(serializeUnifiedPlayerForApi).map((p) => p.id))
           const players: Record<string, { id: string; position: string | null; projectedPoints: number | null; injuryStatus: string | null; yearsExp: number | null }> = {}
           for (const p of rows.map(serializeUnifiedPlayerForApi)) {
-            players[p.id] = { id: p.id, position: p.position, projectedPoints: p.projectedPoints, injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }
+            players[p.id] = { id: p.id, position: p.position, projectedPoints: rate(p), injuryStatus: p.injuryStatus, yearsExp: p.product?.yearsExp ?? null }
             playerNames.set(p.id, p.name)
           }
           const pending = ((await getClaimsByRoster(rosterId, 'pending')) as Array<{ addPlayerId: string }>).map((c) => String(c.addPlayerId))
