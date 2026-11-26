@@ -27,6 +27,14 @@ export const NBA_CONFIG: SportConfigFull = {
     { key: 'fta', label: 'Free Throws Attempted', defaultPoints: 0, isToggleable: true, group: 'shooting', sport: 'NBA' },
     { key: 'dbl_dbl', label: 'Double-Double Bonus', defaultPoints: 1.5, isToggleable: true, group: 'bonus', sport: 'NBA', unit: 'bonus' },
     { key: 'trpl_dbl', label: 'Triple-Double Bonus', defaultPoints: 3, isToggleable: true, group: 'bonus', sport: 'NBA', unit: 'bonus' },
+    // 2026-11-26: categories the box already carries (Road To Glory scores them). 0 by default: no league changes.
+    { key: 'quad_dbl', label: 'Quadruple-Double Bonus', defaultPoints: 0, isToggleable: true, group: 'bonus', sport: 'NBA', unit: 'bonus' },
+    { key: 'min', label: 'Minutes Played', defaultPoints: 0, isToggleable: true, group: 'usage', sport: 'NBA' },
+    { key: 'pf', label: 'Personal Fouls', defaultPoints: 0, isToggleable: true, group: 'negative', sport: 'NBA' },
+    { key: 'fg2m', label: '2-Pointers Made', defaultPoints: 0, isToggleable: true, group: 'shooting', sport: 'NBA' },
+    { key: 'fg2_miss', label: '2-Pointers Missed', defaultPoints: 0, isToggleable: true, group: 'negative', sport: 'NBA' },
+    { key: 'fg3_miss', label: '3-Pointers Missed', defaultPoints: 0, isToggleable: true, group: 'negative', sport: 'NBA' },
+    { key: 'ft_miss', label: 'Free Throws Missed', defaultPoints: 0, isToggleable: true, group: 'negative', sport: 'NBA' },
   ],
 
   scoringPresets: [

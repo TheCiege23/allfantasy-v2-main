@@ -86,6 +86,7 @@ export function buildNcaabLeagueScorer(league: { sport?: string | null; settings
     if (Object.keys(stats).length === 0) return null
     delete stats.dbl_dbl
     delete stats.trpl_dbl
+    delete stats.quad_dbl
     const points = score(stats, position)
     return Number.isFinite(points) ? Math.round(points * 100) / 100 : null
   }

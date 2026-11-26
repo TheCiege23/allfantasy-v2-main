@@ -248,20 +248,61 @@ function normalizeWithAliases(
   return { stats, unmappedKeys }
 }
 
-export function normalizeNbaGameStats(raw: unknown): NormalizedGameStats {
-  const result = normalizeWithAliases(raw, NBA_STAT_ALIASES)
-  if (Object.keys(result.stats).length === 0) return result
+/** Minutes as the feed sends them: NBA "35:21" (minutes:seconds), NCAAB "20" or a number. */
+function parseMinutes(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value !== 'string' || !value.trim()) return undefined
+  const m = /^(\d+):(\d{1,2})$/.exec(value.trim())
+  if (m) return Math.round((Number(m[1]) + Number(m[2]) / 60) * 100) / 100
+  const n = Number(value)
+  return Number.isFinite(n) ? n : undefined
+}
 
+/**
+ * Basketball categories the box carries as raw counts but scoring needs in another form (2026-11-26, the
+ * Road To Glory leagues score them): minutes, personal fouls, two-pointers made, and MISSED free throws,
+ * twos and threes (attempts minus makes). Every one scores 0 by default, so a league that sets nothing
+ * scores exactly as before. A miss count is only written when both halves are present.
+ */
+function addBasketballExtras(raw: unknown, result: NormalizedGameStats): void {
+  const source = isRecord(raw) && isRecord(raw.stats) ? raw.stats : raw
+  if (!isRecord(source)) return
+  const claim = (key: string) => { result.unmappedKeys = result.unmappedKeys.filter((k) => k !== key) }
+  const min = parseMinutes(source.minutes)
+  if (min !== undefined) { result.stats.min = min; claim('minutes') }
+  const pf = asNumber(source.fouls) ?? asNumber(source.pf)
+  if (pf !== undefined) { result.stats.pf = pf; claim('fouls') }
+  const fg2m = asNumber(source.two_points_made)
+  const fg2a = asNumber(source.two_points_attempted)
+  if (fg2m !== undefined) { result.stats.fg2m = fg2m; claim('two_points_made') }
+  if (fg2m !== undefined && fg2a !== undefined) { result.stats.fg2_miss = Math.max(0, fg2a - fg2m); claim('two_points_attempted') }
+  const fg3a = asNumber(source.three_points_attempted)
+  if (result.stats.threes !== undefined && fg3a !== undefined) { result.stats.fg3_miss = Math.max(0, fg3a - result.stats.threes); claim('three_points_attempted') }
+  const ftm = asNumber(source.free_throws_made) ?? result.stats.ftm
+  const fta = asNumber(source.free_throws_attempted) ?? result.stats.fta
+  if (ftm !== undefined && fta !== undefined) { result.stats.ft_miss = Math.max(0, fta - ftm) }
   // Derived per game — see the DOUBLE_CATEGORIES note above.
   const doubles = countDoubleDigitCategories(result.stats)
   if (doubles >= 2) result.stats.dbl_dbl = 1
   if (doubles >= 3) result.stats.trpl_dbl = 1
+  if (doubles >= 4) result.stats.quad_dbl = 1
+}
 
+export function normalizeNbaGameStats(raw: unknown): NormalizedGameStats {
+  const result = normalizeWithAliases(raw, NBA_STAT_ALIASES)
+  if (Object.keys(result.stats).length === 0) return result
+  addBasketballExtras(raw, result)
   return result
 }
 
 export function normalizeNcaabGameStats(raw: unknown): NormalizedGameStats {
   const result = normalizeWithAliases(raw, NCAAB_STAT_ALIASES)
+  if (Object.keys(result.stats).length > 0) {
+    const source = isRecord(raw) && isRecord(raw.stats) ? raw.stats : raw
+    const ftm = isRecord(source) ? asNumber(source.free_throws_made) : undefined
+    if (ftm !== undefined) result.stats.ftm = ftm
+    addBasketballExtras(raw, result)
+  }
   return { ...result, unmappedKeys: result.unmappedKeys.filter((k) => !NCAAB_KNOWN_UNSCORED.has(k)) }
 }
 
