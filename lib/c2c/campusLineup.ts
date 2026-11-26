@@ -21,21 +21,32 @@ export function isC2CVariant(leagueVariant: string | null | undefined): boolean 
   return C2C_VARIANTS.has(String(leagueVariant ?? '').toLowerCase())
 }
 
-export function isFootballC2CLeague(league: { leagueVariant?: string | null; sport?: string | null }): boolean {
+type C2CLeagueShape = { leagueVariant?: string | null; sport?: string | null; leagueType?: string | null }
+
+export function isFootballC2CLeague(league: C2CLeagueShape): boolean {
   return campusSport(league) === 'football'
 }
 
-export function isBasketballC2CLeague(league: { leagueVariant?: string | null; sport?: string | null }): boolean {
+export function isBasketballC2CLeague(league: C2CLeagueShape): boolean {
   return campusSport(league) === 'basketball'
 }
 
 export type CampusSport = 'football' | 'basketball'
 
-/** Which college sport a native C2C league's campus lineup plays: NFL → football, NBA → basketball. */
-export function campusSport(league: { leagueVariant?: string | null; sport?: string | null }): CampusSport | null {
-  if (!isC2CVariant(league.leagueVariant)) return null
+/**
+ * Which college sport a native C2C league's campus lineup plays: NFL → football, NBA → basketball.
+ *
+ * ⚠ A league made in the create wizard carries `leagueType: 'c2c'` and NO variant (the create transaction
+ * sets a variant only for IDP, Zombie, Pirate and Survivor), so a variant-only check left every new NFL C2C
+ * league without a campus lineup (found 2026-11-24). NFL reads the league type too. NBA stays variant-only:
+ * its scorer refuses non-points and best ball scoring, and widening it could stop an existing NBA C2C
+ * league's scoring.
+ */
+export function campusSport(league: C2CLeagueShape): CampusSport | null {
   const sport = String(league.sport ?? '').toUpperCase()
-  return sport === 'NFL' ? 'football' : sport === 'NBA' ? 'basketball' : null
+  if (isC2CVariant(league.leagueVariant)) return sport === 'NFL' ? 'football' : sport === 'NBA' ? 'basketball' : null
+  if (sport === 'NFL' && String(league.leagueType ?? '').trim().toLowerCase() === 'c2c') return 'football'
+  return null
 }
 
 const record = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})

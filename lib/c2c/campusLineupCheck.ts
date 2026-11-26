@@ -14,11 +14,12 @@ import { readRiScheduleWindow, scheduleKeyPrefix } from '@/lib/sports-data/riSch
 import { nbaCampusScheduleCoversWindow } from './nbaCampusScheduleCoverage'
 import { nbaCampusMoveLock } from './nbaCampusMoveLock'
 import { footballCampusMoveLock } from './footballCampusMoveLock'
+import { collegeLineupSport, devyCollegeLineupSlots, isScoringDevyLeague } from './collegeLineupLeague'
 import { loadCfbWeeksForNflWeek } from './campusWeeks'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
-import { campusSport, campusStarterIds, isC2CVariant, validateCampusLineup, type CampusLineupIssue } from './campusLineup'
+import { campusStarterIds, validateCampusLineup, type CampusLineupIssue } from './campusLineup'
 
-type League = { id: string; platform: string | null; sport: string | null; leagueVariant: string | null }
+type League = { id: string; platform: string | null; sport: string | null; leagueVariant: string | null; leagueType?: string | null; settings?: unknown }
 
 export async function checkCampusSave(
   db: Pick<PrismaClient, 'redraftRosterPlayer' | 'sportsDataCache' | 'teamProviderIdentity' | 'sportsGame' | 'sportsPlayer' | 'playerIdentityMap'>,
@@ -30,13 +31,14 @@ export async function checkCampusSave(
   if (campus.join('\n') === campusStarterIds(input.before).join('\n')) return []
   // Emptying the campus lineup is free outside a native C2C league. Inside one it is still a move, so the
   // kickoff lock below judges it (2026-11-24: football used to skip the lock when the lineup emptied).
-  if (campus.length === 0 && !(campusSport(input.league) && isNativePlatform(input.league.platform))) return []
-  if (!isNativePlatform(input.league.platform) || !input.redraftRosterId || !isC2CVariant(input.league.leagueVariant)) {
+  if (campus.length === 0 && !(collegeLineupSport(input.league) && isNativePlatform(input.league.platform))) return []
+  if (!isNativePlatform(input.league.platform) || !input.redraftRosterId || !collegeLineupSport(input.league)) {
     return [{ code: 'campus_not_c2c', message: 'Campus lineups are only for Campus to Canton leagues.' }]
   }
-  const sport = campusSport(input.league)
+  const sport = collegeLineupSport(input.league)
   const basketball = sport === 'basketball'
-  const config = sport ? await getC2CConfig(input.league.id) : null
+  const devy = isScoringDevyLeague(input.league)
+  const config = sport && !devy ? await getC2CConfig(input.league.id) : null
   const rows = sport
     ? await db.redraftRosterPlayer.findMany({
         where: { rosterId: input.redraftRosterId, droppedAt: null },
@@ -47,7 +49,7 @@ export async function checkCampusSave(
   const issues = validateCampusLineup({
     before: input.before,
     after: input.after,
-    slots: config?.collegeActiveLineupSlots,
+    slots: devy ? devyCollegeLineupSlots(input.league.settings) : config?.collegeActiveLineupSlots,
     positionOf: (id) => byId.get(id)?.position ?? null,
     nameOf: (id) => byId.get(id)?.playerName ?? id,
     sport,

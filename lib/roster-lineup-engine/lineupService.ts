@@ -25,6 +25,7 @@ import { checkTaxiSave, logTaxiPromotions, type TaxiSaveCheck } from '@/lib/taxi
 import { checkCampusSave } from '@/lib/c2c/campusLineupCheck'
 import { BEST_BALL_LINEUP_CODE, BEST_BALL_LINEUP_MESSAGE, lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { lineupVersionOf } from '@/lib/roster/lineupVersion'
+import { collegeLineupSport as collegeLineupSportFor } from '@/lib/c2c/collegeLineupLeague'
 
 /**
  * Locked starters keep their exact slot; a locked bench/IR player stays in that section.
@@ -376,7 +377,7 @@ async function runRosterLineupWithEngine(
     }
     // NFL C2C: record this week's campus starters, so rescoring a past week reads the lineup it had
     // (lib/c2c/footballCampusWeekSnapshot.ts). Native only; a no-op for every other league.
-    if (redraftRosterId && sport === 'NFL' && ['c2c', 'merged_devy_c2c'].includes(String(league.leagueVariant ?? '').toLowerCase())) {
+    if (redraftRosterId && collegeLineupSportFor(league) === 'football') {
       const { persistFootballCampusWeekSnapshot } = await import('@/lib/c2c/footballCampusWeekSnapshot')
       await persistFootballCampusWeekSnapshot(tx, { redraftRosterId, season: input.season, week: input.week, playerData: input.nextPlayerData, now: new Date() })
     }

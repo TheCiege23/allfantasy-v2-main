@@ -15,7 +15,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
-import { campusSport } from '@/lib/c2c/campusLineup'
+import { collegeLineupSport, DEVY_COLLEGE_SCORING_KEY, isScoringDevyLeague } from '@/lib/c2c/collegeLineupLeague'
 import { campusPointsForCfbWeek } from '@/lib/c2c/campusScoring'
 import { cfbWeeksByNflWeek } from '@/lib/c2c/campusWeeks'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
@@ -78,10 +78,13 @@ export async function runCampusSeasonTick(leagueId: string, opts: { now?: Date; 
   const db = opts.db ?? defaultPrisma
   const now = (opts.now ?? new Date()).getTime()
 
-  const league = await db.league.findUnique({ where: { id: leagueId }, select: { id: true, platform: true, sport: true, leagueVariant: true, settings: true } })
-  if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'football') return { status: 'skipped', reason: 'not a native NFL C2C league' }
-  const config = await getC2CConfig(leagueId).catch(() => null)
-  if (config?.standingsModel !== 'separate') return { status: 'skipped', reason: 'standings model is not separate' }
+  const league = await db.league.findUnique({ where: { id: leagueId }, select: { id: true, platform: true, sport: true, leagueVariant: true, leagueType: true, settings: true } })
+  if (!league || !isNativePlatform(league.platform) || collegeLineupSport(league) !== 'football') return { status: 'skipped', reason: 'not a native NFL C2C or scoring devy league' }
+  // A scoring devy league always plays its college lineup as its own season; C2C only on "separate".
+  if (!isScoringDevyLeague(league)) {
+    const config = await getC2CConfig(leagueId).catch(() => null)
+    if (config?.standingsModel !== 'separate') return { status: 'skipped', reason: 'standings model is not separate' }
+  }
 
   const proSeason = await db.redraftSeason.findFirst({ where: { leagueId }, orderBy: { season: 'desc' }, select: { id: true, season: true, medianGame: true } })
   if (!proSeason) return { status: 'skipped', reason: 'no season yet' }
@@ -216,7 +219,15 @@ export async function runCampusSeasonTick(leagueId: string, opts: { now?: Date; 
 /** Every native NFL C2C league on the separate model. Used by the score-sync cron. */
 export async function runCampusSeasonTicks(opts: { now?: Date; db?: Db; limit?: number } = {}): Promise<{ leagues: number; ok: number; failed: number; missingTables?: boolean }> {
   const db = opts.db ?? defaultPrisma
-  const rows = await db.c2CLeagueConfig.findMany({ where: { standingsModel: 'separate' }, select: { leagueId: true }, take: opts.limit ?? 200 })
+  const [c2c, devy] = await Promise.all([
+    db.c2CLeagueConfig.findMany({ where: { standingsModel: 'separate' }, select: { leagueId: true }, take: opts.limit ?? 200 }),
+    db.league.findMany({
+      where: { OR: [{ leagueVariant: { in: ['devy', 'devy_dynasty'] } }, { leagueType: 'devy' }], settings: { path: [DEVY_COLLEGE_SCORING_KEY], equals: true } },
+      select: { id: true },
+      take: opts.limit ?? 200,
+    }),
+  ])
+  const rows = [...new Set([...c2c.map((r) => r.leagueId), ...devy.map((r) => r.id)])].map((leagueId) => ({ leagueId }))
   let ok = 0
   let failed = 0
   for (const { leagueId } of rows) {

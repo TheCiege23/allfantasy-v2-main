@@ -1041,7 +1041,7 @@ export async function scoreRosterForWeek(args: {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
   const result = await scoreRosterStarters({ ...args, useDevyEngine, bestBall })
-  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { platform: true, sport: true, leagueVariant: true, settings: true } })
+  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { platform: true, sport: true, leagueVariant: true, leagueType: true, settings: true } })
   if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'basketball') return result
   const settings = settingsForScoringWeek(league.settings as Record<string, any> | null, args.seasonYear, args.week)
   const mode = settings?.scoring_mode ?? settings?.scoringSettings?.scoringMode ?? 'points'
@@ -1059,7 +1059,7 @@ export async function scoreRosterForWeek(args: {
  * module's stat scorer.
  */
 async function loadCampusPoints(
-  league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
+  league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null; leagueType?: string | null } | null,
   args: { season: number; week: number; homeRosterId: string; awayRosterId: string; leagueId: string },
 ) {
   if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'football') return null
@@ -1399,7 +1399,7 @@ async function updateByeRowScore(row: {
 }): Promise<void> {
   let m = row
   const [league, season] = await Promise.all([
-    prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true, platform: true, sport: true, leagueVariant: true } }),
+    prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true, platform: true, sport: true, leagueVariant: true, leagueType: true } }),
     prisma.redraftSeason.findFirst({ where: { id: m.seasonId }, select: { season: true, medianGame: true } }),
   ])
   if (!league || !season) return
