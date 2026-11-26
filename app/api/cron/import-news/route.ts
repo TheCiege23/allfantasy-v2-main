@@ -287,7 +287,13 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         const { sweepIdeaPlans } = await import('@/lib/community/ideaPlanRunner')
         ideaPlans = await sweepIdeaPlans(new Date(), 1).catch((e) => ({ error: e instanceof Error ? e.name : 'unknown' }))
       }
-      clubhouse = { ...outcome, ideaPlans }
+      // The weekly Clubhouse email: a date check outside Monday–Tuesday, a capped send inside it.
+      let digest: unknown = null
+      if (!budget.exhausted()) {
+        const { runClubhouseDigest } = await import('@/lib/community/digestRunner')
+        digest = await runClubhouseDigest().catch((e) => ({ error: e instanceof Error ? e.name : 'unknown' }))
+      }
+      clubhouse = { ...outcome, ideaPlans, digest }
     } catch (err) {
       clubhouse = { error: err instanceof Error ? err.message.slice(0, 200) : String(err) }
       console.error('[cron/import-news] clubhouse schedule failed:', clubhouse)
