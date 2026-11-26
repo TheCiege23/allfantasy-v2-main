@@ -9,18 +9,28 @@
  * used, that could call a swap ACCEPT while the league grade said D. Nothing here prices anything: the
  * accept/counter/reject verdict is the grade's own `action`, and every number is the grade's.
  *
- * 🛑 NO GRADE, NO VERDICT. A swap the chart cannot price — a startup or redraft draft, where a pick is
- * worth the player taken there (`NOT_A_ROOKIE_DRAFT_REASON`), or a pick with no market row — comes back
- * `not_graded` with the grade's reason. The draft-position move is still stated, because it is a fact;
- * it is never turned back into an accept/reject.
+ * 🛑 NO GRADE, NO VERDICT. A swap the chart cannot price — a pick with no market row, or a startup or
+ * redraft draft whose board cannot be read (`NOT_A_ROOKIE_DRAFT_REASON`) — comes back `not_graded` with the
+ * grade's reason. The draft-position move is still stated, because it is a fact; it is never turned back
+ * into an accept/reject.
+ *
+ * STARTUP AND REDRAFT DRAFTS (owner's call, 2026-11-26). There a pick is worth the player taken with it,
+ * so each pick is priced from THIS draft's remaining board — the league value of the players the draft
+ * expects at that slot (`lib/trade-value-console/draftBoardPickPricing.ts`), through the same grader. Only
+ * where that grader prices players on the NFL market chart (`pricesDraftBoard`); anywhere else, and when
+ * the board cannot be read, the swap is withheld with `NOT_A_ROOKIE_DRAFT_REASON` exactly as before.
  */
 
 import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { ANNUAL_C2C_DRAFT, annualC2CDraftSeason } from './annualC2CDraft'
 import { resolveOverallForRoundSlot } from './draftPickTradeInventory'
+import { loadLiveDraftBoard } from './draftBoardProjection'
+import type { LiveDraftBoard } from '@/lib/trade-value-console/draftBoardPickPricing'
 import {
   NOT_A_ROOKIE_DRAFT_REASON,
+  draftPickBoardAsset,
   draftPickGradeAsset,
+  isBoardPricedDraft,
   draftPickTradeGradeFrom,
   isRookieDraft,
   type DraftPickTradeGrade,
@@ -28,6 +38,8 @@ import {
 
 /** The draft session fields a swap's grade depends on. */
 export type DraftPickSwapSession = {
+  /** The draft session's id — which draft's board a startup/redraft pick is priced from. Absent: the league's current draft. */
+  id?: string | null
   teamCount: number
   draftType?: string | null
   thirdRoundReversal?: boolean | null
@@ -60,20 +72,43 @@ export type DraftPickSwap = {
   get: DraftPickRef
 }
 
-/** Lazily-built grader, so a draft the chart cannot grade never loads one, and a list loads it once. */
-export type DraftPickGraderSource = () => Promise<LeagueTradeGrader | null>
+/**
+ * Lazily-built grader, so a draft the chart cannot grade never loads one, and a list loads it once.
+ * `board` reads a startup/redraft draft's remaining board (memoised the same way); a source without it
+ * cannot price such a draft's picks, and they stay withheld.
+ */
+export type DraftPickGraderSource = (() => Promise<LeagueTradeGrader | null>) & {
+  board?: (session: DraftPickSwapSession) => Promise<LiveDraftBoard | null>
+}
 
 /**
  * ⚠ THE CALLER HAS ALREADY PROVEN MEMBERSHIP (or commissioner access), exactly as
  * `createLeagueTradeGrader` requires. `userId` may be omitted where there is no viewer (an AI manager
  * answering for its roster): a pick swap is priced on league value, never on a viewer's roster need.
  */
-export function draftPickTradeGraderSource(args: { leagueId: string; userId?: string | null }): DraftPickGraderSource {
+export function draftPickTradeGraderSource(args: {
+  leagueId: string
+  userId?: string | null
+  /** Injectable for tests; defaults to the DB read (`loadLiveDraftBoard`). */
+  loadBoard?: (a: { leagueId: string; sessionId?: string | null }) => Promise<LiveDraftBoard | null>
+}): DraftPickGraderSource {
   let pending: Promise<LeagueTradeGrader | null> | null = null
-  return () => {
+  const boards = new Map<string, Promise<LiveDraftBoard | null>>()
+  const loadBoard = args.loadBoard ?? loadLiveDraftBoard
+  const source: DraftPickGraderSource = () => {
     pending ??= createLeagueTradeGrader({ leagueId: args.leagueId, userId: args.userId ?? null }).catch(() => null)
     return pending
   }
+  source.board = (session) => {
+    const key = session.id ?? ''
+    let hit = boards.get(key)
+    if (!hit) {
+      hit = loadBoard({ leagueId: args.leagueId, sessionId: session.id ?? null }).catch(() => null)
+      boards.set(key, hit)
+    }
+    return hit
+  }
+  return source
 }
 
 function draftTypeOf(session: DraftPickSwapSession): 'snake' | 'linear' | 'auction' {
@@ -114,7 +149,7 @@ export async function leagueGradeForDraftPickSwap(
   if (season == null) {
     return { graded: false, reason: combined ? 'This combined draft has no verified season.' : 'This draft has no season to price its picks in.' }
   }
-  if (!isRookieDraft(session)) return { graded: false, reason: NOT_A_ROOKIE_DRAFT_REASON }
+  if (!isRookieDraft(session)) return leagueGradeForBoardPickSwap(grader, session, swap, season)
   const asset = (pick: DraftPickRef) =>
     draftPickGradeAsset({
       season,
@@ -129,6 +164,40 @@ export async function leagueGradeForDraftPickSwap(
       give: { assets: [asset(swap.give)], unpriceable: [] },
       get: { assets: [asset(swap.get)], unpriceable: [] },
       viewerSide: false,
+    })
+    return draftPickTradeGradeFrom(view)
+  } catch {
+    return { graded: false, reason: 'This trade could not be graded just now.' }
+  }
+}
+
+/**
+ * A startup/redraft swap, priced from the draft's own remaining board. The board is read first, so a
+ * draft with no readable board never loads the grader; every refusal is the pre-existing reason.
+ */
+async function leagueGradeForBoardPickSwap(
+  grader: DraftPickGraderSource,
+  session: DraftPickSwapSession,
+  swap: DraftPickSwap,
+  season: number,
+): Promise<DraftPickTradeGrade> {
+  const withheld: DraftPickTradeGrade = { graded: false, reason: NOT_A_ROOKIE_DRAFT_REASON }
+  if (!isBoardPricedDraft(session) || !grader.board) return withheld
+  const giveOverall = draftPickOverall(session, swap.give)
+  const getOverall = draftPickOverall(session, swap.get)
+  if (giveOverall == null || getOverall == null) return withheld
+  try {
+    const board = await grader.board(session)
+    if (!board) return withheld
+    const g = await grader()
+    if (!g?.pricesDraftBoard) return withheld
+    const asset = (pick: DraftPickRef, overall: number) =>
+      draftPickBoardAsset({ season, round: pick.round, overall, slot: pick.slot, teamCount: session.teamCount })
+    const view = await gradeDeal(g, {
+      give: { assets: [asset(swap.give, giveOverall)], unpriceable: [] },
+      get: { assets: [asset(swap.get, getOverall)], unpriceable: [] },
+      viewerSide: false,
+      draftBoard: board,
     })
     return draftPickTradeGradeFrom(view)
   } catch {

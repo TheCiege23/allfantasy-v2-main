@@ -172,7 +172,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/ai-coach", tool: "Lega
         ``,
         `Recent decisions:`,
         ...recentDecisions.slice(0, 10).map(d =>
-          `  - [${d.decisionType}] ${d.recommendation} (confidence: ${Math.round(d.confidence * 100)}%, risk: ${d.risk}, followed: ${d.followed ?? 'pending'}, outcome: ${d.grade ?? 'awaiting'})`
+          `  - [${d.decisionType}] ${d.recommendation} (confidence: ${Math.round(d.confidence * 100)}%, risk: ${d.risk}, followed: ${d.followed ?? 'pending'}, ${d.gradeLine})`
         ),
         ``,
         `Use this history to give RETROSPECTIVE advice:`,

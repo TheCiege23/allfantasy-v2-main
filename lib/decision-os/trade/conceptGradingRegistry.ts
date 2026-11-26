@@ -11,11 +11,20 @@
  * manager reads. A league type that has NO entry is withheld too (`UNREGISTERED_CONCEPT_REASON`), never
  * priced on the default chart.
  *
- * ⚠ THE TABLE DESCRIBES WHAT THE GRADER DOES TODAY, NOT WHAT IT SHOULD DO. It was written as a
+ * ⚠ THE TABLE STARTED AS A MAP OF WHAT THE GRADER DID, NOT WHAT IT SHOULD DO. It was written as a
  * behaviour-preserving map of the old if-chain (Phase 5, 2026-11-26), and
  * `__tests__/decision-os/concept-grading-registry.test.ts` keeps the old chain as an oracle and proves
- * every registered combination still reaches the same sub-grader. Entries whose basis looks wrong are
- * marked `review:` — change those deliberately, with the grade tests that prove the new rule.
+ * every registered combination still reaches the same sub-grader — EXCEPT the rows in that test's
+ * `INTENDED_CHANGES`, each a deliberate grade change with its own behaviour tests. Entries whose basis
+ * still looks wrong are marked `review:` — change those the same way.
+ *
+ * Deliberate changes so far (owner-approved, 2026-11-26):
+ *   1. NCAAF is graded on college evidence for every concept — never the NFL chart. Concepts whose
+ *      rosters reset take the college rest-of-season basis; multi-season ones the college dynasty basis,
+ *      or are withheld where their format adjustment (keeper costs, cap contracts) has no college form.
+ *   2. Pirate and EFL grade on the league's book in every sport but NFL (in NCAAF on the college bases): five seasons + picks when it is the
+ *      dynasty book (EFL always; Pirate unless the commissioner said redraft), this season otherwise.
+ *   3. Guillotine in college basketball and soccer uses the guillotine grader's survival weighting.
  *
  * ADDING A CONCEPT: add its id to `CONCEPT_GRADING_REGISTRY` below with one rule per sport, and land the
  * grading tests for that rule in the same change. Until then the concept withholds — which is the point.
@@ -26,6 +35,8 @@
 import type { LeagueSport } from '@prisma/client'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import type { LeagueConceptType } from '@/lib/league/leagueConceptOptions'
+// Pure (no prisma): the one answer every value surface gives to "is this league on the dynasty book".
+import { leagueVariantFor } from '@/lib/core-app/valueBook'
 
 /** The sub-graders `createLeagueTradeGrader` can hand a deal to. */
 export type ConceptGrader =
@@ -48,11 +59,22 @@ export type ConceptFormatRule = 'keeper_option' | 'salary_cap_surplus' | 'c2c_ca
 export type ConceptGradingRule = {
   grader: ConceptGrader
   /**
-   * `ncaaf_college` only: the college grader declines a deal with no picks in a league that is neither
-   * redraft nor dynasty, and the old chain then priced it on the market chart. Recorded here so that
-   * fall-through is a declared rule, not an accident. Absent: the college view is final.
+   * `ncaaf_college` only: which college basis prices the deal. `rest_of_season` is college points over
+   * replacement for the weeks left (picks refused — the rosters do not carry over); `dynasty` is five
+   * seasons by class year plus picks from freshman estimates; `league_book` is `dynasty` when the league
+   * prices on the dynasty book (`leagueVariantFor` — EFL always, Pirate unless confirmed redraft) and
+   * `rest_of_season` otherwise. The college view is always final: an NCAAF deal never falls through to
+   * the NFL chart.
    */
-  collegeFallback?: 'market_chart'
+  college?: 'rest_of_season' | 'dynasty' | 'league_book'
+  /** `ncaaf_college` dynasty only: every pick must be a Campus pick (Canton/Combined picks are NFL rookie picks with no college price). */
+  collegePicks?: 'campus_only'
+  /**
+   * `sport_points` only: `league_book` grades five seasons + picks when the league prices on the dynasty
+   * book (`leagueVariantFor(...).dynasty` — EFL always, Pirate unless confirmed redraft), this season
+   * otherwise. Absent: the league type alone decides, as before.
+   */
+  seasons?: 'league_book'
   /** NFL only: the format post-processor applied to the grade. `c2c_campus` also tries the Campus-draft grade first. */
   format?: ConceptFormatRule
   /** The value basis, in words — what the grade is priced on. */
@@ -93,17 +115,46 @@ const POINTS_MULTI_SEASON_REFUSED: ConceptGradingRule = {
 }
 const COLLEGE_REDRAFT: ConceptGradingRule = {
   grader: 'ncaaf_college',
+  college: 'rest_of_season',
   basis: 'College points over replacement for the rest of the season on the league’s stored projections; picks withheld.',
 }
 const COLLEGE_DYNASTY: ConceptGradingRule = {
   grader: 'ncaaf_college',
+  college: 'dynasty',
   basis: 'Five seasons of college points over replacement plus picks priced from freshman class estimates.',
 }
-const COLLEGE_THEN_CHART: ConceptGradingRule = {
+/** A college concept whose rosters reset: the college redraft basis, never the NFL chart. */
+const COLLEGE_THIS_SEASON: ConceptGradingRule = {
   grader: 'ncaaf_college',
-  collegeFallback: 'market_chart',
-  basis: 'Picks withheld by the college grader (no college pick price); a deal with no picks is priced on the market chart with sport NCAAF.',
-  review: 'Only redraft and dynasty have a college rule. Every other NCAAF concept falls through to the NFL-shaped market chart.',
+  college: 'rest_of_season',
+  basis: 'College points over replacement for the rest of the season on the league’s stored projections, as in college redraft; picks withheld (the rosters do not carry over).',
+}
+/** A multi-season college concept with no format adjustment of its own: the college dynasty basis. */
+const COLLEGE_MULTI_SEASON: ConceptGradingRule = {
+  grader: 'ncaaf_college',
+  college: 'dynasty',
+  basis: 'Five seasons of college points over replacement plus picks priced from freshman class estimates, as in college dynasty.',
+}
+
+/** College Pirate and EFL: the league's book decides, exactly as outside football (fix 2). */
+const COLLEGE_LEAGUE_BOOK: ConceptGradingRule = {
+  grader: 'ncaaf_college',
+  college: 'league_book',
+  basis: 'On the dynasty book (EFL always; Pirate unless the commissioner confirmed a redraft base): five seasons of college points over replacement plus picks from freshman class estimates. On a redraft base: college points over replacement for the rest of the season; picks withheld.',
+}
+
+export const NCAAF_KEEPER_REASON =
+  'This college keeper league’s keeper costs have no college price yet — the keeper option is only modelled on NFL draft values — so this deal is not graded rather than priced on NFL values.'
+export const NCAAF_SALARY_CAP_REASON =
+  'This college salary-cap league’s contracts have no college price yet — cap surplus is only modelled against NFL auction values — so this deal is not graded rather than priced on NFL values.'
+export const NCAAF_UNCONFIRMED_REASON =
+  'This college league’s type is not confirmed yet, and a college deal is graded on its type’s own basis, so this deal is not graded. Confirm the league type in League Settings.'
+
+/** Pirate and EFL outside football: the league's book decides the seasons (2026-11-26). */
+const POINTS_LEAGUE_BOOK: ConceptGradingRule = {
+  grader: 'sport_points',
+  seasons: 'league_book',
+  basis: 'On the dynasty book (EFL always; Pirate unless the commissioner confirmed a redraft base): five seasons of points over replacement plus rookie-draft picks (sport dynasty grade). On a redraft base: points over replacement, this season.',
 }
 
 const pointsSports = (rule: ConceptGradingRule) => ({ NBA: rule, NCAAB: rule, NHL: rule, MLB: rule, SOCCER: rule })
@@ -121,12 +172,12 @@ export const CONCEPT_GRADING_REGISTRY = {
   },
   keeper: {
     NFL: { grader: 'market_chart', format: 'keeper_option', basis: `${CHART_BASIS} Then a one-season keeper option at 85% of surplus over the verified keeper cost.` },
-    NCAAF: COLLEGE_THEN_CHART,
+    NCAAF: { grader: 'withheld', basis: 'Withheld: the keeper option is priced on NFL draft values, and no college form of it exists.', reason: NCAAF_KEEPER_REASON },
     ...pointsSports(POINTS_MULTI_SEASON_REFUSED),
   },
   salary_cap: {
     NFL: { grader: 'market_chart', format: 'salary_cap_surplus', basis: `${CHART_BASIS} Then surplus over present salary, priced from this season’s startup auction.` },
-    NCAAF: COLLEGE_THEN_CHART,
+    NCAAF: { grader: 'withheld', basis: 'Withheld: cap surplus is priced against NFL auction values, and no college form of it exists.', reason: NCAAF_SALARY_CAP_REASON },
     ...pointsSports(POINTS_MULTI_SEASON_REFUSED),
   },
   c2c: {
@@ -135,43 +186,48 @@ export const CONCEPT_GRADING_REGISTRY = {
       format: 'c2c_campus',
       basis: `${CHART_BASIS} Campus-draft deals graded on the Campus division first (native leagues); campus players and combined picks re-priced from college points over replacement.`,
     },
-    NCAAF: COLLEGE_THEN_CHART,
+    NCAAF: {
+      ...COLLEGE_MULTI_SEASON,
+      collegePicks: 'campus_only',
+      basis: 'The Campus side of Campus-to-Canton: five seasons of college points over replacement plus Campus picks from freshman class estimates. A Canton or Combined pick (an NFL rookie pick) has no college price and is withheld.',
+    },
     ...pointsSports(POINTS_MULTI_SEASON_REFUSED),
     NBA: { grader: 'sport_points', basis: 'Native leagues: the NBA Campus-to-Canton grade. Other platforms: withheld as multi-season.' },
   },
   devy: {
     NFL: { ...CHART, review: 'Devy NFL prices on the market chart with held prospects as devy options; the type itself adds nothing.' },
-    NCAAF: COLLEGE_THEN_CHART,
+    NCAAF: COLLEGE_MULTI_SEASON,
     ...pointsSports(POINTS_MULTI_SEASON_REFUSED),
   },
   zombie: { NFL: ZOMBIE, NCAAF: ZOMBIE, NBA: ZOMBIE, NCAAB: ZOMBIE, NHL: ZOMBIE, MLB: ZOMBIE, SOCCER: ZOMBIE },
   guillotine: {
     NFL: GUILLOTINE,
-    NCAAF: COLLEGE_THEN_CHART,
+    NCAAF: COLLEGE_THIS_SEASON,
     NBA: GUILLOTINE,
     NHL: GUILLOTINE,
     MLB: GUILLOTINE,
-    NCAAB: { ...POINTS, review: 'No guillotine rule for college basketball: graded as a whole-season points league.' },
-    SOCCER: { ...POINTS, review: 'No guillotine rule for soccer: graded as a whole-season points league.' },
+    // The daily-sport guillotine model: the points board put on the week, chop weeks from the season calendar.
+    NCAAB: GUILLOTINE,
+    SOCCER: GUILLOTINE,
   },
-  best_ball: { NFL: CHART, NCAAF: COLLEGE_THEN_CHART, ...pointsSports(POINTS) },
-  survivor: { NFL: CHART, NCAAF: COLLEGE_THEN_CHART, ...pointsSports(POINTS) },
-  tournament: { NFL: CHART, NCAAF: COLLEGE_THEN_CHART, ...pointsSports(POINTS) },
-  big_brother: { NFL: CHART, NCAAF: COLLEGE_THEN_CHART, ...pointsSports(POINTS) },
+  best_ball: { NFL: CHART, NCAAF: COLLEGE_THIS_SEASON, ...pointsSports(POINTS) },
+  survivor: { NFL: CHART, NCAAF: COLLEGE_THIS_SEASON, ...pointsSports(POINTS) },
+  tournament: { NFL: CHART, NCAAF: COLLEGE_THIS_SEASON, ...pointsSports(POINTS) },
+  big_brother: { NFL: CHART, NCAAF: COLLEGE_THIS_SEASON, ...pointsSports(POINTS) },
   pirate: {
     NFL: CHART,
-    NCAAF: COLLEGE_THEN_CHART,
-    ...pointsSports({ ...POINTS, review: 'Pirate sits on a dynasty or redraft base, but the points grader always prices it as this season only.' }),
+    NCAAF: COLLEGE_LEAGUE_BOOK,
+    ...pointsSports(POINTS_LEAGUE_BOOK),
   },
   survivor_guillotine: {
     NFL: { ...CHART, review: 'Survivor Guilly allows no trades, yet a deal reaching the grader is priced on the market chart, not on the guillotine rule.' },
-    NCAAF: COLLEGE_THEN_CHART,
+    NCAAF: COLLEGE_THIS_SEASON,
     ...pointsSports(POINTS),
   },
   efl: {
     NFL: CHART,
-    NCAAF: COLLEGE_THEN_CHART,
-    ...pointsSports({ ...POINTS, review: 'EFL prices on the dynasty book in football, but the points grader prices it as this season only.' }),
+    NCAAF: COLLEGE_LEAGUE_BOOK,
+    ...pointsSports(POINTS_LEAGUE_BOOK),
   },
 } as const satisfies Record<GradedConceptId, Record<LeagueSport, ConceptGradingRule>>
 
@@ -183,7 +239,8 @@ const LEGACY_COLUMN_RULES: Record<string, Record<LeagueSport, ConceptGradingRule
   /** `app/api/league/create` writes it for an imported league before a type is confirmed. */
   imported: {
     NFL: { ...CHART, review: 'An unconfirmed imported league prices on the chart its settings imply.' },
-    NCAAF: COLLEGE_THEN_CHART,
+    // Never the NFL chart for a college league, and no college basis can be chosen without the type.
+    NCAAF: { grader: 'withheld', basis: 'Withheld until the league type is confirmed: a college deal is graded on its type’s own college basis.', reason: NCAAF_UNCONFIRMED_REASON },
     ...pointsSports(POINTS),
   },
 }
@@ -241,6 +298,32 @@ export function resolveConceptGrading(args: { type: string | null | undefined; v
     }
   }
   return { key: own.key, via: own.via, rule: ownRule, format }
+}
+
+/**
+ * How the college grader (`./ncaafLeagueGrader.ts`) grades an NCAAF league of this type — read from the
+ * registry so the one grader and the Trade Center console, which both build that grader, cannot disagree.
+ * PURE. Null when another sub-grader owns the type (Zombie). `settings` decides a `league_book` row.
+ */
+export function collegeGradingFor(type: string | null | undefined, settings?: unknown):
+  | { basis: 'rest_of_season' | 'dynasty'; campusPicksOnly: boolean }
+  | { withheld: string }
+  | null {
+  const { rule } = resolveConceptGrading({ type, sport: 'NCAAF' })
+  if (rule.grader === 'withheld') return { withheld: rule.reason ?? UNREGISTERED_CONCEPT_REASON(String(type ?? '')) }
+  if (rule.grader !== 'ncaaf_college' || !rule.college) return null
+  const basis = rule.college === 'league_book'
+    ? leagueVariantFor(settings ?? null, String(type ?? '')).dynasty ? 'dynasty' : 'rest_of_season'
+    : rule.college
+  return { basis, campusPicksOnly: rule.collegePicks === 'campus_only' }
+}
+
+/**
+ * Whether the points grader (`./sportPointsGrader.ts`) reads the seasons from the league's BOOK rather than
+ * from its type — Pirate and EFL outside football. PURE.
+ */
+export function pointsSeasonsFromLeagueBook(type: string | null | undefined, sport: string): boolean {
+  return resolveConceptGrading({ type, sport }).rule.seasons === 'league_book'
 }
 
 /** Every concept the registry grades — what the guard test walks. */

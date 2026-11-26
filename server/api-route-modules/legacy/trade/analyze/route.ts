@@ -36,6 +36,7 @@ import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
 import { buildRuntimeConstraints, formatConstraintsForPrompt } from '@/lib/trade-constraints'
 import { buildHistoricalTradeContext } from '@/lib/historical-values'
 import { autoLogDecision } from '@/lib/decision-log'
+import { ONE_TRADE_GRADE_KEY, oneTradeGradeStamp } from '@/lib/decision-log-trade-grade'
 import { computeNewsValueAdjustments, applyNewsAdjustmentsToValueMap, formatNewsAdjustmentsForPrompt, type PlayerNewsData, type NewsValueAdjustment } from '@/lib/news-value-adjustment'
 import { computeConfidenceRisk, getHistoricalHitRate, type AssetContext } from '@/lib/analytics/confidence-risk-engine'
 import { buildTradeValuationEvidence, type TradeValuationEvidence } from '@/lib/legacy/intelligenceEvidence'
@@ -2440,6 +2441,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
           summary: `Trade: ${legacyVerdictFromGrade(evaluationReceipt.grade) ?? 'analyzed'}`,
           grade: evaluationReceipt.grade.graded ? evaluationReceipt.grade.letter : null,
           verdict: legacyVerdictFromGrade(evaluationReceipt.grade),
+          // The deal's one trade grade, as the receipt gave it — shown beside the outcome grade later
+          // (`lib/decision-log-trade-grade.ts`). `grade` above is NOT read for that: older rows held the AI's letter there.
+          [ONE_TRADE_GRADE_KEY]: oneTradeGradeStamp(evaluationReceipt),
           format,
           sport,
         },

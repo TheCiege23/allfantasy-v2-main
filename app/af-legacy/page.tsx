@@ -34,6 +34,8 @@ import LegacyStrategyTab from '@/components/legacy/LegacyStrategyTab'
 import LegacyOneGrade from '@/components/legacy/LegacyOneGrade'
 import { TRADE_HUB_SIDE_LABELS, tradeHubAnalyzeSides, tradeHubQuickEvaluateSides } from '@/lib/legacy/tradeHubDirection'
 import { tradeAssetLabel, tradeHubBreakdown } from '@/lib/legacy/tradeBreakdown'
+import { gradeLeagueOptions, noLeagueGradeHint } from '@/components/trade-evaluator/GradeLeaguePicker'
+import { defaultShareVoteLeagueId, type ShareVoteLeagueRow } from '@/lib/legacy/shareTradeVoteLeague'
 import TradeBreakdownSides from '@/components/legacy/TradeBreakdownSides'
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import LegacyShopTab from '@/app/af-legacy/components/tabs/LegacyShopTab'
@@ -867,7 +869,14 @@ function AFLegacyContent() {
   const [shareTradeSideA, setShareTradeSideA] = useState('')
   const [shareTradeSideB, setShareTradeSideB] = useState('')
   const [shareTradeLeagueType, setShareTradeLeagueType] = useState<'dynasty' | 'redraft'>('dynasty')
-  const [shareTradeAnalysis, setShareTradeAnalysis] = useState<{ grade?: string; verdict?: string; sideA?: string[]; sideB?: string[] } | null>(null)
+  const [shareTradeAnalysis, setShareTradeAnalysis] = useState<{ grade?: string; verdict?: string; gradeWithheld?: string | null; leagueLabel?: string | null; sideA?: string[]; sideB?: string[] } | null>(null)
+  /*
+   * The league the Trade Vote is graded in (`lib/legacy/shareTradeVoteLeague.ts`). The rows are the
+   * signed-in user's AllFantasy leagues from the same read the trade analyzer's picker uses; `null`
+   * until loaded. An empty choice that the manager never touched follows the default.
+   */
+  const [shareVoteLeagueRows, setShareVoteLeagueRows] = useState<ShareVoteLeagueRow[] | null>(null)
+  const [shareVoteLeagueChoice, setShareVoteLeagueChoice] = useState<string | null>(null)
   const [shareTradeLoading, setShareTradeLoading] = useState(false)
   const [shareTradeError, setShareTradeError] = useState('')
   const [sharePlayerSearch, setSharePlayerSearch] = useState('')
@@ -3136,6 +3145,37 @@ function AFLegacyContent() {
     await generateShareText('balanced', 'rankings')
   }
 
+  // The Trade Vote's league: loaded once, the first time the Trade Vote form is opened.
+  useEffect(() => {
+    if (activeTab !== 'share' || shareType !== 'trade' || shareVoteLeagueRows !== null) return
+    let cancelled = false
+    fetch('/api/league/list?summary=1', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : { leagues: [] }))
+      .then((data: { leagues?: ShareVoteLeagueRow[] }) => {
+        if (!cancelled) setShareVoteLeagueRows(Array.isArray(data?.leagues) ? data.leagues : [])
+      })
+      .catch(() => {
+        if (!cancelled) setShareVoteLeagueRows([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, shareType, shareVoteLeagueRows])
+
+  const shareVoteLeagueOptions = useMemo(() => gradeLeagueOptions(shareVoteLeagueRows ?? []), [shareVoteLeagueRows])
+  const shareVoteDefaultLeagueId = useMemo(
+    () =>
+      defaultShareVoteLeagueId({
+        optionIds: shareVoteLeagueOptions.map((o) => o.id),
+        rows: shareVoteLeagueRows ?? [],
+        typedNames: [...shareTradeSideA.split(','), ...shareTradeSideB.split(',')].map((p) => p.trim()).filter(Boolean),
+        sleeperLeagues: leagues,
+        playerNames,
+      }),
+    [shareVoteLeagueOptions, shareVoteLeagueRows, shareTradeSideA, shareTradeSideB, leagues, playerNames],
+  )
+  const shareVoteLeagueId = shareVoteLeagueChoice ?? shareVoteDefaultLeagueId
+
   // Analyze trade for Share tab Trade Vote
   const analyzeShareTrade = async () => {
     if (!shareTradeSideA.trim() || !shareTradeSideB.trim()) return
@@ -3154,13 +3194,17 @@ function AFLegacyContent() {
           side_a: sideAPlayers,
           side_b: sideBPlayers,
           league_type: shareTradeLeagueType,
+          // The one grade is taken on a league's own values; without one the route can only withhold.
+          ...(shareVoteLeagueId ? { league_id: shareVoteLeagueId } : {}),
         }),
       })
       const data = await res.json()
       if (data.success) {
         setShareTradeAnalysis({
-          grade: data.grade,
+          grade: data.grade ?? undefined,
           verdict: data.verdict,
+          gradeWithheld: data.gradeWithheld ?? null,
+          leagueLabel: shareVoteLeagueOptions.find((o) => o.id === shareVoteLeagueId)?.label ?? null,
           sideA: sideAPlayers,
           sideB: sideBPlayers,
         })
@@ -14487,6 +14531,25 @@ function AFLegacyContent() {
                             />
                           </div>
                         </div>
+                        <div className="mb-3">
+                          <label className="text-xs text-gray-400 block mb-1">League (for the grade)</label>
+                          <select
+                            data-testid="share-trade-league-select"
+                            value={shareVoteLeagueId}
+                            onChange={(e) => { setShareVoteLeagueChoice(e.target.value); setShareTradeAnalysis(null) }}
+                            className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-green-400/50 focus:outline-none"
+                          >
+                            <option value="">{shareVoteLeagueRows === null ? 'Loading your leagues…' : 'No league — the trade is not graded'}</option>
+                            {shareVoteLeagueOptions.map((o) => (
+                              <option key={o.id} value={o.id}>{o.label}</option>
+                            ))}
+                          </select>
+                          <div className="text-[11px] text-gray-500 mt-1">
+                            {shareVoteLeagueId
+                              ? "The grade uses this league's own values, scoring and roster rules."
+                              : shareVoteLeagueRows === null ? '' : noLeagueGradeHint(shareVoteLeagueOptions.length)}
+                          </div>
+                        </div>
                         <div className="flex items-center gap-3 mb-3">
                           <select
                             value={shareTradeLeagueType}
@@ -14507,9 +14570,16 @@ function AFLegacyContent() {
                         {shareTradeAnalysis && (
                           <div className="p-3 rounded-lg bg-black/30 border border-green-500/30">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="text-2xl font-bold text-green-400">{shareTradeAnalysis.grade}</span>
-                              <span className="text-sm text-gray-300">{shareTradeAnalysis.verdict}</span>
+                              {shareTradeAnalysis.grade ? (
+                                <span data-testid="share-trade-grade" className="text-2xl font-bold text-green-400">{shareTradeAnalysis.grade}</span>
+                              ) : (
+                                <span data-testid="share-trade-grade-withheld" className="text-sm font-semibold text-amber-300">Not graded</span>
+                              )}
+                              <span className="text-sm text-gray-300">{shareTradeAnalysis.grade ? shareTradeAnalysis.verdict : shareTradeAnalysis.gradeWithheld || shareTradeAnalysis.verdict}</span>
                             </div>
+                            {shareTradeAnalysis.grade && shareTradeAnalysis.leagueLabel && (
+                              <div className="text-[11px] text-gray-500 mb-1">Graded in {shareTradeAnalysis.leagueLabel}</div>
+                            )}
                             <div className="text-xs text-gray-400">Ready to generate share post!</div>
                           </div>
                         )}

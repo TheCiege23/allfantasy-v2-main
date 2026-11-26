@@ -4,8 +4,9 @@ import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import type { TradeGradeView } from './tradeGrade'
 import { loadNcaafClassYears, loadNcaafRedraftBase, type NcaafRedraftBaseResult } from './ncaafRedraftContext'
-import { gradeNcaafRedraftDeal, ncaafDealPositions, ncaafPickRefusal } from './ncaafRedraftValue'
-import { gradeSportDynastyDeal, priceSportDynastySides, isDynastyLeagueType, FULL_SEASON_GAMES } from './sportDynastyValue'
+import { gradeNcaafRedraftDeal, ncaafDealPositions, ncaafPickRefusal, NCAAF_C2C_PICK_REASON, NCAAF_SEASON_ONLY_PICKS_REASON } from './ncaafRedraftValue'
+import { gradeSportDynastyDeal, priceSportDynastySides, FULL_SEASON_GAMES } from './sportDynastyValue'
+import { collegeGradingFor } from './conceptGradingRegistry'
 import { nextRookieDraftYear } from './sportPointsContext'
 import { indexBoard, type BoardPlayer } from './sportPointsValue'
 
@@ -13,11 +14,13 @@ import { indexBoard, type BoardPlayer } from './sportPointsValue'
  * The college half of the one grade, shared by `createLeagueTradeGrader` and the Trade Center console
  * (which prices through `gradePricedSides` directly) so the two cannot grade a college deal differently.
  *
- * Redraft uses points over replacement. Dynasty adds seasons based on class year
- * and prices picks from the projected freshman pool. Other formats use their existing chart path.
+ * Every college concept is graded here, on the basis the concept registry names (`collegeGradingFor`):
+ * the rest-of-season basis (points over replacement) for concepts whose rosters reset, the dynasty basis
+ * (seasons by class year, picks from the projected freshman pool) for multi-season ones, or withheld with
+ * the reason where the format's adjustment has no college form. Never the NFL chart.
  */
 type NcaafLeagueGrader = {
-  /** A grade, or null when this league type is still graded on the chart path. */
+  /** A grade, or null when another sub-grader owns this league type (Zombie). */
   grade(give: readonly TradeAssetInput[], get: readonly TradeAssetInput[]): Promise<TradeGradeView | null>
   priceDivision(give: readonly TradeAssetInput[], get: readonly TradeAssetInput[]): Promise<TradeGradeView | ReturnType<typeof priceSportDynastySides> | null>
 }
@@ -40,8 +43,15 @@ export function createNcaafLeagueGrader(
   },
   deps: NcaafLeagueGraderDeps = { loadBase: loadNcaafRedraftBase },
 ): NcaafLeagueGrader {
+  /*
+   * 🛑 THE BASIS IS THE CONCEPT REGISTRY'S CALL (`./conceptGradingRegistry.ts`), NOT A SECOND TYPE TEST HERE.
+   * This used to grade only redraft and dynasty-family types and return null for every other college concept,
+   * so the one grader priced those deals on the NFL market chart (owner's fix, 2026-11-26). Now every college
+   * concept has a college basis or a withheld reason; null means only that another grader owns it (Zombie).
+   */
+  const plan = collegeGradingFor(league.leagueType.type, league.settings)
   const isRedraft = String(league.leagueType.type).toLowerCase() === 'redraft'
-  const isDynasty = isDynastyLeagueType(league.leagueType.type)
+  const isDynasty = plan != null && 'basis' in plan && plan.basis === 'dynasty'
   let base: Promise<NcaafRedraftBaseResult> | null = null
   let eligibility: Promise<Map<string, number>> | null = null
   const baseOnce = () =>
@@ -50,10 +60,18 @@ export function createNcaafLeagueGrader(
       .catch((): NcaafRedraftBaseResult => ({ ok: false, reason: 'This league’s college values could not be loaded just now.' })))
 
   async function evaluate<T>(give: readonly TradeAssetInput[], get: readonly TradeAssetInput[], priceDynasty: (args: Parameters<typeof gradeSportDynastyDeal>[0]) => T): Promise<TradeGradeView | T | null> {
+    if (!plan) return null
+    if ('withheld' in plan) return { graded: false, reason: plan.withheld, basis: null }
     if (!isDynasty) {
-      const pick = ncaafPickRefusal([...give, ...get], isRedraft)
-      if (pick) return { graded: false, reason: pick, basis: null }
-      if (!isRedraft) return null
+      // Rest of season: a pick has no season to be used in. Redraft keeps its own wording.
+      if (isRedraft) {
+        const pick = ncaafPickRefusal([...give, ...get], true)
+        if (pick) return { graded: false, reason: pick, basis: null }
+      } else if ([...give, ...get].some((asset) => asset.kind === 'pick')) {
+        return { graded: false, reason: NCAAF_SEASON_ONLY_PICKS_REASON, basis: null }
+      }
+    } else if (plan.campusPicksOnly && [...give, ...get].some((asset) => asset.kind === 'pick' && asset.draftSide !== 'campus')) {
+      return { graded: false, reason: NCAAF_C2C_PICK_REASON, basis: null }
     }
     const loaded = await baseOnce()
     if (!loaded.ok) return { graded: false, reason: loaded.reason, basis: null, ...(loaded.valuationGap ? { valuationGap: loaded.valuationGap } : {}) }
