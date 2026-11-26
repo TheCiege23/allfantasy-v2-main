@@ -49,7 +49,8 @@ export async function loadRosterIdentities(sport: string, ids: string[]): Promis
 
   if (tsdb.length) {
     const players = await prisma.sportsPlayer.findMany({
-      where: { sport, externalId: { in: tsdb } },
+      // TheSportsDB rows only: a bare number in another source's rows is a different player.
+      where: { sport, source: 'thesportsdb', externalId: { in: tsdb } },
       select: { externalId: true, name: true, team: true, position: true },
     })
     const byId = new Map<string, { name: string; team: string | null; position: string | null }>()
