@@ -17,6 +17,7 @@ import { formatNflTeamDefenseName } from '@/lib/redraft/teamDefenseIdentity'
 import { cachedFetch, cacheKey } from '@/lib/api-cache'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { createTtlMemo } from '@/lib/ttl-memo'
+import { filterPoolByCollegeScope, loadCollegeTeamConferences, loadLeagueCollegeScope } from '@/lib/college/collegeTeamConferences'
 import { loadNcaabSeasonBoxes, type NcaabSeasonBoxes } from './ncaabSeasonBoxes'
 import { ncaabPoolRowImage, ncaabPoolRowVerdict, ncaabProductionPerGame } from './ncaabPlayerPoolRules'
 import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
@@ -855,7 +856,22 @@ export async function getPlayerPoolForLeague(
 ): Promise<PoolPlayerRecord[]> {
   const sportType = leagueSportToSportType(leagueSport)
   const sportStr = SPORT_STR[leagueSport] ?? sportType
-  return getPlayerPoolForSport(sportStr, options)
+  /*
+   * A college league can draft from a subset of schools (Power 4, Group of 6, FBS only, or the
+   * commissioner's conferences: lib/college/conferenceScope.ts). Filtering here covers the draft room,
+   * autopick and the waiver wire at once. The limit is applied AFTER the filter: limiting first would
+   * take the best N players from every school and leave a Big Ten + SEC league a fraction of them.
+   * An unreadable setting drafts from every school rather than failing the pool.
+   */
+  const scoped = await loadLeagueCollegeScope(leagueId, String(sportStr)).catch(() => null)
+  if (!scoped) return getPlayerPoolForSport(sportStr, options)
+  const { limit, ...rest } = options ?? {}
+  const [pool, index] = await Promise.all([
+    getPlayerPoolForSport(sportStr, rest),
+    loadCollegeTeamConferences(scoped.sport),
+  ])
+  const inScope = filterPoolByCollegeScope(pool, scoped.sport, scoped.scope, index)
+  return limit != null && limit > 0 ? inScope.slice(0, limit) : inScope
 }
 
 /**
