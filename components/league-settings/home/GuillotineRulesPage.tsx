@@ -721,7 +721,7 @@ export function GuillotineRulesPage({
 
       {/* ---------- Roster changes during the season ---------- */}
       {roster && (
-        <Group id="roster" title="Roster changes during the season" sub="Add or take away spots on a set week. AllFantasy changes every team's roster for you.">
+        <Group id="roster" title="Roster changes during the season" sub="Add or take away spots on a set week, or once only a few teams are left. AllFantasy changes every team's roster for you.">
           <Field label="Scheduled changes" paid={scheduleLocked} help="A new starting spot stays empty until its manager fills it. A spot that is taken away becomes a bench spot, and the player in it moves to the bench between weeks.">
             <p className="text-[12px] text-white/60" data-testid="guillotine-roster-now">Right now every team has {describeLayout(roster.layout, roster.spots)}.</p>
             {rosterDone.map((c) => (
