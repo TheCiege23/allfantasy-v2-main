@@ -24,6 +24,7 @@ import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { MAKE_NATIVE_LABEL, makeNativeLeagueHref } from '@/lib/league/makeNativeLeague'
+import { NativeReadinessCard } from '@/components/league-home/NativeReadinessCard'
 
 type WorkspaceAction = {
   id: string
@@ -203,6 +204,8 @@ export function CommissionerOperationsWorkspace({
       </nav>
 
       <div className="af-admin-sections">
+      {/* Imported leagues only: what the in-place switch to AllFantasy would need. The route shows it to the head commissioner alone. */}
+      {!isNativePlatform(league.platform) ? <NativeReadinessCard leagueId={leagueId} /> : null}
       {/* Decision OS commissioner lens — the same live CommissionerPulse engine
           the Decide tab renders: inactive/at-risk managers from counted signals
           (empty starters, transaction drought, scoring trend, orphan rosters). */}

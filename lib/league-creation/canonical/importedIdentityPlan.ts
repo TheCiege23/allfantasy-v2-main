@@ -211,45 +211,87 @@ export async function planImportedPlayerIdentity(tx: Tx, args: {
   const sourceIds = [...new Set(sourcePlayerIdsByRoster.flat())]
   const totalPlayers = sourcePlayerIdsByRoster.reduce((count, ids) => count + ids.length, 0)
   if (totalPlayers !== sourceIds.length) refuse('The import has duplicate player ownership. Refresh it before carrying rosters over.')
-  const columns = leagueIdentityColumns(sourceIds, args.sport, args.platform)
-  if (sourceIds.length && !columns.length) {
+  const translated = await translateImportedPlayerIds(tx, { sport: args.sport, platform: args.platform, sourceIds })
+  if (!translated.supported) {
     refuse(`Player identities from ${args.platform} cannot yet be translated to a native roster.`)
   }
+  if (translated.ambiguous.length) refuse(`Ambiguous imported player identity ${translated.ambiguous[0]}.`)
+  if (translated.unresolved.length) refuse(`${translated.unresolved.length} imported player IDs cannot be verified for a native league. Refresh player identities before carrying rosters over.`)
+  if (translated.collisions.length) {
+    refuse('Multiple imported player IDs map to one native player. Refresh player identities before carrying rosters over.')
+  }
+  return { sourceRosters, sourcePlayerIdsByRoster, idMap: translated.idMap, playerDetails: translated.playerDetails }
+}
+
+export type ImportedPlayerTranslation = {
+  /** False when this provider's ids have no `PlayerIdentityMap` column for the sport (and there are ids to translate). */
+  supported: boolean
+  idMap: Map<string, string>
+  playerDetails: Map<string, NativePlayerDetails>
+  /** Provider ids two identity rows disagree about, in the order they were met. */
+  ambiguous: string[]
+  /** Provider ids with no native identity. */
+  unresolved: string[]
+  /** Native ids more than one provider id maps to. */
+  collisions: string[]
+}
+
+/**
+ * Provider player id → native player id, reporting every problem instead of stopping at the first.
+ * `planImportedPlayerIdentity` turns the first problem into its refusal; the native-readiness check
+ * lists them all. Reads only.
+ *
+ * ⚠ A Sleeper NFL id IS a native id when the `Player` table has it, which covers rookies the identity
+ * map has not caught yet. That fallback is skipped once an id is ambiguous: the result is a refusal
+ * either way, and the carryover never queried it in that case.
+ */
+export async function translateImportedPlayerIds(tx: Tx, args: { sport: string; platform: string; sourceIds: string[] }): Promise<ImportedPlayerTranslation> {
+  const { sport, platform, sourceIds } = args
+  const idMap = new Map<string, string>()
+  const playerDetails = new Map<string, NativePlayerDetails>()
+  const ambiguous: string[] = []
+  const columns = leagueIdentityColumns(sourceIds, sport, platform)
+  if (sourceIds.length && !columns.length) {
+    return { supported: false, idMap, playerDetails, ambiguous, unresolved: [...sourceIds], collisions: [] }
+  }
   const identities = sourceIds.length ? await tx.playerIdentityMap.findMany({
-    where: { sport: args.sport, OR: columns.map(({ column, ids }) => ({ [column]: { in: ids } }) as Prisma.PlayerIdentityMapWhereInput) },
+    where: { sport, OR: columns.map(({ column, ids }) => ({ [column]: { in: ids } }) as Prisma.PlayerIdentityMapWhereInput) },
     select: { sleeperId: true, espnId: true, mflId: true, fleaflickerId: true, fantraxId: true, rollingInsightsId: true, cfbdId: true,
       canonicalName: true, position: true, currentTeam: true },
   }) : []
-  const idMap = new Map<string, string>()
-  const playerDetails = new Map<string, NativePlayerDetails>()
   for (const { column, ids } of columns) {
     const requested = new Set(ids)
     for (const identity of identities) {
       const sourceId = identity[column]
       if (!sourceId || !requested.has(sourceId)) continue
-      const nativeId = nativePlayerIdFor(args.sport, identity)
+      const nativeId = nativePlayerIdFor(sport, identity)
       if (!nativeId || !identity.position || !identity.canonicalName) continue
-      if (idMap.has(sourceId) && idMap.get(sourceId) !== nativeId) refuse(`Ambiguous imported player identity ${sourceId}.`)
+      if (idMap.has(sourceId) && idMap.get(sourceId) !== nativeId) {
+        if (!ambiguous.includes(sourceId)) ambiguous.push(sourceId)
+        continue
+      }
       idMap.set(sourceId, nativeId)
       playerDetails.set(nativeId, { name: identity.canonicalName, position: identity.position, team: identity.currentTeam })
     }
   }
-  if (String(args.platform).toLowerCase() === 'sleeper' && args.sport === 'NFL') {
+  if (!ambiguous.length && String(platform).toLowerCase() === 'sleeper' && sport === 'NFL') {
     const unresolved = sourceIds.filter((id) => !idMap.has(id))
     if (unresolved.length) {
-      const directPlayers = await tx.player.findMany({ where: { id: { in: unresolved }, sport: args.sport }, select: { id: true, name: true, position: true, team: true } })
+      const directPlayers = await tx.player.findMany({ where: { id: { in: unresolved }, sport }, select: { id: true, name: true, position: true, team: true } })
       for (const player of directPlayers) {
         idMap.set(player.id, player.id)
         playerDetails.set(player.id, { name: player.name, position: player.position, team: player.team })
       }
     }
   }
-  const missing = sourceIds.filter((id) => !idMap.has(id))
-  if (missing.length) refuse(`${missing.length} imported player IDs cannot be verified for a native league. Refresh player identities before carrying rosters over.`)
-  if (new Set(sourceIds.map((id) => idMap.get(id))).size !== sourceIds.length) {
-    refuse('Multiple imported player IDs map to one native player. Refresh player identities before carrying rosters over.')
+  const unresolved = sourceIds.filter((id) => !idMap.has(id))
+  const sourcesByNative = new Map<string, number>()
+  for (const id of sourceIds) {
+    const nativeId = idMap.get(id)
+    if (nativeId) sourcesByNative.set(nativeId, (sourcesByNative.get(nativeId) ?? 0) + 1)
   }
-  return { sourceRosters, sourcePlayerIdsByRoster, idMap, playerDetails }
+  const collisions = [...sourcesByNative].filter(([, count]) => count > 1).map(([nativeId]) => nativeId)
+  return { supported: true, idMap, playerDetails, ambiguous, unresolved, collisions }
 }
 
 export type ImportedFuturePickVerdict =
