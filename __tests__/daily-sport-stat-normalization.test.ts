@@ -321,7 +321,9 @@ describe('real vendor keys from the committed /live fixtures', () => {
   it('leaves unmapped vendor extras out of stats but names them', () => {
     const { stats, unmappedKeys } = normalizeNbaGameStats(NBA_BOX)
     expect(stats).not.toHaveProperty('minutes')
-    expect(unmappedKeys).toContain('minutes')
-    expect(unmappedKeys).toContain('fouls')
+    // Minutes and fouls are scored categories since 2026-11-26 (as min / pf), so they are no longer extras.
+    expect(unmappedKeys).not.toContain('minutes')
+    expect(unmappedKeys).not.toContain('fouls')
+    expect(unmappedKeys).toContain('defensive_rebounds')
   })
 })

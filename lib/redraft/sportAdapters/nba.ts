@@ -19,6 +19,13 @@ export const nbaAdapter: SportAdapter = {
       fta: raw.fta ?? 0,
       dbl_dbl: raw.dbl_dbl ?? 0,
       trpl_dbl: raw.trpl_dbl ?? 0,
+      quad_dbl: raw.quad_dbl ?? 0,
+      min: raw.min ?? 0,
+      pf: raw.pf ?? 0,
+      fg2m: raw.fg2m ?? 0,
+      fg2_miss: raw.fg2_miss ?? 0,
+      fg3_miss: raw.fg3_miss ?? 0,
+      ft_miss: raw.ft_miss ?? 0,
     }
   },
   getLineupLockTime(_sport: string, gameTimeIso: string): Date {

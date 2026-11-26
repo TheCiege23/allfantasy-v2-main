@@ -1,0 +1,823 @@
+{
+ "rtgNba": {
+  "scoringSystem": {
+   "scoringCategories": {
+    "PLAYER": {
+     "BLK": {
+      "Default": "points1"
+     },
+     "FF": {
+      "Default": "points-3"
+     },
+     "2PTM": {
+      "Default": "points2"
+     },
+     "2PT-": {
+      "Default": "points-1"
+     },
+     "ST": {
+      "Default": "points1"
+     },
+     "AST": {
+      "Default": "points1"
+     },
+     "EJ": {
+      "Default": "points-3"
+     },
+     "L": {
+      "Default": "points-1"
+     },
+     "PTS": {
+      "Default": "points1"
+     },
+     "REB": {
+      "Default": "points1"
+     },
+     "3PTM": {
+      "Default": "points3"
+     },
+     "3PT-": {
+      "Default": "points-1"
+     },
+     "PFD": {
+      "Default": "points1"
+     },
+     "4D": {
+      "Default": "points10"
+     },
+     "GWBB": {
+      "Default": "points10"
+     },
+     "3D": {
+      "Default": "points5"
+     },
+     "TF": {
+      "Default": "points-2"
+     },
+     "2D": {
+      "Default": "points2"
+     },
+     "PF": {
+      "Default": "points-1"
+     },
+     "W": {
+      "Default": "points1"
+     },
+     "TO": {
+      "Default": "points-1"
+     },
+     "FTM": {
+      "Default": "points1"
+     },
+     "FT-": {
+      "Default": "points-1"
+     }
+    }
+   },
+   "scoringCategorySettings": [
+    {
+     "configs": [
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_ASSISTS",
+        "name": "Assists",
+        "id": "1250",
+        "shortName": "AST"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_BLOCKS",
+        "name": "Blocks",
+        "id": "1260",
+        "shortName": "BLK"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_EJECTIONS",
+        "name": "Ejections",
+        "id": "1290",
+        "shortName": "EJ"
+       },
+       "points": -3.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_FLAGRANT_FOULS",
+        "name": "Flagrant Fouls",
+        "id": "1320",
+        "shortName": "FF"
+       },
+       "points": -3.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_FREE_THROWS_MADE",
+        "name": "Free Throws Made",
+        "id": "1340",
+        "shortName": "FTM"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_FREE_THROWS_MISSED",
+        "name": "Free Throws Missed",
+        "id": "1348",
+        "shortName": "FT-"
+       },
+       "points": -1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_GAME_WINNING_BUZZER_BEATERS",
+        "name": "Game Winning Buzzer Beaters",
+        "id": "1357",
+        "shortName": "GWBB"
+       },
+       "points": 10.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_LOSSES",
+        "name": "Losses",
+        "id": "1359",
+        "shortName": "L"
+       },
+       "points": -1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_PERSONAL_FOULS",
+        "name": "Personal Fouls",
+        "id": "1380",
+        "shortName": "PF"
+       },
+       "points": -1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_PERSONAL_FOULS_DRAWN",
+        "name": "Personal Fouls Drawn",
+        "id": "1381",
+        "shortName": "PFD"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_POINTS",
+        "name": "Points",
+        "id": "1390",
+        "shortName": "PTS"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_QUADRUPLE_DOUBLES",
+        "name": "Quadruple Doubles",
+        "id": "1395",
+        "shortName": "4D"
+       },
+       "points": 10.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_REBOUNDS",
+        "name": "Rebounds",
+        "id": "1400",
+        "shortName": "REB"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_STEALS",
+        "name": "Steals",
+        "id": "1410",
+        "shortName": "ST"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_TECHNICAL_FOULS",
+        "name": "Technical Fouls",
+        "id": "1420",
+        "shortName": "TF"
+       },
+       "points": -2.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_THREE_POINTERS_MADE",
+        "name": "Three Pointers Made",
+        "id": "1435",
+        "shortName": "3PTM"
+       },
+       "points": 3.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_TWO_POINTERS_MADE",
+        "name": "Two Pointers Made",
+        "id": "1445",
+        "shortName": "2PTM"
+       },
+       "points": 2.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_TRIPLE_DOUBLES",
+        "name": "Triple Doubles",
+        "id": "1450",
+        "shortName": "3D"
+       },
+       "points": 5.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_TURNOVERS",
+        "name": "Turnovers",
+        "id": "1460",
+        "shortName": "TO"
+       },
+       "points": -1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_WINS",
+        "name": "Wins",
+        "id": "1463",
+        "shortName": "W"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_DOUBLE_DOUBLES_PLUS_TRIPLE_DOUBLES",
+        "name": "Double Doubles",
+        "id": "1496",
+        "shortName": "2D"
+       },
+       "points": 2.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_THREE_POINTERS_MISSED",
+        "name": "Three Pointers Missed",
+        "id": "1625",
+        "shortName": "3PT-"
+       },
+       "points": -1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_TWO_POINTERS_MISSED",
+        "name": "Two Pointers Missed",
+        "id": "1643",
+        "shortName": "2PT-"
+       },
+       "points": -1.0
+      }
+     ],
+     "group": {
+      "code": "BASKETBALL_PLAYER",
+      "name": "Player",
+      "id": "3010",
+      "shortName": "Plyr"
+     }
+    }
+   ],
+   "type": "HEAD_TO_HEAD_POINTS_BASED"
+  }
+ },
+ "rtgNcaab": {
+  "scoringSystem": {
+   "scoringCategories": {
+    "PLAYER": {
+     "BLK": {
+      "Default": "points2"
+     },
+     "ST": {
+      "Default": "points2"
+     },
+     "AST": {
+      "Default": "points1"
+     },
+     "EJ": {
+      "Default": "points-3"
+     },
+     "PTS": {
+      "Default": "points1"
+     },
+     "REB": {
+      "Default": "points1"
+     },
+     "3PTM": {
+      "Default": "points0.5"
+     },
+     "4D": {
+      "Default": "points6"
+     },
+     "GWBB": {
+      "Default": "points10"
+     },
+     "3D": {
+      "Default": "points4"
+     },
+     "TF": {
+      "Default": "points-2"
+     },
+     "2D": {
+      "Default": "points2"
+     },
+     "MIN": {
+      "Default": "points0.1"
+     },
+     "PF": {
+      "Default": "points-1"
+     },
+     "W": {
+      "Default": "points1"
+     },
+     "TO": {
+      "Default": "points-1"
+     },
+     "FTM": {
+      "Default": "points1"
+     },
+     "FT-": {
+      "Default": "points-1"
+     }
+    }
+   },
+   "scoringCategorySettings": [
+    {
+     "configs": [
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_ASSISTS",
+        "name": "Assists",
+        "id": "1250",
+        "shortName": "AST"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_BLOCKS",
+        "name": "Blocks",
+        "id": "1260",
+        "shortName": "BLK"
+       },
+       "points": 2.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_EJECTIONS",
+        "name": "Ejections",
+        "id": "1290",
+        "shortName": "EJ"
+       },
+       "points": -3.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_FREE_THROWS_MADE",
+        "name": "Free Throws Made",
+        "id": "1340",
+        "shortName": "FTM"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_FREE_THROWS_MISSED",
+        "name": "Free Throws Missed",
+        "id": "1348",
+        "shortName": "FT-"
+       },
+       "points": -1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_GAME_WINNING_BUZZER_BEATERS",
+        "name": "Game Winning Buzzer Beaters",
+        "id": "1357",
+        "shortName": "GWBB"
+       },
+       "points": 10.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_MINUTES_PLAYED",
+        "name": "Minutes Played",
+        "id": "1360",
+        "shortName": "MIN"
+       },
+       "points": 0.1
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_PERSONAL_FOULS",
+        "name": "Personal Fouls",
+        "id": "1380",
+        "shortName": "PF"
+       },
+       "points": -1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_POINTS",
+        "name": "Points",
+        "id": "1390",
+        "shortName": "PTS"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_QUADRUPLE_DOUBLES",
+        "name": "Quadruple Doubles",
+        "id": "1395",
+        "shortName": "4D"
+       },
+       "points": 6.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_REBOUNDS",
+        "name": "Rebounds",
+        "id": "1400",
+        "shortName": "REB"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_STEALS",
+        "name": "Steals",
+        "id": "1410",
+        "shortName": "ST"
+       },
+       "points": 2.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_TECHNICAL_FOULS",
+        "name": "Technical Fouls",
+        "id": "1420",
+        "shortName": "TF"
+       },
+       "points": -2.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_THREE_POINTERS_MADE",
+        "name": "Three Pointers Made",
+        "id": "1435",
+        "shortName": "3PTM"
+       },
+       "points": 0.5
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_TRIPLE_DOUBLES",
+        "name": "Triple Doubles",
+        "id": "1450",
+        "shortName": "3D"
+       },
+       "points": 4.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_TURNOVERS",
+        "name": "Turnovers",
+        "id": "1460",
+        "shortName": "TO"
+       },
+       "points": -1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_WINS",
+        "name": "Wins",
+        "id": "1463",
+        "shortName": "W"
+       },
+       "points": 1.0
+      },
+      {
+       "position": {
+        "code": "DEFAULT",
+        "name": "Default",
+        "id": "-1",
+        "shortName": "Default"
+       },
+       "cumulative": true,
+       "scoringCategory": {
+        "code": "INDIVIDUAL_DOUBLE_DOUBLES_PLUS_TRIPLE_DOUBLES",
+        "name": "Double Doubles",
+        "id": "1496",
+        "shortName": "2D"
+       },
+       "points": 2.0
+      }
+     ],
+     "group": {
+      "code": "BASKETBALL_PLAYER",
+      "name": "Player",
+      "id": "3010",
+      "shortName": "Plyr"
+     }
+    }
+   ],
+   "type": "HEAD_TO_HEAD_POINTS_BASED"
+  }
+ }
+}

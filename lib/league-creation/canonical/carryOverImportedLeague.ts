@@ -41,6 +41,23 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
 
+/**
+ * The id a native roster holds for an imported player. NFL: the Sleeper id. NCAAF: the CFBD pool id first, then the
+ * Rolling Insights id -- the native NCAAF pool prefers a CFBD row over an RI duplicate
+ * (lib/sport-teams/SportPlayerPoolResolver.ts), campus scoring reads a numeric id as a CFBD id, and college players
+ * are linked by CFBD id (lib/player-identity/ingestNcaafFantraxIdentities.ts). Reading only the RI id refused
+ * nearly every college player in an NCAAF carryover (2026-11-26, Road To Glory). Every other sport: the RI id.
+ */
+export function nativePlayerIdFor(
+  sport: string,
+  identity: { sleeperId?: string | null; rollingInsightsId?: string | null; cfbdId?: string | null },
+): string | null {
+  const s = String(sport).trim().toUpperCase()
+  if (s === 'NFL') return identity.sleeperId ?? null
+  if (s === 'NCAAF') return identity.cfbdId ?? identity.rollingInsightsId ?? null
+  return identity.rollingInsightsId ?? null
+}
+
 export function matchImportedRoster(team: ImportedTeam, rosters: ImportedRoster[]): ImportedRoster {
   const byTeamId = rosters.filter((roster) => rosterSourceTeamId(roster.playerData) === team.externalId)
   const candidates = byTeamId.length ? byTeamId : rosters.filter((roster) =>
@@ -222,7 +239,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   }
   const identities = sourceIds.length ? await tx.playerIdentityMap.findMany({
     where: { sport: args.sport, OR: columns.map(({ column, ids }) => ({ [column]: { in: ids } }) as Prisma.PlayerIdentityMapWhereInput) },
-    select: { sleeperId: true, espnId: true, mflId: true, fleaflickerId: true, fantraxId: true, rollingInsightsId: true,
+    select: { sleeperId: true, espnId: true, mflId: true, fleaflickerId: true, fantraxId: true, rollingInsightsId: true, cfbdId: true,
       canonicalName: true, position: true, currentTeam: true },
   }) : []
   const idMap = new Map<string, string>()
@@ -232,7 +249,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     for (const identity of identities) {
       const sourceId = identity[column]
       if (!sourceId || !requested.has(sourceId)) continue
-      const nativeId = args.sport === 'NFL' ? identity.sleeperId : identity.rollingInsightsId
+      const nativeId = nativePlayerIdFor(args.sport, identity)
       if (!nativeId || !identity.position || !identity.canonicalName) continue
       if (idMap.has(sourceId) && idMap.get(sourceId) !== nativeId) refuse(`Ambiguous imported player identity ${sourceId}.`)
       idMap.set(sourceId, nativeId)

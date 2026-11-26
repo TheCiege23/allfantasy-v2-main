@@ -126,14 +126,15 @@ describe('buildNcaabLeagueScorer', () => {
 
     const doubleDouble = { ...RATES, points: 12, total_rebounds: 11 }
     const { stats } = getDailySportNormalizer('NCAAB')!(doubleDouble)
+    // The per-game normalizer counts bonuses (NCAAB does since 2026-11-26); an average is never a
+    // double-double, so the season scorer drops every bonus key before scoring.
+    expect(stats.dbl_dbl).toBe(1)
+    const { dbl_dbl: _d, trpl_dbl: _t, quad_dbl: _q, ...withoutBonuses } = stats
     const score = buildLeagueStatScorer({ sport: 'NCAAB', settings: {} } as Parameters<typeof buildLeagueStatScorer>[0])!
-    const expected = Math.round(score({ ...stats }, 'F') * 100) / 100
+    const expected = Math.round(score({ ...withoutBonuses }, 'F') * 100) / 100
 
     expect(expected).toBeGreaterThan(0)
     expect(scorer!(doubleDouble, 'F')).toBe(expected)
-    // An average is never a double-double: no bonus key reaches the scorer.
-    expect(stats.dbl_dbl).toBeUndefined()
-    expect(stats.trpl_dbl).toBeUndefined()
   })
 
   it('ranks the more productive line higher, and returns null for an empty one', () => {
