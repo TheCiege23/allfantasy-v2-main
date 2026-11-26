@@ -164,7 +164,12 @@ describe('DraftTopBar strings keep their English and gain Spanish', () => {
     expect(formatTimerSummary(null, en)).toBe('Untimed picks')
     expect(formatTimerSummary(30, en)).toBe('30 Seconds Per Pick')
     expect(formatTimerSummary(60, en)).toBe('1 Minute Per Pick')
-    expect(formatTimerSummary(90, en)).toBe('2 Minutes Per Pick')
+    // Exact units only: a 90-second clock is not "2 Minutes" (2026-11-25).
+    expect(formatTimerSummary(90, en)).toBe('90 Seconds Per Pick')
+    expect(formatTimerSummary(120, en)).toBe('2 Minutes Per Pick')
+    expect(formatTimerSummary(5400, en)).toBe('90 Minutes Per Pick')
+    expect(formatTimerSummary(8 * 3600, en)).toBe('8 Hours Per Pick')
+    expect(formatTimerSummary(36 * 3600, en)).toBe('36 Hours Per Pick')
     expect(formatTimerSummary(3600, en)).toBe('1 Hour Per Pick')
     expect(formatTimerSummary(2 * 86400, en)).toBe('2 Days Per Pick')
     expect(formatTimerSummary(2 * 86400, es)).toBe('2 días por selección')
