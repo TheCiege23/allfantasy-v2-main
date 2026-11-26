@@ -107,8 +107,10 @@ export function guillotineVerdict(args: { me: ChopLineRow | null; myChoppedWeek:
 }
 
 /** "Week 4 of 11" when the league's last chop week is configured and not yet passed; otherwise "Week 4". */
-export function guillotineWeekLabel(week: number, endWeek: number | null | undefined): string {
-  return endWeek != null && endWeek >= week ? `Week ${week} of ${endWeek}` : `Week ${week}`
+export function guillotineWeekLabel(week: number, endWeek: number | null | undefined, periodWeeks?: number | null): string {
+  // A two-week period is keyed by its last week (lib/guillotine/eliminationPeriods.ts): "Weeks 3–4 of 18".
+  const span = (periodWeeks ?? 1) > 1 ? `Weeks ${week - (periodWeeks ?? 1) + 1}–${week}` : `Week ${week}`
+  return endWeek != null && endWeek >= week ? `${span} of ${endWeek}` : span
 }
 
 const TIEBREAK_LABEL: Record<string, string> = {
@@ -135,14 +137,36 @@ export function tiebreakLabels(order: readonly string[] | null | undefined, peri
  * `season_points → previous_period`, "— pts"); the tiebreak order uses tiebreakLabels so it reads exactly as the
  * hub's "Ties are broken by" card on the same page.
  */
+export type GuillotineTradeWindow = {
+  tradesAllowed: boolean
+  tradesCloseAtTeamsLeft: number | null
+  tradesClosed: boolean
+  /** Teams alive now; null when trades are off or the count could not be read. */
+  teamsLeft: number | null
+}
+
+/**
+ * The one line the home shows about trades (lib/guillotine/guillotineTrades.ts), or null when there is nothing to
+ * warn about: trades off, or on with no closing point.
+ */
+export function guillotineTradeWindowLine(t: GuillotineTradeWindow | null | undefined): string | null {
+  if (!t?.tradesAllowed || t.tradesCloseAtTeamsLeft == null) return null
+  if (t.tradesClosed) return `Trades are closed. They closed once ${t.tradesCloseAtTeamsLeft} teams were left.`
+  const now = t.teamsLeft != null ? ` ${t.teamsLeft} are left now.` : ''
+  return `Trades close once ${t.tradesCloseAtTeamsLeft} teams are left.${now}`
+}
+
 export function guillotineRuleRows(config: {
   eliminationStartWeek: number
   eliminationEndWeek: number | null
   teamsPerChop: number
   tiebreakerOrder?: readonly string[] | null
   dangerMarginPoints: number | null
+  trades?: GuillotineTradeWindow | null
+  freeAgencyFromWeek?: number | null
 }): { label: string; value: string | string[] }[] {
   const ties = tiebreakLabels(config.tiebreakerOrder)
+  const t = config.trades
   return [
     { label: 'First chop', value: `Week ${config.eliminationStartWeek}` },
     { label: 'Last chop', value: config.eliminationEndWeek != null ? `Week ${config.eliminationEndWeek}` : 'No last week set' },
@@ -152,6 +176,13 @@ export function guillotineRuleRows(config: {
       value: config.dangerMarginPoints != null ? `Within ${config.dangerMarginPoints} points of the cut` : 'Not set',
     },
     { label: 'Ties are broken by', value: ties.length > 0 ? ties : 'Not set' },
+    ...(t
+      ? [{
+          label: 'Trades',
+          value: !t.tradesAllowed ? 'Off' : t.tradesClosed ? 'Closed' : t.tradesCloseAtTeamsLeft != null ? `On until ${t.tradesCloseAtTeamsLeft} teams are left` : 'On',
+        }]
+      : []),
+    ...(config.freeAgencyFromWeek != null ? [{ label: 'Chopped players skip waivers', value: `From week ${config.freeAgencyFromWeek}` }] : []),
   ]
 }
 

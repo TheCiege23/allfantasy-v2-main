@@ -81,4 +81,19 @@ describe('native', () => {
     // p2 is on R1's bench, so only p1 counts.
     expect(o?.R1).toEqual({ playersLeft: 1, starters: 1, gamesLeft: 2, remainingProjection: 40, partial: false })
   })
+
+  it('🛑 a two-week league covers both weeks of the period, with the lineup of the week being played', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const { readWeekGames } = await import('@/lib/redraft/weekGames')
+    const { loadWeekLineups } = await import('@/lib/redraft/weekLineupSlots')
+    vi.mocked(prisma.league.findUnique).mockResolvedValueOnce({ sport: 'NBA', season: 2026, settings: { guillotine_period_weeks: 2 } } as never)
+    vi.mocked(prisma.redraftSeason.findFirst).mockResolvedValueOnce({ id: 'S', season: 2026, currentWeek: 5 } as never)
+    vi.mocked(readWeekGames).mockClear()
+    const o = await loadSurvivalOutlook('L', 6)
+    // Both slates read; the lineup is week 5's, the one being played.
+    expect(vi.mocked(readWeekGames).mock.calls.map((c) => (c[1] as { week: number }).week)).toEqual([5, 6])
+    expect(vi.mocked(loadWeekLineups).mock.calls.at(-1)?.[1]).toMatchObject({ week: 5 })
+    // p1 (BOS): 3 games a week, 2 left in each read → 4 of 6; projected 60 a week → 120 × 4/6 = 80.
+    expect(o?.R1).toEqual({ playersLeft: 1, starters: 1, gamesLeft: 4, remainingProjection: 80, partial: false })
+  })
 })

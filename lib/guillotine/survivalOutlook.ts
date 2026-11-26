@@ -62,6 +62,27 @@ export function teamOutlook(starters: readonly StarterGames[]): TeamOutlook {
   }
 }
 
+/**
+ * Pure: one starter across the weeks of a period, as the single-week shape `teamOutlook` reads — games and games
+ * left added up, and the projection for the whole period. A week whose projection is not out yet (the second week
+ * of a two-week period, while the first is played) borrows the player's projection from another week of the
+ * period, scaled by games; with none anywhere the projection stays unknown.
+ */
+export function periodStarterGames(weeks: ReadonlyArray<{ projection: number | null; games: number; left: number }>): StarterGames {
+  const known = weeks.find((w) => w.projection != null && Number.isFinite(w.projection) && w.games > 0)
+  let projection: number | null = null
+  let games = 0
+  let left = 0
+  for (const w of weeks) {
+    games += w.games
+    left += w.left
+    if (w.games <= 0) continue
+    const p = w.projection != null && Number.isFinite(w.projection) ? w.projection : known ? (known.projection! * w.games) / known.games : null
+    if (p != null) projection = (projection ?? 0) + p
+  }
+  return { weekProjection: projection, gamesThisWeek: games, gamesLeft: left }
+}
+
 /** Remaining points spread as a share of what is projected (a fantasy week's usual swing, about ±40%). */
 export const SPREAD = 0.4
 export const SIMS = 4000
