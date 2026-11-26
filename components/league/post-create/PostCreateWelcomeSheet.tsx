@@ -6,6 +6,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { intlLocaleOrBrowserDefault } from '@/lib/i18n/bilingual'
 import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
 import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
+import { ClubhousePromoCard } from '@/components/community/ClubhousePromoCard'
 
 type Translate = (key: string) => string
 
@@ -191,6 +192,8 @@ export function PostCreateWelcomeSheet({
 
           {/* Strangers fill seats too: the one moment a commissioner is already thinking about who joins. */}
           <FindLeagueListingCard leagueId={league.id} variant="welcome" />
+
+          <ClubhousePromoCard variant="league-created" className="rounded-xl border border-[color:var(--border)] p-4" />
 
           <section className="space-y-2" aria-label={tx(t, 'league.welcome.nextHeading', 'Next steps')}>
             <h3 className="text-base font-black">{tx(t, 'league.welcome.nextHeading', 'Next steps')}</h3>

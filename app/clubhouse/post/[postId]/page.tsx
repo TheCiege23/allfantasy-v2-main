@@ -17,6 +17,7 @@ import { IdeaAttachments, IdeaCredit, IdeaFacts, IdeaStatusPill } from '@/compon
 import { IdeaPlanPanel } from '@/components/community/IdeaPlanPanel'
 import { listIdeaAttachments } from '@/lib/community/ideaFiles'
 import { getIdeaPlan } from '@/lib/community/ideaPlanRunner'
+import { ShareButton } from '@/components/community/GrowthClient'
 import { IdeaStatusControl, UpvoteButton } from '@/components/community/IdeaClient'
 
 export const dynamic = 'force-dynamic'
@@ -116,6 +117,14 @@ export default async function ClubhousePostPage({ params }: Props) {
         <IdeaAttachments files={attachments} />
         <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
           <ReactionBar targetType="post" targetId={post.id} initial={post.reactions} signedIn={signedIn} loginHref={login} />
+          {!post.removed && (
+            <ShareButton
+              url={here}
+              title={post.title}
+              text={post.idea ? `Would you play this league? "${post.title}" in the AllFantasy League Lab.` : `"${post.title}" in the AllFantasy Clubhouse.`}
+              label={post.idea ? 'Share idea' : 'Share'}
+            />
+          )}
         </div>
         {post.idea && viewer.isModerator && !post.removed && (
           <div className="mt-4">

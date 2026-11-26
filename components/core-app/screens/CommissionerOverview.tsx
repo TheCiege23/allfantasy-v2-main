@@ -10,6 +10,7 @@ import { FocusComposerButton, HubBroadcast } from '@/components/core-app/hubs/Hu
 import { OverviewQueue } from '@/components/core-app/hubs/OverviewQueue'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { InactiveLadderList } from '@/components/core-app/commissioner/InactiveLadderList'
+import { ClubhousePromoCard } from '@/components/community/ClubhousePromoCard'
 
 /**
  * Commissioner Hub, all leagues — `/core/commissioner` (five-doors restyle, 2026-09-17).
@@ -160,6 +161,9 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
         <>
           {/* The to-do list first: one row per thing, the league, and the button that does it. */}
           <OverviewQueue rows={data.queue} title="Your to-do list" />
+
+          {/* After the chores, not before them: the Clubhouse is an extra, never the headline. */}
+          <ClubhousePromoCard variant="commish" className="afh-panel" />
 
           {/*
             Quiet managers in season, with a message to copy for each. Folded (2026-11-23): the to-do list
