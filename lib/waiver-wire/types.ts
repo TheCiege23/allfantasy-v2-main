@@ -81,6 +81,8 @@ export type ProcessedClaimResult = {
   addPlayerId: string
   dropPlayerId?: string | null
   faabSpent?: number | null
+  /** The bid this claim carried (FAAB), win or lose — the waiver run report lists losing bids. */
+  faabBid?: number | null
   message?: string
   waiverRunId?: string
   /** Outcome code for notifications and transaction history. */

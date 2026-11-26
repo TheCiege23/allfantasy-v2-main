@@ -64,7 +64,8 @@ describe('simple creation team choices agree with the server', () => {
     const onChange = vi.fn()
     // A college league: the full native range. (A pro league stops where its players run out.)
     const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 160, sport: 'NCAAF' as const }
-    render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
+    // With AF Commissioner every size is open; without it redraft odd sizes are locked (owner, 2026-11-25).
+    render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} hasCommissioner />)
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '2')
     expect(count).toHaveAttribute('max', '250')
@@ -103,8 +104,12 @@ describe('Zombie universe controls', () => {
 
   it('a pro-sport league is offered no more teams than the real league has', () => {
     const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
-    render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
+    const view = render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} hasCommissioner />)
     expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '32')
     expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32')
+    // Without the plan: the same cap, even sizes only, said in one short line rather than sixteen numbers.
+    view.rerender(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '32')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32, even sizes')
   })
 })

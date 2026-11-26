@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { oddPlayoffFieldNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
 import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
@@ -147,11 +149,18 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
               onChange={(e) => {
                 const v = Number(e.target.value)
                 setPlayoffTeams(v)
-                if (e.target.value !== '' && e.target.validity.valid && Number.isInteger(v)) queuePatch({ playoffTeams: v })
+                const locked = !hasAfCommissionerSub && v !== ctx.league.playoffTeams && oddPlayoffFieldNeedsAfCommissioner(ctx.league.leagueType, v)
+                if (!locked && e.target.value !== '' && e.target.validity.valid && Number.isInteger(v)) queuePatch({ playoffTeams: v })
               }}
               className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
             />
           </label>
+          {!hasAfCommissionerSub && playoffTeams !== ctx.league.playoffTeams && oddPlayoffFieldNeedsAfCommissioner(ctx.league.leagueType, playoffTeams) ? (
+            <p className="mt-1 text-[11px] text-amber-200" data-testid="playoff-teams-odd-locked">
+              {`A ${playoffTeams}-team playoff field is part of AF Commissioner. Not saved — choose an even number, or `}
+              <a href={upgradePathForPlan('af_commissioner')} className="font-bold underline">upgrade</a>.
+            </p>
+          ) : null}
           {fitCap < leagueCap ? (
             <p className="mt-1 text-[11px] text-white/45" data-testid="playoff-teams-fit-note">
               {fitCap >= 2

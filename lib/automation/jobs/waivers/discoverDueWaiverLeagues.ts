@@ -13,7 +13,7 @@ import { buildIdempotencyKey, hashIdempotencyKey } from "@/lib/automation/idempo
 import type { DueWaiverLeague } from "@/lib/automation/jobs/waivers/waiverAutomationTypes"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire/settings-service"
-import { getLeagueWaiverState } from "@/lib/waiver-wire/waiver-state-service"
+import { getLeagueWaiverState, refreshLeagueWaiverNextRunAt } from "@/lib/waiver-wire/waiver-state-service"
 import { guillotineClaimsCutoff, isBlindAuctionLeague } from "@/lib/guillotine/blindWaiverCutoff"
 import { nativeGuillotineState } from "@/lib/league/nativeFormatPatch"
 
@@ -22,6 +22,9 @@ export type DiscoverDueWaiverLeaguesOptions = {
   now?: Date
   leagueId?: string
 }
+
+/** A waiver run still "running" after this long died without closing its row. */
+export const STALE_RUNNING_WAIVER_RUN_MS = 30 * 60_000
 
 function utcDateBucket(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -62,8 +65,21 @@ export async function discoverDueWaiverLeagues(
       continue
     }
 
+    /*
+     * 🛑 A "running" row older than the run budget is a run that died (a thrown write, a container swap
+     * mid-run): nothing ever closes it, and skipping on it skipped this league forever. It is marked
+     * failed — its claims are still pending, since an award commits claim and roster together — and the
+     * league is evaluated as usual. A run started inside the budget is still a live run: wait for it.
+     */
+    const staleBefore = new Date(now.getTime() - STALE_RUNNING_WAIVER_RUN_MS)
+    await prisma.waiverRun
+      .updateMany({
+        where: { leagueId, status: "running", runAt: { lt: staleBefore } },
+        data: { status: "failed" },
+      })
+      .catch(() => null)
     const running = await prisma.waiverRun.findFirst({
-      where: { leagueId, status: "running" },
+      where: { leagueId, status: "running", runAt: { gte: staleBefore } },
       select: { id: true },
     })
     if (running) {
@@ -101,7 +117,16 @@ export async function discoverDueWaiverLeagues(
       continue
     }
 
-    const nextRunAt = state?.nextRunAt ?? null
+    /*
+     * 🛑 NO nextRunAt IS NOT "DUE NOW" (2026-11-26). Nothing writes nextRunAt when a league is created, so a
+     * new league's first claims used to settle at the next 5-minute tick, ignoring its schedule. Work it
+     * out from the schedule first; only a league with no schedule at all (no processing time) keeps the
+     * run-now fallback.
+     */
+    let nextRunAt: Date | null = state?.nextRunAt ?? null
+    if (nextRunAt == null) {
+      nextRunAt = await refreshLeagueWaiverNextRunAt(leagueId, now).catch(() => null)
+    }
     let discoveryReason = "pending_claims"
     let due = true
 

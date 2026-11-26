@@ -60,7 +60,15 @@ async function refreshWorkspaceTasksForLeague(
           // is generous relative to the work (two reads and a handful of writes) because expiring
           // early is what lets two scans interleave on one league.
           { owner: ctx.jobId, ttlMs: 120_000 },
-          () => reconcileLeagueTasks(input.leagueId, scheduledFor),
+          async () => {
+            const outcome = await reconcileLeagueTasks(input.leagueId, scheduledFor)
+            // AF Commissioner FAAB refills (lib/waivers/faabRefillService.ts): paid once the league
+            // reaches the refill week. Never fails the scan.
+            await import('@/lib/waivers/faabRefillService')
+              .then((m) => m.applyDueFaabRefills(input.leagueId))
+              .catch(() => 0)
+            return outcome
+          },
         )
 
         /*

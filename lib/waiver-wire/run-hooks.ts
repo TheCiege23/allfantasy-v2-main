@@ -13,6 +13,34 @@ import { onWaiverReaction } from "@/lib/commentary-engine"
 import { normalizeToSupportedSport } from "@/lib/sport-scope"
 import { isLeaguePrefEnabled, parseLeagueNotificationPrefs } from "@/lib/league/league-notification-prefs"
 import type { ProcessedClaimResult } from "./types"
+import { readWaiverExtras } from "@/lib/waivers/waiverExtras"
+import { buildWaiverRunReport } from "@/lib/waivers/waiverRunReport"
+import { resolvePlayerNamesForSport } from "@/lib/roster/resolvePlayerNames"
+
+/** The AF Commissioner run report for one run, with real team and player names. */
+async function buildRunReportForLeague(
+  leagueId: string,
+  results: ProcessedClaimResult[],
+  league: { sport?: string | null; platform?: string | null } | null,
+  hideLosingBids: boolean,
+): Promise<string> {
+  const ids = [...new Set(results.flatMap((r) => [r.addPlayerId, r.dropPlayerId ?? ""]).filter(Boolean))]
+  const [names, teams, settingsRow] = await Promise.all([
+    resolvePlayerNamesForSport(ids, league?.sport ?? "NFL", league?.platform ?? null).catch(() => new Map<string, string>()),
+    (prisma as any).leagueTeam.findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } }).catch(() => []),
+    (prisma as any).leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverType: true } }).catch(() => null),
+  ])
+  const teamByRoster = new Map<string, string>(
+    (teams as Array<{ externalId: string; teamName: string | null; ownerName: string | null }>).map((t) => [t.externalId, t.teamName || t.ownerName || "A team"]),
+  )
+  return buildWaiverRunReport({
+    results,
+    teamName: (id) => teamByRoster.get(id) ?? "A team",
+    playerName: (id) => names.get(id) ?? "a player",
+    hideLosingBids,
+    faab: String(settingsRow?.waiverType ?? "").toLowerCase() === "faab",
+  })
+}
 
 /** Called after processWaiverClaimsForLeague; posts to activity feed and league chat when configured. */
 export async function onWaiverRunComplete(
@@ -120,12 +148,17 @@ export async function onWaiverRunComplete(
   try {
     const league = await (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { settings: true, sport: true },
+      select: { settings: true, sport: true, platform: true },
     })
     // Only a link that passes the one rule (lib/league/leagueChatThreadLink.ts); a DM or huddle is no link.
     const threadId = leagueChatThreadIdFromSettings(leagueId, league?.settings)
     if (threadId) {
-      await createSystemMessage(threadId, "waiver_bot", message).catch(() => {})
+      // AF Commissioner run report (lib/waivers/waiverRunReport.ts): who got whom, for how much.
+      const extras = readWaiverExtras(league?.settings)
+      const chatMessage = extras.runReport.enabled
+        ? await buildRunReportForLeague(leagueId, results, league, extras.runReport.hideLosingBids).catch(() => message)
+        : message
+      await createSystemMessage(threadId, "waiver_bot", chatMessage).catch(() => {})
     }
 
     // Player Trend Detection: record waiver_add / waiver_drop for processed claims

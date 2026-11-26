@@ -139,8 +139,10 @@ describe('NFL/NCAAF keeper creation defaults', () => {
     const ids = getDraftTypeOptions('keeper', 'NFL').map((option) => option.id)
 
     expect(ids).toEqual(
-      expect.arrayContaining(['snake', 'linear', 'auction', 'slow_draft', 'mock_draft', 'offline', 'auto', 'team']),
+      expect.arrayContaining(['snake', 'linear', 'auction', 'slow_draft', 'offline', 'auto', 'team']),
     )
+    // A mock draft is not a league; every draft room has one (owner, 2026-11-25).
+    expect(ids).not.toContain('mock_draft')
   })
 
   it('resolves keeper snake, linear, auction, slow, mock, offline, auto, and team behavior', () => {

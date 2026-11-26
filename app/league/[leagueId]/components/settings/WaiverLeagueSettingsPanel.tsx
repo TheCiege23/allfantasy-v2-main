@@ -27,6 +27,15 @@ const WAIVER_TYPES = [
   { value: 'standard', label: 'Standard (scheduled batch)' },
 ]
 
+/** One plain line per waiver type (same wording as the League settings hub, lsHub.wv.explain.*). */
+const WAIVER_TYPE_EXPLAIN: Record<string, string> = {
+  faab: 'Every team gets a budget for the season. Managers bid blind; the highest bid wins and that amount comes off their budget.',
+  rolling: 'Teams stand in one line. The team at the front gets its claim, then goes to the back of the line.',
+  reverse_standings: 'The team with the worst record gets first pick of every player, every run.',
+  standard: 'Teams keep the same order all week — winning a claim does not move you. The order resets each week.',
+  fcfs: 'No waivers: the first manager to add a player gets him, straight away.',
+}
+
 const FREE_AGENCY_MODES: Array<{ value: FreeAgencyMode; label: string }> = [
   { value: 'standard', label: "League's waiver rules" },
   { value: 'after_run', label: 'Waivers until each run, then free agents (Sleeper-style)' },
@@ -55,9 +64,7 @@ export function WaiverLeagueSettingsPanel({
   const [waiverType, setWaiverType] = useState(initialData.waiverType ?? 'faab')
   const [budget, setBudget] = useState(initialData.waiverBudget ?? 100)
   const [minBid, setMinBid] = useState(initialData.waiverMinBid ?? 0)
-  const [clearAfter, setClearAfter] = useState(Boolean(initialData.waiverClearAfterGames))
   const [hours, setHours] = useState(initialData.waiverHours ?? 24)
-  const [customDaily, setCustomDaily] = useState(Boolean(initialData.customDailyWaivers))
   const [processTime, setProcessTime] = useState(initialData.waiverProcessTime ?? '03:00')
   // These two live in the waiver-settings row's engine config, read from the effective settings.
   const [freeAgencyMode, setFreeAgencyMode] = useState<FreeAgencyMode>('standard')
@@ -99,9 +106,7 @@ export function WaiverLeagueSettingsPanel({
     setWaiverType(initialData.waiverType ?? 'faab')
     setBudget(initialData.waiverBudget ?? 100)
     setMinBid(initialData.waiverMinBid ?? 0)
-    setClearAfter(Boolean(initialData.waiverClearAfterGames))
     setHours(initialData.waiverHours ?? 24)
-    setCustomDaily(Boolean(initialData.customDailyWaivers))
     setProcessTime(initialData.waiverProcessTime ?? '03:00')
   }, [initialData])
 
@@ -109,7 +114,7 @@ export function WaiverLeagueSettingsPanel({
     <div className="min-h-0 flex-1 space-y-8 px-6 py-6 text-[13px] text-white/85" data-testid="settings-waiver-panel">
       <SettingsPanelHeading
         title="Waiver settings"
-        subtitle="Synced to the waiver wire engine, add/drop validation, and FAAB processing. Extended JSON rules can be set via API (waiverEngineConfig)."
+        subtitle="How players get claimed in this league. Changes apply to the next waiver run."
       />
 
       <div>
@@ -130,7 +135,7 @@ export function WaiverLeagueSettingsPanel({
             </option>
           ))}
         </select>
-        <SettingsHelper>Maps to league.waiverType and the waiver processing engine.</SettingsHelper>
+        <SettingsHelper>{WAIVER_TYPE_EXPLAIN[waiverType] ?? 'How claims on the same player are decided.'}</SettingsHelper>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -148,6 +153,7 @@ export function WaiverLeagueSettingsPanel({
               debouncedSave({ waiverBudget: n })
             }}
           />
+          <SettingsHelper>How much each team can spend on bids for the whole season.</SettingsHelper>
         </div>
         <div>
           <SettingsSectionLabel>Minimum bid</SettingsSectionLabel>
@@ -163,6 +169,7 @@ export function WaiverLeagueSettingsPanel({
               debouncedSave({ waiverMinBid: n })
             }}
           />
+          <SettingsHelper>The smallest bid a claim can carry. It cannot be more than the budget.</SettingsHelper>
         </div>
       </div>
 
@@ -218,17 +225,8 @@ export function WaiverLeagueSettingsPanel({
         </div>
       ) : null}
 
-      <SettingsToggleRow
-        label="After games waivers clear"
-        description="When enabled, players clear to free agency or the next waiver run after their game window (league policy)."
-        checked={clearAfter}
-        disabled={disabled}
-        onChange={(v) => {
-          setClearAfter(v)
-          debouncedSave({ waiverClearAfterGames: v })
-        }}
-      />
-
+      {/* "After games waivers clear" was removed 2026-11-26: nothing in the waiver engine read it, so the
+          switch changed nothing. The waiver period below and "Bench drops after kickoff" are the real rules. */}
       <div>
         <SettingsSectionLabel>Time players stay on waivers after drop (hours)</SettingsSectionLabel>
         <select
@@ -247,6 +245,7 @@ export function WaiverLeagueSettingsPanel({
             </option>
           ))}
         </select>
+        <SettingsHelper>A dropped player can't be added straight away: he sits on waivers this long, so every team gets a fair shot at him.</SettingsHelper>
       </div>
 
       <SettingsToggleRow
@@ -260,16 +259,8 @@ export function WaiverLeagueSettingsPanel({
         }}
       />
 
-      <SettingsToggleRow
-        label="Allow custom daily waivers"
-        description="Enables day-by-day waiver schedule stored on waiverSchedule (configure detail via import or API)."
-        checked={customDaily}
-        disabled={disabled}
-        onChange={(v) => {
-          setCustomDaily(v)
-          debouncedSave({ customDailyWaivers: v })
-        }}
-      />
+      {/* "Allow custom daily waivers" was removed 2026-11-26: no runtime read it. The real day-by-day
+          schedule is League settings → Waivers → "Schedule by day". */}
 
       <div>
         {/*

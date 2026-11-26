@@ -1,5 +1,8 @@
 'use client'
 
+import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
+import { WaiverExtrasCard } from '@/components/league-settings/WaiverExtrasCard'
+import { readWaiverExtras } from '@/lib/waivers/waiverExtras'
 import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
@@ -93,6 +96,16 @@ const HUB_FAAB_ROLLOVER_OPTIONS: Array<{ value: FaabRolloverRule; labelKey: stri
 }))
 
 /** Which of the hub's extra waiver controls apply to a league. Pure, so tests can read it directly. */
+
+/** One plain line per waiver type, shown under the picker (translations: lsHub.wv.explain.*). */
+const WAIVER_TYPE_EXPLAIN_KEYS: Record<string, string> = {
+  faab: 'lsHub.wv.explain.faab',
+  rolling: 'lsHub.wv.explain.rolling',
+  reverse_standings: 'lsHub.wv.explain.reverse_standings',
+  standard: 'lsHub.wv.explain.standard',
+  fcfs: 'lsHub.wv.explain.fcfs',
+}
+
 export function hubWaiverControlsFor(input: { waiverType: string; showFaab: boolean }) {
   return {
     faabFields: input.showFaab,
@@ -143,7 +156,10 @@ export function WaiversSection({
   ctx,
   canEdit,
   timezone,
-}: Pick<LeagueSettingsTabProps, 'ctx' | 'canEdit'> & { timezone: string }) {
+  hasAfCommissionerSub = false,
+}: Pick<LeagueSettingsTabProps, 'ctx' | 'canEdit'> & { timezone: string; hasAfCommissionerSub?: boolean }) {
+  /** Custom daily waivers are AF Commissioner (owner, 2026-11-26): without it, a schedule can only be turned off. */
+  const dailyLocked = !hasAfCommissionerSub
   const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving, savedAt, lastError, manual } = useLeagueSettingsSectionAutosave(leagueId, 'waivers', { enabled: canEdit })
@@ -343,6 +359,12 @@ export function WaiversSection({
             ))}
           </select>
           <span className="mt-1 block text-[11px] leading-snug text-white/40">{t('lsHub.wv.typeHint')}</span>
+          {/* What the chosen type actually does, in one line (owner, 2026-11-26: every waiver option explained). */}
+          {WAIVER_TYPE_EXPLAIN_KEYS[waiverType] ? (
+            <span className="mt-1 block text-[12px] leading-snug text-white/70" data-testid="league-settings-waiver-type-explain">
+              {t(WAIVER_TYPE_EXPLAIN_KEYS[waiverType]!)}
+            </span>
+          ) : null}
         </label>
 
         {waiverType !== 'fcfs' ? (
@@ -390,6 +412,7 @@ export function WaiversSection({
                 }}
                 className={SETTINGS_INPUT_CLASS}
               />
+              <span className="mt-1 block text-[11px] leading-snug text-white/40">{t('lsHub.wv.budgetHint')}</span>
             </label>
             <label className="block min-w-0">
               <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.wv.minBid')}</span>
@@ -615,10 +638,18 @@ export function WaiversSection({
               id={`daily-waivers-toggle-${leagueId}`}
               checked={schedule.enabled}
               onChange={(next) => updateSchedule({ ...schedule, enabled: next })}
-              disabled={!canEdit}
+              disabled={!canEdit || (dailyLocked && !schedule.enabled)}
               labelledBy={`daily-waivers-label-${leagueId}`}
             />
           </div>
+          {dailyLocked ? (
+            <p className="mt-2 text-[11px] leading-snug text-amber-200" data-testid="league-settings-daily-waivers-locked">
+              {t('lsHub.wv.dailyLocked')}{' '}
+              <a href={upgradePathForPlan('af_commissioner', { feature: 'daily_waiver_schedule' })} className="font-bold underline">
+                {t('lsHub.wv.dailyUpgrade')}
+              </a>
+            </p>
+          ) : null}
 
           {schedule.enabled ? (
             <div className="mt-4 space-y-3">
@@ -626,7 +657,7 @@ export function WaiversSection({
                 <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.wv.processAt')}</span>
                 <select
                   value={schedule.processHour}
-                  disabled={!canEdit}
+                  disabled={!canEdit || dailyLocked}
                   onChange={(e) => updateSchedule({ ...schedule, processHour: Number(e.target.value) })}
                   className={SETTINGS_INPUT_CLASS}
                   data-testid="league-settings-daily-waivers-hour"
@@ -651,7 +682,7 @@ export function WaiversSection({
                     <select
                       aria-labelledby={`waiver-day-${leagueId}-${day}`}
                       value={schedule.days[day]}
-                      disabled={!canEdit}
+                      disabled={!canEdit || dailyLocked}
                       onChange={(e) =>
                         updateSchedule({
                           ...schedule,
@@ -674,12 +705,22 @@ export function WaiversSection({
             </div>
           ) : null}
         </div>
+
+        {/* AF Commissioner waiver extras (lib/waivers/waiverExtras.ts). */}
+        <WaiverExtrasCard
+          leagueId={leagueId}
+          initial={readWaiverExtras(ctx.league.settings)}
+          canEdit={canEdit}
+          hasAfCommissionerSub={hasAfCommissionerSub}
+          timezoneLabel={timezone}
+          onSave={(extras) => queuePatch({ waiverExtras: extras })}
+        />
       </div>
     </section>
   )
 }
 
 /** Kept for any deep link that still names the old tab; renders the section on its own. */
-export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
-  return <WaiversSection ctx={ctx} canEdit={canEdit} timezone={ctx.league.timezone ?? 'America/New_York'} />
+export function WaiversTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettingsTabProps) {
+  return <WaiversSection ctx={ctx} canEdit={canEdit} timezone={ctx.league.timezone ?? 'America/New_York'} hasAfCommissionerSub={hasAfCommissionerSub} />
 }

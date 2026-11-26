@@ -9,6 +9,7 @@ import {
   type OrphanAdoptionRequest,
 } from "@/lib/orphan-marketplace"
 import { prisma } from "@/lib/prisma"
+import { assignLeagueSeat } from "@/lib/league/leagueSeats"
 
 type SessionWithUser = { user?: { id?: string } } | null
 
@@ -93,44 +94,19 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueI
           throw new Error("Roster is no longer orphaned.")
         }
 
-        const existingMember = await tx.roster.findFirst({
-          where: { leagueId: params.leagueId, platformUserId: request.userId },
-          select: { id: true },
+        // The one seat-assignment path (lib/league/leagueSeats.ts): it moves the Roster, the
+        // LeagueTeam AND, after the draft, RedraftRoster.ownerId. This route used to write only the
+        // first two, so an adopted native redraft team stayed owned by the orphan key for the season.
+        const seat = await assignLeagueSeat(tx, {
+          leagueId: params.leagueId,
+          rosterId: request.rosterId,
+          userId: request.userId,
         })
-        if (existingMember) throw new Error("Requester already manages a team in this league.")
-
-        await tx.roster.update({
-          where: { id: request.rosterId },
-          data: { platformUserId: request.userId },
-        })
-
-        const [profile, appUser] = await Promise.all([
-          tx.userProfile.findFirst({
-            where: { userId: request.userId },
-            select: { displayName: true, sleeperUsername: true },
-          }),
-          tx.appUser.findUnique({
-            where: { id: request.userId },
-            select: { username: true, displayName: true },
-          }),
-        ])
-        const displayName =
-          profile?.displayName?.trim() ||
-          appUser?.displayName?.trim() ||
-          appUser?.username?.trim() ||
-          profile?.sleeperUsername?.trim() ||
-          request.requesterName
-
-        await tx.leagueTeam.updateMany({
-          where: {
-            leagueId: params.leagueId,
-            OR: [{ externalId: roster.id }, { externalId: roster.platformUserId }, { externalId: request.userId }],
-          },
-          data: {
-            externalId: roster.id,
-            ownerName: displayName,
-          },
-        })
+        if (!seat.ok) {
+          throw new Error(
+            seat.code === "ALREADY_HOLDS_ROSTER" ? "Requester already manages a team in this league." : seat.message,
+          )
+        }
 
         // Auto-close other pending requests for the same roster.
         for (let i = 0; i < requests.length; i += 1) {

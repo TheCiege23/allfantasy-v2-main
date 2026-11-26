@@ -98,10 +98,12 @@ beforeEach(() => {
 })
 
 describe('the odd-size policy', () => {
-  it('locks odd keeper sizes and leaves redraft sizes free', () => {
+  it('locks odd keeper and redraft sizes (redraft since 2026-11-25), never even ones or other formats', () => {
     expect(oddTeamCountNeedsAfCommissioner('keeper', 7)).toBe(true)
     expect(oddTeamCountNeedsAfCommissioner('keeper', 8)).toBe(false)
-    expect(oddTeamCountNeedsAfCommissioner('redraft', 7)).toBe(false)
+    expect(oddTeamCountNeedsAfCommissioner('redraft', 7)).toBe(true)
+    expect(oddTeamCountNeedsAfCommissioner('redraft', 8)).toBe(false)
+    expect(oddTeamCountNeedsAfCommissioner('dynasty', 7)).toBe(false)
     const keeper = getTeamCountOptions('NFL', 'keeper')
     expect(keeper).toEqual(Array.from({ length: 17 }, (_, i) => i + 4)) // 4–20
     expect(teamCountOptionsForPlan(keeper, 'keeper', false)).toEqual([4, 6, 8, 10, 12, 14, 16, 18, 20])
@@ -152,9 +154,15 @@ describe('creating an odd-team league', () => {
     expect((await post(body('keeper', 'NFL', 22))).status).toBe(400)
   })
 
-  it.each([5, 7, 9, 19])('a %i-team redraft league stays free', async (teams) => {
+  it.each([5, 7, 9, 19])('a %i-team redraft league needs AF Commissioner (owner, 2026-11-25)', async (teams) => {
     const res = await post(body('redraft', 'NFL', teams))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(403)
+    h.hasPlan = true
+    expect((await post(body('redraft', 'NFL', teams))).status).toBe(200)
+  })
+
+  it('an even redraft league stays free', async () => {
+    expect((await post(body('redraft', 'NFL', 12))).status).toBe(200)
   })
 })
 
@@ -220,7 +228,16 @@ describe('resizing a league to an odd size before the draft', () => {
     expect(h.resizeMock.mock.calls[0]?.[2]).toMatchObject({ medianGame: true })
   })
 
-  it('resizes a redraft league to 7 without the plan, and turns league median on', async () => {
+  it('refuses a redraft league resized to 7 without the plan', async () => {
+    h.prismaMock.league.findFirst.mockResolvedValue(leagueRow({ leagueType: 'redraft' }))
+    const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
+    const res = await executeLeagueSettingsPatch('app-user-1', { leagueId: 'league-1', leagueSize: 7 })
+    expect(res.status).toBe(403)
+    expect(h.resizeMock).not.toHaveBeenCalled()
+  })
+
+  it('resizes a redraft league to 7 for a subscriber, and turns league median on', async () => {
+    h.hasPlan = true
     h.prismaMock.league.findFirst.mockResolvedValue(leagueRow({ leagueType: 'redraft' }))
     const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
     const res = await executeLeagueSettingsPatch('app-user-1', { leagueId: 'league-1', leagueSize: 7 })
@@ -229,6 +246,7 @@ describe('resizing a league to an odd size before the draft', () => {
   })
 
   it('keeps a median choice sent with the resize', async () => {
+    h.hasPlan = true
     h.prismaMock.league.findFirst.mockResolvedValue(leagueRow({ leagueType: 'redraft' }))
     const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
     const res = await executeLeagueSettingsPatch('app-user-1', { leagueId: 'league-1', leagueSize: 7, medianGame: false })

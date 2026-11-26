@@ -83,7 +83,7 @@ describe('General tab (native league)', () => {
   })
 
   it('FAAB fields only when FAAB is in use (main type or any day)', () => {
-    const r = render(<GeneralTab ctx={ctx()} canEdit hasAfCommissionerSub={false} />)
+    const r = render(<GeneralTab ctx={ctx()} canEdit hasAfCommissionerSub />)
     expect(r.queryByTestId('league-settings-faab-fields')).toBeNull()
     fireEvent.change(r.getByTestId('league-settings-waiver-type'), { target: { value: 'faab' } })
     expect(r.getByTestId('league-settings-faab-fields')).toBeTruthy()
@@ -94,8 +94,14 @@ describe('General tab (native league)', () => {
     expect(r.getByTestId('league-settings-faab-fields')).toBeTruthy()
   })
 
-  it('the daily schedule: 7 day rows, each day its own mode, saved via the waivers section', () => {
+  it('without AF Commissioner the daily schedule is locked, with an upgrade link (owner, 2026-11-26)', () => {
     const r = render(<GeneralTab ctx={ctx()} canEdit hasAfCommissionerSub={false} />)
+    expect((r.getByRole('switch', { name: 'Daily schedule' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(r.getByTestId('league-settings-daily-waivers-locked').querySelector('a')?.getAttribute('href')).toContain('plan=commissioner')
+  })
+
+  it('the daily schedule: 7 day rows, each day its own mode, saved via the waivers section', () => {
+    const r = render(<GeneralTab ctx={ctx()} canEdit hasAfCommissionerSub />)
     expect(r.queryByTestId('league-settings-daily-waivers-mon')).toBeNull()
     fireEvent.click(r.getByRole('switch', { name: 'Daily schedule' }))
     for (const d of ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']) expect(r.getByTestId(`league-settings-daily-waivers-${d}`)).toBeTruthy()

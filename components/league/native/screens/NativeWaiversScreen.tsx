@@ -130,6 +130,10 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const [roster, setRoster] = useState<{ id: string | null; ids: string[]; names: Array<{ id: string; name: string | null }>; faab: number | null; priority: number | null; capacity: number | null; starterPositions: string[] | null }>({ id: null, ids: [], names: [], faab: null, priority: null, capacity: null, starterPositions: null })
   const [watch, setWatch] = useState<string[]>([])
   const [nextRunAt, setNextRunAt] = useState<string | null>(null)
+  /** "Wed 3:00 AM PT" — when waivers clear in the league's own zone (the state route's label). */
+  const [leagueClearLabel, setLeagueClearLabel] = useState<string | null>(null)
+  /** The league turned on conditional claims (AF Commissioner waiver extra) — from the state route. */
+  const [conditionalClaims, setConditionalClaims] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('available')
@@ -199,6 +203,9 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       if (!p.ok) setError('We could not load the player pool.')
       const nr = stj?.state?.nextRunAt
       setNextRunAt(typeof nr === 'string' ? nr : null)
+      const lcl = stj?.settings?.leagueClearLabel
+      setLeagueClearLabel(typeof lcl === 'string' && lcl ? lcl : null)
+      setConditionalClaims(stj?.settings?.conditionalClaims === true)
       setWatch(w.ok && Array.isArray(wj?.playerIds) ? wj.playerIds.map(String) : [])
       await refreshMine()
     } catch {
@@ -370,7 +377,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     }
   }
 
-  const submitClaim = async (player: UnifiedPlayerWireDto, opts: { dropPlayerId: string | null; faabBid: number | null; priorityOrder: number | null }) => {
+  const submitClaim = async (player: UnifiedPlayerWireDto, opts: { dropPlayerId: string | null; faabBid: number | null; priorityOrder: number | null; conditionalGroup?: string | null }) => {
     setBusy(player.id)
     try {
       const send = (confirmed: boolean) =>
@@ -424,11 +431,16 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     await refreshMine()
   }
 
-  const runLabel = nextRunAt
+  // The league's own clear time first ("Wed 3:00 AM PT"), then — when the viewer's zone differs — their own
+  // clock for the next clear in brackets. Without a league-time clear, the viewer's clock alone, as before.
+  const viewerRun = nextRunAt
     ? new Date(nextRunAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
-    : settings?.processingDayOfWeek != null
-      ? DAYS[settings.processingDayOfWeek] ?? null
-      : null
+    : null
+  const runLabel = leagueClearLabel
+    ? viewerRun && viewerRun.replace(/([A-Z])[SD]T$/, '$1T').split(' ').pop() !== leagueClearLabel.split(' ').pop()
+      ? `${leagueClearLabel} (${viewerRun} your time)`
+      : leagueClearLabel
+    : viewerRun
   const waiverDay = nextRunAt ? DAYS[new Date(nextRunAt).getDay()] : settings?.processingDayOfWeek != null ? DAYS[settings.processingDayOfWeek] : null
   const totalBid = claims.reduce((s, c) => s + (Number(c.faabBid) || 0), 0)
   const mine = history.filter((t) => roster.id && t.roster?.id === roster.id).slice(0, 4)
@@ -715,6 +727,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         rosterPlayerIds={roster.ids}
         rosterPlayers={roster.names}
         immediate={Boolean(drawer?.immediate)}
+        conditionalClaims={conditionalClaims}
+        bidHelpLeagueId={faabMode ? id : null}
         onSubmit={async (opts) => {
           if (!drawer) return
           if (drawer.immediate) await addDrop(drawer.player, opts.dropPlayerId)

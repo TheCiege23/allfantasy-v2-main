@@ -116,6 +116,15 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
           <a className="bdx-btn pri rdk-deck-cta" href={`/league/${encodeURIComponent(leagueId)}?view=standings`}>
             Open standings →
           </a>
+          {/* After the draft, this season's draft lives here and only here (owner, 2026-11-25). */}
+          <a
+            className="bdx-btn rdk-deck-cta"
+            href={`/league/${encodeURIComponent(leagueId)}/draft-results`}
+            style={{ marginLeft: 8 }}
+            data-testid="legacy-draft-results-link"
+          >
+            See this season&apos;s draft →
+          </a>
         </div>
       ) : data && !data.supported ? (
         <div className="bdx-empty">

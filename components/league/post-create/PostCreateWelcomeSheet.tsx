@@ -1,11 +1,9 @@
 'use client'
 
 import { useEffect, useId, useRef } from 'react'
-import { ArrowRight, CalendarClock, PartyPopper, Settings2, X } from 'lucide-react'
+import { PartyPopper, X } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
-import { intlLocaleOrBrowserDefault } from '@/lib/i18n/bilingual'
 import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
-import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
 import { ClubhousePromoCard } from '@/components/community/ClubhousePromoCard'
 
 type Translate = (key: string) => string
@@ -51,21 +49,22 @@ export function formatWelcomeDraftDate(iso: string | null, timezone: string | nu
 }
 
 /**
- * "Your league is ready": what was created, the invite (QR, share sheet, text, WhatsApp, copy),
- * and the next step. Shown once, right after the intro, by the post-create welcome flow.
+ * "Your league is ready": just the invite (QR, share sheet, text, WhatsApp, copy) and a way out.
+ * Shown once, right after the intro. Kept deliberately small (owner, 2026-11-25: "it seems like a
+ * lot at once"); the league's settings are on the Draft tab, Find a League listing in Settings.
+ * `onOpenSettings` stays in the props so callers don't change; the sheet no longer links there.
  */
 export function PostCreateWelcomeSheet({
   league,
   inviteUrl,
   onClose,
-  onOpenSettings,
 }: {
   league: PostCreateWelcomeLeague
   inviteUrl: string
   onClose: () => void
   onOpenSettings: (panel: string | null) => void
 }) {
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const titleId = useId()
   const closeRef = useRef<HTMLButtonElement | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
@@ -103,37 +102,11 @@ export function PostCreateWelcomeSheet({
     }
   }, [onClose])
 
-  const draftLabel = formatWelcomeDraftDate(league.draftDateIso, league.timezone, intlLocaleOrBrowserDefault(language))
-  const scoring = [
-    league.scoringLabel,
-    typeof league.tePremiumPoints === 'number'
-      ? tx(t, 'league.welcome.tep', 'TE premium +{{points}} per catch').replace('{{points}}', String(league.tePremiumPoints))
-      : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
-
-  const rows: Array<[string, string]> = [
-    [tx(t, 'league.welcome.format', 'Format'), `${league.sport} · ${league.formatLabel}`],
-    [
-      tx(t, 'league.welcome.managers', 'Managers'),
-      tx(t, 'league.invite.joined', '{{filled}} of {{total}} managers joined')
-        .replace('{{filled}}', String(league.claimedSeats))
-        .replace('{{total}}', String(league.teamCount)),
-    ],
-    ...(scoring ? ([[tx(t, 'league.welcome.scoring', 'Scoring'), scoring]] as Array<[string, string]>) : []),
-    [tx(t, 'league.welcome.draft', 'Draft'), draftLabel ?? tx(t, 'league.welcome.draftLater', 'Not scheduled yet')],
-    ...(league.privacy
-      ? ([
-          [
-            tx(t, 'league.welcome.privacy', 'Privacy'),
-            league.privacy === 'public'
-              ? tx(t, 'league.welcome.public', 'Public')
-              : tx(t, 'league.welcome.private', 'Private (invite only)'),
-          ],
-        ] as Array<[string, string]>)
-      : []),
-  ]
+  const openSeats = Math.max(0, league.teamCount - league.claimedSeats)
+  const inviteLine =
+    openSeats > 0
+      ? tx(t, 'league.welcome.inviteMore', 'Invite {{count}} more managers to fill the league.').replace('{{count}}', String(openSeats))
+      : tx(t, 'league.welcome.full', 'Every seat is filled.')
 
   return (
     <div
@@ -172,68 +145,21 @@ export function PostCreateWelcomeSheet({
           </button>
         </div>
 
-        <div className="space-y-5 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
-          <dl className="divide-y divide-[color:var(--border-subtle)] rounded-2xl border border-[color:var(--border-subtle)]" data-testid="post-create-welcome-info">
-            {rows.map(([label, value]) => (
-              <div key={label} className="flex items-start justify-between gap-4 px-4 py-2.5 text-sm">
-                <dt className="shrink-0 font-semibold text-[color:var(--text-secondary)]">{label}</dt>
-                <dd className="min-w-0 text-right font-bold">{value}</dd>
-              </div>
-            ))}
-          </dl>
-
-          <section aria-label={tx(t, 'league.welcome.inviteHeading', 'Invite your managers')}>
-            <h3 className="mb-1 text-base font-black">{tx(t, 'league.welcome.inviteHeading', 'Invite your managers')}</h3>
-            <p className="mb-3 text-sm text-[color:var(--text-secondary)]">
-              {tx(t, 'league.welcome.inviteBody', 'Send the link however your group chats. Managers join your league from it.')}
-            </p>
-            <LeagueInviteShare url={inviteUrl} leagueName={league.name} testIdPrefix="post-create-invite" />
-          </section>
-
-          {/* Strangers fill seats too: the one moment a commissioner is already thinking about who joins. */}
-          <FindLeagueListingCard leagueId={league.id} variant="welcome" />
-
+        {/* One job only: get the invite out. League details live on the Draft tab, listing in Settings. */}
+        <div className="space-y-4 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
+          <p className="text-sm text-[color:var(--text-secondary)]" data-testid="post-create-welcome-invite-line">
+            {inviteLine}
+          </p>
+          <LeagueInviteShare url={inviteUrl} leagueName={league.name} testIdPrefix="post-create-invite" />
           <ClubhousePromoCard variant="league-created" className="rounded-xl border border-[color:var(--border)] p-4" />
-
-          <section className="space-y-2" aria-label={tx(t, 'league.welcome.nextHeading', 'Next steps')}>
-            <h3 className="text-base font-black">{tx(t, 'league.welcome.nextHeading', 'Next steps')}</h3>
-            {!draftLabel ? (
-              <button
-                type="button"
-                onClick={() => onOpenSettings('draft')}
-                className="flex min-h-12 w-full touch-manipulation items-center justify-between gap-3 rounded-xl bg-violet-600 px-4 text-left text-sm font-black text-[#ffffff]"
-                data-testid="post-create-welcome-set-draft"
-              >
-                <span className="flex items-center gap-2">
-                  <CalendarClock className="h-4 w-4" aria-hidden />
-                  {tx(t, 'league.welcome.setDraft', 'Set the draft time')}
-                </span>
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => onOpenSettings(null)}
-              className="flex min-h-12 w-full touch-manipulation items-center justify-between gap-3 rounded-xl border border-[color:var(--border-subtle)] px-4 text-left text-sm font-bold"
-              data-testid="post-create-welcome-settings"
-            >
-              <span className="flex items-center gap-2">
-                <Settings2 className="h-4 w-4" aria-hidden />
-                {tx(t, 'league.welcome.reviewSettings', 'Review league settings')}
-              </span>
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className={`flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl px-4 text-sm font-black ${
-                draftLabel ? 'bg-violet-600 text-[#ffffff]' : 'text-[color:var(--text-secondary)]'
-              }`}
-              data-testid="post-create-welcome-done"
-            >
-              {tx(t, 'league.welcome.goToLeague', 'Go to my league')}
-            </button>
-          </section>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl px-4 text-sm font-black text-[color:var(--text-secondary)]"
+            data-testid="post-create-welcome-done"
+          >
+            {tx(t, 'league.welcome.later', 'Later — go to my league')}
+          </button>
         </div>
       </div>
     </div>

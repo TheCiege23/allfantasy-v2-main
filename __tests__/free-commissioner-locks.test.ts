@@ -100,14 +100,32 @@ beforeEach(() => {
   ownerEntitledMock.mockResolvedValue(false)
 })
 
-describe('playoff bracket size is free', () => {
-  it.each([7, 9])('a commissioner with no plan can save a %i-team playoff bracket', async (playoffTeams) => {
+describe('playoff bracket size', () => {
+  // Odd fields stay free outside redraft; in REDRAFT they are AF Commissioner since 2026-11-25
+  // (owner's knowing reversal of the Oct 15 rule — lib/league/oddTeamLeagues.ts).
+  it.each([7, 9])('a commissioner with no plan can save a %i-team bracket in a non-redraft league', async (playoffTeams) => {
     const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
     const res = await executeLeagueSettingsPatch(FREE_COMMISSIONER, { leagueId: 'league-1', playoffTeams })
 
     expect(res.status).toBe(200)
     const writes = prismaMock.league.update.mock.calls.map(([arg]) => arg.data)
     expect(writes.some((data) => data.playoffTeams === playoffTeams)).toBe(true)
+  })
+
+  it.each([7, 9])('a redraft commissioner with no plan is refused a new %i-team bracket', async (playoffTeams) => {
+    prismaMock.league.findFirst.mockResolvedValue({ ...(await prismaMock.league.findFirst()), leagueType: 'redraft', playoffTeams: 6 })
+    const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
+    const res = await executeLeagueSettingsPatch(FREE_COMMISSIONER, { leagueId: 'league-1', playoffTeams })
+    expect(res.status).toBe(403)
+    expect(((await res.json()) as { code?: string }).code).toBe('ODD_PLAYOFF_TEAMS_REQUIRES_AF_COMMISSIONER')
+    expect(prismaMock.league.update).not.toHaveBeenCalled()
+  })
+
+  it('a redraft league keeps an odd bracket it already has, and even sizes stay free', async () => {
+    prismaMock.league.findFirst.mockResolvedValue({ ...(await prismaMock.league.findFirst()), leagueType: 'redraft', playoffTeams: 7 })
+    const { executeLeagueSettingsPatch } = await import('@/lib/league/execute-league-settings-patch')
+    expect((await executeLeagueSettingsPatch(FREE_COMMISSIONER, { leagueId: 'league-1', playoffTeams: 7 })).status).toBe(200)
+    expect((await executeLeagueSettingsPatch(FREE_COMMISSIONER, { leagueId: 'league-1', playoffTeams: 8 })).status).toBe(200)
   })
 
   it('still refuses a bracket larger than the league', async () => {

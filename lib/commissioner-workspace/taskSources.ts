@@ -51,6 +51,12 @@ export interface WorkspaceTaskCandidate {
    * drift here surfaces as a dropped link rather than as a dead route.
    */
   relatedLinks: { label: string; moduleId: 'analytics' | 'managers' | 'settings'; href: string }[]
+  /**
+   * Also tell the commissioners, once, when this condition is FIRST detected (taskStore.ts sends it on
+   * insert only — never again for the same sourceKey). For conditions that need a decision before a
+   * deadline, such as a game day the waiver schedule leaves without a free-agent window.
+   */
+  notifyOnOpen?: { title: string; body: string; actionHref: string; actionLabel: string }
 }
 
 function days(n: number): string {
@@ -332,6 +338,8 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     const { readTaxiStealTasks } = await import('@/lib/taxi/taxiStealingService')
     // Managers who have not seen the newest rule change (lib/league-rules-explainer/awareness.ts).
     const { readUnseenRuleChangeTasks } = await import('@/lib/league-rules-explainer/awarenessService')
+    // Game days the per-day waiver schedule leaves without a free-agent window (AF Commissioner only).
+    const { readGameDayWaiverConflictTasks } = await import('@/lib/waivers/gameDayWaiverConflictService')
     return [
       ...(orphans ? [orphans] : []),
       ...await readOperationalTasks(leagueId, now),
@@ -343,6 +351,7 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
       ...await readPickTermsTasks(leagueId),
       ...await readTaxiStealTasks(leagueId, now),
       ...await readUnseenRuleChangeTasks(leagueId, now),
+      ...await readGameDayWaiverConflictTasks(leagueId, now).catch(() => []),
     ]
   }
 

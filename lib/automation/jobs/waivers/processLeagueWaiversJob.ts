@@ -36,6 +36,10 @@ const WAIVER_SKIP_MESSAGES: Record<WaiverRunSkipReason, string> = {
   run_in_progress: "League skipped: another waiver run for this league was still in progress. Pending claims stay pending for the next run.",
   guillotine_chop_pending:
     "League skipped: this week's Guilly chop has not landed yet. Pending claims stay pending and settle on the first run after the chop.",
+  processing_locked: "League skipped: the commissioner paused waiver processing. Pending claims stay pending until it resumes.",
+  not_a_waiver_day: "League skipped: today is not a waiver day on the league's schedule. Pending claims settle on the next waiver day.",
+  claims_not_due:
+    "League skipped: every pending claim is still waiting (a dropped player's hold, or a blind-bid window). They settle on the first run after it ends.",
 }
 
 function mapRunType(trigger: ProcessLeagueWaiversInput["trigger"]): string {

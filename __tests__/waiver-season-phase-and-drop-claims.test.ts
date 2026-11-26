@@ -60,7 +60,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/waiver-wire/settings-service', () => ({ getEffectiveLeagueWaiverSettings: async () => h.effective }))
-vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ getLeagueWaiverState: async () => null, upsertLeagueWaiverStateAfterRun: async () => {} }))
+vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ getLeagueWaiverState: async () => null, upsertLeagueWaiverStateAfterRun: async () => {}, refreshLeagueWaiverNextRunAt: vi.fn(async () => null) }))
 vi.mock('@/lib/waiver-wire/run-hooks', () => ({ onWaiverRunComplete: async () => {} }))
 vi.mock('@/lib/specialty-league/registry', () => ({ getSpecialtySpecByVariant: () => null }))
 vi.mock('@/lib/survivor/SurvivorEffectEngine', () => ({ isWaiverFrozenForRoster: async () => false }))
@@ -74,7 +74,7 @@ vi.mock('@/lib/guillotine/blindWaiverCutoff', () => ({ guillotineClaimsCutoff: a
 vi.mock('@/lib/guillotine/guillotineGuard', () => ({ isRosterChopped: async () => false }))
 vi.mock('@/lib/survivor/SurvivorRosterState', () => ({ isRosterCurrentlyEliminated: async () => false }))
 vi.mock('@/lib/devy/waiver/DevyWaiverRules', () => ({ validateDevyWaiverClaim: async () => ({ allowed: true }) }))
-vi.mock('@/lib/waiver-wire/transaction-eligibility', () => ({ assertWaiverClaimEligibility: async () => undefined }))
+vi.mock('@/lib/waiver-wire/transaction-eligibility', () => ({ assertWaiverClaimEligibility: async () => undefined, waiverRunDropRefusal: vi.fn(async () => null) }))
 vi.mock('@/lib/waiver-wire/daily-schedule-gate', () => ({ loadDailyTransactionPolicy: async () => null }))
 vi.mock('@/lib/waiver-wire/waiver-validation', () => ({
   assertClaimWithinLimits: async () => ({ ok: true }),
@@ -152,9 +152,19 @@ describe('claims on a dropped player wait for his waiver period, then follow the
     claimsOnDroppedX()
     h.claims = h.claims.filter((c) => (c as { rosterId: string }).rosterId !== 'A')
     const runCreate = vi.spyOn((await import('@/lib/prisma')).prisma.waiverRun as { create: () => Promise<unknown> }, 'create')
-    expect(await processWaiverClaimsForLeague('L')).toEqual([])
+    const { refreshLeagueWaiverNextRunAt } = await import('@/lib/waiver-wire/waiver-state-service')
+    vi.mocked(refreshLeagueWaiverNextRunAt).mockClear()
+    const onSkip = vi.fn()
+    expect(await processWaiverClaimsForLeague('L', { onSkip })).toEqual([])
     expect(h.claimUpdate).not.toHaveBeenCalled()
     expect(runCreate).not.toHaveBeenCalled()
+    // 🛑 Not a silent "completed": the job must be told it was skipped, and the next run moves to the
+    // first scheduled run after the hold ends — or the spent idempotency key strands these claims.
+    expect(onSkip).toHaveBeenCalledWith('claims_not_due')
+    const [leagueId, , notBefore] = vi.mocked(refreshLeagueWaiverNextRunAt).mock.calls[0]!
+    expect(leagueId).toBe('L')
+    expect(notBefore).toBeInstanceOf(Date)
+    expect((notBefore as Date).getTime()).toBeGreaterThan(Date.now())
     runCreate.mockRestore()
   })
 
@@ -318,5 +328,109 @@ describe('season phase and policy (pure)', () => {
 
   it('claim refusals read as closed waivers (the claims route maps them to WAIVER_CLOSED)', () => {
     for (const reason of Object.values(PHASE_REASONS)) expect(reason.toLowerCase().startsWith('waiver claims are closed')).toBe(true)
+  })
+})
+
+describe('rolling waivers re-read the order after every award (2026-11-26)', () => {
+  it('a team that wins moves to the back before its next claim: priority 2 gets the player priority 1 also wanted', async () => {
+    setType('rolling')
+    const shared = { A: { id: 'A', platformUserId: 'uA', playerData: [], faabRemaining: 100, waiverPriority: 1 }, C: { id: 'C', platformUserId: 'uC', playerData: [], faabRemaining: 100, waiverPriority: 2 } }
+    const row = (id: string, rosterId: 'A' | 'C', addPlayerId: string, priorityOrder: number) => ({
+      id, leagueId: 'L', rosterId, addPlayerId, dropPlayerId: null, faabBid: null, priorityOrder, status: 'pending',
+      createdAt: new Date('2026-10-20T10:00:00Z'), metadata: null, roster: { ...shared[rosterId] },
+    })
+    // A (priority 1) wants X first, then Y. C (priority 2) wants Y.
+    h.claims = [row('a-x', 'A', 'X', 1), row('a-y', 'A', 'Y', 2), row('c-y', 'C', 'Y', 3)]
+    const results = await processWaiverClaimsForLeague('L')
+    const won = results.filter((r) => r.success).map((r) => [r.rosterId, r.addPlayerId])
+    expect(won).toEqual([['A', 'X'], ['C', 'Y']])
+    expect(results.find((r) => r.claimId === 'a-y')?.success).toBe(false)
+  })
+})
+
+describe('reverse standings in a NATIVE league, where standings are keyed by roster id (2026-11-26)', () => {
+  it('the worst team wins the contested player', async () => {
+    setType('reverse_standings')
+    h.claims = [claim('A', 0, 1, 'uA', 'Z'), claim('B', 0, 3, 'uB', 'Z'), claim('C', 0, 2, 'uC', 'Z')]
+    // Native LeagueTeam.externalId is the Roster id, not the manager's user id. B is last.
+    h.ranks = [{ externalId: 'A', currentRank: 2 }, { externalId: 'B', currentRank: 12 }, { externalId: 'C', currentRank: 7 }]
+    const results = await processWaiverClaimsForLeague('L')
+    expect(winner(results)).toBe('B')
+  })
+})
+
+describe('drop rules are checked again when the claim is processed (2026-11-26)', () => {
+  it('a drop refused at run time (game started since the claim was filed) fails the claim and changes nothing', async () => {
+    setType('rolling')
+    const { waiverRunDropRefusal } = await import('@/lib/waiver-wire/transaction-eligibility')
+    vi.mocked(waiverRunDropRefusal).mockResolvedValueOnce('This bench player is locked because their game has started.')
+    h.claims = [{
+      id: 'c-drop', leagueId: 'L', rosterId: 'A', addPlayerId: 'NEW', dropPlayerId: 'OLD', faabBid: null, priorityOrder: 1, status: 'pending',
+      createdAt: new Date('2026-10-20T10:00:00Z'), metadata: null,
+      roster: { id: 'A', platformUserId: 'uA', playerData: ['OLD'], faabRemaining: 100, waiverPriority: 1 },
+    }]
+    const results = await processWaiverClaimsForLeague('L')
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ success: false, message: 'This bench player is locked because their game has started.' })
+    expect(vi.mocked(waiverRunDropRefusal).mock.calls[0]![0]).toMatchObject({ rosterId: 'A', dropPlayerId: 'OLD' })
+  })
+})
+
+describe('AF Commissioner waiver extras in the run (2026-11-26)', () => {
+  const row = (id: string, rosterId: 'A' | 'B' | 'C' | 'D', addPlayerId: string, priorityOrder: number, opts: { bid?: number; group?: string; pri?: number } = {}) => ({
+    id, leagueId: 'L', rosterId, addPlayerId, dropPlayerId: null, faabBid: opts.bid ?? null, priorityOrder, status: 'pending',
+    createdAt: new Date('2026-10-20T10:00:00Z'), metadata: opts.group ? { conditionalGroup: opts.group } : null,
+    roster: { id: rosterId, platformUserId: `u${rosterId}`, playerData: [], faabRemaining: 100, waiverPriority: opts.pri ?? 1 },
+  })
+  const extras = (over: Record<string, unknown>) => ({
+    af_waiver_extras: {
+      version: 1, conditionalClaims: false, faabRefills: [], rebuildPriority: false,
+      secondChance: { enabled: false, maxGap: 1 }, runReport: { enabled: false, hideLosingBids: false }, faLockWindows: [], ...over,
+    },
+  })
+  const won = (results: Array<{ rosterId: string; addPlayerId?: string; success: boolean }>) =>
+    results.filter((r) => r.success).map((r) => `${r.rosterId}:${r.addPlayerId}`)
+
+  it('conditional claims: once the first choice in a group is won, the rest of the group is skipped', async () => {
+    setType('rolling')
+    h.claims = [row('a1', 'A', 'X', 1, { group: 'rb' }), row('a2', 'A', 'Y', 2, { group: 'rb' })]
+    h.league = { ...h.league, settings: extras({ conditionalClaims: true }) }
+    const on = await processWaiverClaimsForLeague('L')
+    expect(won(on)).toEqual(['A:X'])
+    expect(on.find((r) => r.claimId === 'a2')?.message).toBe('Skipped: an earlier choice in this group was won.')
+    // Off: the same two claims both win.
+    h.claims = [row('a1', 'A', 'X', 1, { group: 'rb' }), row('a2', 'A', 'Y', 2, { group: 'rb' })]
+    h.league = { ...h.league, settings: extras({}) }
+    expect(won(await processWaiverClaimsForLeague('L'))).toEqual(['A:X', 'A:Y'])
+  })
+
+  it('second chance: losing a FAAB bid by $1 moves that team\'s next choice to the front', async () => {
+    setType('faab')
+    const claims = () => [
+      row('c-x', 'C', 'X', 1, { bid: 11 }),
+      row('b-x', 'B', 'X', 2, { bid: 10, group: 'g' }),
+      row('d-y', 'D', 'Y', 3, { bid: 5 }),
+      row('b-y', 'B', 'Y', 4, { bid: 3, group: 'g' }),
+    ]
+    h.claims = claims()
+    h.league = { ...h.league, settings: extras({ conditionalClaims: true, secondChance: { enabled: true, maxGap: 1 } }) }
+    expect(won(await processWaiverClaimsForLeague('L'))).toEqual(['C:X', 'B:Y'])
+    // Off: D's higher bid on Y wins as usual.
+    h.claims = claims()
+    h.league = { ...h.league, settings: extras({ conditionalClaims: true }) }
+    expect(won(await processWaiverClaimsForLeague('L'))).toEqual(['C:X', 'D:Y'])
+  })
+
+  it('rebuild priority: in the playoffs, a team out of the bracket claims before a team still in it', async () => {
+    setType('rolling')
+    h.season = { id: 's1', status: 'playoffs' }
+    h.redraftRosters = [{ id: 'rrB', ownerId: 'uB', isEliminated: true }]
+    const claims = () => [row('a-z', 'A', 'Z', 1, { pri: 1 }), row('b-z', 'B', 'Z', 2, { pri: 3 })]
+    h.claims = claims()
+    h.league = { ...h.league, lifecycleState: 'in_season', settings: extras({ rebuildPriority: true }) }
+    expect(won(await processWaiverClaimsForLeague('L'))).toEqual(['B:Z'])
+    h.claims = claims()
+    h.league = { ...h.league, settings: extras({}) }
+    expect(won(await processWaiverClaimsForLeague('L'))).toEqual(['A:Z'])
   })
 })

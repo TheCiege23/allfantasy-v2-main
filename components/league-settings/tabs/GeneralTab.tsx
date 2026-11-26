@@ -35,6 +35,7 @@ const DEFAULT_TZ = 'America/New_York'
 export function GeneralTab({
   ctx,
   canEdit,
+  hasAfCommissionerSub,
   showWaivers = true,
 }: LeagueSettingsTabProps & {
   /** The League Settings list opens Waivers as its own row, so its General page omits it. */
@@ -180,7 +181,7 @@ export function GeneralTab({
         ) : null}
       </section>
 
-      {showWaivers ? <WaiversSection ctx={ctx} canEdit={canEdit} timezone={timezone} /> : null}
+      {showWaivers ? <WaiversSection ctx={ctx} canEdit={canEdit} timezone={timezone} hasAfCommissionerSub={hasAfCommissionerSub} /> : null}
     </div>
   )
 }

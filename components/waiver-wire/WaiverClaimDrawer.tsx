@@ -21,7 +21,7 @@ type DrawerProps = {
   faabMode: boolean
   faabRemaining: number | null
   hasOpenRosterSpot?: boolean
-  onSubmit: (opts: { dropPlayerId: string | null; faabBid: number | null; priorityOrder: number | null }) => Promise<void> | void
+  onSubmit: (opts: { dropPlayerId: string | null; faabBid: number | null; priorityOrder: number | null; conditionalGroup?: string | null }) => Promise<void> | void
   rosterPlayerIds: string[]
   /** Optional roster options with display names for the drop selector. When provided, options show name (fallback: id). */
   rosterPlayers?: RosterOption[]
@@ -30,7 +30,17 @@ type DrawerProps = {
    * no claim priority and its button reads "Add". Absent, it is a waiver claim as before.
    */
   immediate?: boolean
+  /** The league turned on conditional claims (AF Commissioner waiver extra): offer a claim group. */
+  conditionalClaims?: boolean
+  /** Set to offer Chimmy bid help (AF Pro) on a FAAB claim; the route checks the plan. */
+  bidHelpLeagueId?: string | null
 }
+
+type BidHelpState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'shown'; note: string; typical: number | null }
+  | { kind: 'locked'; href: string }
 
 export default function WaiverClaimDrawer({
   open,
@@ -43,6 +53,8 @@ export default function WaiverClaimDrawer({
   rosterPlayerIds,
   rosterPlayers,
   immediate = false,
+  conditionalClaims = false,
+  bidHelpLeagueId = null,
 }: DrawerProps) {
   const dropOptions = rosterPlayers?.length ? rosterPlayers : rosterPlayerIds.map((id) => ({ id, name: null }))
   // The name alone: a roster id means nothing to a manager. The id is the fallback when no name is known.
@@ -51,12 +63,16 @@ export default function WaiverClaimDrawer({
   const [bid, setBid] = useState<string>("")
   const [priority, setPriority] = useState<string>("")
   const [submitting, setSubmitting] = useState(false)
+  const [group, setGroup] = useState<string>("")
+  const [bidHelp, setBidHelp] = useState<BidHelpState>({ kind: 'idle' })
 
   useEffect(() => {
     if (!open) {
       setDropId("")
       setBid("")
       setPriority("")
+      setGroup("")
+      setBidHelp({ kind: 'idle' })
       setSubmitting(false)
     }
   }, [open])
@@ -84,6 +100,7 @@ export default function WaiverClaimDrawer({
         dropPlayerId: dropId || null,
         faabBid,
         priorityOrder,
+        ...(conditionalClaims && !immediate && group ? { conditionalGroup: group } : {}),
       })
     } finally {
       setSubmitting(false)
@@ -174,8 +191,64 @@ export default function WaiverClaimDrawer({
               />
               {faabRemaining != null && <span className="text-xs text-[var(--accent)]">${faabRemaining} remaining</span>}
             </div>
+            {bidHelpLeagueId && !immediate ? (
+              <div className="mt-2 text-xs" data-testid="waiver-bid-help">
+                {bidHelp.kind === 'idle' || bidHelp.kind === 'loading' ? (
+                  <button
+                    type="button"
+                    disabled={bidHelp.kind === 'loading'}
+                    onClick={async () => {
+                      setBidHelp({ kind: 'loading' })
+                      const res = await fetch(`/api/waiver-wire/leagues/${encodeURIComponent(bidHelpLeagueId)}/bid-help`, { cache: 'no-store' }).catch(() => null)
+                      const j = res ? await res.json().catch(() => ({})) : {}
+                      if (res?.status === 402) return setBidHelp({ kind: 'locked', href: String(j?.upgradeHref ?? '/upgrade?plan=pro') })
+                      setBidHelp({ kind: 'shown', note: String(j?.note ?? 'Bid help is unavailable right now.'), typical: j?.ok ? Number(j.typical) : null })
+                    }}
+                    className="font-semibold text-[var(--accent)] underline disabled:opacity-60"
+                  >
+                    {bidHelp.kind === 'loading' ? 'Asking Chimmy…' : 'Ask Chimmy what to bid'}
+                  </button>
+                ) : bidHelp.kind === 'locked' ? (
+                  <span className="text-[var(--muted)]">
+                    Chimmy bid help is part of AF Pro. <a href={bidHelp.href} className="font-semibold text-[var(--accent)] underline">Upgrade</a>
+                  </span>
+                ) : (
+                  <span className="text-[var(--text)]">
+                    {bidHelp.note}
+                    {bidHelp.typical != null ? (
+                      <>
+                        {' '}
+                        <button type="button" onClick={() => setBid(String(bidHelp.typical))} className="font-semibold text-[var(--accent)] underline">
+                          Use ${bidHelp.typical}
+                        </button>
+                      </>
+                    ) : null}
+                  </span>
+                )}
+              </div>
+            ) : null}
           </div>
         )}
+
+        {/* Conditional claims: "get A; if I lose A, try B" (AF Commissioner waiver extra). */}
+        {conditionalClaims && !immediate ? (
+          <div>
+            <label className="mb-1.5 block text-xs text-[var(--muted)]" htmlFor="waiver-claim-group">
+              Claim group (optional)
+            </label>
+            <select
+              id="waiver-claim-group"
+              value={group}
+              onChange={(e) => setGroup(e.target.value)}
+              data-testid="waiver-claim-group"
+              className="min-h-11 w-40 rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-3 text-sm text-[var(--text)] outline-none"
+            >
+              <option value="">No group</option>
+              {['A', 'B', 'C', 'D'].map((g) => <option key={g} value={g}>Group {g}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-[var(--muted)]">Claims in the same group are backups: once one wins, the rest of the group is skipped. Order them with Claim order.</p>
+          </div>
+        ) : null}
 
         {/* A free agent is added now; only a claim waits in an order. */}
         {!immediate && (

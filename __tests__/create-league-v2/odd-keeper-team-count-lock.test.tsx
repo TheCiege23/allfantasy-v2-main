@@ -29,17 +29,25 @@ describe('odd keeper sizes in the create wizard', () => {
     expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4 to 20')
   })
 
-  it('redraft shows no lock — its odd sizes are free', () => {
+  it('redraft odd sizes are AF Commissioner too (owner, 2026-11-25), with the same upgrade link', () => {
     render(<LeagueBasicsStep state={{ ...keeper, leagueType: 'redraft' }} onChange={vi.fn()} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('step', '2')
+    expect(screen.getByTestId('g30-team-count-locked')).toHaveTextContent(/Odd sizes \(3, 5, 7…\) are part of AF Commissioner\./)
+    expect(screen.getByTestId('g30-team-count-upgrade').getAttribute('href')).toContain('plan=commissioner')
+  })
+
+  it('redraft with AF Commissioner: odd sizes open, nothing locked', () => {
+    render(<LeagueBasicsStep state={{ ...keeper, leagueType: 'redraft' }} onChange={vi.fn()} fieldErrors={null} hasCommissioner />)
     expect(screen.queryByTestId('g30-team-count-locked')).toBeNull()
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('step', '1')
   })
 
   it('picking an odd size turns league median on; back to even turns it off', () => {
     const onChange = vi.fn()
-    const view = render(<LeagueBasicsStep state={{ ...keeper, leagueType: 'redraft' }} onChange={onChange} fieldErrors={null} />)
+    const view = render(<LeagueBasicsStep state={{ ...keeper, leagueType: 'redraft' }} onChange={onChange} fieldErrors={null} hasCommissioner />)
     fireEvent.change(screen.getByTestId('g30-team-count'), { target: { value: '11' } })
     expect(onChange.mock.calls[0]![0]).toMatchObject({ teamCount: 11, medianGame: true })
-    view.rerender(<LeagueBasicsStep state={{ ...keeper, leagueType: 'redraft', teamCount: 11, medianGame: true }} onChange={onChange} fieldErrors={null} />)
+    view.rerender(<LeagueBasicsStep state={{ ...keeper, leagueType: 'redraft', teamCount: 11, medianGame: true }} onChange={onChange} fieldErrors={null} hasCommissioner />)
     fireEvent.change(screen.getByTestId('g30-team-count'), { target: { value: '9' } })
     expect(onChange.mock.calls[1]![0]).not.toHaveProperty('medianGame')
     fireEvent.change(screen.getByTestId('g30-team-count'), { target: { value: '10' } })

@@ -70,6 +70,7 @@ import {
   type PriorWaiverProcessing,
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
+import { WAIVER_EXTRAS_SETTINGS_KEY, anyWaiverExtraOn, parseWaiverExtras, readWaiverExtras, type WaiverExtras } from '@/lib/waivers/waiverExtras'
 import { syncTaxiSlotsToDynastyConfig } from '@/lib/taxi/taxiSlotsSync'
 import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
 import {
@@ -107,7 +108,7 @@ import { planSeasonPlayoffStartSync, type PlayoffStartSyncPlan } from '@/lib/sch
 import { applySeasonPlayoffStartSync, loadCurrentSeasonForPlayoffSync } from '@/lib/schedule-runtime/seasonPlayoffStartSyncApply'
 import { MID_SEASON_CONFIRMATION_CODE, hasMidSeasonConfirmation } from '@/lib/league/midSeasonConfirmation'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
-import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddPlayoffFieldNeedsAfCommissioner, oddTeamCountNeedsAfCommissioner, oddTeamGateLeagueWord } from '@/lib/league/oddTeamLeagues'
 import { EXTRA_MATCHUP_SETTINGS_KEY, parseExtraMatchupSettings, readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { readThirdPlaceGameEnabled, THIRD_PLACE_GAME_SETTINGS_KEY } from '@/lib/playoff-runtime/thirdPlaceGame'
@@ -415,24 +416,33 @@ export async function executeLeagueSettingsPatch(
     return jsonError('AF Commissioner or AF Supreme is required for Commissioner Intelligence and League Helper settings.', 403)
   }
 
-  // A pre-draft resize to an odd keeper size is the same AF Commissioner option creation offers
-  // (lib/league/oddTeamLeagues.ts). Redraft odd sizes stay free.
+  // A pre-draft resize to an odd redraft or keeper size is the same AF Commissioner option creation
+  // offers (lib/league/oddTeamLeagues.ts; redraft gated by the owner 2026-11-25).
   if (body.leagueSize != null && Number(body.leagueSize) !== league.leagueSize &&
       oddTeamCountNeedsAfCommissioner(league.leagueType, Number(body.leagueSize)) && !hasSub) {
     return NextResponse.json(
       {
-        error: `A ${Number(body.leagueSize)}-team keeper league is part of AF Commissioner. Choose an even team count or upgrade.`,
+        error: `A ${Number(body.leagueSize)}-team ${oddTeamGateLeagueWord(league.leagueType)}league is part of AF Commissioner. Choose an even team count or upgrade.`,
         code: 'ODD_TEAM_COUNT_REQUIRES_AF_COMMISSIONER',
       },
       { status: 403 },
     )
   }
 
-  // ⚠ 7- and 9-team playoff brackets are NOT a paid feature. They were refused here without
-  // AF Commissioner, but the bracket engine seeds any field the same way — pad to the next power
-  // of two and hand the top seeds first-round byes (canonicalNflRedraftPlayoffRuntime) — so a
-  // 7-team bracket is built exactly like the free 6-team one. Running a league is free; only the
-  // league-size bound below applies.
+  // Odd redraft playoff fields (3, 5, 7, 9…) are AF Commissioner since 2026-11-25 — the owner's
+  // knowing reversal of the Oct 15 "brackets are free" rule (lib/league/oddTeamLeagues.ts). The
+  // bracket engine still builds any field (pad to a power of two, byes to top seeds); this gates
+  // only CHOOSING a new odd field, so a league keeps a size it already has.
+  if (body.playoffTeams != null && oddPlayoffFieldNeedsAfCommissioner(league.leagueType, Number(body.playoffTeams)) &&
+      Number(body.playoffTeams) !== league.playoffTeams && !hasSub) {
+    return NextResponse.json(
+      {
+        error: `A ${Number(body.playoffTeams)}-team playoff field is part of AF Commissioner. Choose an even number or upgrade.`,
+        code: 'ODD_PLAYOFF_TEAMS_REQUIRES_AF_COMMISSIONER',
+      },
+      { status: 403 },
+    )
+  }
 
   if (body.timezone != null) {
     const tz = String(body.timezone)
@@ -1003,9 +1013,43 @@ export async function executeLeagueSettingsPatch(
   let priorProcessingToStore: PriorWaiverProcessing | null | undefined = undefined
   /** Set when the schedule is being turned OFF: the processing schedule to restore. */
   let processingToRestore: PriorWaiverProcessing | null = null
+  /*
+   * AF Commissioner waiver extras (lib/waivers/waiverExtras.ts). Same gate as the day-by-day schedule:
+   * turning extras off, or re-saving what the league has, is free; turning one on or changing it is not.
+   */
+  let waiverExtrasToStore: WaiverExtras | null = null
+  if (body.waiverExtras !== undefined) {
+    const extras = parseWaiverExtras(body.waiverExtras)
+    if (!extras) return jsonError('Invalid waiverExtras', 400)
+    const current = readWaiverExtras(league.settings)
+    const unchanged = JSON.stringify(current) === JSON.stringify(extras)
+    if (anyWaiverExtraOn(extras) && !unchanged && !hasSub) {
+      return NextResponse.json(
+        { error: 'These waiver tools are part of AF Commissioner.', code: 'WAIVER_EXTRAS_REQUIRE_AF_COMMISSIONER' },
+        { status: 403 },
+      )
+    }
+    waiverExtrasToStore = extras
+  }
+
   if (body.dailyWaiverSchedule !== undefined) {
     const schedule = parseDailyWaiverSchedule(body.dailyWaiverSchedule)
     if (!schedule) return jsonError('Invalid dailyWaiverSchedule', 400)
+    // The day-by-day schedule is an AF Commissioner setting (owner, 2026-11-26). Turning it off is always
+    // allowed, and a league keeps a schedule it already has — only turning one on or changing it is gated.
+    {
+      const current = readDailyWaiverScheduleFromSettings(league.settings)
+      const unchanged = current != null && JSON.stringify(current) === JSON.stringify(schedule)
+      if (schedule.enabled && !unchanged && !hasSub) {
+        return NextResponse.json(
+          {
+            error: 'Custom daily waivers are part of AF Commissioner. Upgrade to set waivers day by day.',
+            code: 'DAILY_WAIVER_SCHEDULE_REQUIRES_AF_COMMISSIONER',
+          },
+          { status: 403 },
+        )
+      }
+    }
     const prevSettings = (league.settings as Record<string, unknown> | null) ?? {}
     const prevSchedule = readDailyWaiverScheduleFromSettings(prevSettings)
     const storedPrior = parsePriorWaiverProcessing(prevSettings[DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY])
@@ -1264,6 +1308,15 @@ export async function executeLeagueSettingsPatch(
       },
     })
     updatedFieldNames.push('draft_rounds')
+  }
+
+  if (waiverExtrasToStore) {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [WAIVER_EXTRAS_SETTINGS_KEY]: waiverExtrasToStore } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(WAIVER_EXTRAS_SETTINGS_KEY)
   }
 
   if (dailyWaiverScheduleToStore) {

@@ -25,7 +25,8 @@ describe('Sleeper tabs', () => {
       Draft: ['Draft HQ'],
       Matchup: ['Matchup', 'Schedule', 'War Room'],
       Team: ['My team', 'Players & waivers', 'Player search', 'Chimmy Coaching'],
-      League: ['Overview', 'Standings & playoffs', 'Activity', 'League chat', 'Legacy'],
+      // Sleeper-simple (owner, 2026-11-25): League opens on standings; the overview is last.
+      League: ['Standings & playoffs', 'League history', 'Activity', 'League chat', 'Overview'],
       Trade: ['Trades', 'Decision OS'],
       News: ['News', 'Live Intel'],
       Settings: ['League settings', 'Commissioner tools'],
@@ -40,16 +41,18 @@ describe('Sleeper tabs', () => {
   })
 
   it('a top tab opens its first sub-tab, and a sub-tab finds its top tab', () => {
-    expect(tabs.map(t => t.id)).toEqual(['draft', 'matchups', 'roster', 'native_home', 'trades', 'news', 'settings'])
+    expect(tabs.map(t => t.id)).toEqual(['draft', 'matchups', 'roster', 'standings', 'trades', 'news', 'settings'])
     expect(nativeNavTabFor(groups, 'waivers')?.label).toBe('Team')
     expect(nativeNavTabFor(groups, 'decide')?.label).toBe('Trade')
     expect(nativeNavTabFor(groups, 'nope')).toBeNull()
   })
 
-  it('after the draft, Draft HQ moves under League and Draft is no longer a tab', () => {
-    const after = buildNativeLeagueNavigation(CORE, true, false, undefined, { draftDone: true })[0].items
+  it('after the draft, the draft lives only in League history: no Draft tab, no Draft HQ anywhere in the nav', () => {
+    const groupsAfter = buildNativeLeagueNavigation(CORE, true, false, undefined, { draftDone: true })
+    const after = groupsAfter[0].items
     expect(after.map(t => t.label)).toEqual(['Matchup', 'Team', 'League', 'Trade', 'News', 'Settings'])
-    expect(after.find(t => t.label === 'League')?.children.map(c => c.id)).toContain('draft')
+    expect(nativeNavLeafIds(groupsAfter)).not.toContain('draft')
+    expect(after.find(t => t.label === 'League')?.children.map(c => c.id)).toContain('legacy')
   })
 
   it('a member gets the read-only League settings and no commissioner tools', () => {
