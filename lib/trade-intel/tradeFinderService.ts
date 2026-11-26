@@ -33,11 +33,11 @@ import {
   type MarketPlayer,
 } from '@/lib/sports-data/sleeperMarketService'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
+import { liveLeagueRosters, liveLeagueUsers } from '@/lib/sleeper/liveLeagueFeed'
 import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { gradeAllWithinBudget, gradeGapPct, type FinderGrade } from '@/lib/trade-finder/finderGrade'
 
-const SLEEPER = 'https://api.sleeper.app/v1'
 const FAIRNESS_BAND = 30 // generation: max ADP gap for a candidate 1-for-1
 const VALUE_FAIRNESS_PCT = 20 // verdict: max % gap on THE league trade grade
 /** Candidates graded per request — generation-ranked first, so the cheap pass decides only who is graded. */
@@ -46,15 +46,6 @@ const GRADE_BUDGET_MS = 8_000
 const NO_GRADER = 'This league’s trade grade is not available here.'
 const SURPLUS_ADP_CEILING = 200 // bench players ranked worse than this aren't trade bait
 
-async function j<T>(path: string): Promise<T | null> {
-  try {
-    const res = await fetch(`${SLEEPER}${path}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    return (await res.json()) as T
-  } catch {
-    return null
-  }
-}
 
 type WireRoster = { roster_id: number; owner_id: string | null; players?: string[] | null }
 type WireUser = {
@@ -231,8 +222,10 @@ export async function getTradeFinder(
 
   // Completed-trade COUNTS only (manager activity) — no letter from this ledger reaches a proposal.
   const [rosters, users, board, grades] = await Promise.all([
-    j<WireRoster[]>(`/league/${sleeperLeagueId}/rosters`),
-    j<WireUser[]>(`/league/${sleeperLeagueId}/users`),
+    // Through the allowlisted, short-cached Sleeper adapter — never a raw vendor call on a request path (DB-first guard).
+    liveLeagueRosters(sleeperLeagueId) as Promise<WireRoster[] | null>,
+    // The wire payload carries `avatar`; the adapter's type just does not declare it.
+    liveLeagueUsers(sleeperLeagueId) as Promise<WireUser[] | null>,
     getSeasonBoard(context.season),
     getTradeGrades(sleeperLeagueId).catch(() => null),
   ])
