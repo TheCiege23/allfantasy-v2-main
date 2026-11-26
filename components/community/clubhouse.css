@@ -451,10 +451,12 @@ a.ch-pill:hover { border-color: var(--line2); color: var(--text); }
 .ch-badge[data-badge='commish'] { color: #34d399; background: rgba(52, 211, 153, 0.13); border-color: rgba(52, 211, 153, 0.3); }
 .ch-badge[data-badge='shipped'] { color: #e879f9; background: rgba(232, 121, 249, 0.13); border-color: rgba(232, 121, 249, 0.3); }
 .ch-badge[data-badge='new'] { color: #38bdf8; background: rgba(56, 189, 248, 0.13); border-color: rgba(56, 189, 248, 0.3); }
+.ch-badge[data-badge='top'] { color: #fb923c; background: rgba(251, 146, 60, 0.13); border-color: rgba(251, 146, 60, 0.3); }
 html[data-mode='light'] .ch-badge[data-badge='staff'] { color: #92400e; }
 html[data-mode='light'] .ch-badge[data-badge='commish'] { color: #065f46; }
 html[data-mode='light'] .ch-badge[data-badge='shipped'] { color: #86198f; }
 html[data-mode='light'] .ch-badge[data-badge='new'] { color: #075985; }
+html[data-mode='light'] .ch-badge[data-badge='top'] { color: #9a3412; }
 
 .ch-avatar {
   display: grid;

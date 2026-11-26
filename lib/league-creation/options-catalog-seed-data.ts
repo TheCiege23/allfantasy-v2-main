@@ -162,9 +162,10 @@ const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
     idp: ['NFL', 'NCAAF'],
     salary_cap: ALL_SPORTS,
     devy: ['NFL', 'NCAAF'],
-    // NBA joined 2026-11-24: an NBA league with a college basketball lineup (the tested NBA C2C engine), up to
-    // 30 teams. NCAAF and NCAAB stay for big college-sized C2C leagues.
-    c2c: ['NFL', 'NBA', 'NCAAF', 'NCAAB'],
+    // 2026-11-24 (owner's decision): C2C is an NFL or NBA league with a college lineup, the engine that scores
+    // both sides. A college-sport C2C league drafted no pro players at all, so big C2C leagues now run on NFL /
+    // NBA, sized by the pro player pool rather than the real league.
+    c2c: ['NFL', 'NBA'],
     /*
      * Only sports whose weekly finalizer can run. A guillotine league needs a completed week
      * before it can eliminate a roster. This list controls both the wizard and create API.
@@ -356,9 +357,11 @@ const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
       NCAAB: [4, 6, 8, 10, 12, 14, 16],
       SOCCER: [4, 6, 8, 10, 12, 14, 16],
     },
+    // IDP joined the big-league sizes 2026-11-24: the owner's Road To Glory commissioner runs a 140-team NCAAF
+    // and a 34-team NFL IDP league. NFL stops at the real league (32; an import keeps its own size), college as dynasty.
     idp: {
-      NFL: [8, 10, 12, 14, 16],
-      NCAAF: [8, 10, 12, 14, 16],
+      NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
+      NCAAF: DYNASTY_CREATE_TEAM_COUNTS,
     },
     salary_cap: {
       NFL: [8, 10, 12, 14, 16],
@@ -383,9 +386,9 @@ const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
       NCAAF: DYNASTY_CREATE_TEAM_COUNTS.filter((n) => n <= NCAAF_DEVY_MAX_TEAMS),
     },
     c2c: {
-      NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
-      // Even sizes from 8 to the NBA's 30 teams.
-      NBA: NFL_PRO_BOUND_EVEN_TEAM_COUNTS.filter((n) => n <= 30),
+      // From 8 teams up to what the pro player pool can fill (the supply check trims the list).
+      NFL: DYNASTY_CREATE_TEAM_COUNTS.filter((n) => n >= 8),
+      NBA: DYNASTY_CREATE_TEAM_COUNTS.filter((n) => n >= 8),
       NCAAF: DYNASTY_CREATE_TEAM_COUNTS,
       NCAAB: DYNASTY_CREATE_TEAM_COUNTS,
     },

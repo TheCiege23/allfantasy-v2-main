@@ -109,3 +109,26 @@ export async function notifyIdeaAuthorOfStatus(args: {
     sourceKey: `community:idea-status:${args.post.id}:${args.status}`,
   })
 }
+
+/** Upvote counts worth telling the author about. Crossing one again after an unvote never re-pings. */
+export const UPVOTE_MILESTONES = [5, 10, 25, 50, 100] as const
+
+export function upvoteMilestoneReached(before: number, after: number): number | null {
+  const hit = UPVOTE_MILESTONES.filter((m) => before < m && after >= m)
+  return hit.length ? hit[hit.length - 1]! : null
+}
+
+/** "Your idea hit 10 upvotes" — one per idea per milestone, keyed so it never repeats. */
+export async function notifyIdeaAuthorOfMilestone(args: {
+  post: { id: string; authorUserId: string; title: string }
+  milestone: number
+}): Promise<boolean> {
+  return createPlatformNotification({
+    userId: args.post.authorUserId,
+    type: 'community_idea_milestone',
+    title: `Your idea “${snippet(args.post.title, 60)}” hit ${args.milestone} upvotes`,
+    body: 'People want to play it. Share it to keep it climbing the League Lab board.',
+    meta: { actionHref: clubhousePostHref(args.post.id), postId: args.post.id, milestone: args.milestone },
+    sourceKey: `community:idea-milestone:${args.post.id}:${args.milestone}`,
+  })
+}

@@ -38,8 +38,13 @@ export function isNativeTeamCount(value: unknown, min: number = MIN_REDRAFT_TEAM
  */
 export const PRO_LEAGUE_TEAMS: Readonly<Record<string, number>> = { NFL: 32, NBA: 30, MLB: 30, NHL: 32 }
 
-/** League types whose sizes are not one league's, so the real-league cap does not apply. */
-const NOT_ONE_LEAGUE_TYPES: readonly string[] = ['tournament']
+/**
+ * League types whose sizes are not one league's, so the real-league cap does not apply. C2C joined
+ * 2026-11-24 (owner's decision): a C2C league's extra teams draw on college players too, so it is sized by
+ * its pro player pool instead (lib/league-creation/playerSupply.ts), letting big C2C leagues run on the
+ * NFL / NBA engine.
+ */
+const NOT_ONE_LEAGUE_TYPES: readonly string[] = ['tournament', 'c2c']
 
 /** `counts` without any size larger than the sport's real league. Other sports are returned as they are. */
 export function capToRealLeague(sport: string, leagueType: string, counts: readonly number[]): number[] {

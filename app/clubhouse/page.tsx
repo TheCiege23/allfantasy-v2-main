@@ -17,7 +17,11 @@ import {
   getCommunityViewer,
   hasEverPosted,
   listPosts,
+  listShippedIdeas,
 } from '@/lib/community/service'
+import { ShippedFromLeagueLab } from '@/components/community/ShippedFromLeagueLab'
+import { DigestToggle, InviteButton } from '@/components/community/GrowthClient'
+import { getDigestOptIn } from '@/lib/community/digestRunner'
 import {
   AuthorBadges,
   Avatar,
@@ -59,6 +63,7 @@ export default async function ClubhousePage() {
     getClubhouseOverview(viewer),
     getGameDaySummary(),
   ])
+  const [shipped, digest] = await Promise.all([listShippedIdeas(3), getDigestOptIn(viewer).catch(() => null)])
   const statBySlug = new Map(stats.map((s) => [s.slug, s]))
   const now = Date.now()
   const signedIn = Boolean(viewer.userId)
@@ -306,13 +311,42 @@ export default async function ClubhousePage() {
             )}
           </section>
 
-          {overview.activeMembers.length > 0 && (
-            <section className="ch-rail-card" aria-labelledby="active-members">
-              <div className="ch-rail-head">
-                <h2 id="active-members" className="ch-eyebrow">
-                  Most active this month
-                </h2>
-              </div>
+          <ShippedFromLeagueLab ideas={shipped} compact />
+
+          <section className="ch-rail-card" aria-labelledby="bring-people">
+            <div className="ch-rail-head">
+              <h2 id="bring-people" className="ch-eyebrow">
+                Bring your league
+              </h2>
+            </div>
+            <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
+              The Clubhouse is better with your commissioner friends in it. Anyone can read; posting takes a free account.
+            </p>
+            <div className="flex flex-col items-start gap-2">
+              <InviteButton className="ch-btn ch-btn-primary ch-btn-sm" />
+              {digest && <DigestToggle initialOn={digest.on} blocked={digest.blockedByUnsubscribe} />}
+            </div>
+            {digest && (
+              <p className="mt-2 text-xs" style={{ color: 'var(--faint)' }}>
+                One email on Mondays, only when something happened: new ideas, what shipped, the busiest threads.
+              </p>
+            )}
+          </section>
+
+          <section className="ch-rail-card" aria-labelledby="active-members">
+            <div className="ch-rail-head">
+              <h2 id="active-members" className="ch-eyebrow">
+                Most active this month
+              </h2>
+              <Link href="/clubhouse/leaderboard" className="text-xs font-bold" style={{ color: 'var(--accent)' }}>
+                Leaderboard →
+              </Link>
+            </div>
+            {overview.activeMembers.length === 0 ? (
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                Nobody yet. Post, reply or pitch an idea to be first on the board.
+              </p>
+            ) : (
               <ol className="grid">
                 {overview.activeMembers.map((m, i) => (
                   <li key={m.author.id}>
@@ -334,8 +368,8 @@ export default async function ClubhousePage() {
                   </li>
                 ))}
               </ol>
-            </section>
-          )}
+            )}
+          </section>
 
           {viewer.isModerator && (
             <Link href="/clubhouse/moderation" className="ch-btn ch-btn-ghost ch-btn-sm">
