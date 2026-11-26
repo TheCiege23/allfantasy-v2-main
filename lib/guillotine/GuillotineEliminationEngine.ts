@@ -655,6 +655,14 @@ async function settleFaabAfterChop(leagueId: string, seasonId: string | null, se
   } catch (e) {
     console.warn('[guillotine] top scorer FAAB bonus not applied yet', JSON.stringify({ leagueId, weekOrPeriod, error: e instanceof Error ? e.message : String(e) }))
   }
+  // Trades (./guillotineTrades.ts): the chopped teams' offers are cancelled, and trades close once few enough
+  // teams are left. Idempotent, and finished by the same "period already processed" branch.
+  try {
+    const { settleTradesAfterChop } = await import('./guillotineTrades')
+    await settleTradesAfterChop(leagueId, weekOrPeriod)
+  } catch (e) {
+    console.warn('[guillotine] trades after chop not settled yet', JSON.stringify({ leagueId, weekOrPeriod, error: e instanceof Error ? e.message : String(e) }))
+  }
 }
 
 /**

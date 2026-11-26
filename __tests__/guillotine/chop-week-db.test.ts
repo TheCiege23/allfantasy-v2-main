@@ -640,6 +640,45 @@ describe.runIf(enabled)('a Guilly chop week against a real database', () => {
       expect((await state(lg)).choppedByWeek).toEqual({ Blades: 1, Daggers: 1 })
     })
 
+    it('trades (owner, 2026-11-25): the chop cancels the chopped team’s offers and closes trades at 3 left; undo reopens them', async () => {
+      const lg = await league(TEAMS, { settings: { guillotineSettings: { tradesAllowed: true, tradesCloseAtTeamsLeft: 3 } } })
+      const { guillotineTradeRefusal, CHOPPED_TEAM_TRADE_MESSAGE, tradesClosedMessage } = await import('@/lib/guillotine/guillotineTrades')
+      const { resolveLeagueTradeSettings } = await import('@/lib/league-trade-engine/tradeSettingsResolver')
+      const offer = (from: string, to: string) =>
+        prisma.redraftTradeProposal.create({ data: { id: randomUUID(), leagueId: lg.leagueId, seasonId: lg.seasonId, proposerRosterId: lg.byName(from).redraftId, receiverRosterId: lg.byName(to).redraftId } })
+      const status = async (id: string) => (await prisma.redraftTradeProposal.findUniqueOrThrow({ where: { id } })).status
+      const allowed = async () => resolveLeagueTradeSettings(await prisma.league.findUniqueOrThrow({ where: { id: lg.leagueId } })).tradesAllowed
+      const withBlades = await offer('Blades', 'Axes')
+      const between = await offer('Cleavers', 'Axes')
+      const ids = (...names: string[]) => names.map((n) => lg.byName(n).redraftId)
+      // Four alive: trades are open.
+      expect(await allowed()).toBe(true)
+      expect(await guillotineTradeRefusal(lg.leagueId, ids('Cleavers', 'Axes'))).toBeNull()
+
+      await sync(lg, 2, afterWeek(1))
+      // Blades is chopped: its offer is cancelled, the other stays; three are left, so trades close.
+      expect(await status(withBlades.id)).toBe('cancelled')
+      expect(await status(between.id)).toBe('pending')
+      expect(await guillotineTradeRefusal(lg.leagueId, ids('Blades', 'Axes'))).toBe(CHOPPED_TEAM_TRADE_MESSAGE)
+      expect(await guillotineTradeRefusal(lg.leagueId, ids('Cleavers', 'Axes'))).toBe(tradesClosedMessage(3))
+      expect(await allowed()).toBe(false)
+      // A commissioner's approval forces past the closed window, never past a chopped team.
+      expect(await guillotineTradeRefusal(lg.leagueId, ids('Cleavers', 'Axes'), { ignoreClosed: true })).toBeNull()
+      expect(await guillotineTradeRefusal(lg.leagueId, ids('Blades', 'Axes'), { ignoreClosed: true })).toBe(CHOPPED_TEAM_TRADE_MESSAGE)
+
+      // Undo: four alive again, trades reopen.
+      expect(await undoLatestChop({ leagueId: lg.leagueId, userId: owner(lg), week: 1 })).toMatchObject({ ok: true })
+      expect(await allowed()).toBe(true)
+      expect(await guillotineTradeRefusal(lg.leagueId, ids('Blades', 'Axes'))).toBeNull()
+    })
+
+    it('[control] trades left off: a chop closes nothing it did not open', async () => {
+      const lg = await league(TEAMS, { settings: { guillotineSettings: { tradesCloseAtTeamsLeft: 3 } } })
+      await sync(lg, 2, afterWeek(1))
+      const { readGuillotineTrades } = await import('@/lib/guillotine/guillotineTrades')
+      expect(readGuillotineTrades((await prisma.league.findUniqueOrThrow({ where: { id: lg.leagueId } })).settings)).toEqual({ tradesAllowed: false, tradesCloseAtTeamsLeft: 3, tradesClosed: false })
+    })
+
     it('refuses once a waiver run has processed claims since the chop, and changes nothing', async () => {
       const lg = await league()
       await sync(lg, 2, afterWeek(1))

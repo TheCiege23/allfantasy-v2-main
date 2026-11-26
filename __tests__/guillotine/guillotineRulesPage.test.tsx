@@ -27,6 +27,8 @@ const RULES: GuillotineRules = {
   periodWeeks: 1,
   chopListOrder: 'chop_top',
   freeAgencyFromWeek: null,
+  tradesAllowed: false,
+  tradesCloseAtTeamsLeft: null,
 }
 
 const view = (over: Record<string, unknown> = {}) => ({
@@ -154,6 +156,18 @@ describe('one Save sends only what changed, to the writer that owns it', () => {
     fireEvent.click(save())
     await screen.findByTestId('guillotine-rules-saved')
     expect(patches()).toEqual([{ rules: { freeAgencyFromWeek: 12 } }])
+  })
+
+  it('trades: off by default; turned on, the commissioner picks when they close', async () => {
+    const { patches } = mount(view())
+    await ready()
+    expect(screen.queryByTestId('guillotine-rules-trades-close')).toBeNull()
+    set('guillotine-rules-trades', 'on')
+    set('guillotine-rules-trades-close', '4')
+    expect(screen.getByText('Teams still alive can trade until only 4 are left.')).toBeTruthy()
+    fireEvent.click(save())
+    await screen.findByTestId('guillotine-rules-saved')
+    expect(patches()).toEqual([{ rules: { tradesAllowed: true, tradesCloseAtTeamsLeft: 4 } }])
   })
 
   it('"skip waivers" is not offered when chopped players are already free agents every week', async () => {

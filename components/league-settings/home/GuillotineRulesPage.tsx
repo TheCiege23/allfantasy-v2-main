@@ -598,6 +598,45 @@ export function GuillotineRulesPage({
           </select>
         </Field>
 
+        {/* lib/guillotine/guillotineTrades.ts: off by default; a chopped team never trades. */}
+        <Field
+          label="Trades"
+          help={
+            !rules.tradesAllowed
+              ? 'No trades. Teams build through waivers and the chopped rosters.'
+              : rules.tradesCloseAtTeamsLeft != null
+                ? `Teams still alive can trade until only ${rules.tradesCloseAtTeamsLeft} are left.`
+                : 'Teams still alive can trade. A chopped team never can.'
+          }
+        >
+          <div className="grid items-end gap-2 sm:grid-cols-2">
+            <select
+              className={inputClass}
+              value={rules.tradesAllowed ? 'on' : 'off'}
+              onChange={(e) => update({ tradesAllowed: e.target.value === 'on' })}
+              data-testid="guillotine-rules-trades"
+            >
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+            {rules.tradesAllowed ? (
+              <label className="text-[11px] text-white/50">Trades close once
+                <select
+                  className={inputClass}
+                  value={rules.tradesCloseAtTeamsLeft ?? ''}
+                  onChange={(e) => update({ tradesCloseAtTeamsLeft: e.target.value === '' ? null : Number(e.target.value) })}
+                  data-testid="guillotine-rules-trades-close"
+                >
+                  <option value="">Never</option>
+                  {[...new Set([...teamsLeftChoices, ...(rules.tradesCloseAtTeamsLeft != null ? [rules.tradesCloseAtTeamsLeft] : [])])].sort((a, b) => b - a).map((n) => (
+                    <option key={n} value={n}>{n} teams are left</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+        </Field>
+
         {/* lib/guillotine/freeAgencyFromWeek.ts: only matters while chops go to waivers. */}
         {rules.rosterReleaseTiming !== 'immediate' ? (
           <Field

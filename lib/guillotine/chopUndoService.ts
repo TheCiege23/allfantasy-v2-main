@@ -266,6 +266,13 @@ export async function undoLatestChop(args: { leagueId: string; userId: string; w
     if (instead.rosterIds.length) {
       choppedInsteadRosterIds = await chopInstead({ leagueId, week, gSeason: pre.gSeason!, rosterIds: instead.rosterIds, scored })
     }
+    // Back up over the "trades close at N" line, trades reopen (./guillotineTrades.ts). Best effort: the undo stands.
+    try {
+      const { syncGuillotineTradeClose } = await import('./guillotineTrades')
+      await syncGuillotineTradeClose(leagueId)
+    } catch (e) {
+      console.warn('[guillotine] trade window not re-checked after undo', e instanceof Error ? e.message : String(e))
+    }
     await announceUndo({
       leagueId,
       week,

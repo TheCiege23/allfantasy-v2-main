@@ -12,6 +12,8 @@
  *   dangerMarginPoints    GuillotineDangerEngine (who shows as "in danger")
  *   rosterReleaseTiming   GuillotineEliminationEngine → releaseChoppedRosters
  *   freeAgencyFromWeek    lib/waiver-wire/dropped-player-waivers.ts (no waiver hold from week N; ./freeAgencyFromWeek.ts)
+ *   tradesAllowed /
+ *   tradesCloseAtTeamsLeft  lib/league-trade-engine/tradeSettingsResolver.ts + every trade gate (./guillotineTrades.ts)
  *   faabOnChop            GuillotineEliminationEngine → redistributeChoppedFaab (./faabOnChop.ts)
  *   bestBall              scoringEngine.leagueIsBestBall → each team's best lineup (./guillotineBestBall.ts)
  *   periodWeeks           nativeGuillotineWeek → which weeks chop and how many weeks a score adds (./eliminationPeriods.ts)
@@ -27,6 +29,7 @@ import { MAX_CHOPS_PER_WEEK } from './chopSchedule'
 import { DEFAULT_FAAB_ON_CHOP_PERCENT, FAAB_ON_CHOP_OPTIONS, isFaabOnChopPercent, type FaabOnChop } from './faabOnChop'
 import { isChopListOrder, type ChopListOrder } from './chopListOrder'
 import { isFreeAgencyFromWeek } from './freeAgencyFromWeek'
+import { isTradesCloseAt } from './guillotineTradeRules'
 
 export type GuillotineRules = {
   teamsPerChop: number
@@ -41,6 +44,10 @@ export type GuillotineRules = {
    * (./freeAgencyFromWeek.ts). null = never. Stored in League.settings (FREE_AGENCY_FROM_WEEK_KEY).
    */
   freeAgencyFromWeek: number | null
+  /** Trades between teams still alive (./guillotineTrades.ts). Stored in League.settings.guillotineSettings; absent = off. */
+  tradesAllowed: boolean
+  /** Trades close once this many teams (or fewer) are left. null = never. Same place. */
+  tradesCloseAtTeamsLeft: number | null
   /** Chimmy writes the weekly recap after each chop (paid leagues; ./weeklyRecap.ts). Stored in League.settings. */
   aiRecapAuto: boolean
   /** What happens to a chopped team's unspent FAAB. Stored in League.settings (FAAB_ON_CHOP_KEY). */
@@ -238,6 +245,16 @@ export function normalizeGuillotineRulesPatch(
       return { ok: false, error: { field: 'freeAgencyFromWeek', message: 'Pick the week chopped players start going straight to free agency, or never.' } }
     }
     out.freeAgencyFromWeek = r.freeAgencyFromWeek as number | null
+  }
+  if ('tradesAllowed' in r) {
+    if (typeof r.tradesAllowed !== 'boolean') return { ok: false, error: { field: 'tradesAllowed', message: 'Turn trades on or off.' } }
+    out.tradesAllowed = r.tradesAllowed
+  }
+  if ('tradesCloseAtTeamsLeft' in r) {
+    if (r.tradesCloseAtTeamsLeft !== null && !isTradesCloseAt(r.tradesCloseAtTeamsLeft)) {
+      return { ok: false, error: { field: 'tradesCloseAtTeamsLeft', message: 'Pick how many teams are left when trades close, or never.' } }
+    }
+    out.tradesCloseAtTeamsLeft = r.tradesCloseAtTeamsLeft as number | null
   }
   if ('chopListOrder' in r) {
     if (!isChopListOrder(r.chopListOrder)) return { ok: false, error: { field: 'chopListOrder', message: 'Pick where the chop zone sits in the list.' } }
