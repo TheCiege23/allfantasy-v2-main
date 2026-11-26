@@ -236,6 +236,31 @@ For each surface, once shadow parity holds over a real sample window (target: �
 2. Single UI contract: the four answers (What happened / Why it matters / Confidence / What to do) + provenance + freshness on every trade surface.
 3. Update `AF_REMEDIATION_PLAN.md` and `docs/os/SPORTS_DATA_DECISION_OS_DEPENDENCY_MAP.md`.
 
+### Phase 5 — concept registry (2026-11-26)
+
+**The contract: every league concept is graded by its own rule, and the rule is named in one table.**
+`createLeagueTradeGrader` (`lib/decision-os/trade/leagueTradeGrader.ts`) no longer picks its sub-grader
+with an if-chain. It asks `resolveConceptGrading` in `lib/decision-os/trade/conceptGradingRegistry.ts`,
+where every concept × sport (NFL, NCAAF, NBA, NCAAB, MLB, NHL, SOCCER) names a sub-grader — `zombie`,
+`ncaaf_college`, `guillotine`, `sport_points`, `market_chart` — plus its value basis and any NFL format
+post-processor (`keeper_option`, `salary_cap_surplus`, `c2c_campus`), or is `withheld` with the sentence
+the manager reads.
+
+- **A league type with no entry is withheld, never priced on the default chart.** Before this, a type
+  nobody had modelled reached the last branch and got a confident letter off the dynasty/redraft chart.
+  Stored values that dispatch today without being concepts are registered explicitly: any type containing
+  `dynasty` (the substring every sub-grader already uses) and the `imported` placeholder.
+- **A new concept needs a registry entry AND its own grading tests before it can grade.** Add the id to
+  `CONCEPT_GRADING_REGISTRY` with one rule per sport; `__tests__/decision-os/concept-grading-registry.test.ts`
+  fails CI with the file to edit when any concept the product carries (format-engine ids, wizard ids,
+  confirmable concepts) lacks one.
+- **The table maps today's behaviour, not the ideal.** It landed behaviour-preserving: the same test keeps
+  the old if-chain as an oracle, built from the real sub-grader factories, and proves every registered
+  concept × sport × variant still reaches the same sub-grader and post-processor. Entries whose basis looks
+  wrong carry a `review:` note; changing one is a deliberate grade change with its own tests.
+- The registry only chooses WHICH sub-grader grades. Each still reads the league's raw type for its own
+  costs and refusals (keeper costs, `multiSeasonFormatReason`, pick policy).
+
 ---
 
 ## Acceptance criteria

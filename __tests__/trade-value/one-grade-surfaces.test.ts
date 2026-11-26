@@ -428,7 +428,10 @@ describe('Chimmy — explains the one grade, never makes one (design step 7)', (
 describe('College redraft — points over replacement, never the private scale (design step 8)', () => {
   it('the league grader asks the college grader first, before any chart pricing', () => {
     const src = code('lib/decision-os/trade/leagueTradeGrader.ts')
-    expect(src).toMatch(/sport === 'NCAAF'\s*\?\s*createNcaafLeagueGrader\(/)
+    // Phase 5: the concept registry names the college grader for every NCAAF concept but Zombie
+    // (`conceptGradingRegistry.ts`; parity with the old `sport === 'NCAAF'` gate is in concept-grading-registry.test.ts).
+    expect(src).toMatch(/rule\.grader === 'ncaaf_college'\s*\?\s*createNcaafLeagueGrader\(/)
+    expect(code('lib/decision-os/trade/conceptGradingRegistry.ts')).toMatch(/redraft: \{ NFL: CHART, NCAAF: COLLEGE_REDRAFT/)
     const college = src.indexOf('await college.grade(give, get)')
     const chart = src.indexOf('resolveAssets(give, opts)')
     expect(college).toBeGreaterThan(-1)
