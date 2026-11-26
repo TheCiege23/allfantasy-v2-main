@@ -43,10 +43,12 @@ export async function listLeagueGroupsFor(userId: string): Promise<LeagueGroupVi
  * typing "Road To Glory" once and picking it from a list after is how seven leagues end up in ONE group
  * rather than in seven near-identical ones.
  */
-export async function groupNamesSetBy(userId: string): Promise<string[]> {
+export async function groupNamesSetBy(userId: string, opts: { excludeLeagueId?: string } = {}): Promise<string[]> {
   const leagues = await readMemberLeagues(userId)
   const names = new Map<string, string>()
   for (const l of leagues) {
+    // Leaving out the league being edited lets a commissioner fix the spelling of a one-league group.
+    if (l.id === opts.excludeLeagueId) continue
     const tag = readLeagueGroup(l.settings)
     if (tag && tag.setBy === userId) names.set(tag.name.toLowerCase(), tag.name)
   }

@@ -12,7 +12,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
-import { applyLeagueGroup, planLeagueGroupPatch, readLeagueGroup } from '@/lib/league-groups/leagueGroups'
+import { applyLeagueGroup, planLeagueGroupPatch, readLeagueGroup, withExistingSpelling } from '@/lib/league-groups/leagueGroups'
 import { groupNamesSetBy } from '@/lib/league-groups/leagueGroupsRead'
 
 export const dynamic = 'force-dynamic'
@@ -50,7 +50,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  const next = applyLeagueGroup(league.settings, plan.value)
+  // A failed lookup keeps the typed spelling: the group still matches, only the heading may differ.
+  const existing = plan.value ? await groupNamesSetBy(userId, { excludeLeagueId: leagueId }).catch(() => []) : []
+  const value = withExistingSpelling(plan.value, existing)
+  const next = applyLeagueGroup(league.settings, value)
   await prisma.league.update({ where: { id: leagueId }, data: { settings: next as Prisma.InputJsonValue } })
-  return NextResponse.json({ group: plan.value ? { name: plan.value.name } : null })
+  return NextResponse.json({ group: value ? { name: value.name } : null })
 }
