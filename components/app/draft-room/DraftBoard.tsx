@@ -8,7 +8,7 @@ import type { DraftPickSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/
 import type { KeeperSessionSnapshot } from '@/lib/live-draft-engine/types'
 import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
 import { isDraftPickRowEmptyFromSnapshot } from '@/lib/live-draft-engine/draftPickEmpty'
-import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
+import { buildPickOwnerResolver } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { getRoundNavigationState } from '@/lib/draft-room/DraftBoardRenderer'
 import { getManagerColorBySlot, withAlpha } from '@/lib/draft-room'
 import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draftRoomDisplayFields'
@@ -180,6 +180,9 @@ function buildAuctionCellPick(
   }
 }
 
+/** Above this many teams the board opens on one round. */
+const BIG_BOARD_TEAMS = 16
+
 function DraftBoardInner({
   picks,
   slotOrder,
@@ -218,7 +221,8 @@ function DraftBoardInner({
   const rs = presentationVariant === 'redraft_snake'
   const { t } = useOptionalLanguage()
   const headerCopy = useMessages(draftRoomHeaderMessages)
-  const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
+  // A big league opens on the current round: every round of 100+ teams is thousands of cells (2026-11-24).
+  const [viewMode, setViewMode] = useState<'all' | 'single'>(() => (teamCount > BIG_BOARD_TEAMS ? 'single' : 'all'))
   const [selectedRound, setSelectedRound] = useState(1)
   const boardRef = useRef<HTMLElement | null>(null)
   const teamGridRef = useRef<HTMLDivElement | null>(null)
@@ -300,6 +304,9 @@ function DraftBoardInner({
     return map
   }, [keeperLocks])
 
+  /** Picks by overall number: a cell finds its pick in constant time (the board looked each one up in a full scan). */
+  const pickByOverall = useMemo(() => new Map(picks.map((entry) => [entry.overall, entry])), [picks])
+
   const keeperCountByRoster = useMemo(() => {
     const counts = new Map<string, number>()
     for (const lock of keeperLocks) counts.set(lock.rosterId, (counts.get(lock.rosterId) ?? 0) + 1)
@@ -310,6 +317,7 @@ function DraftBoardInner({
   const boardRowsByRoundAndSlot = useMemo(() => {
     const totalPicks = rounds * teamCount
     const byRoundSlot: Record<number, Map<number, SequentialBoardEntry>> = {}
+    const ownerOf = buildPickOwnerResolver(slotOrder, tradedPicks)
 
     for (let overall = 1; overall <= totalPicks; overall += 1) {
       const round = Math.ceil(overall / teamCount)
@@ -323,7 +331,7 @@ function DraftBoardInner({
       const key = `${round}-${ownerSlot}`
       const existing = pickByKey[key]
       const lock = keeperByKey[key]
-      const resolved = resolvePickOwner(round, ownerSlot, slotOrder, tradedPicks)
+      const resolved = ownerOf(round, ownerSlot)
       const defaultOwner = slotOrderBySlot.get(ownerSlot) ?? null
       const ownerRosterId = resolved?.rosterId ?? defaultOwner?.rosterId ?? null
       const currentOwner = resolved?.rosterId ? (slotOrderByRosterId.get(resolved.rosterId) ?? null) : null
@@ -703,7 +711,7 @@ function DraftBoardInner({
                       )
                     }
 
-                    const existing = picks.find((entry) => entry.overall === pick.overall)
+                    const existing = pickByOverall.get(pick.overall)
                     return (
                       <DraftBoardCell
                         key={pick.overall}
@@ -940,7 +948,7 @@ function DraftBoardInner({
                         )
                       }
                       const { pick, overall } = cell
-                      const existing = picks.find((entry) => entry.overall === overall)
+                      const existing = pickByOverall.get(overall)
                       const isPickDisplayEmpty =
                         pick.isKeeper
                           ? false

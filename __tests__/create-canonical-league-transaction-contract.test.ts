@@ -663,3 +663,12 @@ describe('C2C and devy leagues carry what their college side needs', () => {
     expect(tx.league.create.mock.calls[0]?.[0].data.settings).toMatchObject({ devy_college_scoring: true })
   })
 })
+
+describe('the invite link fits the league', () => {
+  it('allows every team twice over, never under 50 (a 180-team league needs more than 50 claims)', async () => {
+    const { inviteMaxUsesFor } = await import('@/lib/league-creation/canonical/createCanonicalLeagueInTransaction')
+    expect(inviteMaxUsesFor(12)).toBe(50)
+    expect(inviteMaxUsesFor(180)).toBe(360)
+    expect(inviteMaxUsesFor(Number.NaN)).toBe(50)
+  })
+})
