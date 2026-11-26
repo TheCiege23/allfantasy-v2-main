@@ -700,7 +700,10 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       <li key={`${d.day}-${id}`}>
         <div className="nls-lrow" data-cols="3">
           <PosPill label={slotCategory(d.slots[id]) === 'starter' ? d.slots[id] : slotCategory(d.slots[id]) === 'bench' ? 'BN' : d.slots[id].toUpperCase()} />
-          <div className="nls-player"><strong>{players[id]?.name ?? 'Unknown player'}</strong><small>{d.points[id] != null ? 'Played' : 'No game'}</small></div>
+          <div className="nls-pl">
+            <PlayerAvatar name={players[id]?.name} headshotUrl={players[id]?.headshotUrl ?? players[id]?.imageUrl} teamLogoUrl={players[id]?.teamLogoUrl} team={players[id]?.team} sport={league.sport} empty={!players[id]} />
+            <div className="nls-player"><strong>{players[id]?.name ?? 'Unknown player'}</strong><small>{d.points[id] != null ? 'Played' : 'No game'}</small></div>
+          </div>
           <span className="nls-proj">{d.points[id] != null ? fmt1(d.points[id]) : '—'}</span>
         </div>
       </li>
@@ -900,7 +903,10 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                   <li key={c.id}>
                     <button type="button" disabled={!r?.ok || saving} onClick={() => doMove(c.id, { kind: 'starter', slotIndex })} title={r && !r.ok ? r.reason : undefined}>
                       <PosPill label={c.position} />
-                      <span className="nls-player"><strong>{c.name}</strong><small>{c.badge === 'S' ? 'Starter' : 'Bench'} · {gameLine(players[c.id]) || c.team}</small></span>
+                      <span className="nls-pl">
+                        <PlayerAvatar name={c.name} headshotUrl={players[c.id]?.headshotUrl ?? players[c.id]?.imageUrl} teamLogoUrl={players[c.id]?.teamLogoUrl} team={players[c.id]?.team ?? c.team} sport={league.sport} />
+                        <span className="nls-player"><strong>{c.name}</strong><small>{c.badge === 'S' ? 'Starter' : 'Bench'} · {gameLine(players[c.id]) || c.team}</small></span>
+                      </span>
                       <span className="nls-proj nls-mono">{fmt1(players[c.id]?.projectedPoints ?? null)}</span>
                     </button>
                   </li>
@@ -927,7 +933,10 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                 <li key={i}>
                   <button type="button" disabled={saving} onClick={() => doMove(id, { kind: 'starter', slotIndex: i })}>
                     <PosPill label={s.label} />
-                    <span className="nls-player"><strong>{out ? `Replace ${out.name}` : 'Empty slot'}</strong><small>{out ? gameLine(out) : s.label}</small></span>
+                    <span className="nls-pl">
+                      <PlayerAvatar name={out?.name} headshotUrl={out?.headshotUrl ?? out?.imageUrl} teamLogoUrl={out?.teamLogoUrl} team={out?.team} sport={league.sport} empty={!out} />
+                      <span className="nls-player"><strong>{out ? `Replace ${out.name}` : 'Empty slot'}</strong><small>{out ? gameLine(out) : s.label}</small></span>
+                    </span>
                     <span className="nls-proj nls-mono">{fmt1(out?.projectedPoints ?? null)}</span>
                   </button>
                 </li>

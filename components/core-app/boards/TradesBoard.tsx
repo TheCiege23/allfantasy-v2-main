@@ -114,6 +114,7 @@ function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
         imageUrl={a.imageUrl}
         name={a.name}
         teamLogoUrl={teamLogoUrl('NFL', a.team)}
+        team={a.team}
         size="sm"
       />
       <span className="af-bd-asset-name">

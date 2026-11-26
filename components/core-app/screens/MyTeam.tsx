@@ -32,6 +32,8 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { clubAbbr } from '@/components/core-app/boards/PlayerFace'
+import { initialsFor } from '@/lib/draft-room/classify-avatar-source'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
@@ -438,7 +440,7 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
           <img className="af-mt-avatar" src={imageUrl} alt="" width={36} height={36} onError={() => setFailedImageUrl(imageUrl)} />
         ) : (
           <span className="af-mt-avatar af-mt-avatar--none" aria-hidden>
-            {player.name.charAt(0)}
+            {initialsFor(player.name)}
           </span>
         )}
         {logoUrl ? (
@@ -452,6 +454,8 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
             loading="lazy"
             onError={() => setFailedLogoUrls((urls) => [...urls, logoUrl])}
           />
+        ) : clubAbbr(player.team) ? (
+          <span className="af-mt-teamlogo af-crest-abbr" aria-hidden>{clubAbbr(player.team)}</span>
         ) : null}
       </span>
       {/*
