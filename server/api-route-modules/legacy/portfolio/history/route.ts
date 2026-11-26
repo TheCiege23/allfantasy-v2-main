@@ -1,7 +1,10 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server';
-import { computeDualModeTradeDelta, UserTrade, PricedAsset } from '@/lib/hybrid-valuation';
-import { computeTradeVolatility, adjustConfidenceForVolatility, getVolatilityLabel } from '@/lib/volatility';
+import { computeTradeVolatility, getVolatilityLabel } from '@/lib/volatility';
+import { legacySessionUserId } from '@/lib/legacy/legacyOneGrade';
+import { gradeLegacyCompletedTrades, type LegacyCompletedTrade } from '@/lib/legacy/legacyCompletedTradeGrades';
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade';
+import type { GradeLetter } from '@/lib/trade-intel/gradeScale';
 import {
   getLeagueTransactions,
   getLeagueRosters,
@@ -15,15 +18,34 @@ import type { LegacyDataStatus } from '@/lib/legacy/dataStatus';
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+/*
+ * 🛑 EVERY LETTER AND VALUE HERE IS THE ONE COMPLETED-TRADE GRADE (2026-11-26).
+ *
+ * Until then each point's `deltaValue`, `grade` and `confidence` came from
+ * `computeDualModeTradeDelta` (`lib/hybrid-valuation.ts`) — a second engine, on its own letter scale —
+ * while the report card above this chart and `/api/legacy/trade-analytics` graded the same trades
+ * through `oneGradeForCompletedTrade`. Now every trade goes through that same grade
+ * (`gradeLegacyCompletedTrades`), on the signed-in user's verified AF league row, from the viewer's side:
+ *   - `mode=atTime` reads the trade's frozen ORIGINAL; `mode=hindsight` today's re-grade beside it;
+ *   - `deltaValue` is the league value that letter was taken on (received − sent), `result` the grade's
+ *     own win/loss/even;
+ *   - best/worst, total and average are aggregates of those numbers only.
+ * A trade the grade withholds is not a point and counts in no total; it is listed in `notGraded` with
+ * the grader's reason. `confidence` is null — it was the second engine's number and the one grade
+ * does not produce one. `volatility` is the same asset-mix heuristic as before, read off the assets
+ * and league values the grade was taken on.
+ */
+
 export interface PortfolioPoint {
   date: string;
   tradeId: string;
   deltaValue: number;
   cumulativeValue: number;
   tradeSummary: string;
-  grade: string;
+  grade: GradeLetter;
+  result: 'win' | 'loss' | 'even';
   volatility: string;
-  confidence: number;
+  confidence: null;
 }
 
 export interface PortfolioHistoryResponse {
@@ -33,9 +55,50 @@ export interface PortfolioHistoryResponse {
   worstTrade: PortfolioPoint | null;
   averageDelta: number;
   volatilityProfile: string;
+  gradeSource: 'one_trade_engine';
+  notGraded: Array<{ tradeId: string; date: string; tradeSummary: string; reason: string }>;
 }
 
-async function fetchUserTrades(leagueId: string, sleeperUserId: string): Promise<UserTrade[]> {
+type PortfolioTrade = LegacyCompletedTrade & {
+  parties: Array<LegacyCompletedTrade['parties'][number] & { teamName: string }>
+}
+
+const outcomeOf = (letter: GradeLetter): PortfolioPoint['result'] =>
+  letter === 'A' || letter === 'B' ? 'win' : letter === 'D' || letter === 'F' ? 'loss' : 'even'
+
+const namesOf = (p: LegacyCompletedTrade['parties'][number] | undefined) => [
+  ...(p?.playersReceived ?? []).map((pl) => pl.name),
+  ...(p?.picksReceived ?? []).map((pk) => `${pk.season} Round ${pk.round}`),
+]
+
+/** The grade's own reading of one trade, or the reason it was withheld. PURE. */
+export function portfolioReading(
+  trade: PortfolioTrade,
+  view: TradeGradeView,
+  viewerSleeperId: string,
+  mode: 'atTime' | 'hindsight',
+): { graded: true; letter: GradeLetter; delta: number; volatility: string; summary: string } | { graded: false; reason: string; summary: string } {
+  const me = trade.parties.find((p) => p.userId === viewerSleeperId)
+  const them = trade.parties.find((p) => p !== me)
+  const summary = `Got ${namesOf(me).slice(0, 2).join(', ') || 'picks'} for ${namesOf(them).slice(0, 2).join(', ') || 'picks'}`
+  if (!view.graded) return { graded: false, reason: view.reason, summary }
+  const moment = mode === 'hindsight' && view.current ? view.current : view
+  const assets = (view.lines ?? []).map((l) => ({
+    name: l.name,
+    type: l.assetKind === 'pick' ? 'pick' : 'player',
+    value: Math.max(0, l.leagueValue ?? 0),
+    details: {},
+  })) as unknown as Parameters<typeof computeTradeVolatility>[0]
+  return {
+    graded: true,
+    letter: moment.letter,
+    delta: Math.round(moment.getValue - moment.giveValue),
+    volatility: getVolatilityLabel(computeTradeVolatility(assets)),
+    summary,
+  }
+}
+
+async function fetchUserTrades(leagueId: string, sleeperUserId: string): Promise<PortfolioTrade[]> {
   // Phase 3 batch 2 — canonical read path. Historical trade portfolio: renders trades that
   // already happened, so cache-only is correct; no live roster decision depends on this.
   // Reshaped to the `Record<sleeperId, {...}>` the code below already indexes.
@@ -63,7 +126,7 @@ async function fetchUserTrades(leagueId: string, sleeperUserId: string): Promise
 
   const userRosterId = userRoster.roster_id;
   const seasons = await getLeagueHistory(leagueId);
-  const allTrades: UserTrade[] = [];
+  const allTrades: PortfolioTrade[] = [];
 
   for (const season of seasons) {
     const seasonLeagueId = season.league_id;
@@ -81,13 +144,13 @@ async function fetchUserTrades(leagueId: string, sleeperUserId: string): Promise
     );
 
     for (const trade of trades) {
-      const parties: UserTrade['parties'] = [];
+      const parties: PortfolioTrade["parties"] = [];
       
       for (const rosterId of trade.roster_ids || []) {
         const rosterOwner = rosters.find((r: any) => r.roster_id === rosterId);
         const user = users.find((u: any) => u.user_id === rosterOwner?.owner_id);
         
-        const playersReceived: { name: string; position?: string }[] = [];
+        const playersReceived: { id: string; name: string; position?: string }[] = [];
         const picksReceived: { round: number; season: string; slot?: string }[] = [];
 
         if (trade.adds) {
@@ -95,7 +158,8 @@ async function fetchUserTrades(leagueId: string, sleeperUserId: string): Promise
             if (rId === rosterId && allPlayers[playerId]) {
               playersReceived.push({
                 name: allPlayers[playerId].full_name || allPlayers[playerId].first_name + ' ' + allPlayers[playerId].last_name,
-                position: allPlayers[playerId].position
+                position: allPlayers[playerId].position,
+                id: playerId
               });
             }
           }
@@ -139,7 +203,6 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/portfolio/history", too
     const leagueId = searchParams?.get('leagueId');
     const userId = searchParams?.get('userId');
     const mode = (searchParams?.get('mode') || 'atTime') as 'atTime' | 'hindsight';
-    const isSF = searchParams?.get('sf') === 'true';
 
     if (!leagueId || !userId) {
       return NextResponse.json({ error: 'Missing leagueId or userId' }, { status: 400 });
@@ -152,48 +215,39 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/portfolio/history", too
 
     const userTrades = await fetchUserTrades(leagueId, sleeperUser.userId);
 
+    // THE grade of every trade, from your side. One league load, frozen originals read once.
+    const isViewer = (p: { userId?: string }) => p.userId === sleeperUser.userId;
+    const views = await gradeLegacyCompletedTrades({
+      suppliedLeagueId: leagueId,
+      userId: await legacySessionUserId(),
+      trades: userTrades,
+      isViewer,
+    });
+
     let cumulative = 0;
-    let failedTradeCount = 0;
     const points: PortfolioPoint[] = [];
+    const notGraded: PortfolioHistoryResponse['notGraded'] = [];
 
-    for (const trade of userTrades) {
-      try {
-        const dual = await computeDualModeTradeDelta(trade, sleeperUser.userId, isSF);
-        const result = mode === 'hindsight' ? dual.withHindsight : dual.atTheTime;
-        
-        if (!result) continue;
-
-        const allAssets: PricedAsset[] = [...result.receivedAssets, ...result.gaveAssets];
-        const volatilityScore = computeTradeVolatility(allAssets);
-        const volLabel = getVolatilityLabel(volatilityScore);
-        
-        const { adjustedConfidence } = adjustConfidenceForVolatility(
-          result.confidence,
-          volatilityScore,
-          result.deltaValue
-        );
-
-        cumulative += result.deltaValue;
-
-        const receivedNames = result.receivedAssets.map(a => a.name).slice(0, 2).join(', ');
-        const gaveNames = result.gaveAssets.map(a => a.name).slice(0, 2).join(', ');
-        const tradeSummary = `Got ${receivedNames || 'picks'} for ${gaveNames || 'picks'}`;
-
-        points.push({
-          date: new Date(trade.timestamp).toISOString().split('T')[0],
-          tradeId: trade.transactionId,
-          deltaValue: result.deltaValue,
-          cumulativeValue: cumulative,
-          tradeSummary,
-          grade: result.grade,
-          volatility: volLabel,
-          confidence: adjustedConfidence
-        });
-      } catch (err) {
-        console.error(`Error processing trade ${trade.transactionId}:`, err);
-        failedTradeCount += 1;
+    userTrades.forEach((trade, i) => {
+      const date = new Date(trade.timestamp).toISOString().split('T')[0];
+      const reading = portfolioReading(trade, views[i]!, sleeperUser.userId, mode);
+      if (!reading.graded) {
+        notGraded.push({ tradeId: trade.transactionId, date, tradeSummary: reading.summary, reason: reading.reason });
+        return;
       }
-    }
+      cumulative += reading.delta;
+      points.push({
+        date,
+        tradeId: trade.transactionId,
+        deltaValue: reading.delta,
+        cumulativeValue: cumulative,
+        tradeSummary: reading.summary,
+        grade: reading.letter,
+        result: outcomeOf(reading.letter),
+        volatility: reading.volatility,
+        confidence: null,
+      });
+    });
 
     const totalDelta = cumulative;
     const averageDelta = points.length > 0 ? totalDelta / points.length : 0;
@@ -221,11 +275,23 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/portfolio/history", too
       bestTrade,
       worstTrade,
       averageDelta,
-      volatilityProfile
+      volatilityProfile,
+      gradeSource: 'one_trade_engine',
+      notGraded,
     };
 
     const status: LegacyDataStatus =
-      points.length === 0
+      points.length === 0 && notGraded.length > 0
+        ? {
+            state: 'unavailable',
+            confidence: 'high',
+            source: 'derived',
+            lastUpdatedAt: new Date().toISOString(),
+            reasonCode: 'TRADES_NOT_GRADED',
+            message: notGraded[0]!.reason,
+            retryable: true,
+          }
+        : points.length === 0
         ? {
             state: 'unavailable',
             confidence: 'high',
@@ -235,14 +301,14 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/portfolio/history", too
             message: 'No completed trades were found in your imported Sleeper history for this league.',
             retryable: true,
           }
-        : failedTradeCount > 0
+        : notGraded.length > 0
           ? {
               state: 'partial',
               confidence: 'medium',
               source: 'derived',
               lastUpdatedAt: new Date().toISOString(),
               reasonCode: 'SOME_TRADES_UNPRICEABLE',
-              message: `${failedTradeCount} trade(s) could not be valued and are not included.`,
+              message: `${notGraded.length} trade(s) could not be graded and are not included.`,
               retryable: true,
             }
           : {

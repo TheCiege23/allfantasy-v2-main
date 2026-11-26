@@ -2270,20 +2270,28 @@ function AFLegacyContent() {
             })
             
             const gradeData = await gradeRes.json()
-            if (gradeData.gradedTrade) {
-              const gradedTrade = {
-                ...trade,
-                grade: gradeData.gradedTrade.grade,
-                verdict: gradeData.gradedTrade.briefExplanation || gradeData.gradedTrade.verdict,
-                analysis: gradeData.gradedTrade.fullAnalysis || gradeData.gradedTrade.analysis,
-                winner: gradeData.gradedTrade.winner
-              }
-              gradedTradesByYear[year].push(gradedTrade)
-              allGradedTrades.push(gradedTrade)
-            }
+            // THE one completed-trade grade, from your side (see the trade-history route). A withheld
+            // grade carries `graded: false`, a null letter and the grader's reason.
+            const g = gradeData.gradedTrade
+            const gradedTrade = g
+              ? {
+                  ...trade,
+                  graded: g.graded === true,
+                  grade: g.graded === true ? g.grade : null,
+                  currentGrade: g.graded === true ? g.currentGrade : null,
+                  result: g.graded === true ? g.result : null,
+                  valueDifferential: g.graded === true ? g.valueDifferential : null,
+                  gradeWithheld: g.gradeWithheld ?? null,
+                  verdict: g.graded === true ? g.briefExplanation : g.gradeWithheld,
+                  analysis: g.fullAnalysis,
+                  winner: g.winner ?? null,
+                }
+              : { ...trade, graded: false, grade: null, result: null, valueDifferential: null, gradeWithheld: gradeData.error || 'This trade could not be graded just now.', verdict: gradeData.error || 'This trade could not be graded just now.' }
+            gradedTradesByYear[year].push(gradedTrade)
+            allGradedTrades.push(gradedTrade)
           } catch (e) {
             console.error('Failed to grade trade:', String(e))
-            const failedTrade = { ...trade, grade: 'N/A', verdict: 'Unable to grade' }
+            const failedTrade = { ...trade, graded: false, grade: null, result: null, valueDifferential: null, gradeWithheld: 'This trade could not be graded just now.', verdict: 'This trade could not be graded just now.' }
             gradedTradesByYear[year].push(failedTrade)
             allGradedTrades.push(failedTrade)
           }
@@ -2303,44 +2311,25 @@ function AFLegacyContent() {
         return
       }
       
-      // Calculate summary stats from all graded trades
-      const gradeToScore: Record<string, number> = { 'A+': 10, 'A': 9, 'A-': 8, 'B+': 7, 'B': 6, 'B-': 5, 'C+': 4, 'C': 3, 'C-': 2, 'D': 1, 'F': 0 }
-      const validGrades = allGradedTrades.filter(t => gradeToScore[t.grade] !== undefined)
-      const avgScore = validGrades.length > 0 
-        ? validGrades.reduce((sum, t) => sum + (gradeToScore[t.grade] || 0), 0) / validGrades.length
+      // Summary from the one grade only: the mean of the graded letters (A–F) and the grade's own
+      // win/loss/even. A trade the grade withheld counts in no total.
+      const letterPoints: Record<string, number> = { A: 4, B: 3, C: 2, D: 1, F: 0 }
+      const gradedOnly = allGradedTrades.filter(t => t.graded === true && letterPoints[t.grade] !== undefined)
+      const avgPoints = gradedOnly.length > 0
+        ? gradedOnly.reduce((sum, t) => sum + letterPoints[t.grade], 0) / gradedOnly.length
         : null
-      
-      const overallGrade = avgScore !== null 
-        ? Object.entries(gradeToScore).find(([g, s]) => Math.abs(s - avgScore) < 1)?.[0] || 'C'
-        : 'N/A'
-      
-      // Count wins/losses based on whether the USER was the winner
-      // winner field contains the displayName of whoever got the better side
-      const sleeperUserId = profile?.sleeper_user_id
-      const isWinnerMe = (t: any) => {
-        if (!t.winner || t.winner === 'Even') return null
-        const w = t.winner.toLowerCase()
-        const u = username.toLowerCase()
-        const partyName = t.parties?.find((p: any) => p.rosterId === t.userRosterId)?.displayName?.toLowerCase()
-        if (w === u || (partyName && w === partyName)) return true
-        if (sleeperUserId && w === sleeperUserId) return true
-        if (u.length > 2 && (w.includes(u) || u.includes(w))) return true
-        if (partyName && partyName.length > 2 && (w.includes(partyName) || partyName.includes(w))) return true
-        return false
-      }
-      
-      const wins = allGradedTrades.filter(t => isWinnerMe(t) === true).length
-      const losses = allGradedTrades.filter(t => isWinnerMe(t) === false).length
-      const fair = allGradedTrades.filter(t => isWinnerMe(t) === null).length
-      
+      const overallGrade = avgPoints !== null ? ['F', 'D', 'C', 'B', 'A'][Math.round(avgPoints)] : '—'
+      const score = avgPoints !== null ? Math.round((avgPoints / 4) * 100) : null
+
       setReportCardSummary({
-        totalTrades: allGradedTrades.length,
+        totalTrades: gradedOnly.length,
+        notGraded: allGradedTrades.length - gradedOnly.length,
         yearCount: sortedYears.length,
         overallGrade,
-        wins,
-        losses,
-        fair,
-        avgScore: avgScore?.toFixed(1)
+        wins: gradedOnly.filter(t => t.result === 'win').length,
+        losses: gradedOnly.filter(t => t.result === 'loss').length,
+        fair: gradedOnly.filter(t => t.result === 'even').length,
+        score,
       })
       
       // Cache trades for re-fetching with different modes
@@ -7886,19 +7875,20 @@ function AFLegacyContent() {
                                       
                                       {/* Score */}
                                       <div className={`text-4xl sm:text-5xl font-bold mb-2 ${scoreTextColor}`}>
-                                        {tradeAnalytics?.gradeSource === 'one_trade_engine' ? (tradeAnalytics.gradeCard?.score ?? '—') : tradeAnalytics?.gradeCard?.score ?? (reportCardSummary.totalTrades > 0 ? Math.round(parseFloat(reportCardSummary.avgScore || '0') * 10) : 0)}
+                                        {tradeAnalytics?.gradeSource === 'one_trade_engine' ? (tradeAnalytics.gradeCard?.score ?? '—') : tradeAnalytics?.gradeCard?.score ?? reportCardSummary.score ?? '—'}
                                         <span className="text-lg text-white/40 font-normal">/100</span>
                                       </div>
                                       
                                       {/* Label */}
                                       <div className="text-lg sm:text-xl text-white font-medium mb-8">
                                         {tradeAnalytics?.gradeCard?.label || (
-                                          ['A+', 'A'].includes(grade) ? 'Elite Trader' :
-                                          ['A-', 'B+'].includes(grade) ? 'Great Trader' :
-                                          ['B', 'B-'].includes(grade) ? 'Above Average Trader' :
-                                          ['C+', 'C'].includes(grade) ? 'Average Trader' :
-                                          ['C-', 'D+'].includes(grade) ? 'Below Average Trader' :
-                                          'Needs Improvement'
+                                          // The one grade's A–F scale (the same labels trade-analytics uses).
+                                          grade === 'A' ? 'Elite Trader' :
+                                          grade === 'B' ? 'Above Average Trader' :
+                                          grade === 'C' ? 'Average Trader' :
+                                          grade === 'D' ? 'Below Average Trader' :
+                                          grade === 'F' ? 'Struggling Trader' :
+                                          'Not graded'
                                         )}
                                       </div>
                                       
@@ -7906,7 +7896,7 @@ function AFLegacyContent() {
                                       <div className="flex items-center justify-center gap-6 text-sm text-white/60">
                                         <div className="flex items-center gap-2">
                                           <span className={`w-2 h-2 rounded-full ${isAGrade ? 'bg-emerald-400' : isBGrade ? 'bg-cyan-400' : isCGrade ? 'bg-amber-400' : isDGrade ? 'bg-orange-400' : 'bg-rose-400'}`} />
-                                          <span>{reportCardSummary.totalTrades} trades analyzed</span>
+                                          <span>{reportCardSummary.totalTrades} trades graded{reportCardSummary.notGraded > 0 ? ` · ${reportCardSummary.notGraded} not graded` : ''}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                           <span className={`w-2 h-2 rounded-full ${isAGrade ? 'bg-emerald-400' : isBGrade ? 'bg-cyan-400' : isCGrade ? 'bg-amber-400' : isDGrade ? 'bg-orange-400' : 'bg-rose-400'}`} />
@@ -8284,39 +8274,31 @@ function AFLegacyContent() {
                                     
                                     {/* Chart */}
                                     {(() => {
-                                      // Get all graded trades sorted by timestamp
+                                      // Graded trades only, oldest first. Each point adds the league value the
+                                      // one grade was taken on (received − sent); a withheld trade is left out.
                                       const allTrades = Object.values(reportCardTradesByYear)
                                         .flat()
-                                        .filter((t: any) => t.userInvolved && t.timestamp)
+                                        .filter((t: any) => t.userInvolved && t.timestamp && t.graded === true && typeof t.valueDifferential === 'number')
                                         .sort((a: any, b: any) => a.timestamp - b.timestamp)
-                                      
+
                                       if (allTrades.length === 0) {
                                         return (
                                           <div className="text-center text-white/40 py-8">
-                                            No trade data available for chart
+                                            No graded trades to chart
                                           </div>
                                         )
                                       }
-                                      
-                                      // Calculate cumulative values
-                                      const gradeValues: Record<string, number> = {
-                                        'A+': 3500, 'A': 3000, 'A-': 2500,
-                                        'B+': 2000, 'B': 1500, 'B-': 1000,
-                                        'C+': 500, 'C': 0, 'C-': -500,
-                                        'D+': -1000, 'D': -1500, 'D-': -2000,
-                                        'F': -3000
-                                      }
-                                      
+
                                       let cumulative = 0
                                       const chartData = allTrades.map((trade: any) => {
-                                        const value = gradeValues[trade.grade] || 0
-                                        cumulative += value
+                                        cumulative += trade.valueDifferential
                                         return {
                                           timestamp: trade.timestamp,
                                           date: formatInTimezone(trade.timestamp, { month: 'short', day: 'numeric', year: '2-digit' }),
                                           value: cumulative,
                                           grade: trade.grade,
-                                          isWin: ['A+', 'A', 'A-', 'B+', 'B', 'B-'].includes(trade.grade)
+                                          isWin: trade.result === 'win',
+                                          isEven: trade.result === 'even',
                                         }
                                       })
                                       
@@ -8399,9 +8381,9 @@ function AFLegacyContent() {
                                                 <div
                                                   key={i}
                                                   className={`w-3 h-3 rounded-full ${
-                                                    trade.isWin 
-                                                      ? 'bg-emerald-500' 
-                                                      : trade.grade === 'C' || trade.grade === 'C+' || trade.grade === 'C-'
+                                                    trade.isWin
+                                                      ? 'bg-emerald-500'
+                                                      : trade.isEven
                                                         ? 'bg-amber-500'
                                                         : 'bg-rose-500'
                                                   }`}
@@ -8416,63 +8398,50 @@ function AFLegacyContent() {
                                     
                                     {/* Trading Partners Section */}
                                     {(() => {
-                                      // Build trading partners from graded trades
+                                      // Partners from the one grade only: net is the league value each graded
+                                      // trade was taken on, the letter the mean of those trades' letters.
                                       const allTrades = Object.values(reportCardTradesByYear)
                                         .flat()
-                                        .filter((t: any) => t.userInvolved)
-                                      
+                                        .filter((t: any) => t.userInvolved && t.graded === true && typeof t.valueDifferential === 'number')
+
                                       if (allTrades.length === 0) return null
-                                      
-                                      const gradeValues: Record<string, number> = {
-                                        'A+': 3500, 'A': 3000, 'A-': 2500,
-                                        'B+': 2000, 'B': 1500, 'B-': 1000,
-                                        'C+': 500, 'C': 0, 'C-': -500,
-                                        'D+': -1000, 'D': -1500, 'D-': -2000,
-                                        'F': -3000
-                                      }
-                                      
+
                                       const partnerMap: Record<string, { name: string; trades: number; netValue: number; grades: string[] }> = {}
-                                      
+
                                       allTrades.forEach((trade: any) => {
                                         const otherParties = trade.parties?.filter((p: any) => p.rosterId !== trade.userRosterId) || []
-                                        
+
                                         otherParties.forEach((partner: any) => {
                                           const name = partner.displayName || partner.userId || 'Unknown'
                                           if (!partnerMap[name]) {
                                             partnerMap[name] = { name, trades: 0, netValue: 0, grades: [] }
                                           }
                                           partnerMap[name].trades++
-                                          partnerMap[name].netValue += gradeValues[trade.grade] || 0
+                                          partnerMap[name].netValue += trade.valueDifferential
                                           partnerMap[name].grades.push(trade.grade)
                                         })
                                       })
-                                      
+
                                       const partners = Object.values(partnerMap).sort((a, b) => b.netValue - a.netValue)
                                       if (partners.length === 0) return null
-                                      
+
                                       const bestMark = partners[0]
                                       const nemesis = partners[partners.length - 1]
-                                      
-                                      const getGradeForValue = (netValue: number): string => {
-                                        if (netValue >= 3000) return 'A+'
-                                        if (netValue >= 2000) return 'A'
-                                        if (netValue >= 1000) return 'A-'
-                                        if (netValue >= 500) return 'B+'
-                                        if (netValue >= 0) return 'B'
-                                        if (netValue >= -500) return 'C'
-                                        if (netValue >= -1500) return 'C-'
-                                        if (netValue >= -2500) return 'D'
-                                        if (netValue >= -3500) return 'D-'
-                                        return 'F'
+
+                                      const letterPoints: Record<string, number> = { A: 4, B: 3, C: 2, D: 1, F: 0 }
+                                      const meanGrade = (grades: string[]): string => {
+                                        const pts = grades.filter(g => letterPoints[g] !== undefined).map(g => letterPoints[g])
+                                        if (pts.length === 0) return '—'
+                                        return ['F', 'D', 'C', 'B', 'A'][Math.round(pts.reduce((s, p) => s + p, 0) / pts.length)]
                                       }
-                                      
+
                                       const getGradeColor = (grade: string): string => {
-                                        if (['A+', 'A', 'A-'].includes(grade)) return 'bg-emerald-500'
-                                        if (['B+', 'B', 'B-'].includes(grade)) return 'bg-green-600'
-                                        if (['C+', 'C'].includes(grade)) return 'bg-amber-500'
-                                        if (['C-', 'D+'].includes(grade)) return 'bg-orange-500'
-                                        if (['D', 'D-'].includes(grade)) return 'bg-orange-600'
-                                        return 'bg-rose-500'
+                                        if (grade === 'A') return 'bg-emerald-500'
+                                        if (grade === 'B') return 'bg-green-600'
+                                        if (grade === 'C') return 'bg-amber-500'
+                                        if (grade === 'D') return 'bg-orange-600'
+                                        if (grade === 'F') return 'bg-rose-500'
+                                        return 'bg-slate-600'
                                       }
                                       
                                       return (
@@ -8505,7 +8474,7 @@ function AFLegacyContent() {
                                           {/* Partner List */}
                                           <div className="space-y-2">
                                             {partners.map((partner, idx) => {
-                                              const grade = getGradeForValue(partner.netValue)
+                                              const grade = meanGrade(partner.grades)
                                               return (
                                                 <div 
                                                   key={idx} 
@@ -8557,27 +8526,21 @@ function AFLegacyContent() {
                                     {(() => {
                                       const allTrades = Object.values(reportCardTradesByYear)
                                         .flat()
-                                        .filter((t: any) => t.userInvolved && t.grade)
-                                      
+                                        .filter((t: any) => t.userInvolved && t.graded === true && typeof t.valueDifferential === 'number')
+
                                       if (allTrades.length === 0) return null
-                                      
-                                      const gradeValues: Record<string, number> = {
-                                        'A+': 3500, 'A': 3000, 'A-': 2500,
-                                        'B+': 2000, 'B': 1500, 'B-': 1000,
-                                        'C+': 500, 'C': 0, 'C-': -500,
-                                        'D+': -1000, 'D': -1500, 'D-': -2000,
-                                        'F': -3000
-                                      }
-                                      
+
+                                      // The league value the one grade was taken on (received − sent), never a
+                                      // number read off the letter.
                                       const tradesWithValue = allTrades.map((t: any) => ({
                                         ...t,
-                                        estimatedValue: gradeValues[t.grade] || 0
+                                        estimatedValue: t.valueDifferential
                                       }))
                                       
                                       const bestTrade = tradesWithValue.reduce((best: any, t: any) => 
-                                        t.estimatedValue > (best?.estimatedValue || -Infinity) ? t : best, null)
-                                      const worstTrade = tradesWithValue.reduce((worst: any, t: any) => 
-                                        t.estimatedValue < (worst?.estimatedValue || Infinity) ? t : worst, null)
+                                        t.estimatedValue > (best?.estimatedValue ?? -Infinity) ? t : best, null)
+                                      const worstTrade = tradesWithValue.reduce((worst: any, t: any) =>
+                                        t.estimatedValue < (worst?.estimatedValue ?? Infinity) ? t : worst, null)
                                       
                                       const renderTradeCard = (trade: any, type: 'best' | 'worst') => {
                                         if (!trade) return null
@@ -8605,14 +8568,14 @@ function AFLegacyContent() {
                                                 {isBest ? 'Your Greatest Victory' : 'Your Biggest Regret'}
                                               </div>
                                               <h4 className="text-2xl font-bold text-white">{isBest ? 'Best Trade' : 'Worst Trade'}</h4>
-                                              <div className="text-xs text-white/40">With Hindsight</div>
+                                              <div className="text-xs text-white/40">Graded {trade.grade} at the time{trade.currentGrade && trade.currentGrade !== trade.grade ? ` · ${trade.currentGrade} now` : ''}</div>
                                             </div>
                                             
                                             {/* Value */}
                                             <div className={`text-5xl font-black text-center mb-2 ${isBest ? 'text-emerald-400' : 'text-rose-400'}`}>
                                               {value >= 0 ? '+' : ''}{value.toLocaleString()}
                                             </div>
-                                            <div className="text-xs text-white/50 text-center mb-4">dynasty value {isBest ? 'gained' : 'lost'}</div>
+                                            <div className="text-xs text-white/50 text-center mb-4">league value {value >= 0 ? 'gained' : 'lost'}</div>
                                             
                                             {/* Trade Details */}
                                             <div className="text-center text-sm text-white/60 mb-1">vs {otherParty?.displayName || 'Unknown'}</div>
@@ -9562,13 +9525,20 @@ function AFLegacyContent() {
                                               <div className="flex items-center justify-between gap-3">
                                                 <div className="flex-1 min-w-0">
                                                   <div className="flex items-center gap-2 mb-1">
-                                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                                                      ['A+', 'A', 'A-', 'B+'].includes(trade.grade) ? 'bg-emerald-500/20 text-emerald-400' :
-                                                      ['D', 'F'].includes(trade.grade) ? 'bg-rose-500/20 text-rose-400' :
-                                                      'bg-amber-500/20 text-amber-400'
-                                                    }`}>
-                                                      {trade.grade}
+                                                    <span
+                                                      className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                                        trade.graded !== true ? 'bg-slate-500/20 text-white/50' :
+                                                        trade.result === 'win' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                        trade.result === 'loss' ? 'bg-rose-500/20 text-rose-400' :
+                                                        'bg-amber-500/20 text-amber-400'
+                                                      }`}
+                                                      title={trade.graded !== true ? trade.gradeWithheld || undefined : undefined}
+                                                    >
+                                                      {trade.graded === true ? trade.grade : 'Not graded'}
                                                     </span>
+                                                    {trade.graded === true && trade.currentGrade && trade.currentGrade !== trade.grade && (
+                                                      <span className="text-[11px] text-white/50">now {trade.currentGrade}</span>
+                                                    )}
                                                     <span className="text-xs text-white/40">
                                                       Week {trade.week} • {formatDateInTimezone(trade.timestamp)}
                                                     </span>
@@ -9590,6 +9560,7 @@ function AFLegacyContent() {
                                                       parties: trade.parties || []
                                                     }}
                                                     userId={profile?.sleeper_user_id || username || ''}
+                                                    leagueId={reportCardLeague}
                                                     isSuperFlex={leagues.find(l => l.league_id === reportCardLeague)?.is_sf === true}
                                                   />
                                                 </div>

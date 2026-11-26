@@ -121,36 +121,3 @@ export function getVolatilityLabel(score: number): 'Low' | 'Medium' | 'High' {
   if (score < 1.1) return 'Medium';
   return 'High';
 }
-
-export function adjustConfidenceForVolatility(
-  baseConfidence: number,
-  volatilityScore: number,
-  deltaValue: number
-): { 
-  adjustedConfidence: number; 
-  volatilityLabel: string;
-  explanation: string;
-} {
-  const volLabel = getVolatilityLabel(volatilityScore);
-  let adjustment = 0;
-  let explanation = '';
-
-  if (volLabel === 'High') {
-    adjustment = deltaValue < 0 ? -0.15 : -0.08;
-    explanation = 'Outcome depended on volatile asset performance';
-  } else if (volLabel === 'Low') {
-    adjustment = deltaValue > 0 ? 0.08 : 0.03;
-    explanation = 'Trade involved stable, predictable assets';
-  } else {
-    adjustment = 0;
-    explanation = 'Trade had moderate risk profile';
-  }
-
-  const adjustedConfidence = Math.max(0.15, Math.min(0.95, baseConfidence + adjustment));
-
-  return {
-    adjustedConfidence,
-    volatilityLabel: volLabel,
-    explanation
-  };
-}

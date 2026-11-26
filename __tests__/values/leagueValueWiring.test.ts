@@ -88,12 +88,19 @@ const MUST_WIRE: ReadonlyArray<{ file: string; why: string }> = [
  * against a specific league's starting slots and scoring; applying one league's board to a trade
  * that belongs to another is wrong AND confident, which is worse than the flat constant.
  */
-const MUST_NOT_WIRE: ReadonlyArray<{ file: string; why: string }> = [
-  {
-    file: 'lib/trade-alternatives.ts',
-    why: 'receives a UserTrade, which carries transactionId and parties but no league id',
-  },
-]
+const MUST_NOT_WIRE: ReadonlyArray<{ file: string; why: string }> = []
+
+/*
+ * `lib/trade-alternatives.ts` was the one entry above until 2026-11-26: it priced its alternatives on
+ * `pricePlayer` with no league. It no longer prices anything — the trade and every alternative are
+ * graded by the one completed-trade grade, on the caller's own league — so it left this list rather
+ * than being wired. The test below pins that, so a pricer cannot creep back in unwired.
+ */
+describe('lib/trade-alternatives.ts', () => {
+  it('no longer prices players at all (the one completed-trade grade does)', () => {
+    expect(PRICES_PLAYERS.test(code('lib/trade-alternatives.ts'))).toBe(false)
+  })
+})
 
 describe('league value board wiring', () => {
   describe.each(MUST_WIRE)('$file', ({ file, why }) => {

@@ -40,6 +40,18 @@ export type LegacyPackageGrade =
     }
   | { graded: false; reason: string }
 
+// "grade of B", "graded a C", "an A+ trade", "B-" — any letter grade written into prose.
+const GRADE_LETTER_IN_PROSE =
+  /\b(?:grades?|graded|letter)\b[^.\n]{0,20}?\b[A-F](?:[+-]|(?![A-Za-z']))|(?:^|[\s("'])[A-F][+-](?=[\s).,;:!?"']|$)/i
+
+/**
+ * True when LLM prose writes a letter grade of its own. On the legacy trade tools an LLM may explain
+ * THE grade, never issue one, so prose that does is dropped for the grade's own words. PURE.
+ */
+export function proseNamesAGrade(text: string): boolean {
+  return GRADE_LETTER_IN_PROSE.test(text)
+}
+
 /** The one grade's view, cut down to what a legacy card prints. Nothing is recomputed. */
 export function legacyPackageGrade(view: TradeGradeView): LegacyPackageGrade {
   if (!view.graded) return { graded: false, reason: view.reason }
