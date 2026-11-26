@@ -176,6 +176,12 @@ type CanonicalCreateTransactionResult = {
   inviteUrl: string
 }
 
+/** The C2C standings model a new league starts with. NBA C2C scoring requires unified. */
+function c2cStandingsModelFor(sport: string, requested: unknown): string {
+  if (String(sport).toUpperCase() !== 'NFL') return 'unified'
+  return requested === 'unified' || requested === 'hybrid' ? requested : 'separate'
+}
+
 export async function createCanonicalLeagueInTransaction(
   tx: Tx,
   appUserId: string,
@@ -978,6 +984,9 @@ export async function createCanonicalLeagueInTransaction(
         startupDraftType: coreDraft,
         rookieDraftType: 'linear',
         collegeDraftType: 'snake',
+        // Owner's decision, 2026-11-24: an NFL C2C league plays its college and pro sides as separate
+        // matchups and records (lib/c2c/campusSeason); one combined score is the commissioner's opt-in.
+        standingsModel: c2cStandingsModelFor(sport, setup.standingsModel),
       },
       update: {
         startupDraftType: coreDraft,

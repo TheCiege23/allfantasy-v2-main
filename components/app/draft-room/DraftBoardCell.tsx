@@ -113,6 +113,11 @@ type DraftBoardCellProps = {
   isDevyRound?: boolean
   isCollegeRound?: boolean
   pickHighlight?: PickHighlightTone
+  /**
+   * Set on an empty slot the viewer's team owns: the tile is outlined in white and says so
+   * ("Your pick"), so a manager can see when they pick without counting columns.
+   */
+  viewerUpcomingLabel?: string | null
   /** When set, show a trade affordance (opens pick-trade flow from parent). */
   onTradeFromCell?: () => void
   /**
@@ -121,6 +126,13 @@ type DraftBoardCellProps = {
    * focusRound / focusOriginalRosterId so the relevant row highlights.
    */
   onViewTradeHistory?: () => void
+  /**
+   * The viewer owns this pick. On a phone the trade button shows only on these (2026-11-25, the simplify
+   * pass): with no hover there, every empty pick on the board carried one — ~40 icons on one screen.
+   * Anyone's pick can still be offered for from the Trades panel's "New offer", and on md+ every
+   * pick keeps its hover button.
+   */
+  isOwnPick?: boolean
   /** Snake: reversed rounds show a left arrow on empty cells; forward rounds show right. */
   emptyCellDirection?: 'forward' | 'reverse'
   presentationVariant?: 'default' | 'redraft_snake'
@@ -188,7 +200,9 @@ function DraftBoardCellInner({
   isDevyRound = false,
   isCollegeRound = false,
   pickHighlight = 'none',
+  viewerUpcomingLabel = null,
   emptyCellDirection = 'forward',
+  isOwnPick = false,
   onTradeFromCell,
   onViewTradeHistory,
   onCommissionerEditPick,
@@ -308,7 +322,7 @@ function DraftBoardCellInner({
         isCurrentPick
           ? 'bg-[radial-gradient(120%_140%_at_0%_0%,color-mix(in_srgb,var(--af-league-accent,#22d3ee)_28%,transparent),#0d1020_62%)] ring-2 ring-[color:var(--af-league-accent,#67e8f9)]'
           : isEmpty
-            ? 'bg-[#2a2f45]'
+            ? `bg-[#2a2f45] ${viewerUpcomingLabel ? 'ring-2 ring-inset ring-white/80' : ''}`
             : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300 ring-offset-2 ring-offset-[#0b1428]' : ''} ${highlightClass(pickHighlight)}`
       }`}
       style={openPlayer ? { ...tileStyle, cursor: 'pointer' } : tileStyle}
@@ -370,7 +384,8 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-trade-${pick.overall}`}
           title={t('draftRoom.board.offerPickTrade')}
           aria-label={t('draftRoom.board.offerPickTradeAria')}
-          className={`absolute ${tradeSpot} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
+          data-own-pick={isOwnPick ? 'true' : undefined}
+          className={`absolute ${tradeSpot} z-[1] ${isOwnPick ? 'inline-flex' : 'hidden md:inline-flex'} h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
         >
           <ArrowLeftRight className="h-3 w-3" />
         </button>
@@ -450,6 +465,14 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-slot-salary-${pick.overall}`}
         >
           ${pick.slotSalary.salary}
+        </span>
+      ) : null}
+      {isEmpty && viewerUpcomingLabel && !isCurrentPick ? (
+        <span
+          className="mt-0.5 block truncate text-center text-[11px] font-bold leading-tight text-white"
+          data-testid={`draft-board-cell-your-pick-${pick.overall}`}
+        >
+          {viewerUpcomingLabel}
         </span>
       ) : null}
       {isEmpty ? (

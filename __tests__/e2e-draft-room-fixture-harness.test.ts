@@ -54,6 +54,17 @@ describe('/e2e/draft-room-fixture', () => {
     expect(fixturePoolEntries().some((e) => drafted.has(e.name))).toBe(false)
   })
 
+  it('?clock=long seeds a 4-hour pick clock (the long-clock extras render); the default stays 90s', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    const roomFor = async (searchParams?: Record<string, string>) =>
+      childrenOf(await DraftRoomFixturePage(searchParams ? { searchParams: Promise.resolve(searchParams) } : undefined))[1]
+        .props.initialSnapshot as ReturnType<typeof buildFixtureSnapshot>
+    const long = await roomFor({ clock: 'long' })
+    expect(long.timerSeconds).toBe(4 * 3600)
+    expect(long.timer?.remainingSeconds).toBe(3 * 3600 + 5 * 60)
+    expect((await roomFor()).timerSeconds).toBe(90)
+  })
+
   it('answers the session endpoint with the same snapshot it seeds', () => {
     const fx = fixtureApiResponses(Date.UTC(2026, 8, 1))
     expect((fx.league['draft/session'] as { session: unknown }).session).toEqual(fx.snapshot)

@@ -179,18 +179,25 @@ describe('checkCampusSave', () => {
         { playerId: 'c2', position: 'WR', playerName: 'Campus WR' },
       ]),
     },
+    // No college week counts in the NFL week these saves name, so the kickoff lock has nothing to judge
+    // (the lock itself: __tests__/c2c/football-campus-lineup-lock.test.ts).
+    sportsGame: { findMany: vi.fn(async () => []) },
+    sportsPlayer: { findMany: vi.fn(async () => []) },
+    playerIdentityMap: { findMany: vi.fn(async () => []) },
   }
   const before = { lineup_sections: { devy: [{ id: 'c1' }, { id: 'c2' }] } }
   const after = (campus: string[]) => ({ lineup_sections: { devy: [{ id: 'c1' }, { id: 'c2' }], campus } })
   const league = { id: 'L1', platform: 'af', sport: 'NFL', leagueVariant: 'c2c' }
 
   it('checks a changed campus lineup against the league slots and roster positions', async () => {
-    expect(await checkCampusSave(db as never, { league, redraftRosterId: 'R1', before, after: after(['c1', 'c2']) })).toEqual([])
+    expect(await checkCampusSave(db as never, { league, redraftRosterId: 'R1', before, after: after(['c1', 'c2']), season: 2026, week: 1 })).toEqual([])
     const issues = await checkCampusSave(db as never, {
       league,
       redraftRosterId: 'R1',
       before,
       after: { lineup_sections: { devy: [{ id: 'c1' }, { id: 'c2', position: 'RB' }], campus: ['c2', 'c1'] } },
+      season: 2026,
+      week: 1,
     })
     expect(issues).toEqual([]) // order and client-sent positions do not matter; the roster row says WR → FLEX
   })

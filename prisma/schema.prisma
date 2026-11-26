@@ -6671,6 +6671,7 @@ model League {
   bestBallRosterValidations             BestBallRosterValidation[]
   bigBrotherConfig                      BigBrotherLeagueConfig?
   c2cConfig                             C2CLeagueConfig?
+  c2cCampusSeasons                      C2CCampusSeason[]
   c2cLeague                             C2CLeague?
   c2cScoringLogs                        C2CScoringLog[]
   c2cTransitionRecords                  C2CTransitionRecord[]
@@ -20983,4 +20984,72 @@ model PartnerTaxProfile {
   stripeTransfersStatus String?
   stripeStatusCheckedAt DateTime?
   updatedAt    DateTime @updatedAt
+}
+
+/// C2C "separate" standings model: the college side's own season (schedule, records, playoffs, champion).
+/// Weeks are college football weeks (CFBD regular-season week numbers). Owner's decision, 2026-11-24.
+model C2CCampusSeason {
+  id                 String              @id @default(cuid())
+  leagueId           String
+  season             Int
+  /// The pro side's RedraftSeason this college season belongs to.
+  redraftSeasonId    String
+  /// regular | playoffs | complete
+  status             String              @default("regular") @db.VarChar(16)
+  regularSeasonWeeks Int
+  playoffTeams       Int                 @default(0)
+  championRosterId   String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  league             League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  matchups           C2CCampusMatchup[]
+  standings          C2CCampusStanding[]
+
+  @@unique([leagueId, season])
+  @@map("c2c_campus_seasons")
+}
+
+model C2CCampusMatchup {
+  id             String          @id @default(cuid())
+  campusSeasonId String
+  week           Int
+  /// RedraftRoster ids (the same team ids the pro side uses).
+  homeRosterId   String
+  awayRosterId   String?
+  homeScore      Float           @default(0)
+  awayScore      Float           @default(0)
+  /// scheduled | active | final
+  status         String          @default("scheduled") @db.VarChar(16)
+  /// regular | bye | playoff
+  kind           String          @default("regular") @db.VarChar(16)
+  playoffRound   Int?
+  bracketSlot    Int?
+  detail         Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  campusSeason   C2CCampusSeason @relation(fields: [campusSeasonId], references: [id], onDelete: Cascade)
+
+  @@index([campusSeasonId, week])
+  @@map("c2c_campus_matchups")
+}
+
+model C2CCampusStanding {
+  id             String          @id @default(cuid())
+  campusSeasonId String
+  rosterId       String
+  wins           Int             @default(0)
+  losses         Int             @default(0)
+  ties           Int             @default(0)
+  medianWins     Int             @default(0)
+  medianLosses   Int             @default(0)
+  medianTies     Int             @default(0)
+  pointsFor      Float           @default(0)
+  pointsAgainst  Float           @default(0)
+  rank           Int?
+  seed           Int?
+  updatedAt      DateTime        @updatedAt
+  campusSeason   C2CCampusSeason @relation(fields: [campusSeasonId], references: [id], onDelete: Cascade)
+
+  @@unique([campusSeasonId, rosterId])
+  @@map("c2c_campus_standings")
 }

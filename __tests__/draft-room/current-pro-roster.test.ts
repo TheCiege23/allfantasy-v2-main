@@ -91,6 +91,29 @@ describe('current pro roster reconciliation', () => {
       const sleeper = row({ source: 'sleeper', name: 'Yanic Konan Niederhäuser', status: 'ACT', team: 'CUR', dob: '2003-03-17' })
       expect(ids(reconcileCurrentProRows('NBA', [current, spare], [current, spare, sleeper], true, now))).toEqual(['ri:1755'])
     })
+    describe('when both are in the feed and neither is live', () => {
+      const proof = (over: Record<string, unknown> = {}) => row({ source: 'thesportsdb', status: 'Active', dob: '2003-03-17', ...over })
+      const pair = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+        [row({ id: 'ri:a', externalId: 'a', status: 'INACT', dob: '2003-03-17', ...a }), row({ id: 'ri:b', externalId: 'b', status: 'INACT', dob: '2003-03-17', ...b })]
+      it('keeps the one with a game this season', () => {
+        const [a, b] = pair({}, {})
+        expect(ids(reconcileCurrentProRows('NHL', [a, b], [proof()], true, now, new Set(['b'])))).toEqual(['ri:b'])
+      })
+      it('keeps the one on the club the confirming provider has him on', () => {
+        // Production 2026-11-25: Ryan Ellis, ids 412 (San Jose) and 4660 (Chicago); TheSportsDB has Chicago.
+        const [a, b] = pair({ team: 'San Jose Sharks' }, { team: 'Chicago Blackhawks' })
+        expect(ids(reconcileCurrentProRows('NHL', [a, b], [proof({ team: 'Chicago Blackhawks' })], true, now))).toEqual(['ri:b'])
+      })
+      it('keeps the one at the confirming position when the clubs agree', () => {
+        // Production 2026-11-25: Alex Jefferies, ids 3371 (RW) and 3372 (LW), both Islanders; TheSportsDB has LW.
+        const [a, b] = pair({ position: 'RW' }, { position: 'LW' })
+        expect(ids(reconcileCurrentProRows('NHL', [a, b], [proof({ position: 'LW' })], true, now))).toEqual(['ri:b'])
+      })
+      it('keeps both when nothing tells them apart', () => {
+        const [a, b] = pair({}, {})
+        expect(reconcileCurrentProRows('NHL', [a, b], [proof()], true, now)).toHaveLength(2)
+      })
+    })
     it('never merges different people: a namesake, or a twin on the same club', () => {
       const current = row({ id: 'ri:1', dob: '2003-03-17' })
       const namesake = row({ id: 'ri:2', status: 'INACT', dob: '1980-01-01' })
@@ -127,6 +150,26 @@ describe('current pro roster reconciliation', () => {
       expect(reconcileCurrentProRows('NHL', [sennecke, other], [], true, now, played).map((r) => r.id)).toEqual(['ri:3825'])
       const tsdbSameId = row({ source: 'thesportsdb', externalId: '3825', status: 'Retired', dob: '2006-01-28' })
       expect(reconcileCurrentProRows('NFL', [tsdbSameId], [tsdbSameId], true, now, played)).toHaveLength(0)
+    })
+    it('does not bring back an old profile whose birthday is the current one with day and month exchanged', () => {
+      // Production 2026-11-25: Jayden Struble is id 3562 (INACT, Montreal, 2001-08-09, 12 games) and
+      // id 4662 (ACT, Nashville, 2001-09-08). Restoring 3562 for its games listed him twice.
+      const old = row({ id: 'ri:3562', externalId: '3562', status: 'INACT', team: 'Old Team', position: 'D', dob: '2001-08-09' })
+      const current = row({ id: 'ri:4662', externalId: '4662', position: 'D', dob: '2001-09-08' })
+      const games = new Set(['3562', '4662'])
+      expect(reconcileCurrentProRows('NHL', [old, current], [], true, now, games).map((r) => r.id)).toEqual(['ri:4662'])
+      // Alone he is still a player with games this season.
+      expect(reconcileCurrentProRows('NHL', [old], [], true, now, games).map((r) => r.id)).toEqual(['ri:3562'])
+      // Not when the other profile is not live, plays another position, or was born in another year.
+      for (const other of [{ ...current, status: 'INACT' }, { ...current, position: 'G' }, { ...current, dob: '1998-09-08' }, { ...current, dob: '2001-09-09' }]) {
+        expect(reconcileCurrentProRows('NHL', [old, other], [], true, now, games).map((r) => r.id)).toContain('ri:3562')
+      }
+    })
+    it('keeps two different players who share a name', () => {
+      // The goalies named Matt Murray: born 1994 and 1998, both real.
+      const elder = row({ id: 'ri:597', externalId: '597', name: 'Matt Murray', status: 'INACT', position: 'G', dob: '1994-05-25' })
+      const younger = row({ id: 'ri:2884', externalId: '2884', name: 'Matt Murray', position: 'G', dob: '1998-02-02' })
+      expect(reconcileCurrentProRows('NHL', [elder, younger], [], true, now, new Set(['597', '2884']))).toHaveLength(2)
     })
     it('does not bring back the spare profile of a player whose other profile is the current one', () => {
       const current = row({ id: 'ri:1', externalId: '1', dob: '2006-01-28' })

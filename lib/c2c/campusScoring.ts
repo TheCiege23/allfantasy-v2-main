@@ -27,6 +27,7 @@ import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportS
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { campusStarterIds } from './campusLineup'
 import { loadCfbWeeksForNflWeek } from './campusWeeks'
+import { loadFootballCampusWeekStarters } from './footballCampusWeekSnapshot'
 
 export { campusSport, isBasketballC2CLeague, isFootballC2CLeague } from './campusLineup'
 
@@ -47,12 +48,14 @@ type Starters = { home: string[]; away: string[]; positionOf: Map<string, string
 async function loadCampusStarters(
   db: Pick<PrismaClient, 'roster' | 'redraftRosterPlayer'>,
   args: { homeRosterId: string; awayRosterId: string },
+  /** Football: each roster's campus starters as saved for the scored week (lib/c2c/footballCampusWeekSnapshot.ts). */
+  weekStarters?: ReadonlyMap<string, string[]>,
 ): Promise<Starters | null> {
   const rosters = await db.roster.findMany({
     where: { redraftRosterId: { in: [args.homeRosterId, args.awayRosterId] } },
     select: { redraftRosterId: true, playerData: true },
   })
-  const saved = (id: string) => campusStarterIds(rosters.find((r) => r.redraftRosterId === id)?.playerData ?? null)
+  const saved = (id: string) => weekStarters?.get(id) ?? campusStarterIds(rosters.find((r) => r.redraftRosterId === id)?.playerData ?? null)
   if (saved(args.homeRosterId).length === 0 && saved(args.awayRosterId).length === 0) return null
 
   const rows = await db.redraftRosterPlayer.findMany({
@@ -86,11 +89,47 @@ export async function campusPointsForMatchup(
   db: CampusDb,
   args: { season: number; nflWeek: number; homeRosterId: string; awayRosterId: string },
 ): Promise<CampusMatchupPoints | null> {
-  const starters = await loadCampusStarters(db, args)
+  return scoreCampusWeeks(db, {
+    season: args.season,
+    snapshotWeek: args.nflWeek,
+    homeRosterId: args.homeRosterId,
+    awayRosterId: args.awayRosterId,
+    cfbWeeks: () => loadCfbWeeksForNflWeek(db, { season: args.season, nflWeek: args.nflWeek }),
+  })
+}
+
+/**
+ * Both teams' campus points for ONE college week: the "separate" standings model's college matchup
+ * (lib/c2c/campusSeason). The lineup is the one saved for the NFL week that college week falls in
+ * (`snapshotNflWeek`). Null when neither team starts a college player.
+ */
+export async function campusPointsForCfbWeek(
+  db: CampusDb,
+  args: { season: number; cfbWeek: number; snapshotNflWeek: number; homeRosterId: string; awayRosterId: string },
+): Promise<CampusMatchupPoints | null> {
+  return scoreCampusWeeks(db, {
+    season: args.season,
+    snapshotWeek: args.snapshotNflWeek,
+    homeRosterId: args.homeRosterId,
+    awayRosterId: args.awayRosterId,
+    cfbWeeks: async () => [args.cfbWeek],
+  })
+}
+
+async function scoreCampusWeeks(
+  db: CampusDb,
+  args: { season: number; snapshotWeek: number; homeRosterId: string; awayRosterId: string; cfbWeeks: () => Promise<number[]> },
+): Promise<CampusMatchupPoints | null> {
+  // The lineup as saved for THIS week, so a later change never rewrites a past week's score. A roster
+  // with no saved week yet (or a reader without the cache) falls back to its current lineup.
+  const weekStarters = typeof (db as Partial<Pick<PrismaClient, 'sportsDataCache'>>).sportsDataCache?.findMany === 'function'
+    ? await loadFootballCampusWeekStarters(db as unknown as Pick<PrismaClient, 'sportsDataCache'>, { redraftRosterIds: [args.homeRosterId, args.awayRosterId], season: args.season, week: args.snapshotWeek }).catch(() => undefined)
+    : undefined
+  const starters = await loadCampusStarters(db, args, weekStarters)
   if (!starters) return null
   const { home, away, positionOf } = starters
 
-  const cfbWeeks = await loadCfbWeeksForNflWeek(db, { season: args.season, nflWeek: args.nflWeek })
+  const cfbWeeks = await args.cfbWeeks()
   const all = [...new Set([...home, ...away])]
   if (cfbWeeks.length === 0 || all.length === 0) return { cfbWeeks, home: zeroTeam(home), away: zeroTeam(away) }
 
