@@ -5,6 +5,7 @@ import { DevyLeagueSettingsHub } from '@/components/devy/settings/DevyLeagueSett
 import { BestBallSettingsCommissionerPanel } from '@/components/league-settings/BestBallSettingsCommissionerPanel'
 import { MergedDevyC2CCommissionerSettings } from '@/components/merged-devy-c2c/MergedDevyC2CCommissionerSettings'
 import { CollegeSideSettingsPanel } from '@/components/c2c/CollegeSideSettingsPanel'
+import { LeagueGroupPanel } from '@/components/league-groups/LeagueGroupPanel'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
@@ -69,6 +70,8 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           {t('lsHub.cr.note')}
         </p>
       </div>
+
+      <LeagueGroupPanel leagueId={leagueId} />
 
       {isDevy ? (
         <div className="space-y-3">
