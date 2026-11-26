@@ -23,9 +23,8 @@
  * HERE INSTEAD OF WRITTEN IN A COMMENT AT EACH SITE. An IDP value is computed against a
  * specific league's starting slots and scoring; applying one league's board to another is worse
  * than the flat constant, because it is wrong AND confident. Callers that genuinely have no
- * league — `lib/trade-alternatives.ts` receives a `UserTrade` that carries no league id — must
- * keep passing nothing, and get `{}`
- * from here if they ask anyway.
+ * league must keep passing nothing, and get `{}` from here if they ask anyway. (The example
+ * that stood here, `lib/trade-alternatives.ts`, no longer prices at all since 2026-11-26.)
  *
  * ⚠ FORMAT IS DERIVED HERE, NOT AT THE CALL SITE, AND THAT IS THE SECOND HALF OF THE POINT.
  * `isDynasty` selects between two decay curves and two ceilings (5500/5300 IDP, 500/650 kicker),

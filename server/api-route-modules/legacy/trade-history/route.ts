@@ -9,8 +9,13 @@ import {
   resolveSleeperUser,
 } from '@/lib/sleeper-client'
 import { getCanonicalPlayerMapForSport } from '@/lib/canonical/getCanonicalPlayer'
-import { pricePlayer, pricePick, ValuationContext } from '@/lib/hybrid-valuation'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
+import { isUserParty } from '@/lib/user-matching'
+import { legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
+import { gradeLegacyCompletedTrades } from '@/lib/legacy/legacyCompletedTradeGrades'
+import { proseNamesAGrade } from '@/lib/legacy/legacyPackageGrade'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
 
 const openai = getOpenAIRouteClient()
 
@@ -95,7 +100,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-history", tool: 
     }
 
     if (action === 'grade' && trade) {
-      const gradedTrade = await gradeTrade(trade)
+      const gradedTrade = await gradeTrade(normalizedLeagueId, String(userId), trade)
       return NextResponse.json({ gradedTrade })
     }
 
@@ -445,152 +450,151 @@ async function fetchSeasonTrades(
   return { trades: allTrades.sort((a, b) => b.timestamp - a.timestamp), managerMap, waiverAdds, waiverDrops, leagueMoves }
 }
 
-async function gradeTrade(trade: ProcessedTrade) {
-  // Convert trade timestamp to ISO date for historical lookup
-  const tradeDate = new Date(trade.timestamp).toISOString().split('T')[0]
-  
-  console.log(`[GRADE] Trade date: ${tradeDate}, using hybrid valuation (Excel -> FantasyCalc fallback)`)
+/*
+ * 🛑 `action: 'grade'` GRADES THROUGH THE ONE COMPLETED-TRADE GRADE (2026-11-26).
+ *
+ * Until then each past trade on the AF Legacy report card was priced by `lib/hybrid-valuation.ts`
+ * (`pricePlayer` / `pricePick`, Excel → FantasyCalc → curve), the winner was whichever side's total
+ * was 5% higher, and the letter was a FAIRNESS letter on its own 11-step scale (A = "balanced",
+ * D = "lopsided") — so a trade you won badly and a trade you lost badly were both a D, while the page
+ * counted every A as a big win. An LLM then wrote the verdict from those numbers.
+ *
+ * Now the trade goes to `oneGradeForCompletedTrade` (through `gradeLegacyCompletedTrades`, exactly as
+ * `/api/legacy/trade-analytics` does) on the signed-in user's verified AF league row, from the
+ * VIEWER's side:
+ *   - `grade` is the trade's frozen ORIGINAL letter ("at the time"); `currentGrade` is today's re-grade;
+ *   - `result` is the grade's own reading of that letter (B or better win, D or worse loss, C even),
+ *     and `winner` names the side it favours;
+ *   - `valueDifferential` is the league value the letter was taken on (received − sent, your side).
+ * A withheld grade returns `graded: false`, `grade: null` and the grader's reason as `gradeWithheld`,
+ * and no LLM call is made. When graded, an LLM may still write the two lines of prose, but it is handed
+ * the canonical grade as the verdict, and prose that names any letter grade is discarded in favour of
+ * the grade's own label and recommendation.
+ */
 
-  // Create valuation context for the trade date
-  const ctx: ValuationContext = {
-    asOfDate: tradeDate,
-    isSuperFlex: true
-  }
+type Outcome = 'win' | 'loss' | 'even'
 
-  let sideAValue = 0
-  let sideBValue = 0
-  const sideAAssets: string[] = []
-  const sideBAssets: string[] = []
-  const valuationSources: string[] = []
+/** The grade's own reading of a letter: B or better wins, D or worse loses. */
+export function outcomeOfLetter(letter: GradeLetter): Outcome {
+  return letter === 'A' || letter === 'B' ? 'win' : letter === 'D' || letter === 'F' ? 'loss' : 'even'
+}
 
-  // Find the user's party to correctly attribute wins/losses
-  if (trade.parties.length >= 2) {
-    const [partyA, partyB] = trade.parties
+/** The viewer's party: the roster the fetch matched for this user, else a name/id match. */
+export function viewerMatcher(trade: ProcessedTrade, requestedUser: string) {
+  const byRoster = trade.userRosterId != null && (trade.parties ?? []).some((p) => p.rosterId === trade.userRosterId)
+  return (p: { rosterId?: number; userId?: string; displayName?: string; teamName?: string }) =>
+    byRoster ? p.rosterId === trade.userRosterId : isUserParty(p, requestedUser, requestedUser)
+}
 
-    // Price all players in parallel
-    const allPlayers = [
-      ...partyA.playersReceived.map(p => ({ party: 'A', player: p })),
-      ...partyB.playersReceived.map(p => ({ party: 'B', player: p }))
-    ]
-    const allPicks = [
-      ...partyA.picksReceived.map(p => ({ party: 'A', pick: p })),
-      ...partyB.picksReceived.map(p => ({ party: 'B', pick: p }))
-    ]
-    
-    const [playerPrices, pickPrices] = await Promise.all([
-      Promise.all(allPlayers.map(({ player }) => pricePlayer(player.name, ctx))),
-      Promise.all(allPicks.map(({ pick }) => pricePick({ year: parseInt(pick.season) || 2025, round: pick.round, tier: 'mid' }, ctx)))
-    ])
+async function gradeTrade(leagueId: string, requestedUser: string, trade: ProcessedTrade) {
+  const isViewer = viewerMatcher(trade, requestedUser)
+  const [view] = await gradeLegacyCompletedTrades({
+    suppliedLeagueId: leagueId,
+    userId: await legacySessionUserId(),
+    trades: [trade],
+    isViewer,
+  })
+  return describeGradedTrade(trade, view!, isViewer)
+}
 
-    // Process player values
-    for (let i = 0; i < allPlayers.length; i++) {
-      const { party, player } = allPlayers[i]
-      const priced = playerPrices[i]
-      valuationSources.push(priced.source)
-      console.log(`[GRADE] ${player.name} value: ${priced.value} (source: ${priced.source})`)
-      
-      if (party === 'A') {
-        sideAValue += priced.value
-        sideAAssets.push(`${player.name} (${player.position})`)
-      } else {
-        sideBValue += priced.value
-        sideBAssets.push(`${player.name} (${player.position})`)
-      }
+/** A trade card's grade fields, read off one canonical view. Nothing is recomputed. */
+export async function describeGradedTrade(
+  trade: ProcessedTrade,
+  view: TradeGradeView,
+  isViewer: (p: TradeParty) => boolean,
+  writeNarrative: (a: NarrativeArgs) => Promise<{ brief: string; full: string } | null> = narrativeFor,
+) {
+  const me = trade.parties?.find(isViewer)
+  const them = trade.parties?.find((p) => p !== me)
+
+  if (!view.graded) {
+    return {
+      ...trade,
+      gradeSource: 'one_trade_engine' as const,
+      graded: false as const,
+      grade: null,
+      partnerGrade: null,
+      currentGrade: null,
+      result: null,
+      winner: null,
+      valueDifferential: null,
+      currentValueDifferential: null,
+      gradeWithheld: view.reason,
+      briefExplanation: 'Not graded',
+      fullAnalysis: view.reason,
     }
-
-    // Process pick values
-    for (let i = 0; i < allPicks.length; i++) {
-      const { party, pick } = allPicks[i]
-      const priced = pickPrices[i]
-      valuationSources.push(priced.source)
-      console.log(`[GRADE] ${pick.season} Rd ${pick.round} value: ${priced.value} (source: ${priced.source})`)
-      
-      if (party === 'A') {
-        sideAValue += priced.value
-        sideAAssets.push(`${pick.season} Round ${pick.round}`)
-      } else {
-        sideBValue += priced.value
-        sideBAssets.push(`${pick.season} Round ${pick.round}`)
-      }
-    }
-  }
-  
-  // Log valuation sources summary
-  const excelCount = valuationSources.filter(s => s === 'excel').length
-  const fcCount = valuationSources.filter(s => s === 'fantasycalc').length
-  const curveCount = valuationSources.filter(s => s === 'curve').length
-  console.log(`[GRADE] Valuation sources: excel=${excelCount}, fantasycalc=${fcCount}, curve=${curveCount}`)
-
-  const diff = sideAValue - sideBValue
-  const total = sideAValue + sideBValue
-  const percentDiff = total > 0 ? Math.abs(diff) / total * 100 : 0
-
-  // Determine winner based on value difference (Side A vs Side B)
-  const sideAName = trade.parties[0]?.displayName || 'Side A'
-  const sideBName = trade.parties[1]?.displayName || 'Side B'
-  
-  let winner: string = 'Even'
-  if (percentDiff >= 5) {
-    winner = diff > 0 ? sideAName : sideBName
-  }
-  
-  console.log(`[GRADE] Result: ${sideAName}=${sideAValue} vs ${sideBName}=${sideBValue} | Winner: ${winner} | Diff: ${percentDiff.toFixed(1)}%`)
-
-  // Grade reflects FAIRNESS of the trade (A = fair, D = lopsided)
-  let grade = 'C'
-  if (percentDiff < 5) {
-    grade = 'A'
-  } else if (percentDiff < 10) {
-    grade = 'B+'
-  } else if (percentDiff < 15) {
-    grade = 'B'
-  } else if (percentDiff < 25) {
-    grade = 'C+'
-  } else if (percentDiff < 35) {
-    grade = 'C'
-  } else {
-    grade = 'D'
   }
 
-  const prompt = `Grade this fantasy trade briefly:
-${sideAName} received: ${sideAAssets.join(', ') || 'Nothing'}
-${sideBName} received: ${sideBAssets.join(', ') || 'Nothing'}
-Value difference: ${Math.abs(diff).toFixed(0)} points (${percentDiff.toFixed(1)}%)
-${winner === 'Even' ? 'Trade is balanced' : `${winner} got the better side`}
+  const result = outcomeOfLetter(view.letter)
+  const myName = me?.displayName || 'You'
+  const theirName = them?.displayName || 'Your trade partner'
+  const net = Math.round(view.getValue - view.giveValue)
+  const current = view.current ?? null
+  const narrative = await writeNarrative({ view, me, them, myName, theirName }).catch(() => null)
+
+  return {
+    ...trade,
+    gradeSource: 'one_trade_engine' as const,
+    graded: true as const,
+    grade: view.letter,
+    partnerGrade: view.partnerLetter,
+    currentGrade: current?.letter ?? view.letter,
+    result,
+    winner: result === 'win' ? myName : result === 'loss' ? theirName : 'Even',
+    valueDifferential: net,
+    currentValueDifferential: current ? Math.round(current.getValue - current.giveValue) : net,
+    gradeWithheld: null,
+    briefExplanation: narrative?.brief || view.label,
+    fullAnalysis: narrative?.full || view.recommendation,
+  }
+}
+
+export type NarrativeArgs = {
+  view: Extract<TradeGradeView, { graded: true }>
+  me: TradeParty | undefined
+  them: TradeParty | undefined
+  myName: string
+  theirName: string
+}
+
+const assetList = (p: TradeParty | undefined) =>
+  [
+    ...(p?.playersReceived ?? []).map((pl) => `${pl.name} (${pl.position})`),
+    ...(p?.picksReceived ?? []).map((pk) => `${pk.season} Round ${pk.round}`),
+  ].join(', ') || 'Nothing'
+
+/** The prompt: the canonical verdict is stated as final; the model only explains it. */
+export function narrativePrompt(a: NarrativeArgs): string {
+  const { view } = a
+  return `Write two short lines of prose about a completed fantasy trade. The verdict below is FINAL and comes from our trade grader. Do not give, suggest or imply any other verdict, score or winner, and do not write any letter grade.
+${a.myName} received: ${assetList(a.me)}
+${a.theirName} received: ${assetList(a.them)}
+Verdict for ${a.myName}: ${view.label}. League value received ${Math.round(view.getValue)}, sent ${Math.round(view.giveValue)} (${view.basis}).
+${view.recommendation}
 
 Provide:
-1. A 10-word brief explanation
-2. A 2-3 sentence full analysis
+1. A 10-word brief explanation of that verdict
+2. A 2-3 sentence full analysis consistent with that verdict
 
 Format as JSON: { "brief": "...", "full": "..." }`
+}
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 200,
-      temperature: 0.5,
-    })
-
-    const content = response.choices[0]?.message?.content || '{}'
-    const parsed = JSON.parse(content.replace(/```json?|```/g, '').trim())
-
-    return {
-      ...trade,
-      grade,
-      briefExplanation: parsed.brief || 'Trade analysis complete',
-      fullAnalysis: parsed.full || 'Unable to generate detailed analysis.',
-      winner,
-      valueDifferential: diff,
-    }
-  } catch {
-    return {
-      ...trade,
-      grade,
-      briefExplanation: percentDiff < 10 ? 'Fair and balanced trade' : `${winner} got the better value`,
-      fullAnalysis: `Value differential of ${Math.abs(diff).toFixed(0)} points (${percentDiff.toFixed(1)}%). ${winner === 'Even' ? 'Both sides received comparable value.' : `${winner} came out ahead in this trade.`}`,
-      winner,
-      valueDifferential: diff,
-    }
-  }
+/**
+ * Two lines of prose ABOUT the canonical grade, or null. Prose that writes a letter grade of its own
+ * is dropped, so the caller falls back to the grade's own label and recommendation.
+ */
+async function narrativeFor(a: NarrativeArgs): Promise<{ brief: string; full: string } | null> {
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: narrativePrompt(a) }],
+    max_tokens: 200,
+    temperature: 0.5,
+  })
+  const content = response.choices[0]?.message?.content || '{}'
+  const parsed = JSON.parse(content.replace(/```json?|```/g, '').trim()) as { brief?: unknown; full?: unknown }
+  const brief = typeof parsed.brief === 'string' ? parsed.brief.trim() : ''
+  const full = typeof parsed.full === 'string' ? parsed.full.trim() : ''
+  if (!brief || !full) return null
+  if (proseNamesAGrade(`${brief}\n${full}`)) return null
+  return { brief, full }
 }
