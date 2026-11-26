@@ -7832,7 +7832,7 @@ function AFLegacyContent() {
                               
                               {/* SECTION 1: Grade Card with Animated Cloud Background */}
                               {(() => {
-                                const grade = tradeAnalytics?.gradeCard?.grade || reportCardSummary.overallGrade
+                                const grade = tradeAnalytics?.gradeSource === 'one_trade_engine' ? (tradeAnalytics.gradeCard?.grade ?? '—') : (tradeAnalytics?.gradeCard?.grade || reportCardSummary.overallGrade)
                                 const isAGrade = ['A+', 'A'].includes(grade)
                                 const isBGrade = ['A-', 'B+', 'B'].includes(grade)
                                 const isCGrade = ['B-', 'C+', 'C'].includes(grade)
@@ -7886,7 +7886,7 @@ function AFLegacyContent() {
                                       
                                       {/* Score */}
                                       <div className={`text-4xl sm:text-5xl font-bold mb-2 ${scoreTextColor}`}>
-                                        {tradeAnalytics?.gradeCard?.score ?? (reportCardSummary.totalTrades > 0 ? Math.round(parseFloat(reportCardSummary.avgScore || '0') * 10) : 0)}
+                                        {tradeAnalytics?.gradeSource === 'one_trade_engine' ? (tradeAnalytics.gradeCard?.score ?? '—') : tradeAnalytics?.gradeCard?.score ?? (reportCardSummary.totalTrades > 0 ? Math.round(parseFloat(reportCardSummary.avgScore || '0') * 10) : 0)}
                                         <span className="text-lg text-white/40 font-normal">/100</span>
                                       </div>
                                       
@@ -8227,8 +8227,8 @@ function AFLegacyContent() {
 
                                       {/* Win Definitions Note */}
                                       <div className="text-[11px] text-white/30 text-center px-4">
-                                        {statsTab === 'atTime' && `Win = net delta > +300 at time of trade · Loss = net delta < -300`}
-                                        {statsTab === 'hindsight' && `Win = current net delta > +300 · Loss = current net delta < -300`}
+                                        {statsTab === 'atTime' && `Win = AllFantasy grade A or B at the time of the trade · Loss = D or F · Even = C`}
+                                        {statsTab === 'hindsight' && `Win = AllFantasy grade A or B on today's values · Loss = D or F · Even = C`}
                                         {statsTab === 'lineupImpact' && `Win = est. PPG gain > +0.5 · Loss = est. PPG loss < -0.5`}
                                       </div>
 
@@ -9230,9 +9230,9 @@ function AFLegacyContent() {
                                   <div className="flex flex-wrap justify-center gap-2 mb-3">
                                     {([
                                       ['all', 'All', tradeAnalytics.allTrades.length, 'purple'] as const,
-                                      ['wins', 'Wins', tradeAnalytics.allTrades.filter((t: any) => t.netValue > 300).length, 'emerald'] as const,
-                                      ['losses', 'Losses', tradeAnalytics.allTrades.filter((t: any) => t.netValue < -300).length, 'rose'] as const,
-                                      ['even', 'Even', tradeAnalytics.allTrades.filter((t: any) => t.netValue >= -300 && t.netValue <= 300).length, 'slate'] as const,
+                                      ['wins', 'Wins', tradeAnalytics.allTrades.filter((t: any) => t.result ? t.result === 'win' : t.netValue > 300).length, 'emerald'] as const,
+                                      ['losses', 'Losses', tradeAnalytics.allTrades.filter((t: any) => t.result ? t.result === 'loss' : t.netValue < -300).length, 'rose'] as const,
+                                      ['even', 'Even', tradeAnalytics.allTrades.filter((t: any) => t.result ? t.result === 'even' : t.netValue >= -300 && t.netValue <= 300).length, 'slate'] as const,
                                     ] as const).map(([key, label, count, color]) => (
                                       <button
                                         key={key}
@@ -9277,9 +9277,9 @@ function AFLegacyContent() {
                                   <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
                                     {tradeAnalytics.allTrades
                                       .filter((trade: any) => {
-                                        if (tradeFilter === 'wins') return trade.netValue > 300
-                                        if (tradeFilter === 'losses') return trade.netValue < -300
-                                        if (tradeFilter === 'even') return trade.netValue >= -300 && trade.netValue <= 300
+                                        if (tradeFilter === 'wins') return trade.result ? trade.result === 'win' : trade.netValue > 300
+                                        if (tradeFilter === 'losses') return trade.result ? trade.result === 'loss' : trade.netValue < -300
+                                        if (tradeFilter === 'even') return trade.result ? trade.result === 'even' : trade.netValue >= -300 && trade.netValue <= 300
                                         return true
                                       })
                                       .sort((a: any, b: any) => {
@@ -9440,7 +9440,7 @@ function AFLegacyContent() {
                                             </div>
                                             <div className="p-2 rounded-lg bg-slate-800/60 text-center">
                                               <div className="text-[11px] text-white/40 uppercase">Confidence</div>
-                                              <div className="text-sm font-bold text-purple-300">{trade.confidence}%</div>
+                                              <div className="text-sm font-bold text-purple-300">{trade.confidence != null ? `${trade.confidence}%` : '—'}</div>
                                             </div>
                                           </div>
 
@@ -14680,7 +14680,7 @@ function AFLegacyContent() {
                           }`}>
                             {shareType === 'legacy' && aiReport?.title}
                             {shareType === 'trade' && (shareTradeAnalysis 
-                              ? `${shareTradeAnalysis.grade} Grade Trade` 
+                              ? (shareTradeAnalysis.grade ? `${shareTradeAnalysis.grade} Grade Trade` : 'Trade Vote (not graded)') 
                               : lastTradeResult 
                                 ? 'Recent Trade Analysis' 
                                 : 'Enter a trade above to analyze')}

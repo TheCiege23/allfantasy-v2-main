@@ -9,7 +9,7 @@ import { generateGoalProposals, type GoalProposal, type ProposalGoal } from '@/l
 import { buildLeagueDecisionContext, leagueContextToIntelligence } from '@/lib/trade-engine/league-context-assembler'
 import type { Asset } from '@/lib/trade-engine/types'
 import { createLegacyPackageGrader, legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
-import { gradeInputsFromEngineAssets, type LegacyPackageGrade } from '@/lib/legacy/legacyPackageGrade'
+import { gradeInputsFromEngineAssets, oneGradeGap, rankByOneGrade, type LegacyPackageGrade } from '@/lib/legacy/legacyPackageGrade'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +27,15 @@ export const maxDuration = 60
  * Now each shown package is graded by the one grader, from your side (you send `give`), and the card
  * carries only that grade beside the package and the message copy. Tier names say how a package was
  * BUILT. No acceptance odds: nothing measured them.
+ *
+ * 🛑 AND THE ONE GRADE DECIDES WHAT IS SHOWN, IN WHAT ORDER (2026-11-26). Until then every package the
+ * engine built was shown in the engine's order, partners ranked by the engine's own match score — so
+ * an F-graded overpay sat on the card beside its letter, first if the engine liked it. Now each
+ * partner's packages go through `rankByOneGrade` (B–D only, closest to even first; a withheld package
+ * is dropped beside graded ones), a partner with nothing proposable left is not shown, and partners
+ * are ordered by their best package's distance from even. When nothing at all can be graded (no
+ * league, not your league) the engine's packages are shown in its order, each with the withheld
+ * reason — there is no grade to rank them on.
  */
 export const GOAL_TIER_LABELS: Record<GoalProposal['tier'], string> = {
   safe: 'Value-matched package',
@@ -146,8 +155,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/goal-proposals",
       userId: await legacySessionUserId(),
       viewerSide: false,
     })
-    const partners = await Promise.all(
-      result.partners.map(async (partner) => ({
+    const gradedPartners = await Promise.all(
+      result.partners.map(async (partner, engineOrder) => ({
+        engineOrder,
         rosterId: partner.rosterId,
         displayName: partner.displayName,
         avatar: partner.avatar,
@@ -169,6 +179,17 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/goal-proposals",
         ),
       })),
     )
+    // Graded anywhere means the one grade ranks everywhere: one league, one grader, one rule.
+    const anyGraded = gradedPartners.some((pt) => pt.proposals.some((p) => p.grade.graded))
+    const bestGap = (pt: (typeof gradedPartners)[number]) => {
+      const g = pt.proposals[0]?.grade
+      return g?.graded ? oneGradeGap(g) : Number.POSITIVE_INFINITY
+    }
+    const partners = gradedPartners
+      .map((pt) => ({ ...pt, proposals: anyGraded ? rankByOneGrade(pt.proposals).ranked.filter((p) => p.grade.graded) : pt.proposals }))
+      .filter((pt) => !anyGraded || pt.proposals.length > 0)
+      .sort((a, b) => (anyGraded ? bestGap(a) - bestGap(b) : 0) || a.engineOrder - b.engineOrder)
+      .map(({ engineOrder: _engineOrder, ...pt }) => pt)
 
     return NextResponse.json({
       success: true,

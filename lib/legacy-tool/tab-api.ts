@@ -1,11 +1,6 @@
 ﻿import { prisma } from '@/lib/prisma'
 import { assembleLegacyAIContext, type EnrichedLegacyContext } from '@/lib/legacy-ai-context'
 import { buildLegacyOffseasonBundle, type DraftWarRoomInput } from '@/lib/legacy-tool/offseason'
-import { computeTradeFairnessScore, computeTradeRecommendationScore, normalizeScore } from '@/lib/legacy-tool/scoring'
-import { fuseDecisionScore } from '@/lib/legacy-tool/fusion'
-import { evaluateCommissionerAlert } from '@/lib/legacy-tool/fairness'
-import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
-import { normalizeGrokSignalsToDeltaEvents, persistGrokDeltaEvents } from '@/lib/legacy-tool/grok-delta'
 
 type LegacyApiStatus = 'ok' | 'insufficient_data' | 'error'
 
@@ -595,123 +590,8 @@ export function buildTradeCommandCenterData(args: {
   }
 }
 
-function estimateAssetValue(asset: TradeAsset): number {
-  if (asset.assetType === 'pick') {
-    if (asset.round === 1) return 82
-    if (asset.round === 2) return 58
-    if (asset.round === 3) return 34
-    return 22
-  }
-  return 65
-}
-
-export async function buildTradeReviewData(args: {
-  tradeId?: string
-  trade?: { fromTeamId: string; toTeamId: string; send: TradeAsset[]; receive: TradeAsset[] }
-  includeCounterSuggestions?: boolean
-  includeRenegotiationAdvice?: boolean
-}) {
-  const send = args.trade?.send || []
-  const receive = args.trade?.receive || []
-
-  const sendScore = send.reduce((sum, a) => sum + estimateAssetValue(a), 0)
-  const receiveScore = receive.reduce((sum, a) => sum + estimateAssetValue(a), 0)
-
-  const fairnessScore = computeTradeFairnessScore({
-    sideAScore: sendScore,
-    sideBScore: receiveScore,
-    fairnessScale: 1.25,
-  })
-
-  const rawValueEdge = receiveScore - sendScore
-  const teamFitEdge = rawValueEdge >= 0 ? 8 : -8
-  const shortTermEdge = rawValueEdge >= 0 ? 6 : -6
-  const longTermEdge = rawValueEdge >= 0 ? 5 : -5
-  const riskAdjustedEdge = fairnessScore - 50
-  const playoffEdge = rawValueEdge >= 0 ? 3 : -3
-
-  const recommendationScore = computeTradeRecommendationScore({
-    rawValueEdge,
-    teamFitEdge,
-    shortTermEdge,
-    longTermEdge,
-    riskAdjustedEdge,
-    playoffEdge,
-  })
-
-  const deepseekStructuredScore = normalizeScore(50 + recommendationScore)
-
-  const names = [...send, ...receive].map((a) => a.name).filter(Boolean).slice(0, 12)
-  const grokSignals = await fetchPlayerNewsFromGrok(names, 'nfl').catch(() => [])
-  const deltaEvents = normalizeGrokSignalsToDeltaEvents(grokSignals)
-  await persistGrokDeltaEvents(deltaEvents).catch(() => 0)
-
-  const sentimentAdjust = grokSignals.reduce((sum, s) => {
-    const sentiment = String(s.sentiment || 'neutral').toLowerCase()
-    if (sentiment === 'bullish') return sum + 2
-    if (sentiment === 'bearish') return sum - 2
-    if (sentiment === 'injury_concern') return sum - 4
-    return sum
-  }, 0)
-
-  const fused = fuseDecisionScore({
-    deepseekStructuredScore,
-    grokLiveOverlayAdjustment: sentimentAdjust,
-    eventType: deltaEvents[0]?.event?.event_type,
-    eventConfidence: deltaEvents[0]?.event?.confidence,
-  })
-
-  const recommendation: 'accept' | 'reject' | 'counter' | 'reopen' | 'hold' =
-    recommendationScore >= 15 ? 'accept' : recommendationScore <= -15 ? 'reject' : 'counter'
-
-  const commissionerAlert = evaluateCommissionerAlert({
-    tradeFairnessScore: fairnessScore,
-    repeatedHighImbalanceBetweenSameManagers: false,
-    packageContainsEliteAssetNoPremiumReturn: fairnessScore < 45,
-    inactiveManagerExtremeValueLoss: fairnessScore < 35,
-  })
-
-  return {
-    tradeId: args.tradeId,
-    review: {
-      recommendation,
-      fairnessScore,
-      confidence: clamp01(fused.finalScore / 100),
-      scoreBreakdown: {
-        rawValueScore: rawValueEdge,
-        teamFitScore: teamFitEdge,
-        shortTermScore: shortTermEdge,
-        longTermScore: longTermEdge,
-        riskAdjustedScore: riskAdjustedEdge,
-        playoffImpactScore: playoffEdge,
-        packagePremiumAdjustment: 0,
-      },
-      reasonSummary: [
-        `Estimated value delta: ${rawValueEdge.toFixed(1)} points`,
-        `Fairness score: ${fairnessScore.toFixed(1)}`,
-        `Live-news fused score: ${fused.finalScore.toFixed(1)}`,
-      ],
-      ...(args.includeCounterSuggestions
-        ? {
-            counterSuggestions: [
-              {
-                send: send.slice(0, 1),
-                receive: receive.slice(0, 1),
-                fairnessScore: clamp100(fairnessScore + 6),
-              },
-            ],
-          }
-        : {}),
-      ...(args.includeRenegotiationAdvice
-        ? {
-            renegotiationAdvice: {
-              shouldReopen: recommendation !== 'accept',
-              whyNow: 'Recent market and sentiment volatility changed short-term pricing.',
-              preferredAdjustments: ['Reduce outgoing premium pick cost', 'Add low-tier throw-in on return side'],
-            },
-          }
-        : {}),
-      commissionerAlert,
-    },
-  }
-}
+/*
+ * `buildTradeReviewData` lived here until 2026-11-26 — a flat-65-per-player "fairness" that
+ * `/api/legacy/trade/review` printed as its verdict. The review now grades through the one trade
+ * grade: `lib/legacy/legacyTradeReview.ts`.
+ */

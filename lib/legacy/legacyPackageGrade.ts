@@ -207,3 +207,43 @@ export async function gradeLegacyCounters(
     }),
   )
 }
+
+/**
+ * The letters a GENERATOR may propose (2026-11-26). A or F means one side is giving away more than a
+ * quarter of the deal's value (`PROJECTED_STRONG_BAND`): an A is the "Aggressive — You Win" offer the
+ * other manager holds as an F, and an F is the same overpay from your side. B, C and D are the deals
+ * the one grade calls within reach of even.
+ */
+export const PROPOSABLE_LETTERS: ReadonlySet<GradeLetter> = new Set<GradeLetter>(['B', 'C', 'D'])
+
+/** How far a graded deal sits from even, on the league values it was graded on. 0 is dead even. */
+export function oneGradeGap(grade: Extract<LegacyPackageGrade, { graded: true }>): number {
+  return Math.abs(grade.getValue - grade.giveValue) / Math.max(grade.giveValue, grade.getValue, 1)
+}
+
+/**
+ * Filter and order a generator's candidates by THE grade, never by the generator's own values. PURE.
+ *
+ * - Some candidate is graded: keep only the graded ones whose letter is proposable (B–D), closest to
+ *   even first. A candidate the grader withheld is dropped — beside graded alternatives, a deal the
+ *   engine could not price is not one to put in front of a manager.
+ * - NOTHING is graded (no league, not your league, the league could not be read): the one grade has
+ *   nothing to rank on, so the candidates come back in the generator's order, each carrying its own
+ *   withheld reason. Ranking them on the generator's values instead is exactly what this replaced.
+ *
+ * Ties keep the generator's order (the sort is stable).
+ */
+export function rankByOneGrade<T extends { grade: LegacyPackageGrade }>(candidates: ReadonlyArray<T>): {
+  ranked: T[]
+  /** True when no candidate could be graded, so nothing was filtered or reordered. */
+  ungraded: boolean
+} {
+  const graded = candidates.filter((c): c is T & { grade: Extract<LegacyPackageGrade, { graded: true }> } => c.grade.graded)
+  if (graded.length === 0) return { ranked: [...candidates], ungraded: true }
+  const ranked = graded
+    .filter((c) => PROPOSABLE_LETTERS.has(c.grade.letter))
+    .map((c, i) => ({ c, i, gap: oneGradeGap(c.grade) }))
+    .sort((a, b) => a.gap - b.gap || a.i - b.i)
+    .map((x) => x.c as T)
+  return { ranked, ungraded: false }
+}
