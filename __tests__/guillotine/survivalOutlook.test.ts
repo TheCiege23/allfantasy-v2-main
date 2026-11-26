@@ -114,3 +114,27 @@ describe('before any score', () => {
     expect(b.me?.safePct).not.toBeNull()
   })
 })
+
+describe('a two-week period (owner, 2026-11-26)', () => {
+  it('adds both weeks: in week 1 of the period, the rest of it plus all of week 2 is still to come', async () => {
+    const { periodStarterGames, teamOutlook } = await import('@/lib/guillotine/survivalOutlook')
+    // Week 3: 4 games, 1 played, projected 40. Week 4: 4 games, none played, projected 44.
+    const s = periodStarterGames([{ projection: 40, games: 4, left: 3 }, { projection: 44, games: 4, left: 4 }])
+    expect(s).toEqual({ weekProjection: 84, gamesThisWeek: 8, gamesLeft: 7 })
+    expect(teamOutlook([s]).remainingProjection).toBe(73.5)
+  })
+  it('a week with no projection yet borrows the other week’s, scaled by games', async () => {
+    const { periodStarterGames } = await import('@/lib/guillotine/survivalOutlook')
+    expect(periodStarterGames([{ projection: 40, games: 4, left: 2 }, { projection: null, games: 2, left: 2 }])).toEqual({ weekProjection: 60, gamesThisWeek: 6, gamesLeft: 4 })
+  })
+  it('[control] no projection in any week stays unknown, never zero', async () => {
+    const { periodStarterGames, teamOutlook } = await import('@/lib/guillotine/survivalOutlook')
+    const s = periodStarterGames([{ projection: null, games: 4, left: 2 }, { projection: null, games: 4, left: 4 }])
+    expect(s.weekProjection).toBeNull()
+    expect(teamOutlook([s]).remainingProjection).toBeNull()
+  })
+  it('[control] one week is exactly the old single-week shape', async () => {
+    const { periodStarterGames } = await import('@/lib/guillotine/survivalOutlook')
+    expect(periodStarterGames([{ projection: 60, games: 3, left: 2 }])).toEqual({ weekProjection: 60, gamesThisWeek: 3, gamesLeft: 2 })
+  })
+})

@@ -51,6 +51,8 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { providerLabel } from '@/lib/guillotine/importedLeagueGuard'
 import { readPeriodWeeks } from '@/lib/guillotine/eliminationPeriods'
 import { readChopListOrder } from '@/lib/guillotine/chopListOrder'
+import { countAliveTeams, readGuillotineTrades } from '@/lib/guillotine/guillotineTrades'
+import { readFreeAgencyFromWeek } from '@/lib/guillotine/freeAgencyFromWeek'
 import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
@@ -180,6 +182,11 @@ export async function GET(
   // 2 in an MLB two-week league (lib/guillotine/eliminationPeriods.ts): the home's tiebreak copy says "last period".
   const leagueSettings = (await (async () => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))().catch(() => null))?.settings
   const periodWeeks = readPeriodWeeks(leagueSettings)
+  // Trades (lib/guillotine/guillotineTrades.ts): shown on the home so a manager knows before making an offer.
+  const tradeRules = readGuillotineTrades(leagueSettings)
+  const trades = tradeRules.tradesAllowed
+    ? { ...tradeRules, teamsLeft: await countAliveTeams(leagueId).catch(() => null) }
+    : { ...tradeRules, teamsLeft: null }
 
   return NextResponse.json({
     ...summary,
@@ -206,6 +213,9 @@ export async function GET(
           scheduleLines: advanced ? describeSchedule(advanced, config.teamsPerChop, config.eliminationStartWeek) : [],
           canEditPaidRules,
           periodWeeks,
+          trades,
+          // From this week chopped players skip waivers (lib/guillotine/freeAgencyFromWeek.ts); null = never.
+          freeAgencyFromWeek: readFreeAgencyFromWeek(leagueSettings),
           // Which end of the Chop page's list the chop zone sits at (lib/guillotine/chopListOrder.ts).
           chopListOrder: readChopListOrder(leagueSettings),
         }

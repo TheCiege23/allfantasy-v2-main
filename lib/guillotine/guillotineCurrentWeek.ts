@@ -9,6 +9,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
+import { periodEndWeek, readPeriodWeeks } from './eliminationPeriods'
 
 /**
  * Latest scored period, else the configured first chop week, else 1 — plus when that latest score
@@ -36,17 +37,27 @@ export async function resolveGuillotineWeekState(
  *
  * The week being watched is the one after the last settled chop. It stays on the last settled week
  * when there is nothing after it: the season is finished, or the chop weeks have run out.
+ *
+ * 🛑 IN A TWO-WEEK LEAGUE THIS WAS THE PERIOD'S FIRST WEEK FOR BOTH OF ITS WEEKS. Every chop, score and
+ * preview is keyed by a period's LAST week (./eliminationPeriods.ts), but "one past the last chop" is the
+ * period's first week, and it stayed there until the period was chopped. So during the second week the
+ * outlook read the first week's slate (every game final, nothing left), the next-chop time was a week early,
+ * and the board said "Week 3" for a chop that lands after week 4. With `periodWeeks` the answer is the
+ * period's key, the week that actually chops.
  */
 export function guillotineLiveWeek(args: {
   latestScored: number | null
   startWeek?: number | null
   endWeek?: number | null
   seasonComplete?: boolean
+  /** Weeks per elimination period (./eliminationPeriods.ts). Absent = 1. */
+  periodWeeks?: number
 }): number {
   const start = args.startWeek != null && args.startWeek >= 1 ? args.startWeek : 1
-  if (args.latestScored == null) return start
+  const key = (w: number) => periodEndWeek(w, start, args.periodWeeks ?? 1)
+  if (args.latestScored == null) return key(start)
   if (args.seasonComplete) return args.latestScored
-  const next = Math.max(args.latestScored + 1, start)
+  const next = key(Math.max(args.latestScored + 1, start))
   return args.endWeek != null && next > args.endWeek ? args.latestScored : next
 }
 
@@ -55,19 +66,22 @@ export async function resolveGuillotineLiveWeek(
   leagueId: string,
   config?: { eliminationStartWeek?: number | null; eliminationEndWeek?: number | null } | null,
 ): Promise<number> {
-  const [latest, season] = await Promise.all([
+  const [latest, season, league] = await Promise.all([
     prisma.guillotinePeriodScore
       .findFirst({ where: { leagueId }, orderBy: { weekOrPeriod: 'desc' }, select: { weekOrPeriod: true } })
       .catch(() => null),
     prisma.guillotineSeason
       .findFirst({ where: { redraftSeason: { leagueId } }, orderBy: { createdAt: 'desc' }, select: { status: true } })
       .catch(() => null),
+    // A settings read that fails leaves a one-week league's answer: unchanged from before two-week periods.
+    Promise.resolve().then(() => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })).catch(() => null),
   ])
   return guillotineLiveWeek({
     latestScored: latest?.weekOrPeriod ?? null,
     startWeek: config?.eliminationStartWeek ?? null,
     endWeek: config?.eliminationEndWeek ?? null,
     seasonComplete: season?.status === 'complete',
+    periodWeeks: readPeriodWeeks(league?.settings),
   })
 }
 

@@ -27,32 +27,22 @@ import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetric
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { rosterIdForOwner } from './finishGuillotineSeason'
-import { teamOutlook, type StarterGames, type TeamOutlook } from './survivalOutlook'
+import { periodStarterGames, teamOutlook, type StarterGames, type TeamOutlook } from './survivalOutlook'
+import { readPeriodWeeks, weeksInPeriod } from './eliminationPeriods'
 
 const DAILY = new Set(['NBA', 'NHL', 'MLB', 'NCAAB', 'SOCCER'])
 
 type Lineup = { playerId: string; team?: string | null }
 
-/** The shared core: each team's lineup → its outlook. Null when the slate or the board cannot be read. */
-async function outlookForLineups(args: {
-  leagueId: string
-  sport: string
-  season: number
-  week: number
-  lineups: ReadonlyMap<string, readonly Lineup[]>
-  now: Date
-}): Promise<Record<string, TeamOutlook> | null> {
-  const sport = args.sport.toUpperCase()
-  const ids = [...new Set([...args.lineups.values()].flat().map((p) => p.playerId))]
-  const window = DAILY.has(sport) ? resolveDailySportWeekWindow(sport, args.season, args.week) : null
+/** One week's slate and board: games per club (and how many are not over), each player's projection and club. */
+async function readWeek(args: { leagueId: string; sport: string; season: number; week: number; ids: string[]; now: Date }) {
+  const window = DAILY.has(args.sport) ? resolveDailySportWeekWindow(args.sport, args.season, args.week) : null
   const [games, board] = await Promise.all([
-    readWeekGames(prisma, { sport, season: args.season, week: args.week, seasonType: 'regular', dateWindow: window, now: args.now }),
-    ids.length
-      ? loadLeaguePlayerMetrics({ leagueId: args.leagueId, week: args.week, rosterIds: ids, limit: ids.length, includeTradeValues: false }).catch(() => null)
+    readWeekGames(prisma, { sport: args.sport, season: args.season, week: args.week, seasonType: 'regular', dateWindow: window, now: args.now }),
+    args.ids.length
+      ? loadLeaguePlayerMetrics({ leagueId: args.leagueId, week: args.week, rosterIds: args.ids, limit: args.ids.length, includeTradeValues: false }).catch(() => null)
       : Promise.resolve(null),
   ])
-  // A slate we cannot read would put every starter at "no games left" and every team at 100%.
-  if (games.length === 0) return null
   const pointBoard = board?.season === args.season && board.unit === 'fantasy points'
   const projection = new Map<string, number>()
   const clubOf = new Map<string, string>()
@@ -61,14 +51,12 @@ async function outlookForLineups(args: {
     if (pointBoard && row.weekly != null && Number.isFinite(row.weekly)) projection.set(row.rosterPlayerId, row.weekly)
     if (row.team) clubOf.set(row.rosterPlayerId, row.team)
   }
-
-  // Games per club this week, and how many of them are not over yet.
   const byClub = new Map<string, { total: number; left: number }>()
   for (const g of games) {
     const state = normalizeGameStatus(g.status)
     if (state === 'postponed' || state === 'cancelled') continue
     for (const club of [g.homeTeam, g.awayTeam]) {
-      const key = projectionTeamKey(sport, club)
+      const key = projectionTeamKey(args.sport, club)
       if (!key) continue
       const cur = byClub.get(key) ?? { total: 0, left: 0 }
       cur.total += 1
@@ -76,25 +64,52 @@ async function outlookForLineups(args: {
       byClub.set(key, cur)
     }
   }
+  return { gamesRead: games.length > 0, projection, clubOf, byClub }
+}
+
+/**
+ * The shared core: each team's lineup → its outlook over `weeks` (one week, or both weeks of a two-week period,
+ * ./eliminationPeriods.ts). Null when no week's slate can be read.
+ */
+async function outlookForLineups(args: {
+  leagueId: string
+  sport: string
+  season: number
+  weeks: readonly number[]
+  lineups: ReadonlyMap<string, readonly Lineup[]>
+  now: Date
+}): Promise<Record<string, TeamOutlook> | null> {
+  const sport = args.sport.toUpperCase()
+  const ids = [...new Set([...args.lineups.values()].flat().map((p) => p.playerId))]
+  const read = await Promise.all(args.weeks.map((week) => readWeek({ leagueId: args.leagueId, sport, season: args.season, week, ids, now: args.now })))
+  // A slate we cannot read would put every starter at "no games left" and every team at 100%.
+  if (read.some((w) => !w.gamesRead)) return null
 
   const out: Record<string, TeamOutlook> = {}
   for (const [teamId, lineup] of args.lineups) {
-    const starters: StarterGames[] = lineup.map((p) => {
-      const key = projectionTeamKey(sport, p.team ?? clubOf.get(p.playerId) ?? null)
-      const sched = key ? byClub.get(key) : undefined
-      return { weekProjection: projection.get(p.playerId) ?? null, gamesThisWeek: sched?.total ?? 0, gamesLeft: sched?.left ?? 0 }
-    })
+    const starters: StarterGames[] = lineup.map((p) =>
+      periodStarterGames(
+        read.map((w) => {
+          const key = projectionTeamKey(sport, p.team ?? w.clubOf.get(p.playerId) ?? read.find((x) => x.clubOf.has(p.playerId))?.clubOf.get(p.playerId) ?? null)
+          const sched = key ? w.byClub.get(key) : undefined
+          return { projection: w.projection.get(p.playerId) ?? null, games: sched?.total ?? 0, left: sched?.left ?? 0 }
+        }),
+      ),
+    )
     out[teamId] = teamOutlook(starters)
   }
   return out
 }
 
-/** Native Guilly league: keyed by league roster id. */
+/**
+ * Native Guilly league: keyed by league roster id. `week` is the chop's key week; in a two-week league that is the
+ * period's last week, and the outlook covers both of its weeks, with the lineup of the week being played.
+ */
 export async function loadSurvivalOutlook(leagueId: string, week: number, now: Date = new Date()): Promise<Record<string, TeamOutlook> | null> {
   try {
     const [league, season, rosters] = await Promise.all([
-      prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } }),
-      prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { id: true, season: true } }),
+      prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true } }),
+      prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { id: true, season: true, currentWeek: true } }),
       prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, redraftRosterId: true } }),
     ])
     if (!league || !season) return null
@@ -106,12 +121,15 @@ export async function loadSurvivalOutlook(leagueId: string, week: number, now: D
     }
     const redraftIds = [...leagueRosterOf.keys()]
     if (redraftIds.length === 0) return null
+    const weeks = weeksInPeriod(week, readPeriodWeeks(league.settings))
+    // The lineup that is set now: the calendar week, held inside the period.
+    const lineupWeek = Math.min(Math.max(season.currentWeek ?? week, weeks[0]!), week)
     const [players, weekLineups] = await Promise.all([
       prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: redraftIds }, droppedAt: null },
         select: { rosterId: true, playerId: true, team: true, slotType: true, position: true },
       }),
-      loadWeekLineups(prisma, { redraftRosterIds: redraftIds, season: season.season, week }),
+      loadWeekLineups(prisma, { redraftRosterIds: redraftIds, season: season.season, week: lineupWeek }),
     ])
     const lineups = new Map<string, Lineup[]>()
     for (const leagueRosterId of leagueRosterOf.values()) lineups.set(leagueRosterId, [])
@@ -119,7 +137,7 @@ export async function loadSurvivalOutlook(leagueId: string, week: number, now: D
       if (!isNflRedraftScoringStarterSlot(weekSlotType(p, weekLineups))) continue
       lineups.get(leagueRosterOf.get(p.rosterId)!)?.push({ playerId: p.playerId, team: p.team })
     }
-    return await outlookForLineups({ leagueId, sport: String(league.sport ?? 'NFL'), season: season.season, week, lineups, now })
+    return await outlookForLineups({ leagueId, sport: String(league.sport ?? 'NFL'), season: season.season, weeks, lineups, now })
   } catch {
     return null
   }
@@ -160,7 +178,7 @@ export async function loadImportedSurvivalOutlook(
     }
     // Odds need every team alive; a team we cannot join has no outlook, and the board then shows none.
     if (lineups.size === 0) return null
-    return await outlookForLineups({ leagueId, sport: String(league.sport ?? 'NFL'), season: league.season, week, lineups, now })
+    return await outlookForLineups({ leagueId, sport: String(league.sport ?? 'NFL'), season: league.season, weeks: [week], lineups, now })
   } catch {
     return null
   }
