@@ -1,3 +1,4 @@
+import { LegacyRedraftWaiverClaimsRetiredError } from '@/lib/redraft/legacyWaiverClaimsRetired'
 import { assertStealThreeWaiverHoldCleared } from '@/lib/survivor/survivorStealThreeWaivers'
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
@@ -487,92 +488,13 @@ async function createClaimEvents(input: {
   ])
 }
 
-export async function submitNflRedraftWaiverClaim(input: SubmitNflRedraftWaiverClaimInput) {
-  const season = await resolveSeason(input)
-  if (!season) throw new Error('season_not_found')
-  if (String(season.sport).toUpperCase() !== 'NFL') throw new Error('not_nfl_redraft')
-  const meta = await resolvePlayerMeta({
-    playerId: input.addPlayerId,
-    playerName: input.addPlayerName,
-    position: input.addPlayerPosition,
-    team: input.addPlayerTeam,
-    sport: season.sport,
-  })
-  const resolved = await resolveNflRedraftWaiverRuntime({
-    seasonId: season.id,
-    week: season.currentWeek || 1,
-    includeFreeAgents: false,
-    extraFreeAgents: [meta],
-  })
-  if (!resolved.ok) throw new Error(resolved.reason)
-  const roster = resolved.state.teams.find((team) => team.rosterId === input.rosterId)
-  if (!roster) throw new Error('roster_not_found')
-
-  const conditionalGroupId = input.conditionalGroupId?.trim() || `group:${input.rosterId}:${Date.now()}`
-  const conditionalRank = Math.max(1, Math.floor(Number(input.conditionalRank ?? 1)))
-  const candidate: NflRedraftWaiverClaimInput = {
-    claimId: 'candidate',
-    rosterId: input.rosterId,
-    addPlayerId: input.addPlayerId,
-    addPlayerName: meta.playerName,
-    addPlayerPosition: meta.position,
-    addPlayerTeam: meta.team,
-    dropPlayerId: input.dropPlayerId ?? null,
-    dropPlayerName: input.dropPlayerName ?? null,
-    bidAmount: input.bidAmount ?? 0,
-    priority: conditionalRank,
-    conditionalGroupId,
-    conditionalRank,
-    status: 'pending',
-    actorUserId: input.actorUserId ?? null,
-  }
-  const validation = validateNflRedraftWaiverClaim({ state: resolved.state, claim: candidate })
-  if (!validation.ok) throw new Error(validation.message)
-
-  const claim = await prisma.redraftWaiverClaim.create({
-    data: {
-      seasonId: season.id,
-      leagueId: season.leagueId,
-      rosterId: input.rosterId,
-      addPlayerId: input.addPlayerId,
-      addPlayerName: meta.playerName,
-      dropPlayerId: input.dropPlayerId ?? null,
-      dropPlayerName: input.dropPlayerName ?? null,
-      bidAmount: input.bidAmount ?? 0,
-      priority: conditionalRank,
-    },
-  })
-  await recordClaimTransaction({
-    leagueId: season.leagueId,
-    seasonId: season.id,
-    rosterId: input.rosterId,
-    type: 'waiver_claim_submitted',
-    metadata: {
-      claimId: claim.id,
-      addPlayerId: claim.addPlayerId,
-      addPlayerName: meta.playerName,
-      addPlayerPosition: meta.position,
-      addPlayerTeam: meta.team,
-      dropPlayerId: claim.dropPlayerId,
-      dropPlayerName: claim.dropPlayerName,
-      bidAmount: claim.bidAmount,
-      conditionalGroupId,
-      conditionalRank,
-      actorUserId: input.actorUserId ?? null,
-      warning: meta.warning,
-    },
-  })
-  await createClaimEvents({
-    leagueId: season.leagueId,
-    seasonId: season.id,
-    week: season.currentWeek || 1,
-    type: 'waiver.claim.submitted',
-    claimId: claim.id,
-    rosterId: claim.rosterId,
-    actorUserId: input.actorUserId,
-    payload: { addPlayerId: claim.addPlayerId, dropPlayerId: claim.dropPlayerId, bidAmount: claim.bidAmount },
-  })
-  return { claim, warning: meta.warning }
+/**
+ * Retired 2026-11-26: refuses every new claim. Claims go through the main waiver system now
+ * (lib/redraft/legacyWaiverClaimsRetired.ts). Kept as a named export so an old caller fails loudly
+ * with a clear reason rather than at import time; edit and cancel below still serve pending claims.
+ */
+export async function submitNflRedraftWaiverClaim(_input: SubmitNflRedraftWaiverClaimInput): Promise<never> {
+  throw new LegacyRedraftWaiverClaimsRetiredError()
 }
 
 export async function editNflRedraftWaiverClaim(input: EditNflRedraftWaiverClaimInput) {

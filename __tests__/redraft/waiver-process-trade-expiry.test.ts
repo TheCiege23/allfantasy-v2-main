@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({
   withSyncJobRun: vi.fn(async (_config: { jobName: string }, fn: () => Promise<unknown>) => fn()),
   processWaiverWindow: vi.fn(async () => []),
   seasonsFindMany: vi.fn(async () => [{ id: 'season-1', leagueId: 'league-1' }]),
+  pendingGroupBy: vi.fn(async () => [{ seasonId: 'season-1', _count: { _all: 2 } }] as Array<{ seasonId: string; _count: { _all: number } }>),
+  pendingCount: vi.fn(async () => 0),
   exileRollover: vi.fn(async () => ({ processed: 1, released: 2, scored: 0, pending: 1, errors: [] })),
   expireDue: vi.fn(async () => ({ due: 2, expired: 2, skipped: 0, failures: [] })),
 }))
@@ -22,7 +24,12 @@ vi.mock('@/lib/adminAuth', () => ({ requireAdminOrBearer: vi.fn(async () => ({ o
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({ withSyncJobRun: h.withSyncJobRun }))
 vi.mock('@/lib/redraft/waiverEngine', () => ({ processWaiverWindow: h.processWaiverWindow }))
 vi.mock('@/lib/redraft/seasonStatus', () => ({ engineSeasonScope: () => ({}), SCORING_SEASON_STATUSES: ['active', 'playoffs'] }))
-vi.mock('@/lib/prisma', () => ({ prisma: { redraftSeason: { findMany: h.seasonsFindMany } } }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    redraftSeason: { findMany: h.seasonsFindMany },
+    redraftWaiverClaim: { groupBy: h.pendingGroupBy, count: h.pendingCount },
+  },
+}))
 vi.mock('@/lib/survivor/survivorExileRollover', () => ({ runExileRosterRollover: h.exileRollover }))
 vi.mock('@/lib/redraft/tradeProposalExpiry', () => ({ expireDueRedraftTradeProposals: h.expireDue }))
 
@@ -69,6 +76,23 @@ describe('/api/redraft/waiver-process schedules redraft trade expiry', () => {
     expect(h.processWaiverWindow).toHaveBeenCalledWith('league-1', 'season-1')
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ exileRollover: { error: 'Exile snapshot pending' } })
+  })
+
+  it('drain-only: settles just the seasons that still hold old pending claims, and says how many are left', async () => {
+    const res = await get()
+    expect(h.seasonsFindMany.mock.calls[0]?.[0]).toMatchObject({ where: { AND: [{}, { id: { in: ['season-1'] } }] } })
+    expect(h.processWaiverWindow).toHaveBeenCalledWith('league-1', 'season-1')
+    expect(await res.json()).toMatchObject({ legacyPendingBefore: 2, legacyPendingAfter: 0 })
+  })
+
+  it('[control] with nothing pending in the old table it reads no season and settles nothing', async () => {
+    h.pendingGroupBy.mockResolvedValueOnce([])
+    const res = await get()
+    expect(res.status).toBe(200)
+    expect(h.seasonsFindMany).not.toHaveBeenCalled()
+    expect(h.processWaiverWindow).not.toHaveBeenCalled()
+    expect(h.pendingCount).not.toHaveBeenCalled()
+    expect(await res.json()).toMatchObject({ results: [], legacyPendingBefore: 0, legacyPendingAfter: 0 })
   })
 
   it('runs nothing for an unauthorized request', async () => {

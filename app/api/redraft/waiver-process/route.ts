@@ -58,16 +58,34 @@ async function processDueWaiverWindows() {
   // seasons were running, the same twenty (by Postgres' physical order) were processed every
   // hour and the rest never ran a waiver. `processWaiverWindow` is a no-op read for a season
   // with no pending claims, so every season is visited instead.
-  const seasons = await prisma.redraftSeason.findMany({
-    where: engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }),
-    orderBy: { id: 'asc' },
+  //
+  // ⚠ DRAIN-ONLY SINCE 2026-11-26. The old table takes no new claims (lib/redraft/legacyWaiverClaimsRetired.ts);
+  // every claim goes through the main waiver system and `/api/cron/waivers`. This step now only settles claims
+  // that were ALREADY pending here, so it visits just the seasons that still have one, and reports how many are
+  // left. When `legacyPendingAfter` reads 0 on every run, the old engine (lib/redraft/waiverEngine.ts) can be
+  // deleted. It is not deleted yet because nobody has confirmed the table is empty.
+  const pendingBySeason = await prisma.redraftWaiverClaim.groupBy({
+    by: ['seasonId'],
+    where: { status: 'pending' },
+    _count: { _all: true },
   })
+  const legacyPendingBefore = pendingBySeason.reduce((n, g) => n + g._count._all, 0)
+  const seasonIds = pendingBySeason.map((g) => g.seasonId)
+  const seasons = seasonIds.length
+    ? await prisma.redraftSeason.findMany({
+        where: { AND: [engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }), { id: { in: seasonIds } }] },
+        orderBy: { id: 'asc' },
+      })
+    : []
   const results: { seasonId: string; processed: unknown[] }[] = []
   for (const s of seasons) {
     const processed = await processWaiverWindow(s.leagueId, s.id)
     results.push({ seasonId: s.id, processed })
   }
-  return { results }
+  const legacyPendingAfter = legacyPendingBefore
+    ? await prisma.redraftWaiverClaim.count({ where: { status: 'pending' } })
+    : 0
+  return { results, legacyPendingBefore, legacyPendingAfter }
 }
 
 async function runWaiverProcessing() {
@@ -705,7 +723,11 @@ export async function GET(request: Request) {
     () => processDueWaiverWindows(),
     (r) => ({
       rowsRead: r.results.length,
-      metadata: { seasonsProcessed: r.results.length },
+      metadata: {
+        seasonsProcessed: r.results.length,
+        legacyPendingBefore: r.legacyPendingBefore,
+        legacyPendingAfter: r.legacyPendingAfter,
+      },
     }),
   )
 

@@ -1,5 +1,5 @@
+import { legacyRedraftWaiverClaimsRetiredResponse } from '@/lib/redraft/legacyWaiverClaimsRetired'
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
-import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
 import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
@@ -14,7 +14,6 @@ import {
   editNflRedraftWaiverClaim,
   processNflRedraftWaiverWindow,
   resolveNflRedraftWaiverRuntime,
-  submitNflRedraftWaiverClaim,
   type NflRedraftWaiverRuntimeState,
 } from '@/lib/waiver-runtime'
 import { checkImmediateAddGate } from '@/lib/waiver-wire/immediateAddGate'
@@ -202,44 +201,10 @@ export async function POST(request: Request) {
     const access = await rosterAccess({ rosterId: body.rosterId, seasonId: body.seasonId, leagueId, userId })
     if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
 
+    // Retired 2026-11-26: new claims go through the main waiver system. Editing or cancelling a pending
+    // claim below still works, so claims already queued in the old table are not stuck.
     if (action === 'submit_claim') {
-      const addPlayerId = body.addPlayerId?.trim()
-      const conditionalClaims = Array.isArray(body.conditionalClaims) ? body.conditionalClaims : []
-      if (!addPlayerId && conditionalClaims.length === 0) {
-        return NextResponse.json({ error: 'addPlayerId or conditionalClaims required' }, { status: 400 })
-      }
-      const groupId = body.conditionalGroupId?.trim() || (conditionalClaims.length > 0 ? `group:${access.roster.id}:${randomUUID()}` : undefined)
-      const claims = []
-      const submitOne = async (
-        claimBody: NonNullable<WaiverRuntimeBody['conditionalClaims']>[number] | WaiverRuntimeBody,
-        rank: number,
-      ) => {
-        const id = claimBody.addPlayerId?.trim()
-        if (!id) throw new Error('addPlayerId required')
-        return submitNflRedraftWaiverClaim({
-          seasonId: body.seasonId,
-          leagueId,
-          rosterId: access.roster.id,
-          addPlayerId: id,
-          addPlayerName: claimBody.addPlayerName,
-          addPlayerPosition: claimBody.addPlayerPosition,
-          addPlayerTeam: claimBody.addPlayerTeam,
-          dropPlayerId: claimBody.dropPlayerId,
-          dropPlayerName: claimBody.dropPlayerName,
-          bidAmount: claimBody.bidAmount,
-          conditionalGroupId: groupId,
-          conditionalRank: claimBody === body ? body.conditionalRank ?? rank : rank,
-          actorUserId: userId,
-        })
-      }
-      if (conditionalClaims.length > 0) {
-        for (let i = 0; i < conditionalClaims.length; i += 1) {
-          claims.push(await submitOne(conditionalClaims[i], i + 1))
-        }
-      } else {
-        claims.push(await submitOne(body, body.conditionalRank ?? 1))
-      }
-      return NextResponse.json({ ok: true, claims })
+      return legacyRedraftWaiverClaimsRetiredResponse(leagueId)
     }
 
     if (action === 'edit_claim') {
