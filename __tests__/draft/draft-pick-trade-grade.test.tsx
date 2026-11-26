@@ -94,7 +94,9 @@ describe('wiring', () => {
 
   it('the route grades through the one draft-room review, which grades rookie and combined picks through the league grader', () => {
     expect(route).toMatch(/reviewDraftPickSwap\(\s*draftPickTradeGraderSource\(\{ leagueId, userId \}\)/)
-    expect(review).toMatch(/if \(!isRookieDraft\(session\)\) return \{ graded: false, reason: NOT_A_ROOKIE_DRAFT_REASON \}/)
+    // A startup/redraft draft is priced from its own board (2026-11-26), withheld with the old reason when it cannot be.
+    expect(review).toMatch(/if \(!isRookieDraft\(session\)\) return leagueGradeForBoardPickSwap\(grader, session, swap, season\)/)
+    expect(review).toMatch(/const withheld: DraftPickTradeGrade = \{ graded: false, reason: NOT_A_ROOKIE_DRAFT_REASON \}/)
     expect(review).toMatch(/annualC2CDraftSeason\(session\)/)
     expect(review).toMatch(/draftPickGradeAsset\(\{[^}]*combined,\s*\}\)/)
     expect(review).toMatch(/await gradeDeal\(await grader\(\)/)

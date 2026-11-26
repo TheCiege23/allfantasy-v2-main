@@ -6,10 +6,10 @@
  * chip ("strong value" … "overpay") and a "good/risky move" chip, three private scales no other trade
  * screen uses. Now a swap that the league's value chart CAN price carries the one grade instead.
  *
- * 🛑 ONLY A ROOKIE DRAFT IS GRADED. The grader prices a pick as a rookie-draft asset (year, round,
- * early/mid/late). In a startup or redraft draft a pick is worth the PLAYER taken there, which that
- * chart does not price — grading it anyway would hand out a confident letter about the wrong thing.
- * Those swaps say why they are not graded and keep the draft-position read, which is a fact.
+ * 🛑 A ROOKIE DRAFT'S PICK IS PRICED BY THE PICK MARKET (year, round, exact slot). In a startup or
+ * redraft draft a pick is worth the PLAYER taken there, which that market does not price — so those picks
+ * are priced from the draft's own remaining board instead (`draftPickBoardAsset`, 2026-11-26), and a swap
+ * whose board cannot be read says why it is not graded and keeps the draft-position read, which is a fact.
  */
 
 import { ANNUAL_C2C_DRAFT } from './annualC2CDraft'
@@ -41,6 +41,47 @@ export function isRookieDraft(session: { draftModeLabel?: string | null; playerP
   const label = String(session.draftModeLabel ?? '').trim().toLowerCase()
   const pool = String(session.playerPool ?? '').trim().toLowerCase()
   return label === 'rookie' || label === ANNUAL_C2C_DRAFT || pool === 'rookies_only'
+}
+
+/**
+ * A STARTUP or REDRAFT draft — the full player pool, drafted from scratch — whose picks are priced from
+ * the draft's own remaining board (`draftBoardPickPricing.ts`, owner's call 2026-11-26). Not a rookie draft
+ * (the market quotes those picks), not an auction (no picks), and not a supplemental/dispersal or
+ * veterans-only draft, whose pool is not the league chart's player list.
+ */
+export function isBoardPricedDraft(session: {
+  draftModeLabel?: string | null
+  playerPool?: string | null
+  draftType?: string | null
+}): boolean {
+  if (isRookieDraft(session)) return false
+  if (String(session.draftType ?? 'snake').trim().toLowerCase() === 'auction') return false
+  const label = String(session.draftModeLabel ?? '').trim().toLowerCase()
+  const pool = String(session.playerPool ?? '').trim().toLowerCase()
+  if (pool && pool !== 'all') return false
+  return label === '' || label === 'startup' || label === 'standard' || label === 'redraft'
+}
+
+/**
+ * One pick of a startup/redraft draft as the grader's input: its overall number, priced from the draft's
+ * remaining board. Year/round ride along for the label only — no pick market row is read for it.
+ */
+export function draftPickBoardAsset(input: {
+  season: number
+  round: number
+  overall: number
+  slot: number
+  teamCount: number
+}): Extract<TradeAssetInput, { kind: 'pick' }> {
+  const roundPick = pickInRound(input)
+  return {
+    kind: 'pick',
+    year: input.season,
+    round: input.round,
+    liveBoardOverall: input.overall,
+    ...(roundPick != null ? { roundPick } : {}),
+    label: `${input.season} Pick ${input.round}.${String(roundPick ?? input.slot).padStart(2, '0')} (#${input.overall})`,
+  }
 }
 
 /**

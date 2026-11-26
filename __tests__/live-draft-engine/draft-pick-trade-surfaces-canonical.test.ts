@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({
   session: null as any,
   prisma: {
     draftPickTradeProposal: { findFirst: vi.fn(), update: vi.fn() },
+    // The startup/redraft board read (`loadLiveDraftBoard`). Unset: the read throws and the board is absent.
+    draftSession: { findFirst: vi.fn() },
     aiManagerAuditLog: { create: vi.fn() },
   },
   appendDraftPickTrades: vi.fn(),
@@ -26,8 +28,12 @@ vi.mock('@/lib/prisma', () => ({ prisma: h.prisma }))
 vi.mock('@/lib/decision-os/trade/leagueTradeGrader', () => ({
   createLeagueTradeGrader: (...a: unknown[]) => h.createGrader(...a),
   gradeDeal: async (grader: any, args: any) =>
-    grader ? grader.grade({ give: args.give.assets, get: args.get.assets, viewerSide: args.viewerSide }) : { graded: false, reason: 'no league', basis: null },
+    grader
+      ? grader.grade({ give: args.give.assets, get: args.get.assets, viewerSide: args.viewerSide, ...(args.draftBoard ? { draftBoard: args.draftBoard } : {}) })
+      : { graded: false, reason: 'no league', basis: null },
 }))
+// No warm draft-pool snapshot: a startup board is then ranked on the league chart (inside the grader).
+vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({ getWarmDraftPoolSnapshotFast: vi.fn(async () => ({ warm: false })) }))
 vi.mock('@/lib/live-draft-engine/auth', () => ({
   canAccessLeagueDraft: vi.fn(async () => true),
   getCurrentUserRosterIdForLeague: vi.fn(async () => 'ra'),
@@ -98,6 +104,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  h.prisma.draftSession.findFirst.mockReset()
+  h.grade.mockReset() // no unconsumed `…Once` value leaks from one case into the next
   h.session = rookieSession()
   h.createGrader.mockResolvedValue({ grade: h.grade })
 })
@@ -198,6 +206,62 @@ describe('commissioner AI manager auto-answer', () => {
     await autoRespond('L', 'p1')
     expect(h.prisma.draftPickTradeProposal.update).not.toHaveBeenCalled()
     expect(h.appendDraftPickTrades).not.toHaveBeenCalled()
+  })
+})
+
+describe('startup/redraft drafts: priced from the draft’s own board (2026-11-26)', () => {
+  const STARTUP = { draftModeLabel: 'startup', playerPool: 'all' }
+  const boardRow = { status: 'in_progress', rounds: 4, teamCount: 4, picks: [{ overall: 1, playerName: 'Top Guy', position: 'RB', playerId: null, pickMetadata: null }] }
+  beforeEach(() => {
+    h.prisma.draftSession.findFirst.mockResolvedValue(boardRow)
+    h.createGrader.mockResolvedValue({ grade: h.grade, pricesDraftBoard: true })
+  })
+  const proposal = {
+    id: 'p1', status: 'pending', proposerRosterId: 'ra', receiverRosterId: 'rb', proposerName: 'Alpha',
+    giveRound: 2, giveSlot: 2, receiveRound: 1, receiveSlot: 2,
+    giveOriginalRosterId: 'rb', receiveOriginalRosterId: 'rb',
+    session: { ...rookieSession(), ...STARTUP },
+  }
+
+  it('the commissioner AI accepts or rejects a startup offer on its grade — the board reaches the grader', async () => {
+    h.prisma.draftPickTradeProposal.findFirst.mockResolvedValue(proposal)
+    h.appendDraftPickTrades.mockResolvedValue({ success: true })
+    h.grade.mockResolvedValueOnce(view('accept', 'B', 'D', 3000, 3600))
+    await autoRespond('L', 'p1')
+    const call = h.grade.mock.calls[0][0]
+    // The AI gives 1.02 (#2) and gets 2.02 (#7), each by its overall on the board.
+    expect(call.give[0]).toMatchObject({ liveBoardOverall: 2 })
+    expect(call.get[0]).toMatchObject({ liveBoardOverall: 7 })
+    expect(call.draftBoard).toMatchObject({ openOveralls: Array.from({ length: 15 }, (_, i) => i + 2), expected: null, drafted: { names: ['Top Guy'] } })
+    expect(h.prisma.draftSession.findFirst.mock.calls[0][0].where).toEqual({ id: 's1', leagueId: 'L' })
+    expect(h.prisma.draftPickTradeProposal.update.mock.calls.at(-1)[0].data.status).toBe('accepted')
+
+    vi.clearAllMocks()
+    h.prisma.draftSession.findFirst.mockResolvedValue(boardRow)
+    h.createGrader.mockResolvedValue({ grade: h.grade, pricesDraftBoard: true })
+    h.prisma.draftPickTradeProposal.findFirst.mockResolvedValue(proposal)
+    h.grade.mockResolvedValueOnce(view('decline', 'F', 'A', 6000, 1000))
+    await autoRespond('L', 'p1')
+    expect(h.prisma.draftPickTradeProposal.update.mock.calls[0][0].data.status).toBe('rejected')
+  })
+
+  it('the orphan manager acts on a startup grade instead of holding', async () => {
+    h.grade.mockResolvedValueOnce(view('counter', 'D', 'B', 5000, 4000))
+    const a = await orphan({ leagueId: 'L', session: rookieSession(STARTUP) as any, give: { round: 1, slot: 2 }, get: { round: 1, slot: 4 } })
+    expect(a).toMatchObject({ decision: 'counter', action: 'trade_counter' })
+    h.grade.mockResolvedValueOnce(view('review', 'C', 'C', 5000, 4950))
+    expect((await orphan({ leagueId: 'L', session: rookieSession(STARTUP) as any, give: { round: 1, slot: 2 }, get: { round: 1, slot: 3 } })).decision).toBe('accept')
+  })
+
+  it('🛑 still withheld (pending / hold) where the grader cannot price a board, or there is no board', async () => {
+    h.createGrader.mockResolvedValue({ grade: h.grade }) // e.g. a sport-points league: no `pricesDraftBoard`
+    expect((await orphan({ leagueId: 'L', session: rookieSession(STARTUP) as any, give: { round: 1, slot: 2 }, get: { round: 1, slot: 4 } })).decision).toBe('hold')
+    h.createGrader.mockResolvedValue({ grade: h.grade, pricesDraftBoard: true })
+    h.prisma.draftSession.findFirst.mockResolvedValue(null)
+    h.prisma.draftPickTradeProposal.findFirst.mockResolvedValue(proposal)
+    await autoRespond('L', 'p1')
+    expect(h.prisma.draftPickTradeProposal.update).not.toHaveBeenCalled()
+    expect(h.grade).not.toHaveBeenCalled()
   })
 })
 

@@ -42,6 +42,13 @@ export type TradeAssetInput =
        * chart has one, and exactly as before otherwise (`priceLeagueTradePick`).
        */
       roundPick?: number
+      /**
+       * A pick in a STARTUP or REDRAFT draft being run now, by its overall number. The market has no row
+       * for such a pick, so it is priced from that draft's own remaining board (`draftBoardPickPricing.ts`)
+       * — only when the grade is handed that board; without it the pick is not priced. Set only by the
+       * live draft room (`draftPickBoardAsset`).
+       */
+      liveBoardOverall?: number
       draftSide?: C2CDraftSide
       tier?: 'early' | 'mid' | 'late'
       label?: string

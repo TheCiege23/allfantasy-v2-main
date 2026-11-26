@@ -108,7 +108,8 @@ export function buildTradeMarketOverlay(args: {
       }
       market[side].push(m)
       lineup[side].push(u)
-      const pickMove = args.learned && l.pricedSource === 'pick'
+      // A board-priced pick (a startup/redraft draft) is a player's value, not a rookie pick: the pick market does not move it.
+      const pickMove = args.learned && l.pricedSource === 'pick' && l.dataSource !== 'draft_board'
         ? learnedPickAdjustment(args.learned, bookKey(args.book), l.name, args.teams ?? null, args.now ?? new Date())
         : null
       if (pickMove) picksMoved++

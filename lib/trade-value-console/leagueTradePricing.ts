@@ -761,6 +761,11 @@ export async function resolveAssets(
     pickSlots?: PickSlotProjection | null
     combinedPickQuote?: (pick: Extract<TradeAssetInput, { kind: 'pick' }>) => Promise<number | null>
     /**
+     * The price of a pick in a startup/redraft draft being run now (`liveBoardOverall`), read from that
+     * draft's remaining board by the grader (`draftBoardPickPricing.ts`). A board pick with no quote is unpriced.
+     */
+    draftBoardQuote?: (pick: Extract<TradeAssetInput, { kind: 'pick' }>) => { value: number; source?: string | null } | null
+    /**
      * The league's platform (`fantrax`, `espn`, …). A roster player's `playerId` from such a league is
      * that platform's own id, read through its `PlayerIdentityMap` column — see `identifyProviderRosterId`.
      */
@@ -808,6 +813,34 @@ export async function resolveAssets(
           pricedSource: 'pick',
           playerId: null,
           dataSource: 'no_pick_market',
+        }),
+      )
+      continue
+    }
+    if (raw.kind === 'pick' && raw.liveBoardOverall != null) {
+      /*
+       * A pick in a startup/redraft draft being run now: worth the players this draft expects at that slot,
+       * priced on this chart by the grader (`draftBoardPickPricing.ts`). Never the rookie-pick market, which
+       * has no row for it, and never a curve: no quote, no price.
+       */
+      const name = `${raw.year} Pick ${raw.round}${raw.roundPick != null ? `.${String(raw.roundPick).padStart(2, '0')}` : ''} (#${raw.liveBoardOverall})`
+      const quote = args.draftBoardQuote?.(raw) ?? null
+      const p: PricedAsset = quote && Number.isFinite(quote.value) && quote.value >= 0
+        ? {
+            ...repricedAsset(await pricePick({ year: raw.year, round: raw.round, tier: raw.tier ?? null }, args.nflCtx), quote.value,
+              quote.source === 'allfantasy' ? 'allfantasy' : 'fantasycalc'),
+            name,
+          }
+        : unpricedAsset({ name, type: 'pick', reason: noPickMarketUnpricedReason(raw.year, raw.round) })
+      priced.push(p)
+      lines.push(
+        lineFromPriced(p, {
+          sport: args.effectiveSport,
+          position: 'PICK',
+          team: `${raw.year}`,
+          pricedSource: 'pick',
+          playerId: null,
+          dataSource: quote ? 'draft_board' : 'no_pick_market',
         }),
       )
       continue

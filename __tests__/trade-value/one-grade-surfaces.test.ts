@@ -476,7 +476,8 @@ describe('College redraft — points over replacement, never the private scale (
 describe('League asset rules — picks refused where unpriced, held devy prospects priced (design step 9)', () => {
   it('the league grader refuses picks before pricing and prices devy before grading', () => {
     const src = code('lib/decision-os/trade/leagueTradeGrader.ts')
-    const refuse = src.indexOf('assets.pickRefusal([...give, ...get])')
+    // Every pick but a startup/redraft live-draft board pick (priced from that draft's board, 2026-11-26).
+    const refuse = src.indexOf('assets.pickRefusal([...give, ...get].filter((a) => !isBoardPick(a)))')
     const price = src.indexOf('resolveAssets(give, opts)')
     expect(refuse).toBeGreaterThan(-1)
     expect(price).toBeGreaterThan(refuse)
