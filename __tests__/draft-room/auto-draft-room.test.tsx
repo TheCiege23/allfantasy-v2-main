@@ -244,6 +244,14 @@ describe('the board', () => {
     expect(screen.queryByTestId('draft-board-cell-your-pick-3')).toBeNull()
   })
 
+  it('the current tile reads "Picking" in an auto draft and "On the clock" otherwise', () => {
+    render(board({ currentOverallPick: 4, autoDraft: true }))
+    expect(screen.getByTestId('draft-board-cell-on-clock-4').textContent).toBe('Picking')
+    cleanup()
+    render(board({ currentOverallPick: 4 }))
+    expect(screen.getByTestId('draft-board-cell-on-clock-4').textContent).toBe('On the clock')
+  })
+
   it('shows no "Your pick" to a viewer without a team', () => {
     render(board())
     expect(document.querySelector('[data-testid^="draft-board-cell-your-pick-"]')).toBeNull()

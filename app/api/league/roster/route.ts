@@ -342,7 +342,7 @@ export async function GET(req: NextRequest) {
     // C2C campus lineup (lib/c2c/campusLineup.ts): native football C2C only, null everywhere else.
     // A load failure degrades to null (logged) rather than blocking the roster.
     const campus: CampusLineupView | null = await loadCampusLineupView(prisma, {
-      league: { id: league.id, platform: league.platform, sport: league.sport, leagueVariant: league.leagueVariant },
+      league: { id: league.id, platform: league.platform, sport: league.sport, leagueVariant: league.leagueVariant, leagueType: league.leagueType, settings: league.settings },
       playerData: roster.playerData,
       redraftRosterId: roster.redraftRosterId ?? null,
     }).catch((e: unknown) => {

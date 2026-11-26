@@ -50,6 +50,7 @@ import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefa
 import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import { planStartupDrafts, STARTUP_COLLEGE_DRAFT_SETTINGS_KEY, supportsSeparateStartupDrafts } from '@/lib/draft-defaults/startupCollegeDraft'
 import { dailyLineupTablesExist, defaultsToDailyLineups, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
+import { DEVY_COLLEGE_SCORING_KEY } from '@/lib/c2c/collegeLineupLeague'
 
 type Tx = Prisma.TransactionClient
 
@@ -370,6 +371,9 @@ export async function createCanonicalLeagueInTransaction(
     third_round_reversal: thirdRoundReversal,
     draft_third_round_reversal: thirdRoundReversal,
     draftSettings: { ...engine.settingsSnapshot.draftSettings, rounds: draftRounds, thirdRoundReversal },
+    // Owner's decision, 2026-11-24: a new NFL devy league's college lineup scores, as its own college season
+    // (lib/c2c/collegeLineupLeague.ts). A league made before this stays stash-only until its commissioner opts in.
+    ...(formatId === 'devy' && sport === 'NFL' ? { [DEVY_COLLEGE_SCORING_KEY]: true } : {}),
     ...(formatId === 'dynasty' ? {
       starter_slots: foundationDefaults.rosterSettings.starter_slots,
       bench_slots: foundationDefaults.rosterSettings.benchSlots,

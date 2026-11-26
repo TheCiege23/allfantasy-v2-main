@@ -104,7 +104,7 @@ describe('overallTitleStandings', () => {
 /* ---------- A full college season through the runner, on an in-memory database ---------- */
 
 type Row = Record<string, any>
-function fakeDb(opts: { teams: number; settings: Record<string, unknown> }) {
+function fakeDb(opts: { teams: number; settings: Record<string, unknown>; variant?: string | null; leagueType?: string }) {
   const rosters = Array.from({ length: opts.teams }, (_, i) => ({ id: `r${i + 1}`, ownerId: `u${i + 1}` }))
   const seasons: Row[] = []
   const matchups: Row[] = []
@@ -124,7 +124,7 @@ function fakeDb(opts: { teams: number; settings: Record<string, unknown> }) {
     standings,
     seasons,
     db: {
-      league: { findUnique: async () => ({ id: 'L1', platform: 'af', sport: 'NFL', leagueVariant: 'c2c', settings: opts.settings }) },
+      league: { findUnique: async () => ({ id: 'L1', platform: 'af', sport: 'NFL', leagueVariant: opts.variant === undefined ? 'c2c' : opts.variant, leagueType: opts.leagueType ?? 'c2c', settings: opts.settings }) },
       redraftSeason: { findFirst: async () => ({ id: 'S1', season: 2026, medianGame: false }) },
       redraftRoster: { findMany: async () => rosters },
       sportsGame: { findMany: async ({ where: w }: Row) => (w.sport === 'NCAAF' ? cfbGames : []) },
@@ -200,6 +200,20 @@ describe('runCampusSeasonTick: a whole college season', () => {
     getC2CConfig.mockResolvedValue({ standingsModel: 'unified' })
     const f = fakeDb({ teams: 4, settings: {} })
     await expect(runCampusSeasonTick('L1', { db: f.db as never })).resolves.toEqual({ status: 'skipped', reason: 'standings model is not separate' })
+    expect(f.seasons).toHaveLength(0)
+  })
+
+  it('a wizard-made devy league with college scoring plays its own college season, whatever the C2C config says', async () => {
+    getC2CConfig.mockResolvedValue({ standingsModel: 'unified' })
+    const f = fakeDb({ teams: 4, variant: null, leagueType: 'devy', settings: { devy_college_scoring: true, c2c_college_regular_weeks: 2, c2c_college_playoff_teams: 2 } })
+    for (let k = 1; k <= 4; k++) await runCampusSeasonTick('L1', { db: f.db as never, now: new Date(f.sat(k) + 3 * 86400_000) })
+    expect(f.seasons[0]).toMatchObject({ status: 'complete', championRosterId: 'r4' })
+    expect(getC2CConfig).not.toHaveBeenCalled()
+  })
+
+  it('a stash-only devy league has no college season', async () => {
+    const f = fakeDb({ teams: 4, variant: null, leagueType: 'devy', settings: {} })
+    await expect(runCampusSeasonTick('L1', { db: f.db as never })).resolves.toMatchObject({ status: 'skipped' })
     expect(f.seasons).toHaveLength(0)
   })
 

@@ -50,6 +50,7 @@ import { NhlScoringSettingsPanel } from '@/components/league-settings/NhlScoring
 import ScoringSettingsPanel from '@/components/app/settings/ScoringSettingsPanel'
 import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { NcaafScoringSettingsPanel } from '@/components/league-settings/NcaafScoringSettingsPanel'
+import { CollegePlayerPoolPanel } from '@/components/league-settings/CollegePlayerPoolPanel'
 import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerScoringSettingsPanel'
 import { DraftSettingsCommissionerPanel } from '@/components/league-settings/DraftSettingsCommissionerPanel'
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
@@ -771,6 +772,11 @@ export function SettingsSubPanelBody({
       return (
         <>
           <RosterSettingsReadonlyPanel ctx={ctx} />
+          {(ctx.league.sport === 'NCAAF' || ctx.league.sport === 'NCAAB') && (
+            <div className="mt-6">
+              <CollegePlayerPoolPanel leagueId={ctx.league.id} />
+            </div>
+          )}
           {(ctx.league.sport === 'NFL' || ctx.league.sport === 'NBA' || ctx.league.sport === 'NCAAB' || ctx.league.sport === 'MLB' || ctx.league.sport === 'NCAAF' || ctx.league.sport === 'NHL' || ctx.league.sport === 'SOCCER') && (
             <div className="mt-6">
               <RosterSettingsEditorLazy leagueId={ctx.league.id} />
