@@ -62,6 +62,7 @@ import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
 import { detectProviderFromLink } from '@/lib/league-import/detectProviderFromLink'
 import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
 import { ImportReviewPanel, type ImportReviewState } from '@/components/import/ImportReviewPanel'
+import { ImportLeagueTypePicker } from '@/components/import/ImportLeagueTypePicker'
 import { readImportReview } from '@/lib/league-import/review/readImportReview'
 import type { ImportReview, ImportReviewOverrides } from '@/lib/league-import/review/types'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
@@ -1308,12 +1309,23 @@ export function ImportV4({
     reviewOverridesRef.current = next.overrides
     setReviewState(next)
   }, [])
+  /*
+   * The league type the commissioner picked on the confirm screen; null means "keep what we detected".
+   * A ref for the same reason as the review edits above: the commit can be re-entered from a gate.
+   */
+  const leagueTypeChoiceRef = useRef<string | null>(null)
+  const [leagueTypeChoice, setLeagueTypeChoiceState] = useState<string | null>(null)
+  const setLeagueTypeChoice = useCallback((next: string | null) => {
+    leagueTypeChoiceRef.current = next
+    setLeagueTypeChoiceState(next)
+  }, [])
 
   const runPreview = useCallback(
     async (sourceId: string, attest = false) => {
       setError(null)
       reviewOverridesRef.current = null
       setReviewState(null)
+      setLeagueTypeChoice(null)
       setPhase({ k: 'previewing', sourceId })
       const res = await fetchImportPreview(
         provider,
@@ -1396,7 +1408,7 @@ export function ImportV4({
         review: readImportReview(payload?.review),
       })
     },
-    [provider, espnConnected]
+    [provider, espnConnected, setLeagueTypeChoice]
   )
 
   useEffect(() => {
@@ -1427,13 +1439,19 @@ export function ImportV4({
         sourceId,
         '',
         attested ? { accepted: true } : undefined,
-        force || confirmReimportOfDeleted || claimTeamId || espnRunBy || reviewOverridesRef.current
+        force ||
+          confirmReimportOfDeleted ||
+          claimTeamId ||
+          espnRunBy ||
+          reviewOverridesRef.current ||
+          leagueTypeChoiceRef.current
           ? {
               ...(force ? { force: true } : {}),
               ...(confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
               ...(claimTeamId ? { claimSourceTeamId: claimTeamId } : {}),
               ...(espnRunBy ? { espnLeagueRunBy: espnRunBy } : {}),
               ...(reviewOverridesRef.current ? { reviewOverrides: reviewOverridesRef.current } : {}),
+              ...(leagueTypeChoiceRef.current ? { leagueType: leagueTypeChoiceRef.current } : {}),
             }
           : undefined
       )
@@ -3412,6 +3430,14 @@ export function ImportV4({
               blockedReason={phase.importBlockedReason}
               onRerun={() => void runPreview(phase.sourceId, phase.attested)}
               onReviewStateChange={onReviewStateChange}
+            />
+          ) : null}
+          {phase.review && !phase.importBlockedReason && !previewImportState(provider, phase).espnMember ? (
+            <ImportLeagueTypePicker
+              detectedId={phase.review.league.leagueType}
+              detectedLabel={phase.review.league.leagueTypeLabel}
+              value={leagueTypeChoice}
+              onChange={setLeagueTypeChoice}
             />
           ) : null}
           {/*

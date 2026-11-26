@@ -2323,3 +2323,15 @@
 /* Yahoo tile, allowlisted account: the copy-paste way in instead of "coming soon". */
 .af-im-ys-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .af-im-ys-cta .af-im-fx-go { min-height: 44px; }
+
+/* ── League type on the confirm screen (components/import/ImportLeagueTypePicker.tsx) ── */
+.af-im-league-type { display: flex; flex-direction: column; gap: 6px; margin: 16px 0 4px; }
+.af-im-league-type select {
+  max-width: 360px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text);
+  font: 600 14px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif;
+}
