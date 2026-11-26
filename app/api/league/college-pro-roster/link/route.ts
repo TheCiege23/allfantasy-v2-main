@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { findLinkCandidates, linkHalves } from '@/lib/league/collegePro/linkHalves'
+import { findLinkCandidates, findLinkCandidatesForSport, linkHalves } from '@/lib/league/collegePro/linkHalves'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,11 +10,19 @@ async function sessionUserId(): Promise<string | null> {
   return session?.user?.id ?? null
 }
 
-/** The viewer's leagues that could be this league's other half (pro <-> college, matching sport). */
+/**
+ * The viewer's leagues that could be this league's other half (pro <-> college, matching sport).
+ * `?sport=` instead of `?leagueId=` asks for a league not built yet: the import confirm screen.
+ */
 export async function GET(req: NextRequest) {
   const userId = await sessionUserId()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  const sport = req.nextUrl.searchParams?.get('sport')?.trim()
+  if (!leagueId && sport) {
+    const bySport = await findLinkCandidatesForSport(userId, sport).catch(() => null)
+    return bySport ? NextResponse.json(bySport) : NextResponse.json({ error: 'Could not load your leagues' }, { status: 500 })
+  }
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
   const found = await findLinkCandidates(leagueId, userId).catch(() => null)
   if (!found) return NextResponse.json({ error: 'League not found' }, { status: 404 })

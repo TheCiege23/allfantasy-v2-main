@@ -91,6 +91,8 @@ export default async function ImportPage(
   const initialSleeperUsername = pickQuery(sp, "username");
   const initialLeagueSourceId =
     pickQuery(sp, "leagueId") || pickQuery(sp, "sourceId");
+  /* "Import the other half" from a C2C / devy import: that AF league is preselected to link. */
+  const initialPairWith = pickQuery(sp, "pairWith").trim().slice(0, 64);
 
   /*
    * The Yahoo callback has always written `yahoo_error` here and nothing has ever
@@ -134,6 +136,7 @@ export default async function ImportPage(
     if (providerRaw) qs.set("provider", providerRaw);
     if (initialSleeperUsername) qs.set("username", initialSleeperUsername);
     if (initialLeagueSourceId) qs.set("leagueId", initialLeagueSourceId);
+    if (initialPairWith) qs.set("pairWith", initialPairWith);
     const callbackUrl = encodeURIComponent(`/import?${qs.toString()}`);
     /*
      * A leaguemate invite (2026-11-15) carries the inviter's referral code. Whoever holds one is almost
@@ -174,6 +177,7 @@ export default async function ImportPage(
       defaultProvider={defaultProvider}
       initialAccount={initialSleeperUsername}
       initialLeagueSourceId={initialLeagueSourceId}
+      initialPairWith={initialPairWith || undefined}
       returnTo={returnTo || undefined}
       yahooError={yahooError}
       yahooErrorDesc={yahooErrorDesc}
