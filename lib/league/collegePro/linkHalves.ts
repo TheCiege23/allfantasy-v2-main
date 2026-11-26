@@ -47,10 +47,27 @@ const ownedBy = (userId: string) => ({ OR: [{ userId }, { teams: { some: { claim
 export async function findLinkCandidates(leagueId: string, userId: string): Promise<{ needRole: 'pro' | 'college'; candidates: LinkCandidate[] } | null> {
   const league = await prisma.league.findFirst({ where: { id: leagueId, ...ownedBy(userId) }, select: { id: true, sport: true } })
   if (!league) return null
-  const sport = String(league.sport ?? '').toUpperCase()
+  return findLinkCandidatesForSport(userId, String(league.sport ?? ''), leagueId)
+}
+
+/** The sports a college + pro franchise is built from. Anything else has no other half. */
+const PAIRABLE_SPORTS = new Set(['NFL', 'NBA', 'NCAAF', 'NCAAB'])
+
+/**
+ * The same list for a league that does not exist yet: the import confirm screen asks for the other half
+ * BEFORE the league is built, so all it has is the sport the preview read.
+ */
+export async function findLinkCandidatesForSport(
+  userId: string,
+  sportRaw: string,
+  excludeLeagueId?: string,
+): Promise<{ needRole: 'pro' | 'college'; candidates: LinkCandidate[] }> {
+  const sport = sportRaw.trim().toUpperCase()
+  const needRole = isCollegeSport(sport) ? 'pro' : 'college'
+  if (!PAIRABLE_SPORTS.has(sport)) return { needRole, candidates: [] }
   const want = pairedSportFor(sport)
   const rows = await prisma.league.findMany({
-    where: { id: { not: leagueId }, sport: want as LeagueSport, ...ownedBy(userId) },
+    where: { ...(excludeLeagueId ? { id: { not: excludeLeagueId } } : {}), sport: want as LeagueSport, ...ownedBy(userId) },
     select: { id: true, name: true, platform: true, platformLeagueId: true, sport: true, season: true, leagueType: true },
     orderBy: { season: 'desc' },
     take: 50,
@@ -66,7 +83,7 @@ export async function findLinkCandidates(leagueId: string, userId: string): Prom
     // C2C / Devy leagues first: the likely other half.
     .sort((a, b) => Number(!['c2c', 'devy'].includes(String(a.leagueType))) - Number(!['c2c', 'devy'].includes(String(b.leagueType))))
     .map((r) => ({ leagueId: r.id, name: r.name ?? 'League', platform: r.platform, sport: String(r.sport ?? want), season: r.season ?? null }))
-  return { needRole: isCollegeSport(sport) ? 'pro' : 'college', candidates }
+  return { needRole, candidates }
 }
 
 export async function linkHalves(args: { leagueId: string; otherLeagueId: string; userId: string }): Promise<{ ok: true } | { ok: false; error: string }> {

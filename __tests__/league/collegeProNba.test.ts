@@ -68,7 +68,7 @@ vi.mock('@/lib/league/collegePro/dailyPoints', async (orig) => ({
   loadDailyPoints: vi.fn(async (a: { players: Array<{ id: string }> }) => ({ points: Object.fromEntries(a.players.map((p) => [p.id, 10])), statsOnFile: true })),
 }))
 
-import { isCollegeSport, linkHalves, memberKeyFor, pairedSportFor } from '@/lib/league/collegePro/linkHalves'
+import { findLinkCandidatesForSport, isCollegeSport, linkHalves, memberKeyFor, pairedSportFor } from '@/lib/league/collegePro/linkHalves'
 import { currentFantraxPeriod, loadDailyPoints } from '@/lib/league/collegePro/dailyPoints'
 import { buildFantraxLists } from '@/lib/league/collegePro/buildSides'
 import { loadCollegeProRoster } from '@/lib/league/collegePro/loadCollegeProRoster'
@@ -116,6 +116,19 @@ describe('linking two halves', () => {
     const calls = h.attach.mock.calls.map((c) => c[0] as { role: string; leagueId: string; linkId?: string })
     expect(calls.map((c) => [c.role, c.leagueId])).toEqual([['pro', 'snap-nba'], ['college', 'snap-cbb']])
     expect(calls[1]!.linkId).toBe('link-1')
+  })
+
+  it('lists the other half by sport, for a league the import has not built yet', async () => {
+    const found = await findLinkCandidatesForSport('u1', 'nba')
+    expect(found.needRole).toBe('college')
+    expect(found.candidates.map((c) => c.leagueId)).toEqual(['cbb'])
+  })
+
+  it('has no other half for a sport no college + pro franchise is built from', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    vi.mocked(prisma.league.findMany).mockClear()
+    expect(await findLinkCandidatesForSport('u1', 'MLB')).toEqual({ needRole: 'college', candidates: [] })
+    expect(prisma.league.findMany).not.toHaveBeenCalled()
   })
 
   it('refuses two pro leagues', async () => {

@@ -2335,3 +2335,20 @@
   color: var(--text);
   font: 600 14px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif;
 }
+
+/* ── The other half of a C2C / devy league (components/import/ImportOtherHalfPicker.tsx) ── */
+.af-im-other-half { border: 0; padding: 0; margin: 18px 0 4px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.af-im-other-half legend { padding: 0; margin-bottom: 2px; }
+.af-im-other-half-list { display: flex; flex-direction: column; gap: 8px; max-width: 460px; }
+.af-im-other-half-option {
+  display: flex; align-items: flex-start; gap: 10px; box-sizing: border-box;
+  min-height: 44px; padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--line2);
+  background: var(--surface2); color: var(--text); cursor: pointer;
+}
+.af-im-other-half-option[data-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.af-im-other-half-option input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+.af-im-other-half-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.af-im-other-half-name { font: 700 14px/1.3 var(--font-archivo, Archivo), system-ui, sans-serif; overflow-wrap: anywhere; }
+.af-im-other-half-meta { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+.af-im-pair-note { margin: 0 0 4px; }

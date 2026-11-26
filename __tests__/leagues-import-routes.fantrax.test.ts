@@ -276,6 +276,8 @@ describe('Fantrax import API routes', () => {
         joinedExisting: false,
         // How a team-less league mate joined an existing copy; null for an ordinary import.
         joinedAs: null,
+        // The confirm screen's "other half" link; null when none was picked, as here.
+        pairLink: null,
       })
       expect(persistImportWithCanonicalAuditMock).toHaveBeenCalledWith(
         expect.objectContaining({

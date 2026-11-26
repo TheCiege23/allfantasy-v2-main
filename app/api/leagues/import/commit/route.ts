@@ -29,6 +29,30 @@ function rewardReferredImport(userId: string): void {
 }
 
 /**
+ * Link the confirm screen's "other half" to the league just built. A failure is reported, not thrown:
+ * the import itself succeeded, and the two can still be linked from Connect leagues.
+ */
+async function linkImportedHalf(
+  leagueId: string,
+  otherLeagueId: string,
+  userId: string,
+): Promise<{ ok: true; otherLeagueId: string; otherName: string | null } | { ok: false; error: string }> {
+  try {
+    const [{ prisma }, { linkHalves }] = await Promise.all([
+      import('@/lib/prisma'),
+      import('@/lib/league/collegePro/linkHalves'),
+    ])
+    const result = await linkHalves({ leagueId, otherLeagueId, userId })
+    if (!result.ok) return result
+    const other = await prisma.league.findUnique({ where: { id: otherLeagueId }, select: { name: true } }).catch(() => null)
+    return { ok: true, otherLeagueId, otherName: other?.name ?? null }
+  } catch (e) {
+    console.warn('[import commit] other half not linked', { leagueId, error: e instanceof Error ? e.message : 'unknown' })
+    return { ok: false, error: 'Could not link the other half.' }
+  }
+}
+
+/**
  * Save the confirm screen's league type. Never fails the import: the league is already built, and the
  * type can still be set from League format afterwards.
  *
@@ -246,6 +270,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     reviewOverrides?: unknown
     /** The league type picked on the confirm screen (`LEAGUE_CONCEPT_OPTIONS` id); omitted keeps the detected one. */
     leagueType?: unknown
+    /** The other half of a college + pro league, picked on the confirm screen (an AF League id). */
+    pairWithLeagueId?: unknown
   }
   try {
     body = await req.json()
@@ -462,6 +488,18 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     }
 
     /*
+     * The other half, picked on the same screen. Linked AFTER the league exists, through the same
+     * `linkHalves` the Connect leagues page uses, so the pair is the league's for every manager when
+     * the importer may decide that. Never on another account's league, and never fails the import.
+     */
+    const pairWithLeagueId =
+      typeof body.pairWithLeagueId === 'string' ? body.pairWithLeagueId.trim() : ''
+    const pairLink =
+      pairWithLeagueId && persisted.joinedExisting !== true
+        ? await linkImportedHalf(persisted.league.id, pairWithLeagueId, auth.userId)
+        : null
+
+    /*
      * ⚠ `existed` WAS COMPUTED AND THEN DROPPED HERE, AND IT IS THE WHOLE ANSWER
      * TO "WHY DID MY IMPORT DO NOTHING". `persistImportWithCanonicalAudit`
      * short-circuits on the import idempotency key: a previously-completed run
@@ -516,6 +554,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
          and returned it untouched. `existed` cannot answer that — see the persistence
          service. */
       skipped: skipped === true,
+      /* Null when no other half was picked; otherwise whether linking it worked. */
+      pairLink,
     })
   } catch (error) {
     if (error instanceof ImportRunInFlightError) {

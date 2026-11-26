@@ -63,6 +63,14 @@ import { detectProviderFromLink } from '@/lib/league-import/detectProviderFromLi
 import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
 import { ImportReviewPanel, type ImportReviewState } from '@/components/import/ImportReviewPanel'
 import { ImportLeagueTypePicker } from '@/components/import/ImportLeagueTypePicker'
+import { ImportOtherHalfPicker } from '@/components/import/ImportOtherHalfPicker'
+import {
+  asksForOtherHalf,
+  importOtherHalfHref,
+  NO_OTHER_HALF,
+  pairWithLeagueIdFor,
+  type OtherHalfChoice,
+} from '@/lib/league-import/otherHalf'
 import { readImportReview } from '@/lib/league-import/review/readImportReview'
 import type { ImportReview, ImportReviewOverrides } from '@/lib/league-import/review/types'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
@@ -284,6 +292,9 @@ type Phase =
       joinedExisting: boolean
       /** A team-less league mate: co-owner of a shared team, or a viewer. Null for a team claim. */
       joinedAs?: 'co_owner' | 'viewer' | null
+      /** The confirm screen's other half: linked (or why not), or "I'll import it next". */
+      pairLink?: { ok: true; otherName: string | null } | { ok: false; error: string } | null
+      importOtherHalfNext?: boolean
     }
 
 interface PreviewTeam {
@@ -950,6 +961,8 @@ export type ImportV4Props = {
   yahooConnected?: boolean
   /** The signed-in account's email, so the verify step can say where its link went. */
   viewerEmail?: string | null
+  /** `/import?pairWith=` — this import is the other half of that AF league, which is preselected. */
+  initialPairWith?: string
 }
 
 /**
@@ -972,10 +985,11 @@ type VerifyResume =
   | { k: 'row'; sourceId: string }
 
 /** Where the emailed link lands: this screen, already pointed at what was being imported. */
-function verifyReturnTo(provider: ImportProvider, resume: VerifyResume): string {
+function verifyReturnTo(provider: ImportProvider, resume: VerifyResume, pairWith?: string): string {
   const qs = new URLSearchParams({ provider })
   if (resume.k === 'discover' && resume.identifier.trim()) qs.set('username', resume.identifier.trim())
   if (resume.k === 'preview' || resume.k === 'commit') qs.set('leagueId', resume.sourceId)
+  if (pairWith) qs.set('pairWith', pairWith)
   return `/import?${qs.toString()}`
 }
 
@@ -989,6 +1003,7 @@ export function ImportV4({
   yahooErrorDesc,
   yahooConnected,
   viewerEmail,
+  initialPairWith,
 }: ImportV4Props) {
   const [provider, setProvider] = useState<ImportProvider>(defaultProvider ?? 'sleeper')
   const [account, setAccount] = useState(initialAccount ?? '')
@@ -1319,6 +1334,28 @@ export function ImportV4({
     leagueTypeChoiceRef.current = next
     setLeagueTypeChoiceState(next)
   }, [])
+  /*
+   * The other half of a C2C / devy league, picked on the same screen. A ref for the same reason: the
+   * commit can be re-entered from a gate. Only sent while the question is on screen (see the effect
+   * by the picker), so switching the type away from C2C cannot link a league nobody is looking at.
+   */
+  const otherHalfRef = useRef<OtherHalfChoice>(NO_OTHER_HALF)
+  const [otherHalf, setOtherHalfState] = useState<OtherHalfChoice>(NO_OTHER_HALF)
+  const setOtherHalf = useCallback((next: OtherHalfChoice) => {
+    otherHalfRef.current = next
+    setOtherHalfState(next)
+  }, [])
+  const askOtherHalf =
+    phase.k === 'preview' && phase.review
+      ? asksForOtherHalf({
+          leagueType: leagueTypeChoice ?? phase.review.league.leagueType,
+          sport: phase.review.league.sport,
+          pairWith: initialPairWith ?? null,
+        })
+      : false
+  useEffect(() => {
+    if (phase.k === 'preview' && !askOtherHalf && otherHalfRef.current.kind !== 'none') setOtherHalf(NO_OTHER_HALF)
+  }, [phase.k, askOtherHalf, setOtherHalf])
 
   const runPreview = useCallback(
     async (sourceId: string, attest = false) => {
@@ -1326,6 +1363,7 @@ export function ImportV4({
       reviewOverridesRef.current = null
       setReviewState(null)
       setLeagueTypeChoice(null)
+      setOtherHalf(NO_OTHER_HALF)
       setPhase({ k: 'previewing', sourceId })
       const res = await fetchImportPreview(
         provider,
@@ -1444,7 +1482,8 @@ export function ImportV4({
           claimTeamId ||
           espnRunBy ||
           reviewOverridesRef.current ||
-          leagueTypeChoiceRef.current
+          leagueTypeChoiceRef.current ||
+          pairWithLeagueIdFor(otherHalfRef.current)
           ? {
               ...(force ? { force: true } : {}),
               ...(confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
@@ -1452,6 +1491,9 @@ export function ImportV4({
               ...(espnRunBy ? { espnLeagueRunBy: espnRunBy } : {}),
               ...(reviewOverridesRef.current ? { reviewOverrides: reviewOverridesRef.current } : {}),
               ...(leagueTypeChoiceRef.current ? { leagueType: leagueTypeChoiceRef.current } : {}),
+              ...(pairWithLeagueIdFor(otherHalfRef.current)
+                ? { pairWithLeagueId: pairWithLeagueIdFor(otherHalfRef.current) }
+                : {}),
             }
           : undefined
       )
@@ -1519,6 +1561,7 @@ export function ImportV4({
         skipped?: boolean
         joinedExisting?: boolean
         joinedAs?: 'co_owner' | 'viewer' | null
+        pairLink?: { ok: boolean; otherName?: string | null; error?: string } | null
       }
       const leagueId = data?.leagueId || data?.league?.id || ''
       /*
@@ -1562,6 +1605,12 @@ export function ImportV4({
         skipped: Boolean(data?.skipped),
         joinedExisting: Boolean(data?.joinedExisting),
         joinedAs: data?.joinedAs === 'co_owner' || data?.joinedAs === 'viewer' ? data.joinedAs : null,
+        pairLink: data?.pairLink
+          ? data.pairLink.ok
+            ? { ok: true, otherName: data.pairLink.otherName ?? null }
+            : { ok: false, error: data.pairLink.error || 'We couldn’t link the other half.' }
+          : null,
+        importOtherHalfNext: otherHalfRef.current.kind === 'later' && !data?.joinedExisting,
       })
     },
     // `leagues` is read for the deleted-league confirmation; see importOneLeague.
@@ -3173,7 +3222,7 @@ export function ImportV4({
             {verifyGate ? (
               <ImportVerifyGate
                 email={viewerEmail ?? null}
-                returnTo={verifyReturnTo(provider, verifyGate)}
+                returnTo={verifyReturnTo(provider, verifyGate, initialPairWith)}
                 step={verifyGate.k === 'row' ? 'bulk' : verifyGate.k}
                 autoResume={verifyGate.k === 'discover' || verifyGate.k === 'preview'}
                 resuming={verifyResuming}
@@ -3438,6 +3487,14 @@ export function ImportV4({
               detectedLabel={phase.review.league.leagueTypeLabel}
               value={leagueTypeChoice}
               onChange={setLeagueTypeChoice}
+            />
+          ) : null}
+          {phase.review && !phase.importBlockedReason && !previewImportState(provider, phase).espnMember && askOtherHalf ? (
+            <ImportOtherHalfPicker
+              sport={phase.review.league.sport}
+              preferLeagueId={initialPairWith ?? null}
+              value={otherHalf}
+              onChange={setOtherHalf}
             />
           ) : null}
           {/*
@@ -3773,6 +3830,33 @@ export function ImportV4({
             }}
             extraActions={
               <>
+            {/*
+              The other half from the confirm screen. Linked: say so, by name. Not linked: say why, and
+              where to do it instead. "Import it next": the next import opens with this league waiting.
+            */}
+            {phase.pairLink?.ok ? (
+              <p className="af-im-field-help af-im-pair-note" data-testid="import-pair-linked">
+                Linked with {phase.pairLink.otherName ?? 'your other league'}. Both halves now open as one league.
+              </p>
+            ) : phase.pairLink && !phase.pairLink.ok ? (
+              <p className="af-im-field-help af-im-pair-note" data-testid="import-pair-failed">
+                {phase.pairLink.error} You can link them from{' '}
+                <Link href="/core/connect-leagues">Connect leagues</Link>.
+              </p>
+            ) : null}
+            {phase.leagueId && phase.importOtherHalfNext ? (
+              <Link
+                href={importOtherHalfHref(phase.leagueId)}
+                className="af-btn af-done-alt"
+                data-testid="import-other-half-next"
+                onClick={() => {
+                  setAccount('')
+                  reset()
+                }}
+              >
+                Import the other half
+              </Link>
+            ) : null}
             {phase.leagueId && !phase.joinedExisting ? (
               <>
                 <Link
