@@ -65,6 +65,7 @@ import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-ro
 import { KeeperRollCall } from '@/components/app/draft-room/KeeperRollCall'
 import { PickClockPlanner } from '@/components/app/draft-room/PickClockPlanner'
 import { isLongPickClock, nextPickLabel, normalizeQuietWindow } from '@/lib/draft-room/pickClockPlanning'
+import { tradeForPickDraftEligible } from '@/lib/draft-room/tradeForPick'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
@@ -528,6 +529,7 @@ export function DraftRoomPageClient({
     giveRound?: number
     receiveRound?: number
     receiverRosterId?: string
+    targetPick?: { round: number; slot: number; overall: number } | null
   } | null>(null)
   const [pendingTradesCount, setPendingTradesCount] = useState(0)
   const [roundOneAnnouncementQueue, setRoundOneAnnouncementQueue] = useState<RoundOneAnnouncementQueueItem[]>([])
@@ -2587,6 +2589,43 @@ export function DraftRoomPageClient({
         ownerSlot: ctx.ownerSlot,
         overall: ctx.overall,
         targetIsMine: isMine,
+      })
+    },
+    [currentUserRosterId, leagueId, session],
+  )
+
+  /*
+   * "Trade for this pick" (owner's rule, 2026-11-26 — `lib/draft-room/tradeForPick.ts`): slow drafts only (a
+   * pick clock of 5 minutes or more), never an auction, only while live with pick trades on. The composer opens
+   * with that pick on their side and suggests offers from the viewer's picks; sending is the existing route.
+   */
+  const tradeForPickOn = Boolean(
+    currentUserRosterId &&
+      session &&
+      tradeForPickDraftEligible({
+        timerSeconds: session.timerSeconds ?? null,
+        draftType: session.draftType,
+        status: session.status,
+        pickTradeEnabled: draftUISettings?.pickTradeEnabled ?? true,
+      }),
+  )
+  const openTradeForPick = useCallback(
+    (ctx: { round: number; slot: number; overall: number; ownerRosterId: string }) => {
+      if (!currentUserRosterId || !session || ctx.ownerRosterId === currentUserRosterId) return
+      setTradeInitialDraft({
+        receiveRound: ctx.round,
+        receiverRosterId: ctx.ownerRosterId,
+        targetPick: { round: ctx.round, slot: ctx.slot, overall: ctx.overall },
+      })
+      setTradePanelGeneration((g) => g + 1)
+      setShowTradePanel(true)
+      sendProductAnalyticsBeacon(DRAFT_ROOM.TRADE_OPEN_FROM_BOARD, {
+        leagueId,
+        round: ctx.round,
+        ownerSlot: ctx.slot,
+        overall: ctx.overall,
+        targetIsMine: false,
+        tradeForPick: true,
       })
     },
     [currentUserRosterId, leagueId, session],
@@ -5464,6 +5503,7 @@ export function DraftRoomPageClient({
                   orderSourceLabel={boardOrderSourceLabel}
                   presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
                   onCellTrade={currentUserRosterId ? openPickTradeFromBoard : undefined}
+                  onTradeForPick={tradeForPickOn ? openTradeForPick : undefined}
                   onOpenTradeHistory={() => {
                     setTradeHistoryFocus(null)
                     setTradeHistoryOpen(true)

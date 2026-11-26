@@ -123,6 +123,12 @@ type DraftBoardCellProps = {
   /** When set, show a trade affordance (opens pick-trade flow from parent). */
   onTradeFromCell?: () => void
   /**
+   * "Trade for this pick" (slow drafts, another team's upcoming pick — `lib/draft-room/tradeForPick.ts`).
+   * When set, the whole tile is the tap target (68px tall, ≥84px wide: past 44px both ways) with a visible
+   * label, and the small corner trade icon is not drawn — they would open the same composer.
+   */
+  onTradeForPick?: () => void
+  /**
    * When set on a cell whose pick has `tradedPickMeta`, shows a secondary
    * "history" chip. Parent routes this to PickTradeHistoryModal with
    * focusRound / focusOriginalRosterId so the relevant row highlights.
@@ -206,7 +212,8 @@ function DraftBoardCellInner({
   viewerUpcomingLabel = null,
   emptyCellDirection = 'forward',
   isOwnPick = false,
-  onTradeFromCell,
+  onTradeFromCell: onTradeFromCellProp,
+  onTradeForPick,
   onViewTradeHistory,
   onCommissionerEditPick,
   onOpenPlayer,
@@ -214,6 +221,8 @@ function DraftBoardCellInner({
   presentationVariant = 'default',
 }: DraftBoardCellProps) {
   const openPlayer = !isEmpty && pick.playerName?.trim() && onOpenPlayer ? onOpenPlayer : undefined
+  const tradeForPick = isEmpty && onTradeForPick ? onTradeForPick : undefined
+  const onTradeFromCell = tradeForPick ? undefined : onTradeFromCellProp
   const { tInterpolate, t } = useOptionalLanguage()
   const headerCopy = useMessages(draftRoomHeaderMessages)
   const sportNorm = normalizeToSupportedSport(pick.sport ?? sport ?? DEFAULT_SPORT)
@@ -375,6 +384,26 @@ function DraftBoardCellInner({
           className="absolute left-0.5 top-0.5 z-[2] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-amber-100 opacity-60 transition duration-150 hover:bg-black/65 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
         >
           <Pencil className="h-3 w-3" />
+        </button>
+      ) : null}
+      {tradeForPick ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            tradeForPick()
+          }}
+          data-testid={`draft-board-cell-trade-for-pick-${pick.overall}`}
+          aria-label={`Trade for this pick (${pick.round}.${String(pick.slot ?? '').padStart(2, '0')}, pick ${pick.overall})`}
+          title="Trade for this pick"
+          /* Centred, clear of the pick number (top) and the draft-direction arrow (bottom). On a phone the label
+             is always shown (no hover there); on md+ it appears on hover/focus, so a 12-team board is not a wall
+             of identical labels — the whole tile is the target either way. */
+          className="group/tfp absolute inset-0 z-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg px-1 pt-2 text-center text-[11px] font-semibold leading-tight text-cyan-100/85 transition hover:bg-cyan-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-300/70"
+        >
+          <span className="pointer-events-none md:opacity-0 md:transition-opacity md:group-hover/tfp:opacity-100 md:group-focus-visible/tfp:opacity-100">
+            Trade for this pick
+          </span>
         </button>
       ) : null}
       {onTradeFromCell ? (

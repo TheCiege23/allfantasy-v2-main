@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { DraftPickTradeGradeLine } from './DraftPickTradeGradeLine'
 import {
   ArrowLeftRight,
@@ -146,6 +146,8 @@ type DraftPickTradePanelRootProps = {
   tradeAiPremium: boolean
   /** League rule for the timer when an on-clock pick changes hands. Surfaces a small banner in the composer. */
   onClockTradeTimerBehavior?: 'inherit_remaining' | 'reset_timer'
+  /** Drawn at the top of the composer — the "Trade for this pick" offers card when opened from a board tile. */
+  offerHeader?: ReactNode
 }
 
 export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
@@ -206,6 +208,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
     suggestionMeta,
     tradeAiPremium,
     onClockTradeTimerBehavior = 'inherit_remaining',
+    offerHeader = null,
   } = props
 
   const rs = presentationVariant === 'redraft_snake'
@@ -410,6 +413,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
 
               {showOfferForm ? (
                 <>
+                  {offerHeader}
                   <section
                     className={`rounded-3xl border p-6 sm:p-8 ${
                       rs ? 'border-white/[0.1] bg-black/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]' : 'border-white/[0.08] bg-black/32'

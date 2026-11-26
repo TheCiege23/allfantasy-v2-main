@@ -22,6 +22,7 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 import { useStickyBoardHeader } from './useStickyBoardHeader'
 import { OPEN_SEAT_LABEL, seatDisplayName } from '@/lib/draft-room/seatLabel'
+import { tradeForPickTileEligible } from '@/lib/draft-room/tradeForPick'
 
 /**
  * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
@@ -70,6 +71,12 @@ type DraftBoardProps = {
     ownerRosterId: string
     overall: number
   }) => void
+  /**
+   * "Trade for this pick" (slow drafts only — the caller decides with `tradeForPickDraftEligible`). When set,
+   * another team's upcoming pick in their own slot becomes a ≥44px tap target that opens the pick-trade
+   * composer asking for that pick (`tradeForPickTileEligible` picks the tiles).
+   */
+  onTradeForPick?: (ctx: { round: number; slot: number; overall: number; ownerRosterId: string }) => void
   /** Open the read-only pick-trade history modal. */
   onOpenTradeHistory?: () => void
   /** Premium chrome for live redraft snake route. */
@@ -204,6 +211,7 @@ function DraftBoardInner({
   autoDraft = false,
   orderSourceLabel,
   onCellTrade,
+  onTradeForPick,
   onOpenTradeHistory,
   onViewCellTradeHistory,
   canCommissionerEditPicks = false,
@@ -992,6 +1000,25 @@ function DraftBoardInner({
                             }
                             emptyCellDirection={emptyCellDirection}
                             isOwnPick={Boolean(currentUserRosterId && pick.ownerRosterId === currentUserRosterId)}
+                            onTradeForPick={
+                              onTradeForPick &&
+                              pick.ownerRosterId &&
+                              tradeForPickTileEligible({
+                                viewerRosterId: currentUserRosterId,
+                                ownerRosterId: pick.ownerRosterId,
+                                slotRosterId: slotEntry.rosterId,
+                                made: !isPickDisplayEmpty,
+                                keeperLocked: Boolean(pick.isKeeper || keeperByKey[`${round}-${slotEntry.slot}`]),
+                              })
+                                ? () =>
+                                    onTradeForPick({
+                                      round,
+                                      slot: slotEntry.slot,
+                                      overall,
+                                      ownerRosterId: pick.ownerRosterId ?? '',
+                                    })
+                                : undefined
+                            }
                             onTradeFromCell={
                               currentUserRosterId && onCellTrade && pick.ownerRosterId && typeof pick.slot === 'number'
                                 ? () =>
