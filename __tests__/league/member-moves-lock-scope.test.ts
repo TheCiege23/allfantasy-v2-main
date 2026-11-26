@@ -148,36 +148,30 @@ describe('PATCH /api/redraft/roster — lineup and IR moves', () => {
 })
 
 describe('redraft waiver claims', () => {
-  it('refuses a pre-draft claim even when the commissioner move lock is off', async () => {
-    h.state.lifecycle = 'setup'; h.state.draft = 'in_progress'
+  // Retired 2026-11-26 (lib/redraft/legacyWaiverClaimsRetired.ts): neither old route writes a claim any more,
+  // locked or not, pre-draft or not. Each says where claims go now.
+  it.each([
+    ['unlocked', () => {}],
+    ['under the move lock', () => { h.state.lockAllMoves = true }],
+    ['pre-draft', () => { h.state.lifecycle = 'setup'; h.state.draft = 'in_progress' }],
+  ])('POST /api/redraft/waivers queues nothing (%s): 410, pointing at the main waiver system', async (_label, arrange) => {
+    arrange()
     const res = await redraftClaim()
-    expect(res.status).toBe(409)
-    expect((await res.json()).code).toBe('pre_draft_locked')
-    expect(h.prisma.redraftWaiverClaim.create).not.toHaveBeenCalled()
-  })
-  it('POST /api/redraft/waivers refuses under the lock and queues nothing', async () => {
-    h.state.lockAllMoves = true
-    const res = await redraftClaim()
-    expect(res.status).toBe(409)
-    expect((await res.json()).code).toBe('MOVE_LOCKED')
+    expect(res.status).toBe(410)
+    const body = await res.json()
+    expect(body.code).toBe('LEGACY_REDRAFT_WAIVER_CLAIMS_RETIRED')
+    expect(body.useInstead).toMatch(/^\/api\/waiver-wire\/leagues\/.+\/claims$/)
     expect(h.prisma.redraftWaiverClaim.create).not.toHaveBeenCalled()
   })
 
-  it('POST /api/redraft/waivers queues a claim when unlocked (control)', async () => {
-    expect((await redraftClaim()).status).toBe(200)
-    expect(h.prisma.redraftWaiverClaim.create).toHaveBeenCalledTimes(1)
-  })
-
-  it('POST /waiver-wire/claim refuses under the lock and queues nothing', async () => {
-    h.state.lockAllMoves = true
+  it.each([
+    ['unlocked', () => {}],
+    ['under the move lock', () => { h.state.lockAllMoves = true }],
+  ])('POST /waiver-wire/claim queues nothing (%s)', async (_label, arrange) => {
+    arrange()
     const res = await waiverWireClaim()
-    expect(res.status).toBe(409)
+    expect(res.status).toBe(410)
     expect(h.prisma.redraftWaiverClaim.create).not.toHaveBeenCalled()
-  })
-
-  it('POST /waiver-wire/claim queues a claim when unlocked (control)', async () => {
-    expect((await waiverWireClaim()).status).toBe(200)
-    expect(h.prisma.redraftWaiverClaim.create).toHaveBeenCalledTimes(1)
   })
 
   it('cancelling a pending claim stays open under the lock: it moves nothing', async () => {
