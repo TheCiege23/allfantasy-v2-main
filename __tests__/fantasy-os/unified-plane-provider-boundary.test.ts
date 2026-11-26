@@ -96,11 +96,14 @@ describe('5H-b2 — canonical position governance (no NEW competing broad-collap
   //  - idp-kicker-values.ts      : IDP VALUATION grouping → Phase 5H-c (valuation services)
   //  - idp/types.ts              : league-config IDP split↔group slot families (league-rule logic)
   //  - SportPlayerPoolResolver.ts: sport-scoped player-pool filter grouping (draft/waiver pool)
+  //  - fantraxProSports.ts       : Fantrax LINEUP-SEAT codes → AF seat names, not player positions. A Fantrax
+  //                                "OLB" seat is an LB seat; the player's own position is untouched (2026-11-26)
   const ALLOWLIST = new Set([
     'lib/team-abbrev.ts',
     'lib/idp-kicker-values.ts',
     'lib/idp/types.ts',
     'lib/sport-teams/SportPlayerPoolResolver.ts',
+    'lib/league-import/fantrax/fantraxProSports.ts',
   ].map((p) => p.split('/').join(path.sep)))
 
   it('no NEW file outside the documented allowlist collapses detailed IDP positions to broad buckets', () => {

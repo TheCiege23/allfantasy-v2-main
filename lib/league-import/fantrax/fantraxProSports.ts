@@ -190,6 +190,9 @@ const FOOTBALL_SLOT_CODES: Record<string, string> = {
   QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DEF: 'DEF', DST: 'DST', 'D/ST': 'D/ST',
   RWT: 'FLEX', SFX: 'SUPER_FLEX',
   DL: 'DL', DE: 'DE', DT: 'DT', LB: 'LB', DB: 'DB', CB: 'CB', S: 'S', ID: 'IDP_FLEX',
+  // Outside / inside linebacker seats are linebacker seats here (lib/chimmy/actions/lineupPlan.ts reads OLB and ILB
+  // as LB too). Road To Glory NCAA Football starts LB 1 + OLB 1; without this its whole lineup was dropped (2026-11-26).
+  OLB: 'LB', ILB: 'LB',
 }
 const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB' | 'SOCCER', Record<string, string>> = {
   NFL: FOOTBALL_SLOT_CODES,
