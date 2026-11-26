@@ -1,129 +1,32 @@
 import type { Prisma } from '@prisma/client'
-import { leagueIdentityColumns } from '@/lib/player-identity/externalIdNamespace'
-import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
-import { isNativePlatform } from '@/lib/dashboard/platform-label'
-import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
 import { GAMES_PER_WEEK_SETTINGS_KEY, readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
-import { importedMlbScoring } from './importedMlbScoring'
-import { importedNflScoring } from './importedNflScoring'
+import type { importedNflScoring } from './importedNflScoring'
 import { copyImportedHistory } from './copyImportedHistory'
-import { importedMlbRoster } from './importedMlbRoster'
 import { isNativeFuturePickLeague, loadNativePickHorizonStart } from '@/lib/league-trade-engine/nativeFuturePicks'
+import {
+  asRecord,
+  checkImportedSource,
+  classifyImportedFuturePick,
+  planImportedPlayerIdentity,
+  readImportedSource,
+  refuse,
+  translateImportedRosterData,
+} from './importedIdentityPlan'
+
+/*
+ * The translation and its refusals live in `./importedIdentityPlan`, shared with the planned
+ * in-place switchover. These re-exports keep every existing importer (the creation route, the
+ * carryover tests) on this module's path.
+ */
+export {
+  ImportedLeagueCarryoverError,
+  importedOwnedPlayerIds,
+  matchImportedRoster,
+  nativePlayerIdFor,
+  translateImportedRosterData,
+} from './importedIdentityPlan'
 
 type Tx = Prisma.TransactionClient
-
-export class ImportedLeagueCarryoverError extends Error {}
-
-function refuse(message: string): never {
-  throw new ImportedLeagueCarryoverError(message)
-}
-
-type ImportedTeam = {
-  id: string
-  externalId: string
-  platformUserId: string | null
-  claimedByUserId: string | null
-  teamName: string
-  ownerName: string
-  avatarUrl: string | null
-  isCommissioner: boolean
-  isCoCommissioner?: boolean
-}
-type ImportedRoster = {
-  id: string
-  platformUserId: string
-  playerData: unknown
-  faabRemaining: number | null
-  waiverPriority: number | null
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
-}
-
-/**
- * The id a native roster holds for an imported player. NFL: the Sleeper id. NCAAF: the CFBD pool id first, then the
- * Rolling Insights id -- the native NCAAF pool prefers a CFBD row over an RI duplicate
- * (lib/sport-teams/SportPlayerPoolResolver.ts), campus scoring reads a numeric id as a CFBD id, and college players
- * are linked by CFBD id (lib/player-identity/ingestNcaafFantraxIdentities.ts). Reading only the RI id refused
- * nearly every college player in an NCAAF carryover (2026-11-26, Road To Glory). Every other sport: the RI id.
- */
-export function nativePlayerIdFor(
-  sport: string,
-  identity: { sleeperId?: string | null; rollingInsightsId?: string | null; cfbdId?: string | null },
-): string | null {
-  const s = String(sport).trim().toUpperCase()
-  if (s === 'NFL') return identity.sleeperId ?? null
-  if (s === 'NCAAF') return identity.cfbdId ?? identity.rollingInsightsId ?? null
-  return identity.rollingInsightsId ?? null
-}
-
-export function matchImportedRoster(team: ImportedTeam, rosters: ImportedRoster[]): ImportedRoster {
-  const byTeamId = rosters.filter((roster) => rosterSourceTeamId(roster.playerData) === team.externalId)
-  const candidates = byTeamId.length ? byTeamId : rosters.filter((roster) =>
-    // Older imports can lack a team marker. A marker for another team is never a safe fallback.
-    Boolean(team.platformUserId) && roster.platformUserId === team.platformUserId && !rosterSourceTeamId(roster.playerData),
-  )
-  if (candidates.length !== 1) {
-    refuse(`Cannot identify one current roster for imported team ${team.teamName}. Refresh the import before creating a standalone league.`)
-  }
-  return candidates[0]!
-}
-
-function mapPlayerRows(rows: unknown, idMap: Map<string, string>): unknown {
-  if (!Array.isArray(rows)) return rows
-  return rows.map((row) => {
-    if (typeof row === 'string' || typeof row === 'number') return idMap.get(String(row)) ?? row
-    const obj = asRecord(row)
-    if (!Object.keys(obj).length) return row
-    const id = String(obj.id ?? obj.player_id ?? '')
-    const mapped = idMap.get(id)
-    return mapped ? { ...obj, ...(obj.id != null ? { id: mapped } : {}), ...(obj.player_id != null ? { player_id: mapped } : {}) } : row
-  })
-}
-
-function rowIds(rows: unknown): string[] {
-  if (!Array.isArray(rows)) return []
-  return rows.map((row) => typeof row === 'string' || typeof row === 'number' ? String(row) : String(asRecord(row).id ?? asRecord(row).player_id ?? ''))
-    .filter(Boolean)
-}
-
-export function importedOwnedPlayerIds(data: unknown): string[] {
-  const raw = asRecord(data)
-  const sections = asRecord(raw.lineup_sections)
-  const lineupIds = [...new Set([
-    ...rowIds(raw.starters), ...rowIds(raw.reserve), ...rowIds(raw.taxi),
-    ...Object.values(sections).flatMap(rowIds),
-  ])]
-  const ownedIds = [...new Set(getRosterPlayerIds(data).map(String))]
-  if (!ownedIds.length) return lineupIds
-  const owned = new Set(ownedIds)
-  if (lineupIds.some((id) => !owned.has(id))) {
-    refuse('An imported lineup contains a player missing from its team roster. Refresh the import before carrying it over.')
-  }
-  return ownedIds
-}
-
-export function translateImportedRosterData(data: unknown, idMap: Map<string, string>, sourceLeagueId: string): Record<string, unknown> {
-  const raw = asRecord(data)
-  const players = Array.isArray(data) ? data : Array.isArray(raw.players) && raw.players.length ? raw.players : importedOwnedPlayerIds(data)
-  const sections = asRecord(raw.lineup_sections)
-  const { source_provider: _provider, source_league_id: _sourceId, source_team_id: _teamId,
-    source_manager_id: _managerId, source_season_id: _seasonId, import_batch_id: _batchId,
-    imported_at: _importedAt, import: _import,
-    // A source draft's marker must not make native finalization rebuild the carried lineup.
-    lineup_draft_session_id: _sourceDraftSession, ...rest } = raw
-  return {
-    ...rest,
-    players: mapPlayerRows(players, idMap) ?? [],
-    starters: mapPlayerRows(raw.starters, idMap) ?? [],
-    reserve: mapPlayerRows(raw.reserve, idMap) ?? [],
-    taxi: mapPlayerRows(raw.taxi, idMap) ?? [],
-    lineup_sections: Object.fromEntries(Object.entries(sections).map(([key, rows]) => [key, mapPlayerRows(rows, idMap)])),
-    draftPicks: [],
-    foundation: { ...asRecord(raw.foundation), openTeam: false, carriedOverFromLeagueId: sourceLeagueId },
-  }
-}
 
 type CarriedFuturePicks = { copied: number; skippedUnmapped: number; skippedNotTraded: number; skippedPastSeason: number }
 
@@ -162,17 +65,16 @@ async function carryOverImportedFuturePicks(tx: Tx, args: {
   const horizonStart = await loadNativePickHorizonStart(tx, args.targetLeagueId, target.season ?? null)
   const data: Prisma.FutureDraftPickCreateManyInput[] = []
   for (const row of rows) {
-    const originalRosterId = args.rosterIdByExternalId.get(row.originalRosterId)
-    const currentOwnerId = args.rosterIdByExternalId.get(row.currentOwnerId)
-    if (!originalRosterId || !currentOwnerId) { result.skippedUnmapped++; continue }
-    if (originalRosterId === currentOwnerId) { result.skippedNotTraded++; continue }
-    if (horizonStart == null || row.pickSeason < horizonStart) { result.skippedPastSeason++; continue }
+    const verdict = classifyImportedFuturePick(row, args.rosterIdByExternalId, horizonStart)
+    if (verdict.kind === 'unmapped') { result.skippedUnmapped++; continue }
+    if (verdict.kind === 'notTraded') { result.skippedNotTraded++; continue }
+    if (verdict.kind === 'pastSeason') { result.skippedPastSeason++; continue }
     data.push({
       leagueId: args.targetLeagueId,
       pickSeason: row.pickSeason,
       round: row.round,
-      originalRosterId,
-      currentOwnerId,
+      originalRosterId: verdict.originalRosterId,
+      currentOwnerId: verdict.currentOwnerId,
       traded: true,
       status: 'active',
       sourceTradeId: null,
@@ -195,29 +97,15 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   teamCount: number
   acceptWeeklyLineups?: boolean
 }): Promise<number> {
-  const [source, target, teams, rosters, slots, session] = await Promise.all([
-    tx.league.findUnique({ where: { id: args.sourceLeagueId }, select: { platform: true, sport: true, settings: true, season: true } }),
+  const [read, target, slots, session] = await Promise.all([
+    readImportedSource(tx, args.sourceLeagueId),
     tx.league.findUnique({ where: { id: args.targetLeagueId }, select: { settings: true, season: true } }),
-    tx.leagueTeam.findMany({
-      where: { leagueId: args.sourceLeagueId, lifecycleState: { not: 'ARCHIVED' } },
-      select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, teamName: true, ownerName: true, avatarUrl: true, isCommissioner: true, isCoCommissioner: true },
-    }),
-    tx.roster.findMany({ where: { leagueId: args.sourceLeagueId }, select: { id: true, platformUserId: true, playerData: true, faabRemaining: true, waiverPriority: true } }),
     tx.leagueEntrySlot.findMany({ where: { leagueId: args.targetLeagueId }, orderBy: { slotNumber: 'asc' }, select: { slotNumber: true, rosterId: true } }),
     tx.draftSession.findFirst({ where: { leagueId: args.targetLeagueId }, select: { id: true } }),
   ])
-  if (!source || !target || isNativePlatform(source.platform) || String(source.sport) !== args.sport) {
-    refuse('The imported league sport must match the standalone league.')
-  }
-  let mlbScoring: ReturnType<typeof importedMlbScoring> | undefined
-  let mlbRoster: ReturnType<typeof importedMlbRoster> | undefined
-  if (args.sport === 'MLB') {
-    if (args.acceptWeeklyLineups !== true) refuse('Confirm weekly lineups for the native baseball league. Source daily lineup history stays archived; native scoring uses one lineup per week.')
-    try { mlbScoring = importedMlbScoring(source.settings); mlbRoster = importedMlbRoster(source.settings) }
-    catch (error) { refuse(error instanceof Error ? error.message : 'Imported scoring cannot be verified.') }
-  }
-  // Best-effort, never refuses: null keeps the preset the creator picked (owner, 2026-10-25).
-  const nflScoring = args.sport === 'NFL' ? importedNflScoring(source.settings) : null
+  const { teams, rosters } = read
+  if (!target) refuse('The imported league sport must match the standalone league.')
+  const { source, mlbScoring, mlbRoster, nflScoring } = checkImportedSource(read.source, { sport: args.sport, acceptWeeklyLineups: args.acceptWeeklyLineups })
   if (teams.length !== args.teamCount || slots.length !== args.teamCount || !session) {
     refuse('Team count must match the imported league exactly to carry over every roster.')
   }
@@ -225,52 +113,9 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     ?? teams.find((team) => team.isCommissioner && !team.claimedByUserId)
   if (!creatorTeam) refuse('Claim your commissioner team in the import before carrying rosters over.')
   const orderedTeams = [creatorTeam, ...teams.filter((team) => team.id !== creatorTeam.id).sort((a, b) => a.externalId.localeCompare(b.externalId))]
-  const sourceRosters = orderedTeams.map((team) => matchImportedRoster(team, rosters))
-  if (new Set(sourceRosters.map((roster) => roster.id)).size !== sourceRosters.length) {
-    refuse('Multiple imported teams point to the same roster. Refresh the import first.')
-  }
-  const sourcePlayerIdsByRoster = sourceRosters.map((roster) => importedOwnedPlayerIds(roster.playerData))
-  const sourceIds = [...new Set(sourcePlayerIdsByRoster.flat())]
-  const totalPlayers = sourcePlayerIdsByRoster.reduce((count, ids) => count + ids.length, 0)
-  if (totalPlayers !== sourceIds.length) refuse('The import has duplicate player ownership. Refresh it before carrying rosters over.')
-  const columns = leagueIdentityColumns(sourceIds, args.sport, source.platform)
-  if (sourceIds.length && !columns.length) {
-    refuse(`Player identities from ${source.platform} cannot yet be translated to a native roster.`)
-  }
-  const identities = sourceIds.length ? await tx.playerIdentityMap.findMany({
-    where: { sport: args.sport, OR: columns.map(({ column, ids }) => ({ [column]: { in: ids } }) as Prisma.PlayerIdentityMapWhereInput) },
-    select: { sleeperId: true, espnId: true, mflId: true, fleaflickerId: true, fantraxId: true, rollingInsightsId: true, cfbdId: true,
-      canonicalName: true, position: true, currentTeam: true },
-  }) : []
-  const idMap = new Map<string, string>()
-  const playerDetails = new Map<string, { name: string; position: string; team: string | null }>()
-  for (const { column, ids } of columns) {
-    const requested = new Set(ids)
-    for (const identity of identities) {
-      const sourceId = identity[column]
-      if (!sourceId || !requested.has(sourceId)) continue
-      const nativeId = nativePlayerIdFor(args.sport, identity)
-      if (!nativeId || !identity.position || !identity.canonicalName) continue
-      if (idMap.has(sourceId) && idMap.get(sourceId) !== nativeId) refuse(`Ambiguous imported player identity ${sourceId}.`)
-      idMap.set(sourceId, nativeId)
-      playerDetails.set(nativeId, { name: identity.canonicalName, position: identity.position, team: identity.currentTeam })
-    }
-  }
-  if (String(source.platform).toLowerCase() === 'sleeper' && args.sport === 'NFL') {
-    const unresolved = sourceIds.filter((id) => !idMap.has(id))
-    if (unresolved.length) {
-      const directPlayers = await tx.player.findMany({ where: { id: { in: unresolved }, sport: args.sport }, select: { id: true, name: true, position: true, team: true } })
-      for (const player of directPlayers) {
-        idMap.set(player.id, player.id)
-        playerDetails.set(player.id, { name: player.name, position: player.position, team: player.team })
-      }
-    }
-  }
-  const missing = sourceIds.filter((id) => !idMap.has(id))
-  if (missing.length) refuse(`${missing.length} imported player IDs cannot be verified for a native league. Refresh player identities before carrying rosters over.`)
-  if (new Set(sourceIds.map((id) => idMap.get(id))).size !== sourceIds.length) {
-    refuse('Multiple imported player IDs map to one native player. Refresh player identities before carrying rosters over.')
-  }
+  const { sourceRosters, sourcePlayerIdsByRoster, idMap, playerDetails } = await planImportedPlayerIdentity(tx, {
+    sport: args.sport, platform: source.platform, teams: orderedTeams, rosters,
+  })
 
   const picks: Prisma.DraftPickCreateManyInput[] = []
   const playerPicksBySlot: Array<Array<{ nativeId: string; name: string; position: string; team: string | null }>> = []
