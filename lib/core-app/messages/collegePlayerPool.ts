@@ -8,6 +8,7 @@ export const collegePlayerPoolMessages = defineMessages({
   en: {
     title: 'College player pool',
     subtitle: 'Which schools this league drafts and adds players from.',
+    subtitleCollegeSide: 'Which schools this league drafts its college players from. Pros are not affected.',
     current: (summary: string): string => `Now: ${summary}`,
     allLabel: 'All schools',
     allDescFootball: 'Every college player, FBS and FCS.',
@@ -34,6 +35,7 @@ export const collegePlayerPoolMessages = defineMessages({
   es: {
     title: 'Jugadores universitarios',
     subtitle: 'De qué escuelas se eligen y se agregan jugadores en esta liga.',
+    subtitleCollegeSide: 'De qué escuelas elige esta liga a sus jugadores universitarios. Los profesionales no cambian.',
     current: (summary: string): string => `Ahora: ${summary}`,
     allLabel: 'Todas las escuelas',
     allDescFootball: 'Todos los jugadores universitarios, FBS y FCS.',

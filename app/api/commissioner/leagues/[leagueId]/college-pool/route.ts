@@ -14,9 +14,13 @@ import { canAccessLeague } from '@/lib/draft/access'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
 import { loadCollegeTeamConferences } from '@/lib/college/collegeTeamConferences'
+import { isDevyLeague } from '@/lib/devy'
+import { isC2CLeague } from '@/lib/merged-devy-c2c'
 import {
   COLLEGE_CONFERENCE_SCOPE_KEY,
   collegeScopePresets,
+  collegeScopeSportFor,
+  type CollegeScopeSport,
   describeCollegeScope,
   isCollegeScopeSport,
   parseCollegeScopeInput,
@@ -26,6 +30,18 @@ import {
 export const dynamic = 'force-dynamic'
 
 type Params = { params: Promise<{ leagueId: string }> }
+
+/**
+ * The college sport this league's scope applies to: a college league's own sport, or the college side
+ * of a devy / C2C league (NFL → college football, NBA → college basketball). Null for any other league.
+ */
+async function scopeSportOf(leagueId: string, leagueSport: string): Promise<CollegeScopeSport | null> {
+  if (isCollegeScopeSport(leagueSport)) return leagueSport
+  const collegeSport = collegeScopeSportFor(leagueSport)
+  if (!collegeSport) return null
+  const [devy, c2c] = await Promise.all([isDevyLeague(leagueId).catch(() => false), isC2CLeague(leagueId).catch(() => false)])
+  return devy || c2c ? collegeSport : null
+}
 
 async function sessionUserId(): Promise<string | null> {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -40,12 +56,16 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!commissioner && !(await canAccessLeague(leagueId, userId))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const sport = String(league.sport ?? '')
-  if (!isCollegeScopeSport(sport)) return NextResponse.json({ error: 'College leagues only' }, { status: 400 })
+  const sport = await scopeSportOf(leagueId, String(league.sport ?? ''))
+  // Pro leagues without a college side: nothing to show, said plainly rather than as an error.
+  if (!sport) return NextResponse.json({ applies: false })
   const scope = readCollegeConferenceScope(league.settings, sport)
   const index = await loadCollegeTeamConferences(sport)
   return NextResponse.json({
+    applies: true,
     sport,
+    /** True for a devy / C2C league: the rule covers its college players only. */
+    collegeSide: !isCollegeScopeSport(String(league.sport ?? '')),
     scope: scope ?? { preset: 'all', conferences: [] },
     summary: describeCollegeScope(sport, scope),
     presets: collegeScopePresets(sport),
@@ -63,8 +83,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const sport = String(league.sport ?? '')
-  if (!isCollegeScopeSport(sport)) return NextResponse.json({ error: 'College leagues only' }, { status: 400 })
+  const sport = await scopeSportOf(leagueId, String(league.sport ?? ''))
+  if (!sport) return NextResponse.json({ error: 'College, devy and C2C leagues only' }, { status: 400 })
   const locked = await settingsLockedResponse(leagueId, 'rosters')
   if (locked) return locked
 

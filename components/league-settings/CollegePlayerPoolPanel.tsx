@@ -21,6 +21,8 @@ import { emitLeagueDraftRoomRevalidate } from '@/lib/draft-room/emitLeagueDraftR
 
 type PoolView = {
   sport: CollegeScopeSport
+  /** A devy / C2C league: the rule covers its college players only. */
+  collegeSide?: boolean
   scope: { preset: CollegeScopePreset; conferences: string[] }
   summary: string
   conferences: Array<{ conference: string; teams: number }>
@@ -92,7 +94,7 @@ export function CollegePlayerPoolView({
     <section className="af-ls-card space-y-3" data-testid="college-player-pool">
       <div className="min-w-0">
         <p className="af-ls-eyebrow">{copy.title}</p>
-        <p className="mt-0.5 text-[11px] text-white/45">{copy.subtitle}</p>
+        <p className="mt-0.5 text-[11px] text-white/45">{view.collegeSide ? copy.subtitleCollegeSide : copy.subtitle}</p>
         <p className="mt-1 text-[13px] font-semibold text-white/90" data-testid="college-player-pool-summary">
           {copy.current(view.summary)}
         </p>
@@ -185,6 +187,14 @@ export function CollegePlayerPoolView({
   )
 }
 
+export function isPoolView(v: unknown): v is PoolView {
+  if (!v || typeof v !== 'object') return false
+  const r = v as Partial<PoolView>
+  return (r.sport === 'NCAAF' || r.sport === 'NCAAB') &&
+    Boolean(r.scope && typeof r.scope.preset === 'string' && Array.isArray(r.scope.conferences)) &&
+    Array.isArray(r.conferences) && typeof r.summary === 'string'
+}
+
 export function CollegePlayerPoolPanel({ leagueId }: { leagueId: string }) {
   const copy = useMessages(collegePlayerPoolMessages)
   const url = `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/college-pool`
@@ -195,7 +205,11 @@ export function CollegePlayerPoolPanel({ leagueId }: { leagueId: string }) {
   const load = useCallback(async () => {
     try {
       const res = await fetch(url, { cache: 'no-store' })
-      if (res.ok) setView((await res.json()) as PoolView)
+      if (!res.ok) return
+      const data = (await res.json()) as PoolView & { applies?: boolean }
+      // Only a well-formed answer: anything else (an error page, another route's body) shows no card
+      // rather than crashing the Roster section around it.
+      if (data.applies !== false && isPoolView(data)) setView(data)
     } catch {
       // A settings card: the page renders without it.
     }

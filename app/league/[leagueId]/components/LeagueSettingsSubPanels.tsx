@@ -772,7 +772,9 @@ export function SettingsSubPanelBody({
       return (
         <>
           <RosterSettingsReadonlyPanel ctx={ctx} />
-          {(ctx.league.sport === 'NCAAF' || ctx.league.sport === 'NCAAB') && (
+          {/* College leagues, and the college side of a devy / C2C NFL or NBA league (the card stays
+              hidden when the API says the league has no college side). */}
+          {['NCAAF', 'NCAAB', 'NFL', 'NBA'].includes(String(ctx.league.sport)) && (
             <div className="mt-6">
               <CollegePlayerPoolPanel leagueId={ctx.league.id} />
             </div>

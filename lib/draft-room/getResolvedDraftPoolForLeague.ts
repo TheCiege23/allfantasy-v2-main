@@ -29,6 +29,9 @@ import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { poolTypeForStartupDraftLabel } from '@/lib/draft-defaults/startupCollegeDraft'
 import { isDevyLeague } from '@/lib/devy'
+import { readCollegeConferenceScope } from '@/lib/college/conferenceScope'
+import { describeCollegeTransfer, portalYearFor } from '@/lib/devy/portalMoves'
+import { devySchoolsInScope, loadDevySchoolConferences } from '@/lib/college/devySchoolConferences'
 import { currentNcaabRosterEvidence } from '@/lib/devy/ncaabRosterPool'
 import { getPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/devy'
 import { isC2CLeague, getC2CPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/merged-devy-c2c'
@@ -146,6 +149,8 @@ export type DraftPoolRawRow = {
   isDevy?: boolean
   school?: string | null
   classYearLabel?: string | null
+  /** A college player's transfer-portal move, as one line for his card (lib/devy/portalMoves.ts). */
+  transferNote?: string | null
   draftGrade?: string | null
   projectedLandingSpot?: string | null
   draftEligibleYear?: number | null
@@ -1216,6 +1221,21 @@ async function buildResolvedDraftPoolForLeague(
   if (annualCombined) poolType = ANNUAL_C2C_DRAFT
   const c2cEnabled = annualCombined || Boolean(rawC2cConfig?.enabled) || isC2C
   const liveDraftUsesDevyPools = devyEnabled || c2cEnabled
+  /*
+   * A devy / C2C league can limit its college players to chosen conferences, like a college league
+   * (lib/college/conferenceScope.ts). Read as a `school: { in }` list so the DEVY_POOL_LIMIT take is
+   * filled from in-scope players; null applies no filter (no scope, or schools could not be placed).
+   */
+  const devyCollegeSport = devyPoolSportForDraftSport(sport)
+  const devyScope =
+    devyCollegeSport && (isDevyDynasty || isC2C || devyEnabled || c2cEnabled)
+      ? readCollegeConferenceScope(league?.settings, devyCollegeSport)
+      : null
+  const devySchoolsAllowed =
+    devyCollegeSport && devyScope
+      ? devySchoolsInScope(devyCollegeSport, devyScope, await loadDevySchoolConferences(devyCollegeSport).catch(() => new Map<string, string>()))
+      : null
+  const devySchoolWhere = devySchoolsAllowed ? { school: { in: devySchoolsAllowed } } : {}
   // A two-draft startup (lib/draft-defaults/startupCollegeDraft.ts): the pro draft offers pros only, the
   // college draft college players only, so the board and auto-pick match what each round accepts.
   if (poolType == null) poolType = poolTypeForStartupDraftLabel(draftSession?.draftModeLabel, { isC2C, isDevy: isDevyDynasty })
@@ -1490,7 +1510,7 @@ async function buildResolvedDraftPoolForLeague(
     const devySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false, ...(devySport ? { sport: devySport } : {}), ...(devySport === 'NCAAB' ? { id: { in: await currentNcaabIds() }, source: 'espn_ncaab_roster' } : {}) },
+        where: { devyEligible: true, graduatedToNFL: false, ...devySchoolWhere, ...(devySport ? { sport: devySport } : {}), ...(devySport === 'NCAAB' ? { id: { in: await currentNcaabIds() }, source: 'espn_ncaab_roster' } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -1504,6 +1524,7 @@ async function buildResolvedDraftPoolForLeague(
       isDevy: true,
       school: p.school ?? null,
       classYearLabel: p.classYearLabel ?? null,
+      transferNote: describeCollegeTransfer(p, portalYearFor()),
       draftGrade: p.draftGrade ?? null,
       projectedLandingSpot: p.nflTeam ?? null,
       draftEligibleYear: p.draftEligibleYear ?? null,
@@ -1684,7 +1705,7 @@ async function buildResolvedDraftPoolForLeague(
     const mergeDevySport = devyPoolSportForDraftSport(sport)
     const devyPlayers = await (prisma as any).devyPlayer
       .findMany({
-        where: { devyEligible: true, graduatedToNFL: false, ...(mergeDevySport ? { sport: mergeDevySport } : {}), ...(mergeDevySport === 'NCAAB' ? { id: { in: await currentNcaabIds() }, source: 'espn_ncaab_roster' } : {}) },
+        where: { devyEligible: true, graduatedToNFL: false, ...devySchoolWhere, ...(mergeDevySport ? { sport: mergeDevySport } : {}), ...(mergeDevySport === 'NCAAB' ? { id: { in: await currentNcaabIds() }, source: 'espn_ncaab_roster' } : {}) },
         take: DEVY_POOL_LIMIT,
         orderBy: { devyAdp: 'asc' },
       })
@@ -1702,6 +1723,7 @@ async function buildResolvedDraftPoolForLeague(
           isDevy: true,
           school: p.school ?? null,
           classYearLabel: p.classYearLabel ?? null,
+          transferNote: describeCollegeTransfer(p, portalYearFor()),
           draftGrade: p.draftGrade ?? null,
           projectedLandingSpot: p.nflTeam ?? null,
           draftEligibleYear: p.draftEligibleYear ?? null,
