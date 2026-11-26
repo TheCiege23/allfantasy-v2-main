@@ -1,5 +1,5 @@
 /**
- * The create wizard's "Two-week elimination periods" box (MLB Guilly only) reaches the server as
+ * The create wizard's "Two-week elimination periods" box (Guilly, any sport since 2026-11-25) reaches the server as
  * `conceptSetup.guillotinePeriodWeeks: 2`; every other league's body is unchanged.
  */
 import { describe, expect, it, vi } from 'vitest'
@@ -43,9 +43,13 @@ describe('two-week periods in the create payload', () => {
     expect((await submitted(base({ guillotineTwoWeekPeriods: true }))).guillotinePeriodWeeks).toBe(2)
   })
 
-  it('unticked, another sport, or another format sends nothing', async () => {
+  it('an NBA or NFL Guilly league with the box ticked sends it too (owner, 2026-11-25)', async () => {
+    expect((await submitted(base({ sport: 'NBA', guillotineTwoWeekPeriods: true }))).guillotinePeriodWeeks).toBe(2)
+    expect((await submitted(base({ sport: 'NFL', guillotineTwoWeekPeriods: true }))).guillotinePeriodWeeks).toBe(2)
+  })
+
+  it('unticked, or another format, sends nothing', async () => {
     expect(await submitted(base({ guillotineTwoWeekPeriods: false }))).not.toHaveProperty('guillotinePeriodWeeks')
-    expect(await submitted(base({ sport: 'NBA', guillotineTwoWeekPeriods: true }))).not.toHaveProperty('guillotinePeriodWeeks')
     expect(await submitted(base({ leagueType: 'redraft', guillotineTwoWeekPeriods: true }))).not.toHaveProperty('guillotinePeriodWeeks')
   })
 })

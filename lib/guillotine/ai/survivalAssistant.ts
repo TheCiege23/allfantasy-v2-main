@@ -1,51 +1,47 @@
 import { prisma } from '@/lib/prisma'
+import { getGuillotineConfig } from '../GuillotineLeagueConfig'
+import { loadChopPreview } from '../chopPreviewLoad'
+import { loadSurvivalOutlook } from '../survivalOutlookLoad'
+import { buildSurvivalAnalysis, type SurvivalAnalysis } from './survivalAnalysis'
 
-type SurvivalAnalysis = {
-  survivalProbability: number
-  riskTier: 'SAFE' | 'MODERATE' | 'DANGER' | 'CRITICAL'
-  projectedScore: number
-  safeScoreTarget: number
-  currentChopLine: number
-  marginAboveLine: number
-  biggestThreat: { playerName: string; reason: string; impact: string }
-  recommendation: string
-  shouldSpendFaab: boolean
-  urgencyLevel: 'hold' | 'moderate_spend' | 'all_in'
-  narrative: string
-}
+export type { SurvivalAnalysis }
 
-export async function generateSurvivalAnalysis(
-  rosterId: string,
-  seasonId: string,
-  scoringPeriod: number,
-): Promise<SurvivalAnalysis> {
-  void rosterId
-  const analysis: SurvivalAnalysis = {
-    survivalProbability: 72,
-    riskTier: 'MODERATE',
-    projectedScore: 0,
-    safeScoreTarget: 95,
-    currentChopLine: 88,
-    marginAboveLine: 4,
-    biggestThreat: { playerName: '—', reason: 'Wire projections', impact: 'medium' },
-    recommendation: 'Prioritize floor starters until chop window passes.',
-    shouldSpendFaab: false,
-    urgencyLevel: 'hold',
-    narrative: 'Survival analysis pending live projection feed.',
+export type SurvivalAnalysisResult =
+  | { ok: true; analysis: SurvivalAnalysis }
+  | { ok: false; status: 404 | 409; error: string }
+
+/**
+ * A team's survival analysis for the week being played (rules in ./survivalAnalysis.ts). It returned a fixed
+ * 72% for every team before. Who may ask is the route's job; this only works the numbers out.
+ */
+export async function generateSurvivalAnalysis(input: { leagueId: string; seasonId: string; rosterId: string; scoringPeriod: number }): Promise<SurvivalAnalysisResult> {
+  const preview = await loadChopPreview(input.leagueId)
+  if ('error' in preview) return { ok: false, status: 409, error: preview.error }
+  if (preview.outcome !== 'chop' && preview.outcome !== 'no_chop_week') {
+    return { ok: false, status: 409, error: preview.headline || 'There is no chop to work odds out for.' }
   }
-  const gs = await prisma.guillotineSeason.findFirst({ where: { id: seasonId }, select: { leagueId: true } })
-  if (gs) {
-    await prisma.guillotineAIInsight.create({
+  if (preview.week !== input.scoringPeriod) {
+    return { ok: false, status: 409, error: `Survival odds are worked out for the week being played, week ${preview.week}.` }
+  }
+  const [outlook, config] = await Promise.all([
+    loadSurvivalOutlook(input.leagueId, preview.week).catch(() => null),
+    getGuillotineConfig(input.leagueId).catch(() => null),
+  ])
+  const analysis = buildSurvivalAnalysis({ rosterId: input.rosterId, preview, outlook, dangerMarginPoints: config?.dangerMarginPoints ?? 10 })
+  if (!analysis) return { ok: false, status: 404, error: 'That team is not alive in this league.' }
+
+  await prisma.guillotineAIInsight
+    .create({
       data: {
-        leagueId: gs.leagueId,
-        seasonId,
-        rosterId,
-        scoringPeriod,
+        leagueId: input.leagueId,
+        seasonId: input.seasonId,
+        rosterId: input.rosterId,
+        scoringPeriod: preview.week,
         type: 'survival_probability',
         content: analysis as object,
         narrative: analysis.narrative,
       },
-    }).catch(() => {})
-  }
-  return analysis
+    })
+    .catch(() => {})
+  return { ok: true, analysis }
 }

@@ -11,7 +11,7 @@ import {
   type GuillotineRuleField,
   type GuillotineRules,
 } from '@/lib/guillotine/guillotineRules'
-import { DEFAULT_ADVANCED, MAX_CHOPS_PER_WEEK, MAX_FAAB_AMOUNT, isDefault, type FaabAfterChop, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
+import { DEFAULT_ADVANCED, MAX_CHOPS_PER_WEEK, MAX_FAAB_AMOUNT, MAX_TEAMS_LEFT, isDefault, type FaabAfterChop, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { DEFAULT_FAAB_ON_CHOP_PERCENT, FAAB_ON_CHOP_OPTIONS, FAAB_ON_CHOP_PERCENT_CHOICES, movesChoppedFaab, type FaabOnChop } from '@/lib/guillotine/faabOnChop'
 import { CHOP_LIST_ORDER_OPTIONS, DEFAULT_CHOP_LIST_ORDER, type ChopListOrder } from '@/lib/guillotine/chopListOrder'
 import { CHOP_PATTERN_OPTIONS, applyChopPattern, chopPatternWeeks, describeWeeks, type ChopPatternKind } from '@/lib/guillotine/chopPatterns'
@@ -23,6 +23,7 @@ import {
   ROSTER_CHANGE_OPTIONS,
   describeLayout,
   describeRosterChange,
+  describeRosterChangeWhen,
   rosterChangeNeedsSlot,
   walkRosterSchedule,
   type RosterChange,
@@ -197,18 +198,21 @@ export function GuillotineRulesPage({
   const patternTo = pattern.to != null && weeks.includes(pattern.to) && pattern.to >= patternFrom ? pattern.to : weeks[weeks.length - 1]!
   const patternWeeks = chopPatternWeeks({ kind: pattern.kind, fromWeek: patternFrom, toWeek: patternTo }, { startWeek: firstWeek, periodWeeks: rules.periodWeeks })
   const firstWeekValid = Number.isInteger(firstWeek) && firstWeek >= 1 && firstWeek <= rules.eliminationEndWeek
+  // "Once N teams are left": from one fewer than the league has, down to the last two.
+  const teamsLeftChoices = Array.from({ length: Math.max(1, Math.min(MAX_TEAMS_LEFT, (view.teamCount ?? 12) - 1) - 1) }, (_, i) => Math.min(MAX_TEAMS_LEFT, (view.teamCount ?? 12) - 1) - i).filter((n) => n >= 2)
   // Roster changes: the list as it would run from today's roster, by the save's own walk.
   const rosterWeeks = roster ? Array.from({ length: Math.max(0, roster.toWeek - roster.fromWeek + 1) }, (_, i) => roster.fromWeek + i) : []
   const rosterWalk = roster ? walkRosterSchedule(roster.layout, rosterChanges, roster.spots) : null
   const rosterBlocked = rosterWalk?.steps.find((s) => !s.ok)
-  const rosterByWeek: Array<{ week: number; text: string }> = []
+  const rosterByWeek: Array<{ when: string; text: string }> = []
   if (roster && rosterWalk && !rosterBlocked) {
     for (const s of rosterWalk.steps) {
       if (!s.ok) continue
       const text = describeLayout(s.slots, roster.spots)
+      const when = s.change.teamsLeft != null ? `Once ${s.change.teamsLeft} teams are left` : `From week ${s.change.week}`
       const last = rosterByWeek[rosterByWeek.length - 1]
-      if (last && last.week === s.change.week) last.text = text
-      else rosterByWeek.push({ week: s.change.week, text })
+      if (last && last.when === when) last.text = text
+      else rosterByWeek.push({ when, text })
     }
   }
   const rosterDone = roster ? roster.changes.filter((c) => roster.done.includes(c.id)) : []
@@ -367,7 +371,7 @@ export function GuillotineRulesPage({
           </select>
         </Field>
 
-        {/* MLB only (lib/guillotine/eliminationPeriods.ts): two weeks' scores added, one chop per pair. */}
+        {/* Every sport (lib/guillotine/eliminationPeriods.ts): two weeks' scores added, one chop per pair. */}
         {view.periodWeeksAvailable === true && (
           <Field
             label="Elimination period"
@@ -420,6 +424,55 @@ export function GuillotineRulesPage({
             }}
           >
             Add a change
+          </button>
+        </Field>
+
+        {/* "When N teams remain" (lib/guillotine/chopSchedule.ts `remaining`): the field size, not the calendar. */}
+        <Field
+          label="When only a few teams are left"
+          paid={scheduleLocked}
+          help="For example: two a week until 8 teams are left, then one a week; or no more chops once 3 are left. Beats a change set by week; a special week still beats both."
+        >
+          {(advanced.remaining ?? []).map((r, i) => (
+            <div key={i} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2" data-testid="guillotine-remaining">
+              <label className="text-[11px] text-white/50">Once this many are left
+                <select
+                  className={inputClass}
+                  value={r.teamsLeft}
+                  disabled={scheduleLocked}
+                  onChange={(e) => updateAdvanced({ ...advanced, remaining: (advanced.remaining ?? []).map((x, j) => (j === i ? { ...x, teamsLeft: Number(e.target.value) } : x)) })}
+                  data-testid="guillotine-remaining-teams"
+                >
+                  {teamsLeftChoices.map((n) => <option key={n} value={n}>{n} teams</option>)}
+                </select>
+              </label>
+              <label className="text-[11px] text-white/50">Teams a {week}
+                <select
+                  className={inputClass}
+                  value={r.chops}
+                  disabled={scheduleLocked}
+                  onChange={(e) => updateAdvanced({ ...advanced, remaining: (advanced.remaining ?? []).map((x, j) => (j === i ? { ...x, chops: Number(e.target.value) } : x)) })}
+                  data-testid="guillotine-remaining-chops"
+                >
+                  <option value={0}>No chop</option>
+                  {CHOPS.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <button type="button" className={ghostBtn} onClick={() => updateAdvanced({ ...advanced, remaining: (advanced.remaining ?? []).filter((_, j) => j !== i) })}>Remove</button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className={ghostBtn}
+            disabled={scheduleLocked || teamsLeftChoices.every((n) => (advanced.remaining ?? []).some((r) => r.teamsLeft === n))}
+            data-testid="guillotine-add-remaining"
+            onClick={() => {
+              const used = new Set((advanced.remaining ?? []).map((r) => r.teamsLeft))
+              const n = teamsLeftChoices.find((x) => !used.has(x)) ?? teamsLeftChoices[0]!
+              updateAdvanced({ ...advanced, remaining: [...(advanced.remaining ?? []), { teamsLeft: n, chops: 1 }] })
+            }}
+          >
+            Add a rule
           </button>
         </Field>
 
@@ -545,6 +598,65 @@ export function GuillotineRulesPage({
           </select>
         </Field>
 
+        {/* lib/guillotine/guillotineTrades.ts: off by default; a chopped team never trades. */}
+        <Field
+          label="Trades"
+          help={
+            !rules.tradesAllowed
+              ? 'No trades. Teams build through waivers and the chopped rosters.'
+              : rules.tradesCloseAtTeamsLeft != null
+                ? `Teams still alive can trade until only ${rules.tradesCloseAtTeamsLeft} are left.`
+                : 'Teams still alive can trade. A chopped team never can.'
+          }
+        >
+          <div className="grid items-end gap-2 sm:grid-cols-2">
+            <select
+              className={inputClass}
+              value={rules.tradesAllowed ? 'on' : 'off'}
+              onChange={(e) => update({ tradesAllowed: e.target.value === 'on' })}
+              data-testid="guillotine-rules-trades"
+            >
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+            {rules.tradesAllowed ? (
+              <label className="text-[11px] text-white/50">Trades close once
+                <select
+                  className={inputClass}
+                  value={rules.tradesCloseAtTeamsLeft ?? ''}
+                  onChange={(e) => update({ tradesCloseAtTeamsLeft: e.target.value === '' ? null : Number(e.target.value) })}
+                  data-testid="guillotine-rules-trades-close"
+                >
+                  <option value="">Never</option>
+                  {[...new Set([...teamsLeftChoices, ...(rules.tradesCloseAtTeamsLeft != null ? [rules.tradesCloseAtTeamsLeft] : [])])].sort((a, b) => b - a).map((n) => (
+                    <option key={n} value={n}>{n} teams are left</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+        </Field>
+
+        {/* lib/guillotine/freeAgencyFromWeek.ts: only matters while chops go to waivers. */}
+        {rules.rosterReleaseTiming !== 'immediate' ? (
+          <Field
+            label="Skip waivers late in the season"
+            help={rules.freeAgencyFromWeek != null ? `From week ${rules.freeAgencyFromWeek}, chopped players are free agents as soon as the chop is final.` : 'Every chop goes to the waiver run.'}
+          >
+            <select
+              className={inputClass}
+              value={rules.freeAgencyFromWeek ?? ''}
+              onChange={(e) => update({ freeAgencyFromWeek: e.target.value === '' ? null : Number(e.target.value) })}
+              data-testid="guillotine-rules-free-agency-from"
+            >
+              <option value="">Never</option>
+              {[...new Set([...weeks, ...(rules.freeAgencyFromWeek != null ? [rules.freeAgencyFromWeek] : [])])].sort((a, b) => a - b).map((w) => (
+                <option key={w} value={w}>From week {w}</option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+
         <Field label="A chopped team's unspent FAAB" help={faabHelp} paid={paidLocked('faabOnChop')}>
           <div className="grid items-end gap-2 sm:grid-cols-[2fr_1fr]">
             <select className={inputClass} value={rules.faabOnChop} onChange={(e) => update({ faabOnChop: e.target.value as FaabOnChop })} data-testid="guillotine-rules-faab-on-chop">
@@ -586,23 +698,61 @@ export function GuillotineRulesPage({
             )}
           </div>
         </Field>
+
+        {/* The week's top scorer among the survivors (lib/guillotine/faabBonus.ts). */}
+        <Field label="Bonus FAAB for the week's top scorer" paid={scheduleLocked} help="After each chop, the surviving team with the week's highest score gets this much more FAAB. A tie splits it. Only matters if your league uses FAAB bidding.">
+          <select
+            className={inputClass}
+            value={advanced.topScorerBonus ?? 0}
+            disabled={scheduleLocked}
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              const { topScorerBonus: _old, ...rest } = advanced
+              updateAdvanced(n > 0 ? { ...rest, topScorerBonus: n } : rest)
+            }}
+            data-testid="guillotine-faab-bonus"
+          >
+            {[...new Set([0, 5, 10, 20, 25, 50, 100, advanced.topScorerBonus ?? 0])].sort((a, b) => a - b).map((n) => (
+              <option key={n} value={n}>{n === 0 ? 'No bonus' : `$${n}`}</option>
+            ))}
+          </select>
+        </Field>
       </Group>
 
       {/* ---------- Roster changes during the season ---------- */}
       {roster && (
-        <Group id="roster" title="Roster changes during the season" sub="Add or take away spots on a set week. AllFantasy changes every team's roster for you.">
+        <Group id="roster" title="Roster changes during the season" sub="Add or take away spots on a set week, or once only a few teams are left. AllFantasy changes every team's roster for you.">
           <Field label="Scheduled changes" paid={scheduleLocked} help="A new starting spot stays empty until its manager fills it. A spot that is taken away becomes a bench spot, and the player in it moves to the bench between weeks.">
             <p className="text-[12px] text-white/60" data-testid="guillotine-roster-now">Right now every team has {describeLayout(roster.layout, roster.spots)}.</p>
             {rosterDone.map((c) => (
               <p key={c.id} className="rounded-lg border border-white/10 px-3 py-2 text-[12px] text-white/50" data-testid={`guillotine-roster-done-${c.id}`}>
-                Week {c.week}: {describeRosterChange(c, roster.spots)}. {rosterSkipped.has(c.id) ? `Not made: ${rosterSkipped.get(c.id)}` : 'Done.'}
+                {describeRosterChangeWhen(c)}: {describeRosterChange(c, roster.spots)}. {rosterSkipped.has(c.id) ? `Not made: ${rosterSkipped.get(c.id)}` : 'Done.'}
               </p>
             ))}
             {rosterChanges.map((c) => (
-              <div key={c.id} className="grid grid-cols-2 items-end gap-2 rounded-lg border border-white/10 p-3 sm:grid-cols-[0.55fr_1.9fr_1.7fr_0.6fr_auto]" data-testid="guillotine-roster-change">
-                <label className="order-1 text-[11px] text-white/50 sm:order-none">Week
-                  <select className={inputClass} value={c.week} disabled={scheduleLocked} onChange={(e) => editRoster(c.id, { week: Number(e.target.value) })} data-testid="guillotine-roster-week">
-                    {[...new Set([...rosterWeeks, c.week])].sort((a, b) => a - b).map((w) => <option key={w} value={w}>{w}</option>)}
+              <div key={c.id} className="grid grid-cols-2 items-end gap-2 rounded-lg border border-white/10 p-3 sm:grid-cols-[0.9fr_1.8fr_1.6fr_0.6fr_auto]" data-testid="guillotine-roster-change">
+                <label className="order-1 text-[11px] text-white/50 sm:order-none">When
+                  {/* A week, or "once N teams are left" (the bench that grows as the league shrinks). */}
+                  <select
+                    className={inputClass}
+                    value={c.teamsLeft != null ? `t${c.teamsLeft}` : String(c.week)}
+                    disabled={scheduleLocked}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v.startsWith('t')) editRoster(c.id, { teamsLeft: Number(v.slice(1)), week: Math.min(c.week, rosterWeeks[0] ?? c.week) })
+                      else {
+                        const { teamsLeft: _gone, ...rest } = c
+                        updateRoster(rosterChanges.map((x) => (x.id === c.id ? { ...rest, week: Number(v) } : x)))
+                      }
+                    }}
+                    data-testid="guillotine-roster-week"
+                  >
+                    <optgroup label="In week">
+                      {[...new Set([...rosterWeeks, c.week])].sort((a, b) => a - b).map((w) => <option key={w} value={w}>Week {w}</option>)}
+                    </optgroup>
+                    <optgroup label="When only this many are left">
+                      {teamsLeftChoices.map((n) => <option key={`t${n}`} value={`t${n}`}>{n} teams left</option>)}
+                    </optgroup>
                   </select>
                 </label>
                 <label className="order-3 col-span-2 text-[11px] text-white/50 sm:order-none sm:col-span-1">What happens
@@ -643,7 +793,7 @@ export function GuillotineRulesPage({
               </p>
             ) : rosterByWeek.length > 0 ? (
               <ul className="space-y-0.5 text-[12px] text-white/60" data-testid="guillotine-roster-result">
-                {rosterByWeek.map((w) => <li key={w.week}>From week {w.week}: {w.text}.</li>)}
+                {rosterByWeek.map((w) => <li key={w.when}>{w.when}: {w.text}.</li>)}
               </ul>
             ) : null}
           </Field>

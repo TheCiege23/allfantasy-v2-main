@@ -9,7 +9,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-type ReleaseRow = { leagueId: string; playerId: string; availableAt: Date; eliminatedRosterId: string }
+type ReleaseRow = { leagueId: string; playerId: string; availableAt: Date; eliminatedRosterId: string; scoringPeriod?: number }
 
 const m = vi.hoisted(() => ({
   releases: [] as ReleaseRow[],
@@ -138,6 +138,26 @@ describe('the commissioner’s "Right after the chop" setting', () => {
   })
   it('[control] a choice that cannot be read keeps the hold', async () => {
     m.prisma.guillotineLeagueConfig.findUnique.mockRejectedValue(new Error('down'))
+    expect((await loadDroppedPlayerHolds('L', 24, { now: NOW })).has('star')).toBe(true)
+  })
+})
+
+describe('"chopped players stop hitting waivers after week N"', () => {
+  it('a chop in week N or later is not held: the chopped player is a first-come add at once', async () => {
+    m.releases = [{ leagueId: 'L', playerId: 'star', availableAt: CHOP, eliminatedRosterId: 'rr-chopped', scoringPeriod: 12 }]
+    m.prisma.league.findUnique.mockResolvedValue({ settings: { guillotineFreeAgencyFromWeek: 12 }, timezone: 'UTC', waiverHours: 24, lifecycleState: 'in_season', guillotineMode: true })
+    expect((await loadDroppedPlayerHolds('L', 24, { now: NOW })).size).toBe(0)
+    const r = await call()
+    expect(r.body.code).toBeUndefined()
+    expect(m.executeAdd).toHaveBeenCalledTimes(1)
+  })
+  it('[control] a chop before week N is still held', async () => {
+    m.releases = [{ leagueId: 'L', playerId: 'star', availableAt: CHOP, eliminatedRosterId: 'rr-chopped', scoringPeriod: 11 }]
+    m.prisma.league.findUnique.mockResolvedValue({ settings: { guillotineFreeAgencyFromWeek: 12 }, timezone: 'UTC', waiverHours: 24, lifecycleState: 'in_season', guillotineMode: true })
+    expect((await loadDroppedPlayerHolds('L', 24, { now: NOW })).has('star')).toBe(true)
+  })
+  it('[control] with no such rule, a week-12 chop is held as before', async () => {
+    m.releases = [{ leagueId: 'L', playerId: 'star', availableAt: CHOP, eliminatedRosterId: 'rr-chopped', scoringPeriod: 12 }]
     expect((await loadDroppedPlayerHolds('L', 24, { now: NOW })).has('star')).toBe(true)
   })
 })

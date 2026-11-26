@@ -1,4 +1,5 @@
 import 'server-only'
+import { effectiveReleaseTiming, readFreeAgencyFromWeek } from './freeAgencyFromWeek'
 
 /**
  * Server half of ./chopPreview.ts: gathers this week's inputs the way the native week runner does
@@ -126,7 +127,7 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
     dangerMarginPoints: config.dangerMarginPoints ?? 10,
     faabOnChop: faabPolicy,
     faabOnChopPercent: readFaabOnChopPercent(league.settings),
-    rosterReleaseTiming: config.rosterReleaseTiming,
+    rosterReleaseTiming: effectiveReleaseTiming(config.rosterReleaseTiming, readFreeAgencyFromWeek(league.settings), week),
     teams,
     previousWeek: [...lastWeek].map(([rosterId, periodPoints]) => ({ rosterId, periodPoints })),
     draftSlotByRoster,

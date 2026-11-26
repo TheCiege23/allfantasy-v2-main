@@ -538,6 +538,16 @@ async function assertRedraftDeadlineOpen(leagueId: string, commissionerOverride:
 }
 
 /**
+ * Guilly (lib/guillotine/guillotineTrades.ts), bound at proposal and acceptance like the deadline. A commissioner
+ * override forces past a closed window, as it forces past the deadline; never past a chopped team.
+ */
+async function assertGuillotineTradesOpen(leagueId: string, redraftRosterIds: string[], commissionerOverride: boolean | undefined): Promise<void> {
+  const { guillotineTradeRefusal } = await import('@/lib/guillotine/guillotineTrades')
+  const refusal = await guillotineTradeRefusal(leagueId, redraftRosterIds, { ignoreClosed: commissionerOverride === true })
+  if (refusal) throw new Error(refusal)
+}
+
+/**
  * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts), bound at proposal and at execution
  * like the deadline. A commissioner override forces past them, exactly as it forces past the deadline.
  */
@@ -566,6 +576,7 @@ export async function createNflRedraftTradeProposal(input: CreateNflRedraftTrade
   const resolved = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (!resolved.ok) throw new Error(resolved.reason)
   await assertRedraftDeadlineOpen(resolved.state.leagueId, input.commissionerOverride)
+  await assertGuillotineTradesOpen(resolved.state.leagueId, [input.proposerRosterId, input.receiverRosterId], input.commissionerOverride)
   await assertSurvivorTradeRulesOpen(resolved.state.leagueId, input, input.commissionerOverride)
   const validation = validateNflRedraftTradeProposal({
     state: resolved.state,
@@ -863,6 +874,11 @@ export async function actOnNflRedraftTradeProposal(input: {
   if (input.action === 'accept' || input.action === 'commissioner_approve') {
     // Acceptance binds the deadline; a commissioner approval is the override convention.
     await assertRedraftDeadlineOpen(resolved.state.leagueId, input.action === 'commissioner_approve' || input.commissionerOverride === true)
+    await assertGuillotineTradesOpen(
+      resolved.state.leagueId,
+      [proposal.proposerRosterId, proposal.receiverRosterId],
+      input.action === 'commissioner_approve' || input.commissionerOverride === true,
+    )
     return applyExecutedTrade({
       state: resolved.state,
       proposalId: input.proposalId,

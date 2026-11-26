@@ -26,6 +26,9 @@ const RULES: GuillotineRules = {
   bestBall: false,
   periodWeeks: 1,
   chopListOrder: 'chop_top',
+  freeAgencyFromWeek: null,
+  tradesAllowed: false,
+  tradesCloseAtTeamsLeft: null,
 }
 
 const view = (over: Record<string, unknown> = {}) => ({
@@ -144,6 +147,35 @@ describe('one Save sends only what changed, to the writer that owns it', () => {
     expect(patches()).toEqual([{ rules: { chopListOrder: 'chop_bottom' } }])
   })
 
+  it('"skip waivers late in the season": picking a week sends it, and "Never" sends null', async () => {
+    const { patches } = mount(view())
+    await ready()
+    expect(screen.getByTestId('guillotine-rules-free-agency-from')).toBeTruthy()
+    set('guillotine-rules-free-agency-from', '12')
+    expect(screen.getByText('From week 12, chopped players are free agents as soon as the chop is final.')).toBeTruthy()
+    fireEvent.click(save())
+    await screen.findByTestId('guillotine-rules-saved')
+    expect(patches()).toEqual([{ rules: { freeAgencyFromWeek: 12 } }])
+  })
+
+  it('trades: off by default; turned on, the commissioner picks when they close', async () => {
+    const { patches } = mount(view())
+    await ready()
+    expect(screen.queryByTestId('guillotine-rules-trades-close')).toBeNull()
+    set('guillotine-rules-trades', 'on')
+    set('guillotine-rules-trades-close', '4')
+    expect(screen.getByText('Teams still alive can trade until only 4 are left.')).toBeTruthy()
+    fireEvent.click(save())
+    await screen.findByTestId('guillotine-rules-saved')
+    expect(patches()).toEqual([{ rules: { tradesAllowed: true, tradesCloseAtTeamsLeft: 4 } }])
+  })
+
+  it('"skip waivers" is not offered when chopped players are already free agents every week', async () => {
+    mount(view({ rules: { ...RULES, rosterReleaseTiming: 'immediate' } }))
+    await ready()
+    expect(screen.queryByTestId('guillotine-rules-free-agency-from')).toBeNull()
+  })
+
   it('🛑 when one part is refused it stops, and says what was saved and what was not', async () => {
     const { patches, onSaved } = mount(view(), (body) => ('rules' in body ? { status: 400, body: { error: 'With 12 teams this chop schedule still has 5 alive after week 8.' } } : null))
     await ready()
@@ -256,7 +288,7 @@ describe('what a commissioner cannot change is locked, not hidden', () => {
     for (const id of ['guillotine-rules-teams-per-chop', 'guillotine-rules-end-week', 'guillotine-add-step', 'guillotine-pattern-apply', 'guillotine-add-special', 'guillotine-faab-mode', 'guillotine-immunity', 'guillotine-rules-stat-hours', 'guillotine-rules-danger-margin']) {
       expect((screen.getByTestId(id) as HTMLInputElement).disabled, id).toBe(true)
     }
-    for (const id of ['lsh-first-chop-input', 'guillotine-rules-endgame', 'guillotine-rules-release', 'guillotine-rules-list-order', 'guillotine-rules-best-ball']) {
+    for (const id of ['lsh-first-chop-input', 'guillotine-rules-endgame', 'guillotine-rules-release', 'guillotine-rules-list-order', 'guillotine-rules-best-ball', 'guillotine-rules-free-agency-from']) {
       expect((screen.getByTestId(id) as HTMLInputElement).disabled, id).toBe(false)
     }
     set('guillotine-rules-release', 'immediate')

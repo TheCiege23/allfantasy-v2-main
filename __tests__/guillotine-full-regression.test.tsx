@@ -66,6 +66,8 @@ const releaseEliminationLockMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/automation/locks', () => ({ acquireAutomationLock: acquireEliminationLockMock, releaseAutomationLock: releaseEliminationLockMock }))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/guillotine/faabAfterChop', () => ({ applyFaabAfterChop: applyFaabAfterChopMock }))
+// The top scorer's bonus runs beside it (lib/guillotine/faabBonus.ts); off in these leagues.
+vi.mock('@/lib/guillotine/faabBonus', () => ({ applyTopScorerBonus: vi.fn(async () => ({ applied: false, reason: 'off' })) }))
 /*
  * The engine resolves across the two roster id spaces through this module. Mocking it keeps this
  * suite testing ELIMINATION rather than re-modelling the reconciler's query sequence -- the

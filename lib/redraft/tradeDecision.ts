@@ -182,6 +182,17 @@ export async function acceptRedraftTrade(input: TradeDecisionInput): Promise<Tra
     )
   }
 
+  // Guilly (lib/guillotine/guillotineTrades.ts): a chopped team cannot accept or be traded with, and a closed
+  // trade window binds at acceptance like the deadline above. One league read and out for every other league.
+  const { guillotineTradeRefusal } = await import('@/lib/guillotine/guillotineTrades')
+  const guilly = await guillotineTradeRefusal(proposal.leagueId, [
+    proposal.proposerRosterId,
+    proposal.receiverRosterId,
+    ...(proposal.additionalRosterIds ?? []),
+    ...(proposal.assets ?? []).flatMap((a) => [a.fromRosterId, a.toRosterId]),
+  ])
+  if (guilly) return json({ error: guilly, code: 'GUILLOTINE_TRADE_CLOSED' }, { status: 409 })
+
   // Post-draft roster lock: an offer made before the draft ended cannot settle during it.
   // After the existing refusals (already accepted, deadline) so their behaviour is unchanged.
   const postDraftLock = await postDraftRosterMoveRefusal(proposal.leagueId, 'trade')

@@ -52,6 +52,7 @@ import { redactAndCap } from '@/lib/security/redactSecrets'
 import {
   importPublicEspnLeagueAsMember,
   parseEspnLeagueRunBy,
+  type PublicMemberPlatform,
 } from '@/lib/league-import/espn/espnPublicMemberImport'
 
 /**
@@ -90,17 +91,22 @@ function mapImportCommitErrorStatus(code: string): number {
 }
 
 /**
- * The no-cookie member import of a public ESPN league. The league is owned by the AllFantasy system
- * account and the caller's team claim is recorded UNCONFIRMED — see `espnPublicMemberImport.ts` for
- * why that combination is what keeps a picked team from turning into control of the league.
+ * The member import of a public ESPN league (no cookies) or a PASTED Yahoo league (no attestation).
+ * The league is owned by the AllFantasy system account and the caller's team claim is recorded
+ * UNCONFIRMED — see `espnPublicMemberImport.ts` for why that combination is what keeps a picked team
+ * from turning into control of the league.
  */
-async function commitPublicEspnLeagueAsMember(args: {
+async function commitPublicLeagueAsMember(args: {
+  provider: PublicMemberPlatform
   userId: string
   sourceId: string
   claimSourceTeamId: string
+  /** "Update my existing league" — see `refreshExisting` in espnPublicMemberImport.ts. */
+  refreshExisting?: boolean
 }): Promise<Response> {
+  const provider = args.provider
   const result = await runImportedLeagueNormalizationPipeline({
-    provider: 'espn',
+    provider,
     sourceId: args.sourceId,
     userId: args.userId,
   })
@@ -112,13 +118,15 @@ async function commitPublicEspnLeagueAsMember(args: {
       userId: args.userId,
       normalized: result.normalized,
       claimSourceTeamId: args.claimSourceTeamId,
-      persistAsOwner: async (ownerUserId) => {
+      ...(provider === 'espn' ? {} : { platform: provider }),
+      ...(args.refreshExisting ? { refreshExisting: true } : {}),
+      persistAsOwner: async (ownerUserId, opts) => {
         const { persisted } = await persistImportWithCanonicalAudit({
           userId: ownerUserId,
-          provider: 'espn',
+          provider,
           normalized: result.normalized,
           canonical: buildCanonicalImportBundle(result.normalized),
-          allowUpdateExisting: false,
+          allowUpdateExisting: opts?.allowUpdateExisting === true,
           importerSourceManagerId: null,
           importerSourceTeamId: null,
         })
@@ -128,7 +136,7 @@ async function commitPublicEspnLeagueAsMember(args: {
     if (!outcome.ok) {
       return NextResponse.json({ error: outcome.error, code: outcome.code }, { status: outcome.status })
     }
-    await recordImportCompleted(args.userId, 'espn', { existed: outcome.existed === true, joinedExisting: outcome.joinedExisting === true })
+    await recordImportCompleted(args.userId, provider, { existed: outcome.existed === true, joinedExisting: outcome.joinedExisting === true })
     rewardReferredImport(args.userId)
     return NextResponse.json({
       leagueId: outcome.league.id,
@@ -141,7 +149,7 @@ async function commitPublicEspnLeagueAsMember(args: {
       joinedExisting: outcome.joinedExisting,
       incompleteSteps: [],
       skipped: false,
-      /* The team is the caller's on AllFantasy, but nothing proved it on ESPN. */
+      /* The team is the caller's on AllFantasy, but nothing proved it on ESPN / Yahoo. */
       claimUnconfirmed: true,
     })
   } catch (error) {
@@ -205,6 +213,12 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
      * PUBLIC league imports without cookies as a member — see `espnPublicMemberImport.ts`.
      */
     espnLeagueRunBy?: string
+    /**
+     * PASTED Yahoo league only — `me` (I'm the commissioner: attest, today's path) or `member`
+     * (someone else runs it: pick your team, NO attestation). Same values and parser as
+     * `espnLeagueRunBy`; `member` imports exactly like ESPN's public member path.
+     */
+    yahooLeagueRunBy?: string
     /** Commissioner edits from the review screen — see `lib/league-import/review/importReviewOverrides.ts`. */
     reviewOverrides?: unknown
   }
@@ -239,7 +253,13 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     )
   }
 
-  const attestation = attestationFromRequestBody(body.attestation)
+  /*
+   * A PASTED Yahoo league whose importer says they are a MEMBER, not its commissioner (a public league
+   * Yahoo created, owner report 2026-11-26). Any attestation in the body is dropped before the gate —
+   * a member choice must never be stamped as a commissioner claim, nor turn into the `C`.
+   */
+  const yahooMember = yahooSnapshotAllowed && parseEspnLeagueRunBy(body.yahooLeagueRunBy) === 'member'
+  const attestation = yahooMember ? undefined : attestationFromRequestBody(body.attestation)
   // Only the commissioner/co-commissioner of the source league may import.
   const gate = await assertImportCommissioner({
     appUserId: auth.userId,
@@ -266,7 +286,29 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
         { status: 400 },
       )
     }
-    return commitPublicEspnLeagueAsMember({ userId: auth.userId, sourceId, claimSourceTeamId: picked })
+    return commitPublicLeagueAsMember({ provider: 'espn', userId: auth.userId, sourceId, claimSourceTeamId: picked })
+  }
+
+  if (yahooMember) {
+    /* Not-found (someone else's paste) and the like still refuse. The only failure this path moves
+       past is the one asking for a commissioner attestation, which a member must not give. */
+    if (!gate.ok && gate.requiresAttestation !== true) {
+      return commissionerGateFailureResponse(gate)
+    }
+    const picked = typeof body.claimSourceTeamId === 'string' ? body.claimSourceTeamId.trim() : ''
+    if (!picked) {
+      return NextResponse.json(
+        { error: 'Pick your team from the list first — a league member imports with their team.', code: 'PICK_TEAM_REQUIRED' },
+        { status: 400 },
+      )
+    }
+    return commitPublicLeagueAsMember({
+      provider: 'yahoo',
+      userId: auth.userId,
+      sourceId,
+      claimSourceTeamId: picked,
+      refreshExisting: Boolean(body.force),
+    })
   }
 
   if (!gate.ok) {

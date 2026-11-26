@@ -19,6 +19,13 @@
  *
  * A league someone already imported as its proven commissioner is NOT joined from here — that
  * league is run by a person, and joining it is what their invite link is for.
+ *
+ * ⚠ ALSO THE MEMBER PATH FOR A PASTED YAHOO LEAGUE (`yahoo-snapshot:<id>`, owner report 2026-11-26).
+ * Someone in a public league Yahoo created could only import by ticking "I'm the commissioner" — a
+ * false attestation. A pasted page proves no more than a public ESPN read does, so it takes this same
+ * path with `platform: 'yahoo'`: system-owned league, UNCONFIRMED claim, no attestation, no `C`.
+ * Pasted Yahoo pages carry no commissioner flags at all, so point 3 is vacuous there, and point 4
+ * has no proof path yet (no Yahoo API) — the copy below says so rather than pointing at ESPN.
  */
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
@@ -33,6 +40,26 @@ export function parseEspnLeagueRunBy(raw: unknown): EspnLeagueRunBy | null {
   return raw === 'espn' || raw === 'member' || raw === 'me' ? raw : null
 }
 
+/** The providers whose public / pasted leagues can be joined by picking a team. */
+export type PublicMemberPlatform = 'espn' | 'yahoo'
+
+/** What to tell someone who wants a team this path cannot give them. */
+const PROOF_HINT: Record<PublicMemberPlatform, { commissionerTeam: string; taken: string; runByCommissioner: string }> = {
+  espn: {
+    commissionerTeam:
+      "ESPN lists that team as one of this league's commissioners. To claim it, connect ESPN so we can confirm it's yours.",
+    taken: "If it's yours, connect ESPN and import again — proving it moves the team to you.",
+    runByCommissioner:
+      "This league is already on AllFantasy, set up by its commissioner. Ask them for the league's invite link — or connect ESPN and import again to join with your team.",
+  },
+  yahoo: {
+    commissionerTeam: "Yahoo lists that team as one of this league's commissioners, so it can't be claimed this way.",
+    taken: "If it's yours, ask your league's commissioner on AllFantasy to sort it out.",
+    runByCommissioner:
+      "This league is already on AllFantasy, set up by its commissioner. Ask them for the league's invite link to join with your team.",
+  },
+}
+
 type EspnPublicMemberImportResult =
   | { ok: true; league: PersistImportedLeagueResult['league']; joinedExisting: boolean; existed: boolean }
   | { ok: false; status: number; code: string; error: string }
@@ -45,21 +72,30 @@ export async function importPublicEspnLeagueAsMember(args: {
   userId: string
   normalized: NormalizedImportResult
   claimSourceTeamId: string
-  /** Persists the normalized league owned by `ownerUserId`. The caller's usual persist + audit. */
-  persistAsOwner: (ownerUserId: string) => Promise<PersistImportedLeagueResult>
+  /** Defaults to `espn`. `yahoo` is a PASTED Yahoo league — see this file's header. */
+  platform?: PublicMemberPlatform
+  /**
+   * "Update my existing league": re-persist the SYSTEM-owned row from this fresh read. Honoured only
+   * for a caller who already holds a team in that row — a newcomer joins, they do not rewrite it.
+   */
+  refreshExisting?: boolean
+  /**
+   * Persists the normalized league owned by `ownerUserId`. The caller's usual persist + audit.
+   * `allowUpdateExisting` is passed only for a refresh.
+   */
+  persistAsOwner: (ownerUserId: string, opts?: { allowUpdateExisting: boolean }) => Promise<PersistImportedLeagueResult>
 }): Promise<EspnPublicMemberImportResult> {
   const { userId, normalized } = args
+  const platform: PublicMemberPlatform = args.platform ?? 'espn'
+  const label = platform === 'yahoo' ? 'Yahoo' : 'ESPN'
+  const hint = PROOF_HINT[platform]
   const claimId = args.claimSourceTeamId.trim()
   const roster = normalized.rosters.find((r) => String(r.source_team_id) === claimId)
   if (!roster) {
     return fail(400, 'CLAIM_TEAM_NOT_IN_LEAGUE', 'That team is not in this league. Go back and pick your team again.')
   }
   if (roster.is_commissioner === true || roster.is_co_commissioner === true) {
-    return fail(
-      403,
-      'COMMISSIONER_TEAM_NEEDS_PROOF',
-      "ESPN lists that team as one of this league's commissioners. To claim it, connect ESPN so we can confirm it's yours.",
-    )
+    return fail(403, 'COMMISSIONER_TEAM_NEEDS_PROOF', hint.commissionerTeam)
   }
 
   const platformLeagueId = String(normalized.source.source_league_id)
@@ -68,20 +104,28 @@ export async function importPublicEspnLeagueAsMember(args: {
       ? normalized.league.season
       : null
   if (season == null) {
-    return fail(422, 'SEASON_UNKNOWN', 'We could not tell which ESPN season this league is. Try again in a moment.')
+    return fail(422, 'SEASON_UNKNOWN', `We could not tell which ${label} season this league is. Try again in a moment.`)
   }
 
   const rows = (await prisma.league.findMany({
-    where: { platform: 'espn', platformLeagueId, season },
+    where: { platform, platformLeagueId, season },
     select: { id: true, name: true, sport: true, userId: true },
   })) as Array<{ id: string; name: string | null; sport: string | null; userId: string }>
 
   // Already theirs (imported earlier as its proven commissioner): nothing to claim.
   const own = rows.find((r) => r.userId === userId)
   if (own) {
+    /* Their own league, run as its commissioner: updating it is the commissioner path's job. */
+    if (args.refreshExisting) {
+      return fail(
+        409,
+        'LEAGUE_IS_YOURS',
+        "You imported this league as its commissioner. Choose “I'm the commissioner” to update it.",
+      )
+    }
     return {
       ok: true,
-      league: { id: own.id, name: own.name ?? 'ESPN League', sport: own.sport ?? 'NFL' },
+      league: { id: own.id, name: own.name ?? `${label} League`, sport: own.sport ?? 'NFL' },
       joinedExisting: false,
       existed: true,
     }
@@ -89,25 +133,31 @@ export async function importPublicEspnLeagueAsMember(args: {
 
   const systemRow = rows.find((r) => isSystemLeagueOwner(r.userId))
   if (!systemRow && rows.length > 0) {
-    return fail(
-      409,
-      'LEAGUE_RUN_BY_COMMISSIONER',
-      "This league is already on AllFantasy, set up by its commissioner. Ask them for the league's invite link — or connect ESPN and import again to join with your team.",
-    )
+    return fail(409, 'LEAGUE_RUN_BY_COMMISSIONER', hint.runByCommissioner)
   }
 
   let league: PersistImportedLeagueResult['league']
   let joinedExisting = false
   if (systemRow) {
-    league = { id: systemRow.id, name: systemRow.name ?? 'ESPN League', sport: systemRow.sport ?? 'NFL' }
+    league = { id: systemRow.id, name: systemRow.name ?? `${label} League`, sport: systemRow.sport ?? 'NFL' }
     joinedExisting = true
+    if (args.refreshExisting) {
+      const holds = await prisma.leagueTeam.findFirst({
+        where: { leagueId: systemRow.id, claimedByUserId: userId },
+        select: { id: true },
+      })
+      if (holds) {
+        const persisted = await args.persistAsOwner(systemRow.userId, { allowUpdateExisting: true })
+        league = persisted.league
+      }
+    }
   } else {
     const ownerId = await ensureSystemLeagueOwner()
     const persisted = await args.persistAsOwner(ownerId)
     league = persisted.league
   }
 
-  const claim = await claimTeamUnconfirmed({ leagueId: league.id, userId, teamExternalId: claimId })
+  const claim = await claimTeamUnconfirmed({ leagueId: league.id, userId, teamExternalId: claimId, platform })
   if (!claim.ok) return claim
 
   try {
@@ -127,8 +177,11 @@ export async function claimTeamUnconfirmed(args: {
   leagueId: string
   userId: string
   teamExternalId: string
+  /** Only changes the wording of a refusal. Defaults to `espn`. */
+  platform?: PublicMemberPlatform
 }): Promise<{ ok: true; alreadyHeld: boolean } | { ok: false; status: number; code: string; error: string }> {
   const { leagueId, userId, teamExternalId } = args
+  const hint = PROOF_HINT[args.platform ?? 'espn']
   const team = (await prisma.leagueTeam.findFirst({
     where: { leagueId, externalId: teamExternalId },
     select: { id: true, claimedByUserId: true, isCommissioner: true, isCoCommissioner: true, platformUserId: true },
@@ -144,7 +197,7 @@ export async function claimTeamUnconfirmed(args: {
       ok: false,
       status: 409,
       code: 'TEAM_ALREADY_CLAIMED',
-      error: "Someone on AllFantasy already claimed that team. If it's yours, connect ESPN and import again — proving it moves the team to you.",
+      error: `Someone on AllFantasy already claimed that team. ${hint.taken}`,
     }
   }
   if (team.isCommissioner || team.isCoCommissioner) {
@@ -152,7 +205,7 @@ export async function claimTeamUnconfirmed(args: {
       ok: false,
       status: 403,
       code: 'COMMISSIONER_TEAM_NEEDS_PROOF',
-      error: "ESPN lists that team as one of this league's commissioners. To claim it, connect ESPN so we can confirm it's yours.",
+      error: hint.commissionerTeam,
     }
   }
   const heldElsewhere = await prisma.leagueTeam.findFirst({
@@ -187,7 +240,7 @@ export async function claimTeamUnconfirmed(args: {
         ok: false,
         status: 409,
         code: 'TEAM_ALREADY_CLAIMED',
-        error: "Someone on AllFantasy just claimed that team. If it's yours, connect ESPN and import again — proving it moves the team to you.",
+        error: `Someone on AllFantasy just claimed that team. ${hint.taken}`,
       }
     }
     throw err

@@ -18,6 +18,8 @@ import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBe
 import { checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
 import { isPeriodEndWeek, PERIOD_WEEKS_KEY, readPeriodWeeks, supportsTwoWeekPeriods } from './eliminationPeriods'
 import { CHOP_LIST_ORDER_KEY, DEFAULT_CHOP_LIST_ORDER, readChopListOrder } from './chopListOrder'
+import { FREE_AGENCY_FROM_WEEK_KEY, readFreeAgencyFromWeek } from './freeAgencyFromWeek'
+import { readGuillotineTrades, syncGuillotineTradeClose, writeGuillotineTradeRules } from './guillotineTrades'
 
 /**
  * Read and save the "League rules" page (rules and tiers in ./guillotineRules.ts).
@@ -94,6 +96,9 @@ export async function readGuillotineRules(leagueId: string, userId: string): Pro
       bestBall: readGuillotineBestBall(settings),
       periodWeeks: readPeriodWeeks(settings),
       chopListOrder: readChopListOrder(settings),
+      freeAgencyFromWeek: readFreeAgencyFromWeek(settings),
+      tradesAllowed: readGuillotineTrades(settings).tradesAllowed,
+      tradesCloseAtTeamsLeft: readGuillotineTrades(settings).tradesCloseAtTeamsLeft,
     },
     startWeek: config.eliminationStartWeek,
     seasonWeeks,
@@ -134,7 +139,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
   }
 
   /*
-   * Two-week periods (./eliminationPeriods.ts): MLB only, and fixed once a chop has happened — the
+   * Two-week periods (./eliminationPeriods.ts): every sport, and fixed once a chop has happened — the
    * periods are paired from the first chop week, so switching mid-season would re-pair weeks already scored.
    */
   if (patch.periodWeeks !== undefined && patch.periodWeeks !== current.rules.periodWeeks) {
@@ -142,7 +147,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       return { ok: false, status: 409, error: 'The first chop has happened, so the elimination period is fixed for this season.', field: 'periodWeeks' }
     }
     if (patch.periodWeeks === 2 && !current.periodWeeksAvailable) {
-      return { ok: false, status: 400, error: 'Two-week elimination periods are for MLB leagues.', field: 'periodWeeks' }
+      return { ok: false, status: 400, error: 'Two-week elimination periods are not available for this league.', field: 'periodWeeks' }
     }
   }
 
@@ -195,7 +200,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
     }
   }
 
-  const { endgame, aiRecapAuto, faabOnChop, faabOnChopPercent, bestBall, periodWeeks, chopListOrder, ...configPatch } = patch
+  const { endgame, aiRecapAuto, faabOnChop, faabOnChopPercent, bestBall, periodWeeks, chopListOrder, freeAgencyFromWeek, tradesAllowed, tradesCloseAtTeamsLeft, ...configPatch } = patch
   if (Object.keys(configPatch).length > 0) {
     const row = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
     if (row) {
@@ -227,14 +232,19 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
   const periodChanged = periodWeeks !== undefined && periodWeeks !== current.rules.periodWeeks
   const listOrderChanged = chopListOrder !== undefined && chopListOrder !== current.rules.chopListOrder
   const faabPercentChanged = faabOnChopPercent !== undefined && faabOnChopPercent !== current.rules.faabOnChopPercent
-  if (endgameChanged || recapChanged || faabChanged || faabPercentChanged || bestBallChanged || periodChanged || listOrderChanged) {
+  const freeAgencyChanged = freeAgencyFromWeek !== undefined && freeAgencyFromWeek !== current.rules.freeAgencyFromWeek
+  const tradesChanged =
+    (tradesAllowed !== undefined && tradesAllowed !== current.rules.tradesAllowed) ||
+    (tradesCloseAtTeamsLeft !== undefined && tradesCloseAtTeamsLeft !== current.rules.tradesCloseAtTeamsLeft)
+  if (endgameChanged || recapChanged || faabChanged || faabPercentChanged || bestBallChanged || periodChanged || listOrderChanged || freeAgencyChanged || tradesChanged) {
     // League.settings is shared by every settings writer: take the row lock (as chop rules do).
     const conflict = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
       // Split and "FAAB after a chop" cannot be on together (faabOnChop.ts); checked under the lock.
       if (faabChanged && faabOnChop && movesChoppedFaab(faabOnChop) && readAdvanced(row?.settings).faab.mode !== 'unchanged') return true
-      const settings: Record<string, unknown> = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
+      let settings: Record<string, unknown> = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
+      if (tradesChanged) settings = writeGuillotineTradeRules(settings, { tradesAllowed, tradesCloseAtTeamsLeft })
       if (endgameChanged) settings.guillotineEndgame = endgame
       if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
       if (faabChanged) settings[FAAB_ON_CHOP_KEY] = faabOnChop
@@ -248,6 +258,11 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       if (listOrderChanged) {
         if (chopListOrder === DEFAULT_CHOP_LIST_ORDER) delete settings[CHOP_LIST_ORDER_KEY]
         else settings[CHOP_LIST_ORDER_KEY] = chopListOrder
+      }
+      // "Never" is the default and is removed rather than stored (./freeAgencyFromWeek.ts).
+      if (freeAgencyChanged) {
+        if (freeAgencyFromWeek == null) delete settings[FREE_AGENCY_FROM_WEEK_KEY]
+        else settings[FREE_AGENCY_FROM_WEEK_KEY] = freeAgencyFromWeek
       }
       // One week is the default: the key is removed rather than stored, so the league reads as before.
       if (periodChanged) {
@@ -264,6 +279,8 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       return false
     })
     if (conflict) return { ok: false, status: 409, error: FAAB_RULES_CONFLICT_MESSAGE, field: 'faabOnChop' }
+    // A new line, or trades switched on with few teams left, takes effect now (./guillotineTrades.ts).
+    if (tradesChanged) await syncGuillotineTradeClose(leagueId)
   }
 
   const view = await readGuillotineRules(leagueId, userId)

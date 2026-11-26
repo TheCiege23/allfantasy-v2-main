@@ -26,6 +26,12 @@ describe("FindLeagueHero", () => {
     expect(screen.getByRole("link", { name: "← Home" }).getAttribute("href")).toBe("/")
   })
 
+  it("has no intro line under the title (2026-11-25)", () => {
+    render(<FindLeagueHero />)
+    expect(screen.getByTestId("find-league-hero").querySelector(".fl-hero-intro")).toBeNull()
+    expect(document.body.textContent).not.toMatch(/press Join/)
+  })
+
   it("has a Spanish string for every English one", () => {
     expect(Object.keys(findLeagueHeroMessages.es).sort()).toEqual(Object.keys(findLeagueHeroMessages.en).sort())
   })

@@ -56,10 +56,15 @@ afterEach(cleanup)
 const events = (name: string) => beacon.mock.calls.filter(([e]) => e === name).map(([, meta]) => meta)
 
 describe('create league wizard — guidance and validation', () => {
-  it('shows how many steps are left and that progress is saved', () => {
-    render(<Harness />)
-    expect(screen.getByTestId('g30-step-progress')).toHaveTextContent('Step 1 of 4 · 3 steps left')
+  it('shows the step and that progress is saved, once each (2026-11-26)', () => {
+    const { container } = render(<Harness />)
+    expect(screen.getByTestId('g30-step-progress').textContent).toBe('Step 1 of 4')
     expect(screen.getByTestId('g30-autosave')).toHaveTextContent('Progress saved just now')
+    // The numbered steps already show progress: no "steps left" and no second progress bar.
+    expect(container.textContent).not.toMatch(/steps? left|last step/)
+    expect(container.querySelector('[style*="width"][class*="bg-violet-600"]')).toBeNull()
+    // No page intro repeating what the step card says.
+    expect(container.textContent).not.toMatch(/Pick a sport, a format and how you will draft/)
   })
 
   it('stops Next on a step with a mistake and says what to fix', () => {

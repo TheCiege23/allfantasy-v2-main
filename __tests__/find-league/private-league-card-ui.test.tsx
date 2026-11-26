@@ -125,7 +125,9 @@ describe("a private league's card", () => {
         league={privateCard({ joinMode: "invite", isPrivate: false, joinUrl: "/join?code=OPEN1", detailUrl: "/leagues/P1" })}
       />
     )
-    expect(screen.getByText("Public league")).toBeTruthy()
+    // No "Public league" badge on a plain public league (2026-11-25): Find a League lists public leagues.
+    expect(screen.queryByText("Public league")).toBeNull()
+    expect(screen.queryByTestId("find-league-source-P1")).toBeNull()
     expect(screen.getByTestId("find-league-join-P1").getAttribute("href")).toBe("/join?code=OPEN1")
     expect(screen.getByTestId("find-league-view-P1")).toBeTruthy()
     expect(screen.queryByTestId("find-league-ask-P1")).toBeNull()
