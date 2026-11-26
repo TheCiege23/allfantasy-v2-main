@@ -316,6 +316,11 @@ export async function submitImportCreation(
      * imports with no cookies as a member (see `espnPublicMemberImport.ts`).
      */
     espnLeagueRunBy?: 'espn' | 'member' | 'me'
+    /**
+     * PASTED Yahoo league: `member` imports with the picked team and NO commissioner attestation (the
+     * same member path as ESPN's); `me` is the attested commissioner import.
+     */
+    yahooLeagueRunBy?: 'member' | 'me'
     /** Edits from the "Review your import" screen, applied server-side to the fresh fetch. */
     reviewOverrides?: ImportReviewOverrides | null
   }
@@ -341,6 +346,7 @@ export async function submitImportCreation(
         ...(options?.confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
         ...(options?.claimSourceTeamId?.trim() ? { claimSourceTeamId: options.claimSourceTeamId.trim() } : {}),
         ...(provider === 'espn' && options?.espnLeagueRunBy ? { espnLeagueRunBy: options.espnLeagueRunBy } : {}),
+        ...(provider === 'yahoo' && options?.yahooLeagueRunBy ? { yahooLeagueRunBy: options.yahooLeagueRunBy } : {}),
         ...(options?.reviewOverrides ? { reviewOverrides: options.reviewOverrides } : {}),
       }),
     });
