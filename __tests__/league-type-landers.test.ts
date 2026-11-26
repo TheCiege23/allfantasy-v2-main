@@ -63,7 +63,8 @@ describe('league type landers', () => {
     // Positive control: the registry alone would have offered these, and they must NOT appear.
     expect(getLeagueTypeSports(page('guillotine'))).not.toContain('NCAAF')
     expect(getLeagueTypeSports(page('devy'))).not.toContain('NBA')
-    expect(getLeagueTypeSports(page('c2c'))).not.toContain('NBA')
+    // NBA C2C joined 2026-11-24 (an NBA league with a college lineup); MLB still has no C2C.
+    expect(getLeagueTypeSports(page('c2c'))).not.toContain('MLB')
     // IDP is a modifier, not a catalog concept: it follows sport-scope.
     expect(getLeagueTypeSports(page('idp'))).toEqual(['NFL', 'NCAAF'])
   })

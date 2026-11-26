@@ -52,8 +52,9 @@ describe('specialty formats lead the Basics step', () => {
     render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
     const all = screen.getAllByRole('button').map((b) => b.getAttribute('data-testid') ?? '').filter((id) => id.startsWith('g30-league-type-'))
     expect(new Set(all).size).toBe(all.length)
-    // NBA: 4 classics + 7 specialties, Survivor Guilly included since 2026-11-10.
-    expect(all).toHaveLength(11)
+    // NBA: 4 classics + 8 specialties, Survivor Guilly included since 2026-11-10 and C2C since 2026-11-24.
+    expect(all).toHaveLength(12)
+    expect(all).toContain('g30-league-type-c2c')
   })
 
   it('choosing a specialty tile selects that format', () => {

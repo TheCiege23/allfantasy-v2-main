@@ -174,8 +174,8 @@ export async function finalizeRosterAssignments(
       continue
     }
 
-    const collegePlayers = players.filter(isNbaCollegePick)
-    const proPlayers = players.filter((p) => !isNbaCollegePick(p))
+    const collegePlayers = players.filter(isCollegePick)
+    const proPlayers = players.filter((p) => !isCollegePick(p))
     // Always refresh the flat draftPicks audit trail.
     let nextPlayerData: Record<string, unknown> = { ...data, draftPicks: players }
 
@@ -222,9 +222,19 @@ function isNbaCollegePick(player: AssignedPlayer): boolean {
   return /^espn:ncaab:\d+$/.test(String(player.playerId ?? '')) && (player.assetType === 'c2c_college' || player.assetType === 'devy_pick')
 }
 
+/**
+ * Any drafted college asset, in any sport: it belongs in the devy section, where the C2C and devy college
+ * lineup reads its players (lib/c2c/campusLineup.ts). Before 2026-11-24 only an NBA college pick went there;
+ * an NFL league's startup college draft put every CFBD pick on the PRO bench, so a C2C or devy team had no
+ * college player to start and its college players filled pro bench seats.
+ */
+function isCollegePick(player: AssignedPlayer): boolean {
+  return isNbaCollegePick(player) || player.assetType === 'c2c_college' || player.assetType === 'devy_pick'
+}
+
 /** Keep drafted college assets in the devy section, never in pro starter or bench slots. */
 export function mergeNbaCollegeDraftPlayers(data: Record<string, unknown>, players: AssignedPlayer[]): Record<string, unknown> {
-  return mergeDraftCollegePlayers(data, players.filter(isNbaCollegePick))
+  return mergeDraftCollegePlayers(data, players.filter(isCollegePick))
 }
 
 function mergeDraftCollegePlayers(data: Record<string, unknown>, college: AssignedPlayer[]): Record<string, unknown> {
@@ -293,7 +303,7 @@ export function addFollowUpDraftPlayers(
   rosterTemplate: Parameters<typeof buildLineupSectionsFromPicks>[1] | null,
   annualCombined = false,
 ): Record<string, unknown> {
-  const collegePick = (p: AssignedPlayer) => isNbaCollegePick(p) || (annualCombined && p.assetType === 'c2c_college')
+  const collegePick = (p: AssignedPlayer) => isCollegePick(p) || (annualCombined && p.assetType === 'c2c_college')
   const previousPicks = stillRosteredDraftPicks(
     playerData,
     Array.isArray(playerData.draftPicks) ? (playerData.draftPicks as AssignedPlayer[]) : [],

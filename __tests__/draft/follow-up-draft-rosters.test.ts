@@ -182,3 +182,21 @@ describe('draftPicks keeps only players still on the roster (2026-11-15)', () =>
       .toEqual([{ playerId: null, playerName: 'No Id', position: 'K' }])
   })
 })
+
+/*
+ * 2026-11-24: an NFL league's startup college draft put every CFBD pick on the PRO bench, so a C2C or devy
+ * team had no college player to start. Every college-tagged pick now joins the devy section.
+ */
+describe('college picks join the devy section, in any sport', () => {
+  const base = () => ({ players: ['q1'], starters: ['q1'], lineup_sections: { starters: [{ id: 'q1', position: 'QB' }], bench: [], ir: [], taxi: [], devy: [] }, draftPicks: [{ playerId: 'q1', playerName: 'q1', position: 'QB' }] })
+  it.each(['c2c_college', 'devy_pick'])('a CFBD %s pick lands in devy, not on the bench', (assetType) => {
+    const out = addFollowUpDraftPlayers(base(), [{ playerId: '4433971', playerName: 'College QB', position: 'QB', team: 'Georgia', assetType } as never], null) as any
+    expect(out.lineup_sections.devy.map((p: { id: string }) => p.id)).toEqual(['4433971'])
+    expect(out.lineup_sections.bench).toEqual([])
+  })
+  it('[control] a pro rookie still joins the bench', () => {
+    const out = addFollowUpDraftPlayers(base(), [{ playerId: 'r9', playerName: 'Rookie', position: 'RB', team: 'DAL', assetType: 'player' } as never], null) as any
+    expect(out.lineup_sections.bench.map((p: { id: string }) => p.id)).toEqual(['r9'])
+    expect(out.lineup_sections.devy).toEqual([])
+  })
+})
