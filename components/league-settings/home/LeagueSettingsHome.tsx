@@ -110,6 +110,8 @@ type LeagueSettingsHomeProps = {
    * "when" eyebrow and a timeline stage. Null or absent renders the default page unchanged.
    */
   redraft?: RedraftSettingsView | null
+  /** Drawn below the sections (the "Export league" card). */
+  footer?: ReactNode
 }
 
 /**
@@ -128,6 +130,7 @@ export function LeagueSettingsHome({
   initialSubPage = null,
   header,
   redraft = null,
+  footer = null,
 }: LeagueSettingsHomeProps) {
   const [open, setOpen] = useState<SettingsSubPageId | null>(initialSubPage)
   const listScroll = useRef(0)
@@ -195,6 +198,7 @@ export function LeagueSettingsHome({
           </section>
           )
         })}
+        {footer}
       </div>
     </div>
   )
