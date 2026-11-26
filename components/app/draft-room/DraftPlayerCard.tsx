@@ -292,7 +292,11 @@ function DraftPlayerCardInner({
   const meaningfulSummary = storedSummary && !/^(No stats available$|(?:Chimmy |Chimmy )?ADP\b|Bye\b)/i.test(storedSummary) ? storedSummary : null
   const statLine = meaningfulSummary ?? (projectedPoints != null ? `Proj ${projectedPoints.toFixed(1)} pts` : '')
   const boxScoreLine = compactStats || nbaRates
-  const displayStatLine = boxScoreLine ? [display?.stats?.seasonLabel, boxScoreLine].filter(Boolean).join(' · ') : statLine
+  // A player with no game this season carries last season's line; the label says so.
+  const seasonLabel = display?.stats?.seasonLabel
+    ? `${display.stats.seasonLabel}${display.stats.seasonIsPrevious ? ' (last season)' : ''}`
+    : null
+  const displayStatLine = boxScoreLine ? [seasonLabel, boxScoreLine].filter(Boolean).join(' · ') : statLine
   const headshotTestBase = testId ? `${testId}-headshot` : 'draft-player-headshot'
   const teamLogoTestBase = testId ? `${testId}-team-logo` : 'draft-player-team-logo'
 

@@ -145,7 +145,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
     .filter((change) => change.style === null || !alreadyChimmy.has(change.rosterId))
   const chimmySeason: Array<{ rosterId: string; ok: boolean; error?: string }> = []
   for (const change of changes) {
-    const res = await applyChimmyAutopilot(leagueId, userId, change.rosterId, change.style)
+    // The personality the team drafts with goes with it into the season (lib/inactive-manager/managerProfile.ts).
+    const personality = validated.blob.assignments.find((a) => a.rosterId === change.rosterId)?.npcDraftPersonality
+    const res = await applyChimmyAutopilot(leagueId, userId, change.rosterId, change.style, { personality })
     chimmySeason.push(res.ok ? { rosterId: change.rosterId, ok: true } : { rosterId: change.rosterId, ok: false, error: res.error })
   }
 

@@ -16,6 +16,7 @@ const m = vi.hoisted(() => {
     prisma: {
       $queryRaw: vi.fn(async () => [{ id: 'L' }]),
       $transaction: vi.fn(),
+      leagueAuditLog: { count: vi.fn(async () => 0) },
       league: {
         findUnique: vi.fn(async () => ({ id: 'L', userId: 'owner', platform: 'allfantasy', sport: 'NFL', status: 'in_season', lifecycleState: 'in_season', lockAllMoves: false, leagueVariant: null, settings: state.settings })),
       },
@@ -129,6 +130,39 @@ describe('runAutopilotWaivers', () => {
     vi.clearAllMocks()
     m.state.ownerHasPlan = true
     expect(await runAutopilotWaivers()).toMatchObject({ teams: 2, claims: 2 })
+  })
+
+  describe('upgrade pickups', () => {
+    // Everyone healthy, so there is no hole: the bench tight end projects 1, a free one 9.
+    const healthy = () => m.data.mockImplementation(async ({ surface }: { surface: string }) =>
+      surface === 'waivers'
+        ? [{ id: 'faTe', name: 'Free End', position: 'TE', projectedPoints: 9, injuryStatus: null, product: { yearsExp: 4 } }]
+        : [
+            { id: 'qb', position: 'QB', projectedPoints: 20, injuryStatus: null, product: { yearsExp: 5 } },
+            { id: 'rb', position: 'RB', projectedPoints: 12, injuryStatus: null, product: { yearsExp: 5 } },
+            { id: 'te', name: 'Spare End', position: 'TE', projectedPoints: 1, injuryStatus: null, product: { yearsExp: 8 } },
+          ])
+
+    it('with no hole to fill, swaps a weak bench player for a clearly better free agent, at the minimum bid', async () => {
+      healthy()
+      m.state.settings = { af_managed_lineups: { r1: { since: 's', byUserId: 'commish', autopilot: ap } } }
+      m.state.waivers = { normalizedWaiverType: 'faab', faabBudget: 100, faabMinBid: 1, allowZeroFaabBid: false }
+      m.state.faabRemaining = 50
+      const r = await runAutopilotWaivers()
+      expect(r.claims).toBe(1)
+      expect(m.createClaim).toHaveBeenCalledWith('L', 'r1', expect.objectContaining({ addPlayerId: 'faTe', dropPlayerId: 'te', faabBid: 1, metadata: expect.objectContaining({ slot: 'Upgrade' }) }))
+      expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: AUTOPILOT_CLAIM_ACTION, metadata: expect.objectContaining({ slot: 'Upgrade', addPlayerId: 'faTe' }) }))
+    })
+
+    it('makes one a week: none when it already made one, or when the week cannot be read', async () => {
+      healthy()
+      m.state.settings = { af_managed_lineups: { r1: { since: 's', byUserId: 'commish', autopilot: ap } } }
+      m.prisma.leagueAuditLog.count.mockResolvedValueOnce(1)
+      expect(await runAutopilotWaivers()).toMatchObject({ claims: 0, skipped: { no_holes: 1 } })
+      m.prisma.leagueAuditLog.count.mockRejectedValueOnce(new Error('db'))
+      expect(await runAutopilotWaivers()).toMatchObject({ claims: 0, skipped: { no_holes: 1 } })
+      expect(m.createClaim).not.toHaveBeenCalled()
+    })
   })
 
   it('respects the league phase gate the claims route applies', async () => {

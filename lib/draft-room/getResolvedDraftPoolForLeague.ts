@@ -7,6 +7,8 @@ import { collegeByeWeekFor, loadCollegeByeIndex, type CollegeByeIndex } from './
 import { observedAdpSeason } from './observedAdpSeason'
 import { reconcileCurrentDraftSeeds } from './reconcileCurrentDraftSeeds'
 import { loadStoredDraftSeasonStats } from './storedDraftSeasonStats'
+import { buildNcaabDraftSeasonLine, buildNcaabLeagueScorer, loadNcaabSeasonBoxes, pickNcaabDraftBox, type NcaabSeasonBoxes } from './ncaabDraftSeason'
+import { loadNcaabEspnHeadshotsByRiId, resolveNcaabDraftHeadshot } from './ncaabDraftHeadshots'
 import { attachTeamDefenseStats, loadNflTeamDefenseSeason, type TeamDefenseByTeam } from './nflTeamDefenseSeason'
 /**
  * Single server source for normalized draft pool rows (same enrichment as GET /draft/pool).
@@ -2210,6 +2212,32 @@ async function buildResolvedDraftPoolForLeague(
     perfAfProj()
   }
 
+  /*
+   * College basketball: the season line, this league's points per game and the ESPN headshot, all
+   * joined by Rolling Insights id (ncaabDraftSeason.ts, ncaabDraftHeadshots.ts). A failed read
+   * leaves the columns as dashes and the photo as initials, never the draft broken.
+   */
+  let ncaabBoxes: NcaabSeasonBoxes | null = null
+  let ncaabEspnHeadshots: Map<string, string> | null = null
+  const ncaabScorer = sport === 'NCAAB' ? buildNcaabLeagueScorer(league) : null
+  if (sport === 'NCAAB' && poolRows.length > 0) {
+    const perfNcaab = perfStart('11d. NCAAB season lines + ESPN headshots')
+    ;[ncaabBoxes, ncaabEspnHeadshots] = await Promise.all([
+      loadNcaabSeasonBoxes().catch((err) => {
+        console.warn('[draft-pool] NCAAB season lines unavailable:', err instanceof Error ? err.message : String(err))
+        return null
+      }),
+      loadNcaabEspnHeadshotsByRiId(poolRows.flatMap((p) => {
+        const riId = rollingInsightsIdOfPoolRow(p)
+        return riId ? [riId] : []
+      })).catch((err) => {
+        console.warn('[draft-pool] NCAAB ESPN headshots unavailable:', err instanceof Error ? err.message : String(err))
+        return null
+      }),
+    ])
+    perfNcaab()
+  }
+
   const perfEnrichRows = perfStart('12. per-player enrichment')
   const enrichedList = await cooperativeMap(rawListFiltered, (row) => {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
@@ -2334,6 +2362,9 @@ async function buildResolvedDraftPoolForLeague(
       sprPoolRecordId,
     )
     const storedSeason = storedSeasonStats.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')
+    const ncaabRiId = sport === 'NCAAB' ? rollingInsightsIdOfPoolRow(poolMatch) : null
+    const ncaabBox = ncaabRiId ? pickNcaabDraftBox(ncaabBoxes?.byRiId.get(ncaabRiId)) : null
+    const ncaabLine = ncaabBox ? buildNcaabDraftSeasonLine(ncaabBox, position, ncaabScorer, ncaabBoxes?.season) : null
     const sprAug = sprLookup.augment
     const sprMeta = sprLookup.meta
 
@@ -2496,6 +2527,14 @@ async function buildResolvedDraftPoolForLeague(
      * `buildPlayerKey` (loadAdpBoard re-keys stored rows), so the lookup must be too. It used
      * `canonicalName`, which KEEPS suffixes and so cannot meet a suffix-insensitive key - and it
      * already missed every dotted stored key (`marvin harrison jr.|wr` vs `marvin harrison jr|wr`). */
+    // College basketball takes no photo from the name ladder above: ESPN's, tied to this player, or none.
+    const ncaabHeadshot = sport === 'NCAAB'
+      ? resolveNcaabDraftHeadshot({
+          byEspnId: ncaabRiId ? ncaabEspnHeadshots?.get(ncaabRiId) : null,
+          own: [(row as RawRow).imageUrl, (poolMatch as { image_url?: string | null } | undefined)?.image_url],
+          sameSchool: team && !isFreeAgentTeam(team) ? sportsPlayerImageByLooseTeamKey.get(loosePlayerTeamKey(name, position, team)) : null,
+        })
+      : null
     const aiAdpHit = aiAdpByPlayerKey.get(buildPlayerKey(name ?? '', position ?? ''))
     const averagedAdpHit =
       averagedAdpStrict.get(adpLookupKey(name ?? '', position ?? '', team ?? null)) ??
@@ -2646,7 +2685,7 @@ async function buildResolvedDraftPoolForLeague(
           age: (row as RawRow).age ?? (poolMatch as { age?: number | null }).age ?? null,
           adp: resolvedAdp,
           imageUrl:
-            backfilledHeadshot ??
+            sport === 'NCAAB' ? ncaabHeadshot : backfilledHeadshot ??
             sprHeadshotUrl ??
             toImageUrl((row as RawRow).imageUrl) ??
             toImageUrl((poolMatch as { image_url?: string | null }).image_url) ??
@@ -2668,7 +2707,7 @@ async function buildResolvedDraftPoolForLeague(
           injuryStatus: normalizedInjuryStatus,
           status: dbInjuryHit?.gameStatus ?? row.status ?? null,
           adp: resolvedAdp,
-          imageUrl: backfilledHeadshot ?? sprHeadshotUrl ?? toImageUrl((row as RawRow).imageUrl) ?? null,
+          imageUrl: sport === 'NCAAB' ? ncaabHeadshot : backfilledHeadshot ?? sprHeadshotUrl ?? toImageUrl((row as RawRow).imageUrl) ?? null,
           sourcePlayerId,
           sourceSleeperId,
         }
@@ -2696,10 +2735,13 @@ async function buildResolvedDraftPoolForLeague(
         sprSupplementFppg ??
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
-      nbaDraftStats: sport === 'NBA' ? (storedSeason?.nbaDraftStats ?? sprAug?.nbaDraftStats ?? null) : null,
-      statSeason: observedNfl?.season ?? storedSeason?.statSeason ?? null,
+      nbaDraftStats: sport === 'NBA' ? (storedSeason?.nbaDraftStats ?? sprAug?.nbaDraftStats ?? null) : (ncaabLine?.nbaDraftStats ?? null),
+      statSeason: observedNfl?.season ?? storedSeason?.statSeason ?? ncaabLine?.statSeason ?? null,
+      statSeasonIsPrevious: !observedNfl?.season && (storedSeason?.statSeasonIsPrevious === true || ncaabLine?.statSeasonIsPrevious === true),
       seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (storedSeason?.seasonStatLine ?? sprAug?.seasonStatLine ?? null) : null,
-      afProjectionPerGame: afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null,
+      afProjectionPerGame: sport === 'NCAAB'
+        ? (ncaabLine?.projectedPointsPerGame ?? null)
+        : (afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null),
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??
         analytics?.lifetimeValue ??

@@ -132,3 +132,17 @@
 .af-core .af-mt-media-fold > summary::after { content: '▸'; margin-left: auto; color: var(--muted); }
 .af-core .af-mt-media-fold[open] > summary::after { content: '▾'; }
 .af-core .af-mt-media-fold[open] { padding-bottom: 16px; }
+
+/*
+ * "Refresh lineup" under the team name is a standalone control, 32px tall on a touch phone. An
+ * invisible box lifts the hit area to 44px without moving the line (the `.af-info-tip` convention).
+ * Its own top-level @media at depth 0.
+ */
+@media (pointer: coarse) {
+  .af-core .af-lv-refresh-link { position: relative; }
+  .af-core .af-lv-refresh-link::after {
+    content: '';
+    position: absolute;
+    inset: -6px -4px;
+  }
+}

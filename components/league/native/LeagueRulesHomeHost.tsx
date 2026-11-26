@@ -154,9 +154,13 @@ export function LeagueRulesHomeHost({
     </ul>
   )
 
+  /* With the "What changed" card up, its own "League rules" button is the one: the standalone one under
+     it said the same thing a line lower (2026-11-24, the simplify pass). The wrapper stays, hidden, because
+     the dialog's portal finds the workspace through it. */
+  const changesCard = !view.showRulesPopup && view.pendingChanges.length > 0
   return (
     <>
-      {!view.showRulesPopup && view.pendingChanges.length > 0 ? (
+      {changesCard ? (
         <section className="nl-card" data-testid="league-rules-changes-card" aria-live="polite">
           <div className="nl-card-label">
             <span>{t('leagueRules.ui.whatChanged')}</span>
@@ -167,15 +171,15 @@ export function LeagueRulesHomeHost({
             <button type="button" className="nl-button nl-primary" onClick={dismissChanges} data-testid="league-rules-changes-dismiss">
               {t('leagueRules.ui.gotIt')}
             </button>
-            <button type="button" className="nl-button" onClick={() => setOpen(true)}>
+            <button type="button" className="nl-button" onClick={() => setOpen(true)} data-testid="league-rules-open">
               {t('leagueRules.ui.open')}
             </button>
           </div>
         </section>
       ) : null}
 
-      <div className="flex justify-end" ref={hostRef}>
-        <button
+      <div className="flex justify-end" ref={hostRef} hidden={changesCard}>
+        {changesCard ? null : <button
           type="button"
           className={
             variant === 'classic'
@@ -186,7 +190,7 @@ export function LeagueRulesHomeHost({
           data-testid="league-rules-open"
         >
           <BookOpen size={15} aria-hidden /> {t('leagueRules.ui.open')}
-        </button>
+        </button>}
       </div>
 
       {mounted && open

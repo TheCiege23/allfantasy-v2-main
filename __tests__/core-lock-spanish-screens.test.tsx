@@ -212,6 +212,10 @@ describe('Player Finder — GameDayTriage', () => {
     if (more) fireEvent.click(more)
     const out = text(container)
     expectSpanish(out, /\b(locks?|locked|kicked off|reported|Game day|starting in|lineups? read|Bye|Flagged means|bench him)\b/, 'triage')
+    // 2026-11-24: the method note under the list is one closed row, titled in Spanish too.
+    const foot = container.querySelector<HTMLDetailsElement>('details.af-pf-triage-foot')!
+    expect(foot.open).toBe(false)
+    expect(foot.querySelector('summary')?.textContent).toBe('Cómo funciona esta lista')
     for (const k of AHEAD) expect(out, k).toContain(coreUiCopy(lockState(k, NOW).label, 'es'))
     expect(out).toContain('Descanso · sem. 5')
   })

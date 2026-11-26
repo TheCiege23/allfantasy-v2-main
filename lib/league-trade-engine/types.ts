@@ -36,4 +36,10 @@ export type CreateLeagueTradeInput = {
   /** Expiry hours from now (default 48) */
   expiresInHours?: number
   metadata?: Record<string, unknown>
+  /**
+   * SERVER-ONLY: the offer is made by Chimmy for this team, which it runs (./chimmyActor.ts). Must be the
+   * proposing roster, and `proposedByUserId` must be the commissioner who handed it to Chimmy. Trade
+   * routes never set it.
+   */
+  chimmyForRosterId?: string | null
 }

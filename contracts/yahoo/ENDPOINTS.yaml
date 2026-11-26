@@ -1,0 +1,58 @@
+--- # ============================================================================
+# Yahoo Fantasy Sports API v2 — Contract (SKELETON, 2026-11-25)
+# Nothing here is captured yet. Every resource is `status: not_yet_captured` until
+# a redacted capture from the owner-only button (README) is committed to fixtures/.
+# The request forms are the ones lib/league-import/yahoo/YahooLeagueFetchService.ts
+# builds; they are NOT verified against a captured response.
+# ============================================================================
+
+meta:
+  vendor: Yahoo
+  base_url_source: lib/league-import/yahoo/YahooLeagueFetchService.ts YAHOO_API_BASE   # the only literal
+  format: "?format=json on every request"
+  contract_version: 0.0.1
+  docs_url: https://developer.yahoo.com/fantasysports/guide/
+  data_classification: league_data_about_people   # managers, team names — redact before committing
+
+auth:
+  mechanism: oauth2_bearer
+  credential_store: league_auths (platform yahoo) via lib/yahoo/yahooCredentialStore.ts
+  note: >
+    Every resource below needs the reading user's token. Captures are made only by the owner-only
+    admin capture, with the owner's own token. Never put a token in a URL, a fixture or a log.
+
+capture:
+  tool: app/api/admin/contract-capture (Admin → Data → Provider contract capture)
+  redaction: lib/admin/contractCapture/redactContractCapture.ts
+  synthetic_league_key: "{game}.l.999001"
+
+resources:
+  league_teams:
+    request: league/{league_key}/teams
+    status: not_yet_captured
+    used_by: [fetchYahooLeagueForImport, fetchYahooActivityForSync, fetchYahooWeeklyMatchupsForSync]
+    capture_purpose: find the team Yahoo marks is_owned_by_current_login for the capturing account
+    unverified: [is_owned_by_current_login spelling and type (1 vs "1")]
+
+  team_roster_week_stats:
+    request: team/{team_key}/roster;week={N}/players/stats;type=week;week={N}
+    status: not_yet_captured
+    derived_from: "the import's verified team/{key}/roster/players, plus Yahoo's documented roster;week= and stats;type=week;week= sub-resources"
+    wanted:
+      - each player's selected_position for week N (bench BN, IR slots)
+      - player_points.total for week N and whether it is present for bench players
+      - player_stats.stats[] for week N, and whether points are league-scored or Yahoo default
+    unverified: [everything — see GAPS.md Y-01]
+
+  league_scoreboard_week:
+    request: league/{league_key}/scoreboard;week={N}
+    status: not_yet_captured
+    used_by: [fetchYahooCategoryMatchupForWeek]
+    unverified: [team_points / team_projected_points for a finished week; status values]
+
+  pending_trades_for_team:
+    request: league/{league_key}/transactions;types=pending_trade;team_key={team_key}
+    status: not_yet_captured
+    used_by: [fetchYahooPendingTrades -> lib/provider-trades/scanPendingYahooTrades.ts]
+    privacy: "owner rule 2026-11-25 — keep and show only offers the signed-in user sent or received (GAPS.md Y-03)"
+    unverified: [status vocabulary (pending vs proposed), whether a proposer is named, trader/tradee team keys, trade_note]

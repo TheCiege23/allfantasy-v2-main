@@ -1,5 +1,6 @@
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { prisma } from '@/lib/prisma'
+import { declaredSleeperId } from './declaredSleeperId'
 
 /**
  * Which player-id vocabulary a league's rosters speak, and the translation that
@@ -113,12 +114,32 @@ const STRIPPED_ARRAY_KEYS: readonly string[] = [...ROSTER_KEYS, 'ir', 'devy', 'b
 export function stripForeignIds(playerData: unknown): Record<string, unknown> {
   const pd = (playerData ?? {}) as Record<string, unknown>
   const out: Record<string, unknown> = { ...pd }
-  for (const key of STRIPPED_ARRAY_KEYS) if (Array.isArray(pd[key])) out[key] = []
+  /*
+   * ⚠ EXCEPT AN ID THAT DECLARES ITSELF A SLEEPER ID (`sleeper:<id>`, see `declaredSleeperId.ts`).
+   * Only a pasted Yahoo league writes one, and it is kept UNWRAPPED — the bare Sleeper id — because
+   * the namespace is in the id, not inferred from the platform. Every other foreign id is still
+   * removed; a roster with no declared ids comes out exactly as before.
+   */
+  const keepDeclared = (arr: unknown[]) =>
+    arr.flatMap((x) => {
+      const sid = declaredSleeperId(x)
+      return sid ? [sid] : []
+    })
+  for (const key of STRIPPED_ARRAY_KEYS) if (Array.isArray(pd[key])) out[key] = keepDeclared(pd[key] as unknown[])
   for (const sectionsKey of ['lineup_sections', 'lineupSections']) {
     const sections = pd[sectionsKey]
     if (!sections || typeof sections !== 'object' || Array.isArray(sections)) continue
     out[sectionsKey] = Object.fromEntries(
-      Object.entries(sections as Record<string, unknown>).map(([k, v]) => [k, Array.isArray(v) ? [] : v]),
+      Object.entries(sections as Record<string, unknown>).map(([k, v]) => [
+        k,
+        Array.isArray(v)
+          ? v.flatMap((e) => {
+              const sid = declaredSleeperId(sectionEntryId(e))
+              if (!sid) return []
+              return [e && typeof e === 'object' ? { ...(e as Record<string, unknown>), id: sid } : sid]
+            })
+          : v,
+      ]),
     )
   }
   return out
@@ -272,11 +293,13 @@ export async function translateRostersToSleeperIds<T extends { playerData: unkno
   const idSpace = rosterIdSpaceOf(platform, sport)
   if (idSpace === 'other') {
     // Counted, never read: a foreign id surviving to a Sleeper-id lookup IS the collision.
+    // Only ids that declare themselves Sleeper ids survive (`stripForeignIds`).
+    const ids = collectRosterIds(rosters.map((r) => r.playerData))
     return {
       rosters: rosters.map((r) => ({ ...r, playerData: stripForeignIds(r.playerData) })),
       idSpace,
-      total: collectRosterIds(rosters.map((r) => r.playerData)).length,
-      translated: 0,
+      total: ids.length,
+      translated: ids.filter((id) => declaredSleeperId(id) !== null).length,
     }
   }
   if (idSpace !== 'espn' || rosters.length === 0) return { rosters: [...rosters], idSpace, total: 0, translated: 0 }

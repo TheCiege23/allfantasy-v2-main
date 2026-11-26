@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import '@/components/core-app/home/af-home-guide.css'
 
 /**
  * "Why it matters", closed until tapped (2026-11-24, the home's simplify pass).

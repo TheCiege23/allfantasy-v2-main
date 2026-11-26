@@ -19,7 +19,7 @@ export default async function AlertSettingsPage() {
       <div className="mx-auto max-w-lg px-4 py-8 sm:px-6">
         <h1 className="text-2xl font-bold text-white">Sports alerts</h1>
         <p className="mt-1 text-sm text-white/60">
-          Choose which real-time alerts you get in-app: injuries, performances, lineup changes.
+          Real-time alerts in your notification bell. Tap one to open the player or league.
         </p>
         <AlertSettingsClient />
         <p className="mt-6 text-xs text-white/40">

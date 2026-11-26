@@ -71,7 +71,8 @@ function defaultCommissionerSettings(sport: LeagueSport): C2CCommissionerSetting
     rookiePickTradeRules: 'allowed',
     collegePickTradeRules: 'allowed',
     collegeScoringUntilDeadline: true,
-    standingsModel: 'unified',
+    // Owner's decision, 2026-11-24: NFL C2C plays separate college and pro matchups by default.
+    standingsModel: sport === 'NFL' ? 'separate' : 'unified',
     mergedRookieCollegeDraft: false,
     nflCollegeExcludeKDST: true,
     proLineupSlots: isFootball ? NFL_C2C_PRO_LINEUP_DEFAULT : NBA_C2C_PRO_LINEUP_DEFAULT,
@@ -186,6 +187,8 @@ export async function getC2CConfig(leagueId: string): Promise<C2CLeagueConfigSha
     sportAdapterId,
     ...DEFAULT_CAPABILITIES,
     ...defaults,
+    // A league with no stored config predates the separate default and keeps scoring as it always has.
+    standingsModel: 'unified',
   }
 }
 
@@ -267,7 +270,7 @@ export async function upsertC2CConfig(
     rookiePickTradeRules: input.rookiePickTradeRules ?? 'allowed',
     collegePickTradeRules: input.collegePickTradeRules ?? 'allowed',
     collegeScoringUntilDeadline: input.collegeScoringUntilDeadline ?? true,
-    standingsModel: input.standingsModel ?? 'unified',
+    standingsModel: input.standingsModel ?? defaults.standingsModel,
     mergedRookieCollegeDraft: input.mergedRookieCollegeDraft ?? false,
     nflCollegeExcludeKDST: input.nflCollegeExcludeKDST ?? true,
     proLineupSlots: (input.proLineupSlots ?? defaults.proLineupSlots) as object,

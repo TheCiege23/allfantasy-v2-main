@@ -143,7 +143,7 @@ export function PreferencesSettingsSection({
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>{t("settings.preferences.title")}</h2>
-        <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>{t("settings.preferences.subtitle")}</p>
+        {/* No intro line (2026-11-25, the simplify pass): it listed the four labels right below it. */}
       </div>
 
       <div>
@@ -292,16 +292,29 @@ export function PreferencesSettingsSection({
         )}
       </div>
 
-      <ChimmyVoiceSettingsCard />
-
       {/*
-        Saves on change through its own endpoint, not through this form's submit: a preference
-        Chimmy uses on the next message should not wait for "Save preferences".
+        Chimmy's voice, Chimmy's preferences and AutoCoach behind one closed row (2026-11-25, the simplify
+        pass): about 800px open on a phone, above the Save button for the four settings above, which do
+        not include any of them. Each card inside still saves on its own.
       */}
-      <ChimmyPreferencesCard />
+      <details className="ns-pref-fold group" data-testid="settings-preferences-chimmy-fold">
+        <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold [&::-webkit-details-marker]:hidden" style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}>
+          {t("settings.preferences.chimmyFold")}
+          <span aria-hidden="true" className="text-xs transition-transform group-open:rotate-180" style={{ color: "var(--muted)" }}>▾</span>
+        </summary>
+        <div className="mt-3 space-y-5">
+          <ChimmyVoiceSettingsCard />
 
-      {/* Saves on change through /api/user/autocoach, like the Chimmy card above. */}
-      <AutoCoachSettingsCard />
+          {/*
+            Saves on change through its own endpoint, not through this form's submit: a preference
+            Chimmy uses on the next message should not wait for "Save preferences".
+          */}
+          <ChimmyPreferencesCard />
+
+          {/* Saves on change through /api/user/autocoach, like the Chimmy card above. */}
+          <AutoCoachSettingsCard />
+        </div>
+      </details>
 
       {/* Favorite / hide / order the universal My Team view's leagues. Saves on change. */}
       <LeagueListPreferencesCard />

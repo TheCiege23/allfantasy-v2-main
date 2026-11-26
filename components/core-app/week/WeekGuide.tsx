@@ -20,6 +20,7 @@ import {
 } from '@/lib/core-app/weekGuide'
 import { weekGuideMessages } from '@/lib/core-app/messages/weekGuide'
 import { WeekDateRange } from '@/components/core-app/WeekDateRange'
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import type { WeekNeed } from '@/lib/core-app/weekNeeds'
 // The card and button primitives (af3a-card, af3a-btn) live with the home dashboard's styles; load them
 // here rather than relying on another screen's import having put them on the page.
@@ -119,7 +120,10 @@ function Headline({
       <h1 id="af-wg-title" className="af-hg-title">
         {s.winning + s.losing + s.close > 0 ? t.headline(s.winning, s.losing, s.close) : t.noGamesYet}
       </h1>
-      <p className="af-hg-intro">{t.intro}</p>
+      {/*
+        No intro line (2026-11-24, the simplify pass): the headline is the week's result and the cards below
+        lead with the close games, so "close games first" was the page describing itself.
+      */}
       <ul className="af-hg-chips">
         {chips.map((c) => {
           const tone = c.tone === 'bad' ? 'warn' : c.tone === 'warn' ? 'info' : 'ok'
@@ -252,9 +256,7 @@ function CloseGames({
           {t.closeMore(games.length - shown.length)} →
         </Link>
       ) : null}
-      <p className="af-decision-why af-hg-why">
-        <b>{t.why}</b> {t.closeTeach}
-      </p>
+      <WhyFold label={t.why}>{t.closeTeach}</WhyFold>
     </section>
   )
 }
@@ -288,9 +290,7 @@ function Survival({ board, t }: { board: WeekBoard; t: Text }) {
           )
         })}
       </ul>
-      <p className="af-decision-why af-hg-why">
-        <b>{t.why}</b> {t.survivalTeach}
-      </p>
+      <WhyFold label={t.why}>{t.survivalTeach}</WhyFold>
     </section>
   )
 }
@@ -347,9 +347,7 @@ function Kickoffs({ calendar, t }: { calendar: WeeklyCalendar | null; t: Text })
           </ul>
         </>
       ) : null}
-      <p className="af-decision-why af-hg-why">
-        <b>{t.why}</b> {t.kickTeach}
-      </p>
+      <WhyFold label={t.why}>{t.kickTeach}</WhyFold>
     </section>
   )
 }
@@ -386,9 +384,7 @@ function AlsoNeeds({ needs, t }: { needs: readonly WeekNeed[]; t: Text }) {
           </li>
         ))}
       </ul>
-      <p className="af-decision-why af-hg-why">
-        <b>{t.why}</b> {t.needsTeach}
-      </p>
+      <WhyFold label={t.why}>{t.needsTeach}</WhyFold>
     </section>
   )
 }

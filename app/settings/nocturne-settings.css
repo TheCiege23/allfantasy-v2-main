@@ -1085,15 +1085,6 @@
   outline: 2px solid var(--ns-accent-bright);
   outline-offset: 3px;
 }
-.nocturne-settings .af-home-section-hidden-tag {
-  padding: 2px 7px;
-  border: 1px solid var(--ns-border);
-  border-radius: 999px;
-  font: 800 11px/1.4 var(--ns-sans);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ns-muted);
-}
 
 /*
  * Phone hub, grouped like iOS Settings (2026-11-24, the simplify pass): each group is ONE panel and its

@@ -15,6 +15,11 @@
  * WHO NEVER SEES IT: signed-out visitors; anyone who already answered (granted or denied); a
  * browser that cannot push and is not an iPhone tab that could after "Add to Home Screen"; a
  * server without push keys; and the sign-in, sign-up and onboarding screens themselves.
+ *
+ * MEASURED (2026-11-24): `push_ask_shown` / `push_ask_enabled` / `push_ask_dismissed` with
+ * `placement: 'signin_sheet'` and the `mode` it asked in (web, app, homeScreen) — the same events and
+ * key as Player Finder's PushAsk (`lib/push-notifications/trackPushAsk.ts`). Before this the sheet sent
+ * nothing, so the push funnel counted only Player Finder and read as if new users were never asked.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -33,6 +38,7 @@ import {
 import { useIosAppPush } from '@/lib/push-notifications/useIosAppPush'
 import { useWebPushSubscription } from '@/lib/push-notifications/useWebPushSubscription'
 import { usePublishSignInPushVisibility } from '@/lib/push-notifications/signInPushVisibility'
+import { trackPushAsk } from '@/lib/push-notifications/trackPushAsk'
 
 type Mode = 'web' | 'app' | 'homeScreen'
 
@@ -55,6 +61,8 @@ export function SignInPushSheet() {
   const [done, setDone] = useState(false)
   const [tapped, setTapped] = useState(false)
   const dialog = useRef<HTMLDivElement | null>(null)
+  /** The mode the sheet was SHOWN in, so its enabled/dismissed events carry the same one. */
+  const shownMode = useRef<Mode | null>(null)
   usePublishSignInPushVisibility(open)
   const web = useWebPushSubscription(vapidKey)
   const app = useIosAppPush({ registerOnMount: false })
@@ -104,8 +112,15 @@ export function SignInPushSheet() {
     const local = storage('local')
     const state = readSignInPushAskState(local?.getItem(SIGN_IN_PUSH_ASK_KEY) ?? null)
     local?.setItem(SIGN_IN_PUSH_ASK_KEY, JSON.stringify(recordSignInPushAsk(state, Date.now())))
+    shownMode.current = mode
+    if (mode) trackPushAsk('push_ask_shown', 'signin_sheet', { mode })
     setOpen(true)
-  }, [ready, open])
+  }, [ready, open, mode])
+
+  // Counted once, whichever door (web subscribe or the iOS app's answer) got there.
+  useEffect(() => {
+    if (done && shownMode.current) trackPushAsk('push_ask_enabled', 'signin_sheet', { mode: shownMode.current })
+  }, [done])
 
   // The iOS app answers asynchronously; close on the answer.
   useEffect(() => {
@@ -123,6 +138,8 @@ export function SignInPushSheet() {
   if (!open) return null
 
   const close = () => {
+    // "Not now", Escape, or "Got it" on the how-to / an error — anything that ends the ask unanswered.
+    if (!done && shownMode.current) trackPushAsk('push_ask_dismissed', 'signin_sheet', { mode: shownMode.current })
     setOpen(false)
     setEligible(false)
   }

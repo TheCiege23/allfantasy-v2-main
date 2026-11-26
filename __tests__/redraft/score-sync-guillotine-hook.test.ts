@@ -14,6 +14,7 @@ const m = vi.hoisted(() => ({
   standings: vi.fn(),
   pirateCapture: vi.fn(),
   chopZone: vi.fn(),
+  survivalAlert: vi.fn(),
   correction: vi.fn(),
 }))
 
@@ -67,6 +68,7 @@ vi.mock('@/lib/pirate/service', () => ({
 vi.mock('@/lib/pirate/lineupEvidence', () => ({ capturePirateLineupEvidence: m.pirateCapture }))
 vi.mock('@/lib/guillotine/nativeGuillotineWeek', () => ({ runNativeGuillotineWeek: m.guillotine }))
 vi.mock('@/lib/guillotine/chopAlerts', () => ({ sendChopZoneWarningsForSeason: m.chopZone }))
+vi.mock('@/lib/guillotine/survivalAlerts', () => ({ sendSurvivalOddsAlertsForSeason: m.survivalAlert }))
 vi.mock('@/lib/guillotine/statCorrectionHandler', () => ({ checkGuillotineStatCorrectionsForSeason: m.correction }))
 vi.mock('@/lib/zombie/zombieAutomation', () => ({ runZombieHousekeeping: m.housekeeping }))
 vi.mock('@/lib/playoff-runtime/playoffRoundScoring', () => ({ scoreActivePlayoffRound: m.playoff }))
@@ -123,6 +125,29 @@ describe('score-sync — native guillotine', () => {
     const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
     expect(m.chopZone.mock.calls.map((c) => c[0])).toEqual([{ seasonId: 's-broken', week: 4 }])
     expect(body.result.redraft).toMatchObject({ guillotineOutcomes: { waiting: 3, chop_zone_warning: 1 } })
+  })
+
+  it('checks the live danger alert for the same league and week, and counts one that went out', async () => {
+    m.guillotine.mockImplementation(async ({ seasonId }: { seasonId: string }) => {
+      if (seasonId === 's-broken') return { seasonId, outcome: 'waiting', week: 4, reason: 'week_in_progress' }
+      if (seasonId === 's-guillotine') return { seasonId, outcome: 'waiting', week: 3, reason: 'stat_correction_window' }
+      return { seasonId, outcome: 'waiting', week: 10, reason: 'week_in_progress' }
+    })
+    m.chopZone.mockResolvedValue({ outcome: 'too_early' })
+    m.survivalAlert.mockResolvedValue({ outcome: 'sent', sent: 1 })
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
+    expect(m.survivalAlert.mock.calls.map((c) => c[0])).toEqual([{ seasonId: 's-broken', week: 4 }])
+    expect(body.result.redraft).toMatchObject({ guillotineOutcomes: { waiting: 3, survival_alert: 1 } })
+  })
+
+  it('a danger alert that throws is counted, and the warning beside it still runs', async () => {
+    m.guillotine.mockResolvedValue({ outcome: 'waiting', week: 4, reason: 'week_in_progress' })
+    m.chopZone.mockResolvedValue({ outcome: 'sent', warned: 1 })
+    m.survivalAlert.mockRejectedValue(new Error('db blip'))
+    const res = await GET(new Request('http://localhost/api/redraft/score-sync'))
+    const body = (await res.json()) as { result: { redraft: Record<string, unknown> } }
+    expect(body.result.redraft).toMatchObject({ guillotineFailed: 0, guillotineOutcomes: { waiting: 3, chop_zone_warning: 3, survival_alert_failed: 3 } })
   })
 
   it('a warning that throws is counted and costs nothing else', async () => {

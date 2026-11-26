@@ -18,6 +18,8 @@
  *                                       commit; retry safe)
  *   DRAFT_PICK_OFFLINE_DRAFT     → 409  (an automatic pick in an offline draft,
  *                                       where the commissioner enters every pick)
+ *   DRAFT_PICK_AUTO_DRAFT        → 409  (a pick made by hand in an auto draft, where
+ *                                       every pick is made automatically)
  *
  * Stale-overall and race-retry are both 409 because the client recovery is
  * the same: refresh session snapshot and resubmit with the new
@@ -32,6 +34,7 @@ export const DRAFT_PICK_STALE_OVERALL = 'DRAFT_PICK_STALE_OVERALL' as const
 export const DRAFT_PICK_RACE_RETRY = 'DRAFT_PICK_RACE_RETRY' as const
 export const DRAFT_PICK_INVALID_PAYLOAD = 'DRAFT_PICK_INVALID_PAYLOAD' as const
 export const DRAFT_PICK_OFFLINE_DRAFT = 'DRAFT_PICK_OFFLINE_DRAFT' as const
+export const DRAFT_PICK_AUTO_DRAFT = 'DRAFT_PICK_AUTO_DRAFT' as const
 
 export type PickAuthorityCode =
   | typeof DRAFT_PICK_NOT_LIVE
@@ -41,6 +44,7 @@ export type PickAuthorityCode =
   | typeof DRAFT_PICK_RACE_RETRY
   | typeof DRAFT_PICK_INVALID_PAYLOAD
   | typeof DRAFT_PICK_OFFLINE_DRAFT
+  | typeof DRAFT_PICK_AUTO_DRAFT
 
 /**
  * HTTP status mapping for the route layer. Keep in lockstep with the
@@ -53,6 +57,7 @@ export function httpStatusForPickAuthorityCode(code: PickAuthorityCode): number 
     case DRAFT_PICK_STALE_OVERALL:
     case DRAFT_PICK_RACE_RETRY:
     case DRAFT_PICK_OFFLINE_DRAFT:
+    case DRAFT_PICK_AUTO_DRAFT:
       return 409
     case DRAFT_PICK_NOT_LIVE:
     case DRAFT_PICK_DUPLICATE_PLAYER:

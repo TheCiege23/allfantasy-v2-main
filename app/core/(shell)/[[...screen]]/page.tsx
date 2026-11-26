@@ -251,6 +251,7 @@ import { loadDailyStreak } from '@/lib/core-app/dailyStreakStore'
 import type { LaunchOfferView } from '@/lib/monetization/foundingMember'
 import { homeLaunchOfferFor } from '@/components/launch/homeLaunchOffer'
 import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
+import { HolidaySaleStrip } from '@/components/launch/HolidaySaleStrip'
 import CommissionerOverview from '@/components/core-app/screens/CommissionerOverview'
 import { getCommissionerOverview } from '@/lib/core-app/commissionerOverview'
 import { parseStandingsView } from '@/lib/core-app/standingsView'
@@ -1528,6 +1529,9 @@ export default async function AfCorePage({
     now,
   })
 
+  /* The sale banner: only for a viewer we KNOW has no plan — a failed plan read shows nothing. */
+  const homeShowsHolidaySale = access ? !access.hasPlan : false
+
   const commissionerCount = playedLeagues.filter((l) => Boolean(l.isCommissioner)).length
 
   /*
@@ -1746,6 +1750,7 @@ export default async function AfCorePage({
         syncAge,
         plan,
         homeLaunchOffer,
+        homeShowsHolidaySale,
         commissionerCount,
         now,
         errorResetKey,
@@ -2117,6 +2122,8 @@ type CoreScreenContext = {
   plan: { name: string; tokensLeft: number | null } | null
   /** The home's launch countdown — non-null only before launch for a viewer without a plan. */
   homeLaunchOffer: LaunchOfferView | null
+  /** Show the Black Friday banner: true only for a viewer known to hold no plan. */
+  homeShowsHolidaySale: boolean
   commissionerCount: number
   now: Date
   /** The URL key the error boundaries reset on — computed once, beside the screen's own. */
@@ -2224,6 +2231,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
     syncAge,
     plan,
     homeLaunchOffer,
+    homeShowsHolidaySale,
     commissionerCount,
     now,
     errorResetKey,
@@ -6133,6 +6141,8 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
               <>
                 {/* Pre-launch, no plan: "Everything's free until Oct 15" + countdown. Null otherwise. */}
                 {homeLaunchOffer ? <LaunchOfferStrip offer={homeLaunchOffer} surface="core" /> : null}
+                {/* Black Friday → Cyber Monday, viewers without a plan only (null outside the sale). */}
+                {homeShowsHolidaySale ? <HolidaySaleStrip surface="core" /> : null}
                 <ConnectLeagueCard userId={userId} leagueCount={playedLeagues.length} />
               </>
             }

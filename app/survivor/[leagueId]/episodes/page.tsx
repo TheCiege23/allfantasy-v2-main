@@ -35,6 +35,9 @@ export default function SurvivorEpisodesPage() {
   const scene = (episode: SurvivorEpisode, label: string) => episode.scenes.find(s => s.label === label)?.text
   const council = ctx.season?.activeCouncil
   const openCouncilWeek = council?.status === 'voting_open' ? council.week ?? ctx.currentWeek ?? null : null
+  // The status stays 'voting_open' until the host reads the votes; the deadline is what closes the voting.
+  const voteDeadline = Date.parse(String(council?.voteDeadlineAt ?? council?.votingDeadline ?? ''))
+  const votesClosed = Number.isFinite(voteDeadline) && voteDeadline <= Date.now()
 
   return (
     <div className="px-3 pb-28 pt-4 md:px-6 md:pb-10" data-testid="survivor-episodes-page">
@@ -42,7 +45,11 @@ export default function SurvivorEpisodesPage() {
         <p className="sv-eyebrow">Season timeline</p>
         <h1 className="sv-h mt-1 text-xl md:text-2xl">{ctx.leagueName}</h1>
         <p className="mt-2 text-[13px] text-white/55">
-          {episodes ? `${episodes.length} episode${episodes.length === 1 ? '' : 's'} so far` : 'Loading the season…'}
+          {episodes
+            ? episodes.length
+              ? `Recaps through week ${Math.max(...episodes.map((e) => e.week))}`
+              : 'No recaps yet'
+            : 'Loading the season…'}
         </p>
       </section>
 
@@ -61,7 +68,7 @@ export default function SurvivorEpisodesPage() {
             {revealed.map(row => (
               <li key={row.id} className="rounded-lg border border-white/10 bg-black/25 p-3 text-[13px] text-white/80">
                 <span className="font-semibold text-[#f6d3ae]">{row.author}</span>
-                <time className="ml-2 text-[11px] text-white/40" dateTime={row.createdAt}>{new Date(row.createdAt).toLocaleDateString(getAppIntlLocale())}</time>
+                <time className="ml-2 text-[11px] text-white/40" dateTime={row.createdAt}>{new Date(row.createdAt).toLocaleDateString(getAppIntlLocale(), { month: 'short', day: 'numeric' })}</time>
                 <p className="mt-1">“{row.text}”</p>
               </li>
             ))}
@@ -78,7 +85,7 @@ export default function SurvivorEpisodesPage() {
             challengeLabel={scene(episode, 'The scores') ? 'Scores' : 'Challenge'}
             challengeLine={scene(episode, 'The scores') ?? scene(episode, 'The challenge') ?? scene(episode, 'Challenge') ?? 'Scores are in.'}
             // ⚠ No Tribal scene is not "nobody went home": this week's vote may still be open.
-            tribalLine={islandEpisodeTribalLine(episode, { openCouncilWeek })}
+            tribalLine={islandEpisodeTribalLine(episode, { openCouncilWeek, votesClosed })}
             twistsLine={scene(episode, 'Twist')}
             recap={episode.scenes.filter(s => !['The scores', 'The challenge', 'Challenge', 'Tribal Council', 'Tribal', 'Twist'].includes(s.label)).map(s => `${s.label}: ${s.text}`).join('\n') || undefined}
           />

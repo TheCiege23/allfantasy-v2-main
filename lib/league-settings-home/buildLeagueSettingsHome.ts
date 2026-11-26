@@ -383,37 +383,26 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
     sections.push({
       id: 'guillotine',
       title: 'Guilly',
+      // One row for the one page (components/league-settings/home/GuillotineRulesPage.tsx). It was five rows opening
+      // three pages, two of them the same page; the page now holds all of it, grouped by question.
       rows: [
         {
-          id: 'first-chop',
-          label: 'First chop week',
-          value: g ? `Week ${g.firstChopWeek}${g.locked ? ' · locked' : ''}` : LOADING,
+          id: 'guilly-rules',
+          label: 'Guilly rules',
+          value: g
+            ? [
+                `First chop week ${g.firstChopWeek}`,
+                g.scheduleLines?.length ? g.scheduleLines[0]!.replace(/^From week \d+: /, '').replace(/\.$/, '') : 'One chop a week',
+                ENDGAME_LABELS[String(league.guillotineEndgame ?? 'last_team_standing')] ?? titleCase(String(league.guillotineEndgame)),
+              ].join(' · ')
+            : LOADING,
           pending: g == null,
-          ...(g?.locked ? {} : edit('guillotine-first-chop')),
-        },
-        {
-          id: 'chop-rules',
-          label: 'Chop rules',
-          value: g ? (g.scheduleLines?.length ? g.scheduleLines.slice(0, 2).join(' ') : 'One chop a week') : LOADING,
-          pending: g == null,
-          ...edit('guillotine-chop-rules'),
-        },
-        {
-          id: 'league-rules',
-          label: 'League rules',
-          value: 'Endgame · tiebreakers · release timing',
           ...edit('guillotine-rules'),
         },
         {
           id: 'chop-schedule',
-          label: 'Chop & waiver schedule',
+          label: 'Chop & waiver days',
           value: profile ? `Chop ${profile.chopLabel.replace(/^By /, 'by ')} · Waivers ${profile.waiverLabel}` : 'Weekly',
-        },
-        {
-          id: 'endgame',
-          label: 'Endgame',
-          value: ENDGAME_LABELS[String(league.guillotineEndgame ?? 'last_team_standing')] ?? titleCase(String(league.guillotineEndgame)),
-          ...edit('guillotine-rules'),
         },
       ],
     })

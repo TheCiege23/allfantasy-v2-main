@@ -113,11 +113,16 @@ export function GuillotineAIPanel({
   if (deterministicSummaryProp == null && isGuillotineLeague === false) return null
 
   return (
-    <section className="gl gl-card-accent rounded-2xl border p-4 sm:p-6">
-      <h2 className="gl-text mb-3 flex items-center gap-2 text-lg font-semibold">
-        <Sparkles className="gl-accent-text h-5 w-5" />
-        Guilly Chimmy
-      </h2>
+    // Closed until asked for (2026-11-24, the simplify pass): open, its five plan chips and button were
+    // ~400px of the hub every visit. The heading is the row you tap; "Storylines" opens it too.
+    <details className="gl gl-fold gl-card-accent rounded-2xl border p-4 sm:p-6" data-testid="guillotine-ai-panel">
+      <summary className="gl-fold-summary">
+        <h2 className="gl-text flex items-center gap-2 text-lg font-semibold">
+          <Sparkles className="gl-accent-text h-5 w-5" />
+          Guilly Chimmy
+        </h2>
+      </summary>
+      <div className="mt-3">
       <p className="gl-text2 mb-4 text-sm">
         Ask Chimmy for a plan to stay above the cut. Chimmy explains; the chop itself comes from the scores.
       </p>
@@ -170,6 +175,7 @@ export function GuillotineAIPanel({
           <p className="gl-text whitespace-pre-wrap text-sm">{result.explanation}</p>
         </div>
       )}
-    </section>
+      </div>
+    </details>
   )
 }

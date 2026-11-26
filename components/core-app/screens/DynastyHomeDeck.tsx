@@ -156,7 +156,8 @@ export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: stri
                 )}
               </h2>
             ) : null}
-            {off ? null : <p className="af-lh-dy-tagline">{m.tagline}</p>}
+            {/* The in-season tagline ("Rosters carry over. Every pick is an asset…") went 2026-11-24: the
+                cards under it say the same thing with the league's own numbers. */}
           </div>
         </div>
 

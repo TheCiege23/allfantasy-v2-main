@@ -191,13 +191,12 @@ export function HomeSectionsSettingsSection({
                     data-home-section={section.id}
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-bold" style={{ color: "var(--text)" }}>
-                          {title}
-                        </span>
-                        {!visible ? (
-                          <span className="af-home-section-hidden-tag">{t("settings.home.hiddenTag")}</span>
-                        ) : null}
+                      {/*
+                        No HIDDEN tag (2026-11-25, the simplify pass): the switch, the "Off" under it and the
+                        dimmed row already said it three ways.
+                      */}
+                      <span className="block text-sm font-bold" style={{ color: "var(--text)" }}>
+                        {title}
                       </span>
                       <span className="mt-1 block text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
                         {t(`settings.home.section.${section.id}.desc`)}

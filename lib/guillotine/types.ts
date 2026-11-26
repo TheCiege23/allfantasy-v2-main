@@ -133,3 +133,9 @@ export type GuillotineEventType =
   | 'stat_correction'
   /** The commissioner undid a chop (./chopUndo.ts): the team is back, its players restored. */
   | 'chop_undone'
+  /** A scheduled roster change ran (./rosterScheduleApply.ts): what changed, and the layout it left. */
+  | 'roster_change'
+  /** A chopped manager's parting message, or the commissioner taking one down (./lastWords.ts). */
+  | 'last_words'
+  /** A live danger alert went out (./survivalAlerts.ts): which teams, which kind; its presence stops a resend. */
+  | 'survival_odds_alert'

@@ -17,7 +17,7 @@ import { GUILLOTINE_LEAGUE_ID, GUILLOTINE_WEEK, installGuillotineHarnessFetch, t
 import '@/components/core-app/af-core.css'
 
 const TABS = [
-  { id: 'guillotine', label: 'Guilly' }, { id: 'native_home', label: 'League home' }, { id: 'war_room', label: 'War Room' },
+  { id: 'guillotine', label: 'Chop' }, { id: 'native_home', label: 'League home' }, { id: 'scores', label: 'Live scores' }, { id: 'war_room', label: 'War Room' },
   { id: 'roster', label: 'My team' }, { id: 'standings', label: 'Standings' },
 ]
 

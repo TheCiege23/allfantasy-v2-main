@@ -57,11 +57,11 @@ describe('Board header follows the vertical scroll', () => {
 })
 
 describe('No unexplained minus number', () => {
-  it('board tiles say "early" / "late" instead of a bare signed number', () => {
-    const cell = read('components/app/draft-room/DraftBoardCell.tsx')
-    expect(cell).toMatch(/`\$\{pick\.adpDelta\} late`/)
-    expect(cell).toMatch(/`\$\{Math\.abs\(pick\.adpDelta\)\} early`/)
-    expect(cell).not.toMatch(/`−\$\{Math\.abs\(pick\.adpDelta\)\}`/)
+  it('board tiles carry no ADP gap at all: not a signed number, not "early" / "late"', () => {
+    // First a bare "−5", then "5 early" (2026-11-16), then removed from the tile (owner, 2026-11-25).
+    const code = read('components/app/draft-room/DraftBoardCell.tsx').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    expect(code).not.toMatch(/pick\.adpDelta/)
+    expect(code).not.toMatch(/draft-board-cell-adp-delta/)
   })
 })
 

@@ -78,32 +78,39 @@ describe('buildSurvivalTable', () => {
 })
 
 describe('Matchup tab of a guillotine league', () => {
-  it('🛑 draws the week against the chop line, not a bye', async () => {
+  it('🛑 draws you against the whole league and the chop line, not a bye', async () => {
     const calls = stubFetch(summary())
     render(<NativeMatchupScreen league={league()} onSelectTab={() => {}} />)
-    expect(await screen.findByRole('heading', { name: 'Week 3 · The chop' })).toBeTruthy()
+    expect((await screen.findByTestId('gsb-headline')).textContent).toBe('Only 6.2 above the chop line')
     expect(calls.every((u) => u.includes('/guillotine/summary'))).toBe(true)
     expect(screen.queryByTestId('native-matchup-no-game')).toBeNull()
-    const rows = [...document.querySelectorAll('.nls-gl-row')]
-    expect(rows.map((r) => r.querySelector('strong')?.textContent)).toEqual(['Aces', 'Bears you', 'Cubs'])
-    expect(rows.map((r) => r.querySelector('.nls-gl-pts')?.textContent)).toEqual(['120.5', '86.2', '80.0'])
-    // The line sits above the first team it takes.
-    expect(screen.getByTestId('guillotine-chop-line').parentElement?.querySelector('strong')?.textContent).toBe('Cubs')
-    expect(screen.getByTestId('guillotine-my-margin').textContent).toBe('You are 6.2 above the chop line with 86.2.')
+    const rows = [...document.querySelectorAll('.gsb-row')]
+    // Chop zone on top, the league default (lib/guillotine/chopListOrder.ts).
+    expect(rows.map((r) => r.querySelector('strong')?.textContent)).toEqual(['Cubs', 'BearsYou', 'Aces'])
+    expect(rows.map((r) => r.querySelector('.gsb-pts')?.textContent)).toEqual(['80.0', '86.2', '120.5'])
+    expect(rows.map((r) => r.querySelector('.gsb-rank')?.textContent)).toEqual(['3', '2', '1'])
+    // The chop-zone marker sits above the first team it takes.
+    expect(screen.getByTestId('gsb-chop-line').parentElement?.querySelector('strong')?.textContent).toBe('Cubs')
+    // The race either side of you, and the graveyard.
+    expect(screen.getByTestId('gsb-rival-above').textContent).toContain('Aces')
+    expect(screen.getByTestId('gsb-rival-below').textContent).toContain('6.2 behind you')
+    expect(screen.getByTestId('gsb-graveyard').textContent).toContain('Ducks')
   })
   it('before any score the teams are listed with dashes, never 0.0', async () => {
     stubFetch(summary({ home: { scores: {}, chopped: [] } }))
     render(<NativeMatchupScreen league={league()} onSelectTab={() => {}} />)
     await screen.findByText('Aces')
-    expect([...document.querySelectorAll('.nls-gl-pts')].map((e) => e.textContent)).toEqual(['—', '—', '—'])
-    expect(screen.queryByTestId('guillotine-my-margin')).toBeNull()
+    expect([...document.querySelectorAll('.gsb-pts')].map((e) => e.textContent)).toEqual(['—', '—', '—'])
+    expect(screen.queryByTestId('gsb-strip')).toBeNull()
+    expect(screen.queryByTestId('gsb-chop-line')).toBeNull()
   })
-  it('the Guilly button opens the Guilly tab', async () => {
+  it('the button opens the lineup; there is no second button to a hub, because this board is the Chop page', async () => {
     stubFetch(summary())
     const goTo = vi.fn()
     render(<NativeMatchupScreen league={league()} onSelectTab={goTo} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Guilly' }))
-    expect(goTo).toHaveBeenCalledWith('guillotine')
+    fireEvent.click(await screen.findByRole('button', { name: 'Set my lineup' }))
+    expect(screen.queryByRole('button', { name: 'Guilly hub' })).toBeNull()
+    expect(goTo.mock.calls).toEqual([['roster']])
   })
   it('[control] a league that is not guillotine still asks for its head-to-head matchup', async () => {
     const calls = stubFetch({})

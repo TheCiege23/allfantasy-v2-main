@@ -165,6 +165,13 @@ function OfferColumn({
   )
 }
 
+/** "Oct 30" from the agent's "2026-10-30" run date (read as a calendar day, not a UTC instant), in the app's locale. */
+function ideaDate(day: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day)
+  if (!m) return day
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(getAppIntlLocale(), { month: 'short', day: 'numeric' })
+}
+
 const assetList = (assets: TradeAgentIdea['give']) => assets.map((a) => (a.position ? `${a.name} (${a.position})` : a.name)).join(', ')
 
 /**
@@ -194,7 +201,7 @@ function AgentIdeas({ state }: { state: NonNullable<TradesData['agentIdeas']> })
                 </span>{' '}
                 · {copy('your roster')} <span className="af-num">+{idea.viewerFitPct}%</span> · {copy('theirs')}{' '}
                 <span className="af-num">+{idea.partnerFitPct}%</span> · {copy('suggested')}{' '}
-                <time dateTime={idea.runDate}>{idea.runDate}</time>
+                <time dateTime={idea.runDate}>{ideaDate(idea.runDate)}</time>
               </p>
             </li>
           ))}
@@ -348,10 +355,12 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                 <div className="af-tr-leaguegrade" data-letter={letter} data-rd-tone={redraftGradeTone(letter) ?? undefined}>
                   <span className="af-tr-leaguegrade-letter af-num">{letter}</span>
                   <span className="af-tr-leaguegrade-line">
-                    {lg.leagueGradeShort(
-                      (i === 0 ? graded.getValue : graded.giveValue).toLocaleString(getAppIntlLocale()),
-                      (i === 0 ? graded.giveValue : graded.getValue).toLocaleString(getAppIntlLocale()),
-                    )}
+                    {headReasons.length > 0
+                      ? lg.leagueGradeOnly
+                      : lg.leagueGradeShort(
+                          (i === 0 ? graded.getValue : graded.giveValue).toLocaleString(getAppIntlLocale()),
+                          (i === 0 ? graded.giveValue : graded.getValue).toLocaleString(getAppIntlLocale()),
+                        )}
                   </span>
                 </div>
               ) : null}

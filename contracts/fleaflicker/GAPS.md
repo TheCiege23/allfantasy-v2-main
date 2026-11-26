@@ -53,6 +53,14 @@ history they are content to publish — ideally one they own. Until then the
 endpoints stay recorded-but-uncaptured, which is the honest state: we know they
 exist and what they take, and we have not looked inside.
 
+**Owner ruling, 2026-11-25 — the "whose" half, for pending trade offers.**
+AllFantasy may read pending offers but keeps and shows ONLY offers the
+signed-in user sent or received (recorded with the same words in
+`contracts/espn/GAPS.md` T-03 and `contracts/yahoo/GAPS.md`). That answers
+whose offers a runtime feature may hold. It does NOT reopen this gap's capture
+question: nothing was captured for Fleaflicker, `FetchTrades` stays uncaptured,
+and committing a league's activity log still needs the owner to name the league.
+
 ⚠ **AND `FetchTrades`'s `filter` PARAMETER IS UNDOCUMENTED.** The vendor names the
 parameter without enumerating its accepted values. Guessing one and probing is
 exactly the assumption this contract exists to prevent; it needs the same

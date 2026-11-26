@@ -910,6 +910,8 @@ export async function createIdea(viewer: CommunityViewer, input: CreateIdeaInput
       body: input.body,
       tags: details.sport ? [details.sport] : [],
       ideaDetails: details as Prisma.InputJsonObject,
+      // The staff build plan starts queued; the form or the cron sweep writes it.
+      ideaPlan: { create: {} },
     },
     select: { id: true },
   })
