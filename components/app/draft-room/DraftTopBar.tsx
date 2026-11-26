@@ -203,19 +203,27 @@ function withCount(template: string, count: number): string {
   return template.replace('{{count}}', String(count))
 }
 
+/**
+ * "90 Seconds Per Pick", never "2 Minutes": a clock is stated in the largest unit that divides it
+ * exactly. Rounding to the larger unit told a 54-team draft on a 90-second clock it had two minutes
+ * a pick (2026-11-25).
+ */
 export function formatTimerSummary(timerSeconds: number | null | undefined, t: (key: string) => string): string {
-  if (!timerSeconds || timerSeconds <= 0) return t('draftRoom.topBar.timer.untimed')
-  if (timerSeconds < 60) return withCount(t('draftRoom.topBar.timer.seconds'), timerSeconds)
-  if (timerSeconds < 3600) {
-    const minutes = Math.round(timerSeconds / 60)
-    return withCount(t(minutes === 1 ? 'draftRoom.topBar.timer.minuteOne' : 'draftRoom.topBar.timer.minutes'), minutes)
+  if (!timerSeconds || !Number.isFinite(timerSeconds) || timerSeconds <= 0) return t('draftRoom.topBar.timer.untimed')
+  const seconds = Math.round(timerSeconds)
+  if (seconds % 86400 === 0) {
+    const days = seconds / 86400
+    return withCount(t(days === 1 ? 'draftRoom.topBar.timer.dayOne' : 'draftRoom.topBar.timer.days'), days)
   }
-  if (timerSeconds < 86400) {
-    const hours = Math.round(timerSeconds / 3600)
+  if (seconds % 3600 === 0) {
+    const hours = seconds / 3600
     return withCount(t(hours === 1 ? 'draftRoom.topBar.timer.hourOne' : 'draftRoom.topBar.timer.hours'), hours)
   }
-  const days = Math.round(timerSeconds / 86400)
-  return withCount(t(days === 1 ? 'draftRoom.topBar.timer.dayOne' : 'draftRoom.topBar.timer.days'), days)
+  if (seconds % 60 === 0) {
+    const minutes = seconds / 60
+    return withCount(t(minutes === 1 ? 'draftRoom.topBar.timer.minuteOne' : 'draftRoom.topBar.timer.minutes'), minutes)
+  }
+  return withCount(t('draftRoom.topBar.timer.seconds'), seconds)
 }
 
 function formatPoolReadinessLabel(

@@ -17,6 +17,8 @@ export const draftRoomHeaderMessages = defineMessages({
     onTheClock: 'On the clock',
     // Auto draft: every pick is made for the manager, so the room shows progress, not a pick clock.
     autoDrafting: 'Auto-drafting',
+    // The board's current tile in an auto draft: the server is picking, nobody is on a clock.
+    picking: 'Picking',
     autoDraftProgress: (pick: number, total: number): string => `Pick ${pick} of ${total}`,
     autoDraftTitle: 'Every pick is made automatically, so there is no pick clock.',
     autoPick: 'Auto pick',
@@ -54,6 +56,7 @@ export const draftRoomHeaderMessages = defineMessages({
     soundHint: 'Pitidos en los últimos 10 segundos de cada selección',
     onTheClock: 'En el reloj',
     autoDrafting: 'Draft automático',
+    picking: 'Eligiendo',
     autoDraftProgress: (pick: number, total: number): string => `Selección ${pick} de ${total}`,
     autoDraftTitle: 'Todas las selecciones se hacen automáticamente, así que no hay reloj.',
     autoPick: 'Selección automática',

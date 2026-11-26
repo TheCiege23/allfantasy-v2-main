@@ -117,7 +117,9 @@ describe('scheduledDraftAutoStarts', () => {
   })
 
   it('is false where no starter runs: a redraft sport outside the list, an imported league, no league', () => {
-    expect(scheduledDraftAutoStarts(true, { ...native, sport: 'NCAAB', leagueType: 'redraft', isDynasty: false })).toBe(false)
+    expect(scheduledDraftAutoStarts(true, { ...native, sport: 'CRICKET', leagueType: 'redraft', isDynasty: false })).toBe(false)
+    // College basketball redraft starts on the server since 2026-11-25, Autostart on or off.
+    expect(scheduledDraftAutoStarts(false, { ...native, sport: 'NCAAB', leagueType: 'redraft', isDynasty: false })).toBe(true)
     expect(scheduledDraftAutoStarts(true, { ...native, platform: 'sleeper', sport: 'NFL', leagueType: 'dynasty', isDynasty: true })).toBe(false)
     expect(scheduledDraftAutoStarts(true, null)).toBe(false)
   })

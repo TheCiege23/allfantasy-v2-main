@@ -71,6 +71,7 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
   'collegeProTeamMap', // lib/league/collegePro/headToHead.ts — Sleeper roster id -> Fantrax team id, confirmed by the commissioner
   'collegeProPair', // lib/league/collegePro/leaguePair.ts — this league's other half, so every member sees one league
   'collegeProDraftChecklist', // lib/league/collegePro/draftChecklist.ts — the commissioner's ticked offseason steps, per draft year
+  'collegeConferenceScope', // lib/college/conferenceScope.ts — which conferences a college league drafts from (commissioner)
 
   // ── Notifications, feed and automation preferences ────────────────────────
   'leagueNotificationPrefs', // NotificationsSettingsPanel settingsMerge
