@@ -130,6 +130,11 @@ export async function guillotineChopPendingForWaivers(
     if (!resolved.ok) return { hold: false }
 
     const advanced = readAdvanced(league.settings)
+    // The field going into the pending chop, only when a "when N teams remain" rule could change its count: such a
+    // rule can mean no chop at all, and waivers must not be held for a chop that is not coming.
+    const aliveBefore = advanced.remaining?.length
+      ? (await prisma.roster.count({ where: { leagueId } })) - (await prisma.guillotineRosterState.count({ where: { leagueId, choppedAt: { not: null } } }))
+      : undefined
     const verdict = chopPendingVerdict({
       fantasyWeek: resolved.fantasyWeek,
       currentWeekComplete: resolved.sportWeekComplete,
@@ -137,7 +142,7 @@ export async function guillotineChopPendingForWaivers(
       currentScoringPeriod: gSeason?.currentScoringPeriod ?? null,
       eliminationStartWeek: config.eliminationStartWeek,
       eliminationEndWeek: config.eliminationEndWeek,
-      chopsInWeek: (week) => scheduledChops(advanced, week, config.teamsPerChop),
+      chopsInWeek: (week) => scheduledChops(advanced, week, config.teamsPerChop, aliveBefore),
       periodWeeks: readPeriodWeeks(league.settings),
     })
     if (verdict.hold) return { hold: true, week: verdict.week, message: CHOP_PENDING_WAIVER_MESSAGE(verdict.week) }

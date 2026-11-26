@@ -23,7 +23,19 @@ export const SUPPORT_MESSAGES_PER_DAY = 40
 
 export type SupportFrom = 'member' | 'staff'
 export type SupportEvent = 'opened' | 'closed' | 'reopened'
-export type SupportMeta = { from: SupportFrom; event?: SupportEvent; topic?: SupportTopic; pagePath?: string }
+/**
+ * Where a member's message came from. `discord`: posted in the AllFantasy server's support channel and
+ * read in by lib/support/discordSupport.ts. The ids let a staff reply go back to that person there.
+ */
+export type SupportDiscordRef = { userId: string; username: string; messageId: string; channelId: string }
+export type SupportMeta = {
+  from: SupportFrom
+  event?: SupportEvent
+  topic?: SupportTopic
+  pagePath?: string
+  via?: 'discord'
+  discord?: SupportDiscordRef
+}
 
 export type SupportStatus = 'needs_reply' | 'answered' | 'closed'
 
@@ -56,7 +68,18 @@ export function readSupportMeta(metadata: unknown): SupportMeta | null {
     ...(r.event === 'opened' || r.event === 'closed' || r.event === 'reopened' ? { event: r.event } : {}),
     ...(isSupportTopic(r.topic) ? { topic: r.topic } : {}),
     ...(typeof r.pagePath === 'string' ? { pagePath: r.pagePath } : {}),
+    ...(r.via === 'discord' ? { via: 'discord' as const } : {}),
+    ...(readDiscordRef(r.discord) ? { discord: readDiscordRef(r.discord)! } : {}),
   }
+}
+
+function readDiscordRef(v: unknown): SupportDiscordRef | null {
+  if (!v || typeof v !== 'object') return null
+  const r = v as Record<string, unknown>
+  const ok = (x: unknown): x is string => typeof x === 'string' && x.length > 0
+  return ok(r.userId) && ok(r.username) && ok(r.messageId) && ok(r.channelId)
+    ? { userId: r.userId, username: r.username, messageId: r.messageId, channelId: r.channelId }
+    : null
 }
 
 /**

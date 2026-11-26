@@ -82,8 +82,8 @@ describe('the period model (pure)', () => {
   it('reads two weeks only from an explicit 2; anything else is the old one-week league', () => {
     expect(readPeriodWeeks({ guillotine_period_weeks: 2 })).toBe(2)
     for (const s of [{}, null, undefined, { guillotine_period_weeks: 3 }, { guillotine_period_weeks: '2' }]) expect(readPeriodWeeks(s)).toBe(1)
-    expect(supportsTwoWeekPeriods('MLB')).toBe(true)
-    for (const sport of ['NFL', 'NBA', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER']) expect(supportsTwoWeekPeriods(sport)).toBe(false)
+    // Every sport since the owner's list of 2026-11-25 ("two-week chops for every sport").
+    for (const sport of ['MLB', 'NFL', 'NBA', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER']) expect(supportsTwoWeekPeriods(sport)).toBe(true)
   })
 
   it('pairs weeks from the first chop week and keys each period by its last week', () => {
@@ -161,12 +161,12 @@ describe('the League rules page and creation refuse what the engine cannot run',
   const mlb = { ...create, sport: 'MLB', scoringPreset: 'mlb_points' }
   const nfl = { ...create, sport: 'NFL', scoringPreset: 'fb_ppr' }
   const refusedOnPeriod = (r: ReturnType<typeof validateCreatePayload>) => !r.ok && JSON.stringify(r).includes('conceptSetup.guillotinePeriodWeeks')
-  it('creation takes two-week periods for an MLB Guilly league only', () => {
+  it('creation takes two-week periods for a Guilly league in any sport, and only a Guilly league', () => {
     // Controls: both bodies are valid without the setting, so a refusal below is the setting's.
     expect(validateCreatePayload(mlb).ok).toBe(true)
     expect(validateCreatePayload(nfl).ok).toBe(true)
     expect(validateCreatePayload({ ...mlb, conceptSetup: { guillotinePeriodWeeks: 2 } }).ok).toBe(true)
-    expect(refusedOnPeriod(validateCreatePayload({ ...nfl, conceptSetup: { guillotinePeriodWeeks: 2 } }))).toBe(true)
+    expect(validateCreatePayload({ ...nfl, conceptSetup: { guillotinePeriodWeeks: 2 } }).ok).toBe(true)
     expect(refusedOnPeriod(validateCreatePayload({ ...mlb, concept: 'redraft', conceptSetup: { guillotinePeriodWeeks: 2 } }))).toBe(true)
     expect(refusedOnPeriod(validateCreatePayload({ ...mlb, conceptSetup: { guillotinePeriodWeeks: 3 } }))).toBe(true)
   })
@@ -280,5 +280,28 @@ describe('runNativeGuillotineWeek with two-week periods', () => {
     expect(m.recordBaseline).toHaveBeenCalledTimes(1)
     // A one-week baseline is exactly what it was: no per-week block.
     expect(m.recordBaseline.mock.calls[0]![0].teams[0]).not.toHaveProperty('weekPlayerPoints')
+  })
+})
+
+describe('the draft-slot tiebreak in a two-week league (owner, 2026-11-25)', () => {
+  it('applies to the first chop: week 2 when the league starts in week 1; week 1 for a one-week league, as before', async () => {
+    const { draftSlotTiebreakLastWeek } = await import('@/lib/guillotine/eliminationPeriods')
+    expect(draftSlotTiebreakLastWeek(1, 2)).toBe(2)
+    expect(draftSlotTiebreakLastWeek(1, 1)).toBe(1)
+    // A league that starts later has season points to tell teams apart: unchanged.
+    expect(draftSlotTiebreakLastWeek(3, 2)).toBe(1)
+  })
+
+  it('so a tie at the first two-week chop goes to the later draft slot', async () => {
+    const { resolveTiebreak } = await import('@/lib/guillotine/GuillotineTiebreakResolver')
+    const rows = [
+      { rosterId: 'early', periodPoints: 100, seasonPointsCumul: 100 },
+      { rosterId: 'late', periodPoints: 100, seasonPointsCumul: 100 },
+      { rosterId: 'safe', periodPoints: 150, seasonPointsCumul: 150 },
+    ]
+    const args = { candidates: rows, tiebreakerOrder: ['draft_slot', 'random'] as never, teamsPerChop: 1, weekOrPeriod: 2, draftSlotByRoster: new Map([['early', 1], ['late', 8], ['safe', 4]]), tiebreakSeed: 'L:2026' }
+    expect(resolveTiebreak({ ...args, draftSlotLastWeek: 2 })).toMatchObject({ choppedRosterIds: ['late'], stepUsed: 'draft_slot' })
+    // [control] without it the step is skipped, as it was for every MLB two-week league.
+    expect(resolveTiebreak(args).stepUsed).not.toBe('draft_slot')
   })
 })

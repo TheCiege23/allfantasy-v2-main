@@ -58,7 +58,7 @@ export default async function SupportInboxPage(props: { searchParams?: Promise<{
           <div>
             <Link href="/admin" className="text-xs text-cyan-300/80">← Admin</Link>
             <h1 className="mt-1 text-2xl font-black">Support inbox</h1>
-            <p className="text-sm text-white/60">Messages members send from /help. Your reply reaches them in the app and by email.</p>
+            <p className="text-sm text-white/60">Messages members send from /help or post in the Discord support channel. Your reply reaches them where they wrote.</p>
           </div>
           <nav className="flex gap-2 text-sm" aria-label="Filter">
             {FILTERS.map((f) => (
@@ -84,6 +84,7 @@ export default async function SupportInboxPage(props: { searchParams?: Promise<{
                       className={`block px-4 py-3 ${open?.id === t.id ? "bg-cyan-400/10" : "hover:bg-white/5"}`}>
                       <div className="flex items-center justify-between gap-2 text-xs text-white/60">
                         <span>{t.member?.name ?? "A member"}</span>
+                        {t.via === "discord" ? <span className="rounded bg-indigo-500/20 px-1.5 text-[11px] font-semibold text-indigo-200">Discord</span> : null}
                         <span>{when(t.lastMessageAt)}</span>
                       </div>
                       <div className="mt-1 truncate text-sm font-semibold">{t.title}</div>
@@ -108,6 +109,7 @@ export default async function SupportInboxPage(props: { searchParams?: Promise<{
                   <dd>{open.member?.name ?? "A member"}{open.member?.email ? ` · ${open.member.email}` : ""}</dd>
                   {open.topic ? (<><dt>About</dt><dd>{SUPPORT_TOPIC_LABELS.en[open.topic]}</dd></>) : null}
                   {open.pagePath ? (<><dt>Came from</dt><dd className="break-all">{open.pagePath}</dd></>) : null}
+                  {open.via === "discord" ? (<><dt>Came from</dt><dd>Discord support channel. Your reply is posted there and mentions them.</dd></>) : null}
                   <dt>Status</dt>
                   <dd>{SUPPORT_STATUS_LABELS.en[open.status]}</dd>
                 </dl>

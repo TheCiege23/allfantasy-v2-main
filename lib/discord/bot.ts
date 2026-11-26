@@ -274,6 +274,35 @@ export async function postMessage(
   return data.id
 }
 
+/**
+ * A reply to one message that pings exactly one person: `message_reference` threads it under their
+ * message, and `allowed_mentions` lets ONLY that user's @mention notify (never @everyone or a role,
+ * whatever the text says). If their message was deleted, Discord posts it as a plain message instead.
+ */
+export async function postReplyMentioning(
+  channelId: string,
+  content: string,
+  opts: { replyToMessageId: string; mentionUserId: string },
+): Promise<string> {
+  const res = await sendOnceWithRetry(`${DISCORD_BASE}/channels/${channelId}/messages`, {
+    method: 'POST',
+    headers: botHeaders(),
+    body: JSON.stringify({
+      content,
+      message_reference: { message_id: opts.replyToMessageId, fail_if_not_exists: false },
+      allowed_mentions: { parse: [], users: [opts.mentionUserId], replied_user: true },
+    }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!res.ok) {
+    const t = await res.text().catch(() => '')
+    throw new DiscordApiError('postReplyMentioning', res.status, t)
+  }
+  const data = (await res.json()) as { id?: string }
+  if (typeof data.id !== 'string' || !data.id) throw new DiscordApiError('postReplyMentioning', 502, 'Missing message ID')
+  return data.id
+}
+
 export async function postLeagueChatEmbed(
   channelId: string,
   opts: {
@@ -337,8 +366,11 @@ export async function createWebhook(
 export type DiscordApiMessage = {
   id: string
   content: string
-  author?: { id: string; username?: string; global_name?: string | null; avatar?: string | null }
+  author?: { id: string; username?: string; global_name?: string | null; avatar?: string | null; bot?: boolean }
   embeds?: unknown[]
+  attachments?: Array<{ url?: string; filename?: string }>
+  /** 0 default, 19 reply; anything else is a system message (join, pin, boost). */
+  type?: number
 }
 
 export async function fetchChannelMessages(

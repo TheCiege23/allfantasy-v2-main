@@ -7,6 +7,8 @@ import { OWNER_EMAIL } from '@/lib/notifications/notifyOwnerOfNewSignup'
 import { prisma } from '@/lib/prisma'
 import { consumeDailyLimit } from '@/lib/rate-limit-daily'
 import { sendNotificationEmail } from '@/lib/resend-client'
+import { postReplyMentioning } from '@/lib/discord/bot'
+import { supportReplyText } from './discordSupportCore'
 import {
   SUPPORT_MESSAGES_PER_DAY,
   SUPPORT_STAFF_NAME,
@@ -16,6 +18,7 @@ import {
   readSupportMeta,
   supportStatus,
   supportThreadTitle,
+  type SupportDiscordRef,
   type SupportEvent,
   type SupportFrom,
   type SupportMeta,
@@ -45,6 +48,8 @@ export type SupportThreadView = {
   createdAt: string
   lastMessageAt: string
   pagePath?: string
+  /** Opened in the AllFantasy Discord server's support channel; replies go back there too. */
+  via?: 'discord'
   member?: { userId: string; name: string; email: string | null }
   messages?: SupportMessageView[]
 }
@@ -71,6 +76,8 @@ async function withinDailyLimit(kind: 'thread' | 'message', userId: string): Pro
 function view(thread: ThreadRow, messages: MessageRow[] | null, member?: SupportThreadView['member']): SupportThreadView {
   const metas = (messages ?? []).map((m) => readSupportMeta(m.metadata))
   const opened = metas.find((m) => m?.event === 'opened') ?? null
+  // Someone who wrote in Discord without a linked AllFantasy account has no member row; name them as Discord does.
+  if (!member && opened?.discord) member = { userId: '', name: `${opened.discord.username} (Discord)`, email: null }
   return {
     id: thread.id,
     title: thread.title ?? 'Support',
@@ -79,6 +86,7 @@ function view(thread: ThreadRow, messages: MessageRow[] | null, member?: Support
     createdAt: thread.createdAt.toISOString(),
     lastMessageAt: thread.lastMessageAt.toISOString(),
     ...(opened?.pagePath ? { pagePath: opened.pagePath } : {}),
+    ...(opened?.via === 'discord' ? { via: 'discord' as const } : {}),
     ...(member ? { member } : {}),
     ...(messages
       ? {
@@ -209,6 +217,7 @@ export async function staffReply(input: { adminUserId: string | null; threadId: 
   if (!thread) return { ok: false, error: 'not_found' }
   const messageId = await write(thread.id, input.adminUserId, input.text, { from: 'staff' }, input.now ?? new Date())
   if (thread.createdByUserId) void alertMember({ userId: thread.createdByUserId, threadId: thread.id, messageId, text: input.text })
+  void relayStaffReplyToDiscord(thread.id, input.text)
   return { ok: true }
 }
 
@@ -233,11 +242,19 @@ async function adminUserIds(): Promise<string[]> {
   return rows.map((r) => r.id)
 }
 
-async function alertStaff(input: { threadId: string; userId: string; topic: SupportTopic | null; text: string; isNew: boolean }): Promise<void> {
+async function alertStaff(input: {
+  threadId: string
+  userId: string | null
+  topic: SupportTopic | null
+  text: string
+  isNew: boolean
+  /** Overrides the member's name: a Discord person with no linked account is named as Discord shows them. */
+  who?: string
+}): Promise<void> {
   try {
     const member = await memberOf(input.userId)
     const href = `/admin/support?thread=${encodeURIComponent(input.threadId)}`
-    const who = member?.name ?? 'A member'
+    const who = input.who ?? member?.name ?? 'A member'
     const subject = input.isNew
       ? `Support: ${input.topic ? SUPPORT_TOPIC_LABELS.en[input.topic] : 'new message'} from ${who}`
       : `Support: ${who} replied`
@@ -283,5 +300,85 @@ async function alertMember(input: { userId: string; threadId: string; messageId:
     })
   } catch (e) {
     console.error('[support] member alert failed', { threadId: input.threadId, error: e instanceof Error ? e.message : String(e) })
+  }
+}
+
+/* ── Discord (lib/support/discordSupport.ts reads the channel; these write and reply) ─────────────── */
+
+/**
+ * One member message from the Discord support channel. A person's messages go into their open Discord
+ * conversation, or open a new one when they have none (or it was closed). A linked AllFantasy account
+ * owns the conversation, so it also shows in their /help; otherwise it belongs to no account and is
+ * named by their Discord name. The usual staff alerts fire (owner email, admin bell and phone).
+ */
+export async function recordDiscordSupportMessage(input: {
+  discord: SupportDiscordRef
+  displayName: string
+  linkedUserId: string | null
+  text: string
+  now?: Date
+}): Promise<{ ok: true; threadId: string; opened: boolean } | { ok: false; error: 'rate_limited' | 'duplicate' }> {
+  const now = input.now ?? new Date()
+  const already = await prisma.platformChatMessage.findFirst({
+    where: { metadata: { path: ['support', 'discord', 'messageId'], equals: input.discord.messageId } },
+    select: { id: true },
+  })
+  if (already) return { ok: false, error: 'duplicate' }
+
+  const limiterKey = `discord:${input.discord.userId}`
+  const existing = await openDiscordThreadOf(input.discord.userId)
+  if (existing) {
+    if (!(await withinDailyLimit('message', limiterKey))) return { ok: false, error: 'rate_limited' }
+    await write(existing, input.linkedUserId, input.text, { from: 'member', via: 'discord', discord: input.discord }, now)
+    void alertStaff({ threadId: existing, userId: input.linkedUserId, topic: null, text: input.text, isNew: false, who: `${input.displayName} (Discord)` })
+    return { ok: true, threadId: existing, opened: false }
+  }
+
+  if (!(await withinDailyLimit('thread', limiterKey))) return { ok: false, error: 'rate_limited' }
+  const thread = await prisma.platformChatThread.create({
+    data: {
+      threadType: SUPPORT_THREAD_TYPE,
+      productType: 'shared',
+      title: supportThreadTitle('other', input.text),
+      createdByUserId: input.linkedUserId,
+      lastMessageAt: now,
+    },
+    select: { id: true },
+  })
+  await write(thread.id, input.linkedUserId, input.text, { from: 'member', event: 'opened', topic: 'other', via: 'discord', discord: input.discord }, now)
+  void alertStaff({ threadId: thread.id, userId: input.linkedUserId, topic: 'other', text: input.text, isNew: true, who: `${input.displayName} (Discord)` })
+  return { ok: true, threadId: thread.id, opened: true }
+}
+
+/** The person's newest Discord conversation, if it is not closed. */
+async function openDiscordThreadOf(discordUserId: string): Promise<string | null> {
+  const last = await prisma.platformChatMessage.findFirst({
+    where: { metadata: { path: ['support', 'discord', 'userId'], equals: discordUserId } },
+    orderBy: { createdAt: 'desc' },
+    select: { threadId: true },
+  })
+  if (!last?.threadId) return null
+  const messages = await messagesOf(last.threadId)
+  return supportStatus(messages) === 'closed' ? null : last.threadId
+}
+
+/**
+ * A staff reply to a conversation that came from Discord, posted back in the channel as a reply to the
+ * person's latest message there. Best-effort like every alert: the reply is saved either way, and a
+ * failure is logged without the bot token (DiscordApiError never carries it).
+ */
+async function relayStaffReplyToDiscord(threadId: string, text: string): Promise<void> {
+  try {
+    const latest = [...(await messagesOf(threadId))]
+      .reverse()
+      .map((m) => readSupportMeta(m.metadata))
+      .find((meta) => meta?.from === 'member' && meta.discord)?.discord
+    if (!latest) return
+    await postReplyMentioning(latest.channelId, supportReplyText(latest.userId, text), {
+      replyToMessageId: latest.messageId,
+      mentionUserId: latest.userId,
+    })
+  } catch (e) {
+    console.error('[support] Discord reply failed', { threadId, error: e instanceof Error ? e.message : String(e) })
   }
 }

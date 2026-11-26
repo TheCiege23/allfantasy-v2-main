@@ -560,7 +560,6 @@ export function CreateLeagueWizard(props: WizardProps) {
     sendProductAnalyticsBeacon(CREATE_LEAGUE.STEP_COMPLETE, { flow: 'g30', step: activeStep })
     goToStep(nextStep)
   }
-  const stepsLeft = STEP_ORDER.length - 1 - activeIndex
   const stepsWithIssues = new Set(props.completionIssues.map((issue) => stepForIssue(issue.code)))
 
   return (
@@ -608,9 +607,7 @@ export function CreateLeagueWizard(props: WizardProps) {
                 <h1 className="text-[1.75rem] font-black leading-tight tracking-tight sm:text-4xl">
                   {t('createLeague.g30.title')}
                 </h1>
-                <p className="mt-1.5 max-w-2xl text-sm leading-6 text-[color:var(--text-secondary)] sm:mt-2">
-                  {t('createLeague.g30.subtitle')}
-                </p>
+                {/* No page intro (2026-11-26): each step's card already says what to choose. */}
               </div>
               <button
                 type="button"
@@ -659,7 +656,6 @@ export function CreateLeagueWizard(props: WizardProps) {
           <div className="flex items-center justify-between gap-3 text-xs font-bold text-[color:var(--text-secondary)]">
             <span data-testid="g30-step-progress">
               Step {activeIndex + 1} of {STEP_ORDER.length}
-              {stepsLeft > 0 ? ` · ${stepsLeft} ${stepsLeft === 1 ? 'step' : 'steps'} left` : ' · last step'}
             </span>
             {props.lastSavedAt ? (
               <span className="text-[color:var(--text-tertiary)]" aria-live="polite" data-testid="g30-autosave">
@@ -710,12 +706,6 @@ export function CreateLeagueWizard(props: WizardProps) {
                 )
               })}
             </ol>
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-[color:var(--border-subtle)] sm:hidden" aria-hidden="true">
-              <div
-                className="h-full rounded-full bg-violet-600 transition-[width] duration-300 motion-reduce:transition-none"
-                style={{ width: `${((activeIndex + 1) / STEP_ORDER.length) * 100}%` }}
-              />
-            </div>
           </nav>
 
           <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-3.5 shadow-xl shadow-black/5 sm:p-5">
@@ -1336,8 +1326,8 @@ export function LeagueBasicsStep({
       </label>
       ) : null}
 
-      {/* MLB Guilly only: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). */}
-      {getEffectiveLeagueType(state) === 'guillotine' && state.sport === 'MLB' ? (
+      {/* Guilly, every sport: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). */}
+      {getEffectiveLeagueType(state) === 'guillotine' ? (
       <label
         className={cx(
           'flex min-h-12 cursor-pointer touch-manipulation items-start gap-3 rounded-xl border px-4 py-3 text-sm transition',

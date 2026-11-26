@@ -105,8 +105,21 @@ async function starterSeatLabels(leagueId: string): Promise<string[]> {
 }
 
 /** Due now: every due change, except one that moves players while a week is being played. */
-function dueNow(schedule: RosterChange[], done: ReadonlyArray<string>, week: number, betweenWeeks: boolean): RosterChange[] {
-  return dueRosterChanges(schedule, done, week).filter((c) => betweenWeeks || !rosterChangeMovesPlayers(c.kind))
+function dueNow(schedule: RosterChange[], done: ReadonlyArray<string>, week: number, betweenWeeks: boolean, aliveNow?: number): RosterChange[] {
+  return dueRosterChanges(schedule, done, week, aliveNow).filter((c) => betweenWeeks || !rosterChangeMovesPlayers(c.kind))
+}
+
+/**
+ * Teams still alive: every roster without a chop record, the way the chop engine counts them. Read only when a
+ * "once N teams are left" change is waiting, so every other league pays nothing for it.
+ */
+async function aliveFor(leagueId: string, schedule: RosterChange[], db: Pick<typeof prisma, 'roster' | 'guillotineRosterState'> = prisma): Promise<number | undefined> {
+  if (!schedule.some((c) => c.teamsLeft != null)) return undefined
+  const [all, chopped] = await Promise.all([
+    db.roster.count({ where: { leagueId } }),
+    db.guillotineRosterState.count({ where: { leagueId, choppedAt: { not: null } } }),
+  ])
+  return all - chopped
 }
 
 /**
@@ -153,7 +166,7 @@ export async function applyDueRosterChanges(input: { leagueId: string; week: num
     const schedule = readRosterSchedule(league.settings)
     if (schedule.length === 0) return null
     const ran = await readRosterScheduleRan(prisma, leagueId, league.settings)
-    if (dueNow(schedule, ran.done, week, betweenWeeks).length === 0) return null
+    if (dueNow(schedule, ran.done, week, betweenWeeks, await aliveFor(leagueId, schedule)).length === 0) return null
   }
   const locked = await withAutomationLock(`guillotine:roster-schedule:${leagueId}`, { owner: randomUUID(), ttlMs: 120_000 }, () => runLocked(leagueId, week, betweenWeeks))
   return locked.ok ? locked.value : null
@@ -192,7 +205,8 @@ async function runLocked(leagueId: string, week: number, betweenWeeks: boolean):
       }
       return { ...state.pending, resumed: true }
     }
-    const due = dueNow(readRosterSchedule(row.settings), ran.done, week, betweenWeeks)
+    const stored = readRosterSchedule(row.settings)
+    const due = dueNow(stored, ran.done, week, betweenWeeks, await aliveFor(leagueId, stored, tx))
     if (due.length === 0) return null
     const walk = walkRosterSchedule(layoutNow, due, spots)
     const next: NonNullable<RosterScheduleState['pending']> = {

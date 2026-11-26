@@ -127,7 +127,10 @@ describe('setting a change', () => {
     const { patches } = mount(view())
     await ready()
     add()
-    expect([...inRow(0, 'guillotine-roster-week').options].map((o) => o.value)).toEqual(['4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17'])
+    const values = [...inRow(0, 'guillotine-roster-week').options].map((o) => o.value)
+    expect(values.filter((v) => !v.startsWith('t'))).toEqual(['4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17'])
+    // And "once N teams are left", from one fewer than the league's 12 down to the last two.
+    expect(values.filter((v) => v.startsWith('t'))).toEqual(['t11', 't10', 't9', 't8', 't7', 't6', 't5', 't4', 't3', 't2'])
     expect([inRow(0, 'guillotine-roster-week').value, inRow(0, 'guillotine-roster-kind').value, inRow(0, 'guillotine-roster-slot').value, inRow(0, 'guillotine-roster-count').value]).toEqual(['4', 'add_starter', 'FLEX', '1'])
     expect(result()).toBe('From week 4: 10 starters, 6 bench.')
     fireEvent.click(save())
@@ -190,6 +193,29 @@ describe('setting a change', () => {
     set(inRow(0, 'guillotine-roster-slot'), 'SUPERFLEX')
     expect(screen.getByRole('alert').textContent).toBe('Week 4: the league has no Super Flex (QB/WR/RB/TE) starting spot to take away.')
     expect(save().disabled).toBe(true)
+  })
+
+  it('"bench grows as the league shrinks": a bench spot once 8 teams are left, and back to a week again', async () => {
+    const { patches } = mount(view())
+    await ready()
+    add()
+    set(inRow(0, 'guillotine-roster-kind'), 'add_bench')
+    set(inRow(0, 'guillotine-roster-week'), 't8')
+    expect(inRow(0, 'guillotine-roster-week').value).toBe('t8')
+    expect(result()).toBe('Once 8 teams are left: 9 starters, 7 bench.')
+    fireEvent.click(save())
+    await waitFor(() => expect(patches).toHaveLength(1))
+    expect(patches[0]!.rosterSchedule).toEqual([expect.objectContaining({ teamsLeft: 8, week: 4, kind: 'add_bench', slot: null, count: 1 })])
+  })
+
+  it('choosing a week again drops the teams-left trigger', async () => {
+    mount(view())
+    await ready()
+    add()
+    set(inRow(0, 'guillotine-roster-week'), 't6')
+    set(inRow(0, 'guillotine-roster-week'), 9)
+    expect(inRow(0, 'guillotine-roster-week').value).toBe('9')
+    expect(result()).toBe('From week 9: 10 starters, 6 bench.')
   })
 
   it('says what each week leaves, in week order, whatever order the rows are in', async () => {

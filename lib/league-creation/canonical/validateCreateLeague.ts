@@ -509,14 +509,14 @@ export function validateCreatePayload(
     }
   }
 
-  // Two-week Guilly elimination periods (lib/guillotine/eliminationPeriods.ts): MLB only. Refused rather
+  // Two-week Guilly elimination periods (lib/guillotine/eliminationPeriods.ts): Guilly only. Refused rather
   // than dropped, so a league is never created on a period length it did not ask for.
   if (schedule.guillotinePeriodWeeks !== undefined && schedule.guillotinePeriodWeeks !== 1) {
     const message =
       schedule.guillotinePeriodWeeks !== 2
         ? 'An elimination period is one week or two.'
         : formatId !== 'guillotine' || !supportsTwoWeekPeriods(sport)
-          ? 'Two-week elimination periods are for MLB Guilly leagues.'
+          ? 'Two-week elimination periods are for Guilly leagues.'
           : null
     if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.guillotinePeriodWeeks', message }] }
   }

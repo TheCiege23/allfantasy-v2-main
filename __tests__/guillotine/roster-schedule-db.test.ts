@@ -257,6 +257,7 @@ async function clean() {
   edges.notified.length = 0
   for (const id of created.leagueIds.splice(0)) {
     await prisma.guillotineEventLog.deleteMany({ where: { leagueId: id } })
+    await prisma.guillotineRosterState.deleteMany({ where: { leagueId: id } })
     await prisma.automationLock.deleteMany({ where: { lockKey: { contains: id } } })
     await prisma.league.delete({ where: { id } }).catch(() => {})
   }
@@ -659,6 +660,25 @@ describe.skipIf(!enabled)('scheduled roster changes on a real database', () => {
       expect(edges.notified).toEqual([])
       expect((await t.read()).savedWeeks).toEqual([])
     })
+  })
+
+  it('"bench grows as the league shrinks": a bench spot once 2 teams are left, added only after the chop that leaves 2', async () => {
+    const lg = await league()
+    await team(lg)
+    await team(lg)
+    const grow = [{ id: 'at2', week: 4, teamsLeft: 2, kind: 'add_bench', slot: null, count: 1 }]
+    expect(await saveRosterSchedule(lg.leagueId, lg.ownerId, grow)).toMatchObject({ ok: true })
+    // Three teams alive: not yet, whatever the week.
+    expect(await applyDueRosterChanges({ leagueId: lg.leagueId, week: 9 })).toBeNull()
+    expect((await seen(lg)).engine).toMatchObject({ BN: 6 })
+    // A chop leaves two.
+    await prisma.guillotineRosterState.create({ data: { leagueId: lg.leagueId, rosterId: lg.rosterId, choppedAt: new Date(), choppedInPeriod: 8 } })
+    const run = await applyDueRosterChanges({ leagueId: lg.leagueId, week: 9 })
+    expect(run?.applied.map((c) => c.id)).toEqual(['at2'])
+    expect((await seen(lg)).engine).toMatchObject({ BN: 7 })
+    // And once only.
+    expect(await applyDueRosterChanges({ leagueId: lg.leagueId, week: 10 })).toBeNull()
+    expect((await seen(lg)).engine).toMatchObject({ BN: 7 })
   })
 
   it('never touches an imported league', async () => {

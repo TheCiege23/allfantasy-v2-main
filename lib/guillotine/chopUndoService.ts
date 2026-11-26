@@ -97,7 +97,7 @@ async function loadContext(leagueId: string, db: Db = prisma): Promise<ChopConte
 async function blockersFor(ctx: ChopContext, db: Db = prisma): Promise<ChopUndoBlocker[]> {
   const { gSeason, week, choppedAt } = ctx
   const redraftIds = [...ctx.redraftByEngine.values()]
-  const [laterChop, claimsProcessed, claimed, droppedByTeam, faabEvent, faabReset] = await Promise.all([
+  const [laterChop, claimsProcessed, claimed, droppedByTeam, faabEvent, faabReset, faabBonus] = await Promise.all([
     gSeason && week != null
       ? db.guillotineElimination.findFirst({ where: { seasonId: gSeason.id, scoringPeriod: { gt: week } }, select: { scoringPeriod: true } })
       : null,
@@ -116,6 +116,7 @@ async function blockersFor(ctx: ChopContext, db: Db = prisma): Promise<ChopUndoB
       : [],
     week != null ? findFaabSplit(ctx.leagueId, week, choppedAt, db) : null,
     week != null ? findFaabReset(ctx.leagueId, week, choppedAt, db) : null,
+    week != null ? findFaabReset(ctx.leagueId, week, choppedAt, db, 'faab_bonus') : null,
   ])
   const listed = new Set(ctx.releases.map((r) => r.eliminatedRosterId))
   const teamsWithoutReleaseRecord = (droppedByTeam as Array<{ rosterId: string }>).filter((row) => !listed.has(row.rosterId)).length
@@ -130,15 +131,19 @@ async function blockersFor(ctx: ChopContext, db: Db = prisma): Promise<ChopUndoB
     teamsWithoutReleaseRecord,
     unmatchedTeams: ctx.choppedRosterIds.filter((id) => !ctx.redraftByEngine.has(id)).length,
     faabSplitWithoutShares: faabReturnPlan(faabEvent, ctx.choppedRosterIds) == null,
-    faabResetWithoutChanges: faabResetReturnPlan(faabReset?.metadata ?? null) == null,
+    // The top scorer's bonus (./faabBonus.ts) records the same before/after, so it is checked the same way.
+    faabResetWithoutChanges: faabResetReturnPlan(faabReset?.metadata ?? null) == null || faabResetReturnPlan(faabBonus?.metadata ?? null) == null,
   })
 }
 
-/** The week's "FAAB after a chop" event (./faabAfterChop.ts), written in the chop's own run. */
-async function findFaabReset(leagueId: string, week: number, choppedAt: Date | null, db: Db) {
+/**
+ * The week's "FAAB after a chop" event (./faabAfterChop.ts), or with `eventType` 'faab_bonus' the top scorer's
+ * bonus (./faabBonus.ts): both written in the chop's own run, both with each team's before and after.
+ */
+async function findFaabReset(leagueId: string, week: number, choppedAt: Date | null, db: Db, eventType: 'faab_after_chop' | 'faab_bonus' = 'faab_after_chop') {
   if (!choppedAt) return null
   const row = await db.guillotineEventLog.findFirst({
-    where: { leagueId, eventType: 'faab_after_chop', createdAt: { gte: new Date(choppedAt.getTime() - 60_000) }, metadata: { path: ['weekOrPeriod'], equals: week } },
+    where: { leagueId, eventType, createdAt: { gte: new Date(choppedAt.getTime() - 60_000) }, metadata: { path: ['weekOrPeriod'], equals: week } },
     orderBy: { createdAt: 'desc' },
     select: { id: true, metadata: true },
   })
@@ -261,6 +266,13 @@ export async function undoLatestChop(args: { leagueId: string; userId: string; w
     if (instead.rosterIds.length) {
       choppedInsteadRosterIds = await chopInstead({ leagueId, week, gSeason: pre.gSeason!, rosterIds: instead.rosterIds, scored })
     }
+    // Back up over the "trades close at N" line, trades reopen (./guillotineTrades.ts). Best effort: the undo stands.
+    try {
+      const { syncGuillotineTradeClose } = await import('./guillotineTrades')
+      await syncGuillotineTradeClose(leagueId)
+    } catch (e) {
+      console.warn('[guillotine] trade window not re-checked after undo', e instanceof Error ? e.message : String(e))
+    }
     await announceUndo({
       leagueId,
       week,
@@ -326,6 +338,19 @@ async function applyUndo(tx: Prisma.TransactionClient, ctx: ChopContext, userId:
           data: { status: 'denied', processedAt: new Date(), denialReason: 'The commissioner undid the chop, so this player is back on his team.' },
         })
       : { count: 0 }
+
+  // The top scorer's bonus ran LAST (./faabBonus.ts), so it is undone first, the same way as the reset below.
+  const bonus = await findFaabReset(leagueId, week, ctx.choppedAt, tx, 'faab_bonus')
+  if (bonus) {
+    const bonusPlan = faabResetReturnPlan(bonus.metadata)
+    if (!bonusPlan) throw new UndoRefused(CHOP_UNDO_BLOCKER_MESSAGES.faab_reset_unknown)
+    for (const [rosterId, { before, after }] of bonusPlan) {
+      const put = await tx.roster.updateMany({ where: { id: rosterId, faabRemaining: after }, data: { faabRemaining: before } })
+      if (put.count !== 1) throw new UndoRefused(CHOP_UNDO_BLOCKER_MESSAGES.waivers_ran)
+    }
+    if (bonusPlan.size) await copyGenericFaabToRedraft(tx, [...bonusPlan.keys()])
+    await tx.guillotineEventLog.delete({ where: { id: bonus.id } })
+  }
 
   // FAAB after a chop (top up / reset): undone FIRST, the reverse of the order the chop applied them. Each survivor
   // goes back to its balance before the chop — only if it is still exactly what the chop set (a spend since would make
