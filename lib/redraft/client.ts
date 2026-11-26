@@ -113,19 +113,6 @@ export type RedraftLiveScoringClient = NflRedraftLiveScoringRuntimeState
 export type RedraftTradeRuntimeClient = NflRedraftTradeRuntimeState
 export type RedraftWaiverRuntimeClient = NflRedraftWaiverRuntimeState
 
-export type RedraftWaiverClaimClient = {
-  id: string
-  addPlayerId: string
-  addPlayerName: string
-  dropPlayerName: string | null
-  bidAmount: number | null
-  priority: number | null
-  status: string
-  submittedAt: string
-  processedAt: string | null
-  denialReason: string | null
-}
-
 export type RedraftTradeProposal = {
   id: string
   leagueId: string
@@ -543,18 +530,6 @@ export async function fetchRedraftRoster(rosterId: string, week: number): Promis
   })
   const body = await parseJson<{ roster?: RedraftRosterClient }>(res)
   return body.roster ?? null
-}
-
-export async function fetchRedraftWaiverClaims(
-  seasonId: string,
-  rosterId: string,
-): Promise<RedraftWaiverClaimClient[]> {
-  const qs = new URLSearchParams({ seasonId, rosterId })
-  const res = await fetch(`/api/redraft/waivers?${qs.toString()}`, {
-    credentials: 'include',
-  })
-  const body = await parseJson<{ claims?: RedraftWaiverClaimClient[] }>(res)
-  return body.claims ?? []
 }
 
 export async function fetchRedraftWaiverRuntime(params: {

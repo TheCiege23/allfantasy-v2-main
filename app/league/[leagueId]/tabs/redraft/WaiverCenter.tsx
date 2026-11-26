@@ -6,12 +6,7 @@ import { ClipboardList, Loader2, TrendingUp, Zap } from 'lucide-react'
 import { ProjectionChip } from '@/components/sports/ProjectionCard'
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import { playerProfileHref } from '@/lib/player-links/playerProfileHref'
-import {
-  fetchRedraftWaiverClaims,
-  fetchRedraftWaiverRuntime,
-  type RedraftWaiverClaimClient,
-  type RedraftWaiverRuntimeClient,
-} from '@/lib/redraft/client'
+import { fetchRedraftWaiverRuntime, type RedraftWaiverRuntimeClient } from '@/lib/redraft/client'
 
 type WaiverTarget = {
   name: string
@@ -37,41 +32,21 @@ export function WaiverCenter({
   sport?: string
 }) {
   const [targets, setTargets] = useState<WaiverTarget[]>([])
-  const [claims, setClaims] = useState<RedraftWaiverClaimClient[]>([])
   const [runtime, setRuntime] = useState<RedraftWaiverRuntimeClient | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!seasonId || !rosterId) {
-      setClaims([])
+    if (!seasonId || !rosterId || !leagueId) {
+      setRuntime(null)
       return
     }
     let cancelled = false
-    ;(async () => {
-      try {
-        const [rows, waiverRuntime] = await Promise.all([
-          fetchRedraftWaiverClaims(seasonId, rosterId),
-          leagueId
-            ? fetchRedraftWaiverRuntime({
-                leagueId,
-                seasonId,
-                rosterId,
-                includeFreeAgents: false,
-              }).catch(() => null)
-            : Promise.resolve(null),
-        ])
-        if (!cancelled) {
-          setClaims(rows)
-          setRuntime(waiverRuntime)
-        }
-      } catch {
-        if (!cancelled) {
-          setClaims([])
-          setRuntime(null)
-        }
-      }
-    })()
+    fetchRedraftWaiverRuntime({ leagueId, seasonId, rosterId, includeFreeAgents: false })
+      .catch(() => null)
+      .then((waiverRuntime) => {
+        if (!cancelled) setRuntime(waiverRuntime)
+      })
     return () => {
       cancelled = true
     }
@@ -158,11 +133,7 @@ export function WaiverCenter({
               {runtime.settings.mode}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
-              <p className="text-[11px] text-white/35">Pending</p>
-              <p className="mt-0.5 text-[15px] font-bold text-white">{runtime.coverage.pendingClaims}</p>
-            </div>
+          <div className="grid grid-cols-3 gap-2">
             <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
               <p className="text-[11px] text-white/35">FAAB teams</p>
               <p className="mt-0.5 text-[15px] font-bold text-white">{runtime.coverage.faabTeams}</p>
@@ -217,49 +188,6 @@ export function WaiverCenter({
           ))}
         </div>
       )}
-
-      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <h4 className="text-[12px] font-bold text-white">Waiver claims</h4>
-          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[11px] text-white/45">
-            {sport ?? 'NFL'}
-          </span>
-        </div>
-        {!seasonId || !rosterId ? (
-          <p className="text-[11px] text-white/40">Select a roster to view waiver claims.</p>
-        ) : claims.length === 0 ? (
-          <p className="text-[11px] text-white/40">No waiver claims submitted for this roster.</p>
-        ) : (
-          <div className="space-y-2">
-            {claims.map((claim) => (
-              <div key={claim.id} className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-[12px] font-semibold text-white">{claim.addPlayerName}</p>
-                    <p className="text-[11px] text-white/40">
-                      {claim.dropPlayerName ? `Drop ${claim.dropPlayerName}` : 'No drop'} - FAAB{' '}
-                      {claim.bidAmount ?? 0}
-                    </p>
-                  </div>
-                  <span
-                    className={[
-                      'rounded-full px-2 py-0.5 text-[11px] font-bold uppercase',
-                      claim.status === 'approved'
-                        ? 'bg-emerald-400/15 text-emerald-200'
-                        : claim.status === 'denied'
-                          ? 'bg-rose-400/15 text-rose-200'
-                          : 'bg-[#ff3d81]/15 text-[#ffd7e5]',
-                    ].join(' ')}
-                  >
-                    {claim.status}
-                  </span>
-                </div>
-                {claim.denialReason ? <p className="mt-1 text-[11px] text-amber-100/80">{claim.denialReason}</p> : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   )
 }
