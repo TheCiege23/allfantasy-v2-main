@@ -39,7 +39,7 @@ type Phase =
   | { k: 'start' }
   | { k: 'collect' }
   | { k: 'review'; preview: PreviewView }
-  | { k: 'done'; leagueId: string; name: string; updated: boolean }
+  | { k: 'done'; leagueId: string; name: string; updated: boolean; member: boolean }
 
 interface PreviewView {
   name: string
@@ -78,13 +78,38 @@ function toPreviewView(data: unknown): PreviewView {
 export const YAHOO_NO_TEAM = 'none'
 
 /**
+ * "Who runs this league?" — the same answers, and the same wire values, as ESPN's
+ * `espnLeagueRunBy` (`me` / `member`). See lib/league-import/espn/espnPublicMemberImport.ts.
+ *
+ * 🛑 THIS WAS A SINGLE "I'm the commissioner" CHECKBOX THAT HAD TO BE TICKED TO IMPORT AT ALL, so a
+ * member of a public league Yahoo created (owner report 2026-11-26) could only get in by attesting to
+ * something false. A member now imports with their team and no attestation is sent.
+ */
+export type YahooLeagueRunBy = 'me' | 'member'
+
+const YAHOO_RUN_BY_OPTIONS: ReadonlyArray<{ value: YahooLeagueRunBy; label: string; help: string }> = [
+  {
+    value: 'me',
+    label: 'I’m the commissioner',
+    help: 'You run this league on Yahoo. You get the commissioner’s C on AllFantasy.',
+  },
+  {
+    value: 'member',
+    label: 'I’m a member of this league',
+    help: 'Someone else runs it — including a public league Yahoo set up. Pick your team and you join as a member.',
+  },
+]
+
+/**
  * Why the Import button is disabled, as one line, or null when it is not. The button used to grey out
  * with no word of explanation until the commissioner box was ticked.
+ *
+ * A member must pick a real team — "I don't have a team" is a commissioner-only answer.
  */
-export function yahooImportBlockedHint(isCommissioner: boolean, teamChoice: string): string | null {
+export function yahooImportBlockedHint(runBy: YahooLeagueRunBy | null, teamChoice: string): string | null {
   const needs: string[] = []
-  if (!teamChoice) needs.push('pick your team')
-  if (!isCommissioner) needs.push('tick “I’m the commissioner of this league”')
+  if (!teamChoice || (runBy === 'member' && teamChoice === YAHOO_NO_TEAM)) needs.push('pick your team')
+  if (!runBy) needs.push('choose “I’m the commissioner” or “I’m a member of this league”')
   if (needs.length === 0) return null
   const line = needs.join(' and ')
   return `To import, ${line}.`
@@ -116,7 +141,7 @@ export function YahooSnapshotImport() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [isCommissioner, setIsCommissioner] = useState(false)
+  const [runBy, setRunBy] = useState<YahooLeagueRunBy | null>(null)
   const [teamChoice, setTeamChoice] = useState('')
   const [alreadyImported, setAlreadyImported] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -246,15 +271,21 @@ export function YahooSnapshotImport() {
       setError(null)
       setBusy(true)
       try {
-        /* The picked team is claimed for the importer (and gets the commissioner's C); nothing on a
+        if (!runBy) return
+        /* The picked team is claimed for the importer (a commissioner's also gets the C); nothing on a
            pasted page says which team is theirs, so without it the league lands with no owner. */
         const claimSourceTeamId = teamChoice && teamChoice !== YAHOO_NO_TEAM ? teamChoice : undefined
         const result = await submitImportCreation(
           'yahoo',
           sourceId,
           '',
-          { accepted: true, statement: 'I am the commissioner of this Yahoo league.' },
-          { ...(force ? { force: true } : {}), ...(claimSourceTeamId ? { claimSourceTeamId } : {}) },
+          /* 🛑 The commissioner attestation is sent ONLY by someone who said they are the commissioner. */
+          runBy === 'me' ? { accepted: true, statement: 'I am the commissioner of this Yahoo league.' } : undefined,
+          {
+            yahooLeagueRunBy: runBy,
+            ...(force ? { force: true } : {}),
+            ...(claimSourceTeamId ? { claimSourceTeamId } : {}),
+          },
         )
         if (!result.ok || !result.data?.league) {
           setAlreadyImported(result.code === 'LEAGUE_ALREADY_IMPORTED')
@@ -271,12 +302,18 @@ export function YahooSnapshotImport() {
           setError('This league is already in your account. Update it with the pages you pasted?')
           return
         }
-        setPhase({ k: 'done', leagueId: result.data.league.id, name: result.data.league.name, updated: force })
+        setPhase({
+          k: 'done',
+          leagueId: result.data.league.id,
+          name: result.data.league.name,
+          updated: force,
+          member: runBy === 'member',
+        })
       } finally {
         setBusy(false)
       }
     },
-    [sourceId, teamChoice],
+    [sourceId, teamChoice, runBy],
   )
 
   const startOver = useCallback(async () => {
@@ -290,7 +327,7 @@ export function YahooSnapshotImport() {
     setNotice(null)
     setError(null)
     setAlreadyImported(false)
-    setIsCommissioner(false)
+    setRunBy(null)
     setTeamChoice('')
     setPhase({ k: 'start' })
   }, [checklist])
@@ -298,10 +335,10 @@ export function YahooSnapshotImport() {
   if (!enabled) return null
 
   const rostersAdded = checklist?.teams.filter((t) => t.hasRoster).length ?? 0
-  /* A preview with no teams has nothing to pick from, so only the commissioner box can block it. */
+  /* A preview with no teams has nothing to pick from: a commissioner imports with no team, a member cannot. */
   const blockedHint =
     phase.k === 'review'
-      ? yahooImportBlockedHint(isCommissioner, phase.preview.teams.length > 0 ? teamChoice : YAHOO_NO_TEAM)
+      ? yahooImportBlockedHint(runBy, phase.preview.teams.length > 0 ? teamChoice : YAHOO_NO_TEAM)
       : null
 
   return (
@@ -519,6 +556,34 @@ export function YahooSnapshotImport() {
             <p className="af-im-fx-note">
               Check these match Yahoo. If something is off, go back and paste that page again.
             </p>
+            <fieldset className="af-im-runby" data-testid="yahoo-run-by">
+              <legend className="af-label">Who runs this league on Yahoo?</legend>
+              {YAHOO_RUN_BY_OPTIONS.map((o) => (
+                <label
+                  key={o.value}
+                  className="af-im-runby-option"
+                  data-selected={runBy === o.value ? 'true' : undefined}
+                >
+                  <input
+                    type="radio"
+                    name="yahoo-run-by"
+                    value={o.value}
+                    checked={runBy === o.value}
+                    data-testid={`yahoo-run-by-${o.value}`}
+                    disabled={busy}
+                    onChange={() => {
+                      setRunBy(o.value)
+                      /* "I don't have a team" is not an answer a member can give. */
+                      if (o.value === 'member' && teamChoice === YAHOO_NO_TEAM) setTeamChoice('')
+                    }}
+                  />
+                  <span className="af-im-runby-text">
+                    <strong>{o.label}</strong>
+                    <span className="af-im-field-help">{o.help}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             {phase.preview.teams.length > 0 ? (
               <label className="af-im-fx-field">
                 <span>Which team is yours?</span>
@@ -534,14 +599,12 @@ export function YahooSnapshotImport() {
                       {t.manager ? `${t.name} (${t.manager})` : t.name}
                     </option>
                   ))}
-                  <option value={YAHOO_NO_TEAM}>I don&apos;t have a team in this league</option>
+                  {runBy !== 'member' ? (
+                    <option value={YAHOO_NO_TEAM}>I don&apos;t have a team in this league</option>
+                  ) : null}
                 </select>
               </label>
             ) : null}
-            <label className="af-im-fx-check af-im-ys-attest">
-              <input type="checkbox" checked={isCommissioner} onChange={(e) => setIsCommissioner(e.target.checked)} />
-              I&apos;m the commissioner of this league
-            </label>
             <div className="af-im-ys-row af-im-ys-row--end">
               <button type="button" className="af-im-ys-quiet" onClick={() => setPhase({ k: 'collect' })} disabled={busy}>
                 ← Back
@@ -569,6 +632,9 @@ export function YahooSnapshotImport() {
             <p className="af-im-fx-done-h">
               {phase.updated ? 'Updated' : 'Imported'} {phase.name}
             </p>
+            {phase.member ? (
+              <p className="af-im-fx-note">You joined as a member with your team. Commissioner tools stay with the league&apos;s commissioner.</p>
+            ) : null}
             <p className="af-im-fx-p">
               <a href={`/core?league=${encodeURIComponent(phase.leagueId)}`}>Open league →</a>
             </p>
