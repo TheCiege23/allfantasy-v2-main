@@ -134,6 +134,7 @@ export const playerFinderMessages = defineMessages({
     triageStartingIn: (count: number) => ` · starting in ${count} ${count === 1 ? 'league' : 'leagues'}`,
     triageBenchBeforeLock: 'bench him before your leagues lock',
     triageNoKickoff: 'no kickoff to count down to',
+    triageFootLabel: 'How this list works',
     triageFoot:
       'Flagged means the injury feed reads Questionable, Doubtful or Out, or his club is not playing this week — a bye when the slate has the shape of one, otherwise a gap in the schedule we hold. Best-ball leagues are left out: the platform picks those lineups itself. Locks are his own kickoff; a league that locks every lineup at the first game locks earlier. A ✓ means you opened that lineup here — we cannot see the change you make on the platform until its roster refreshes.',
 
@@ -244,6 +245,7 @@ export const playerFinderMessages = defineMessages({
     triageStartingIn: (count) => ` · titular en ${count} ${count === 1 ? 'liga' : 'ligas'}`,
     triageBenchBeforeLock: 'siéntalo antes de que tus ligas se bloqueen',
     triageNoKickoff: 'sin hora de inicio para la cuenta regresiva',
+    triageFootLabel: 'Cómo funciona esta lista',
     triageFoot:
       'Señalado significa que el reporte de lesiones dice Dudoso, Poco probable o Fuera, o que su equipo no juega esta semana: un descanso cuando la jornada tiene esa forma, y si no, un hueco en el calendario que tenemos. Las ligas best ball quedan fuera: la plataforma arma esas alineaciones sola. Cada bloqueo es el inicio de su propio partido; una liga que bloquea todas las alineaciones en el primer partido se bloquea antes. Un ✓ significa que abriste esa alineación aquí: no vemos el cambio que hagas en la plataforma hasta que se actualice su plantel.',
 

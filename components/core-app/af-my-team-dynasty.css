@@ -93,3 +93,9 @@ html[data-mode='light'] .af-mt-dyn-prospect{background:#6d28d9;color:#fff}
 @media (min-width:861px){
   .af-core.af-shell[data-dynasty-background=true] .af-mt-row{grid-template-columns:46px minmax(0,1fr) 44px auto}
 }
+
+/* 2026-11-24: on My Team the chips lead the game line ("26 · KC vs DET · Sun 1:00p") rather than
+ * sitting beside the name, so a phone row is two lines, not three. Inside the closed abbreviations
+ * row, the age key needs a little room above it. */
+.af-mt-player-meta > .af-mt-dyn{margin:0 6px 0 0}
+.af-mt-key > .af-mt-dyn-key{margin:10px 0 0}

@@ -36,9 +36,15 @@ describe('buildSurvivorStatusCard', () => {
     const c = card(season({ activeCouncil: { id: 'c', week: 6, status: 'voting_open', attendingTribeId: 't1', voteDeadlineAt: '2026-10-20T08:00:00Z' } }, { idolIds: ['i1'] }), { canVote: true })
     expect(c.headline).toBe('Your tribe is at Tribal Council')
     expect(c.detail).toMatch(/Voting has closed/)
-    expect(c.facts).toContainEqual({ label: 'Votes closed', value: '08:00' })
+    // The detail says "Voting has closed"; the tile no longer says it again for your own council (2026-11-24).
+    expect(c.facts.map((f) => f.label)).not.toContain('Votes closed')
     expect(JSON.stringify(c)).not.toMatch(/under a minute|Vote now/)
     expect(c.actions).toEqual([])
+  })
+
+  it('another tribe’s council past its deadline keeps the "Votes closed" tile — nothing else says it', () => {
+    const c = card(season({ activeCouncil: { id: 'c', week: 6, status: 'voting_open', attendingTribeId: 't2', voteDeadlineAt: '2026-10-20T08:00:00Z' } }))
+    expect(c.facts).toContainEqual({ label: 'Votes closed', value: '08:00' })
   })
 
   it('a challenge whose lock time has passed is not offered', () => {

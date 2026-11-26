@@ -1461,6 +1461,179 @@ export async function fetchYahooCategoryMatchupForWeek(
   return parseYahooScoreboard(data, season).find((entry) => entry.week === week) ?? null
 }
 
+/* ── Owner-only contract capture (admin tool, 2026-11-25) ──────────────────────────────────────
+ *
+ * The owner's decision: Yahoo's per-player weekly points shape and its pending-trade shape are
+ * captured ONCE, from an admin page, on the owner's OWN stored Yahoo credential, and handed back
+ * as a redacted JSON download (`lib/admin/contractCapture/`). Nothing is stored.
+ *
+ * The request set is a CLOSED allowlist. `buildYahooContractCapturePath` is the only way a path
+ * is made, and every variable part is validated against Yahoo's key grammar first, so no caller
+ * parameter can steer the request anywhere else. The base URL stays the single literal at the top
+ * of this file; nothing here adds a host. See contracts/yahoo/ENDPOINTS.yaml.
+ */
+export const YAHOO_LEAGUE_KEY_PATTERN = /^\d{1,6}\.l\.\d{1,12}$/
+export const YAHOO_TEAM_KEY_PATTERN = /^\d{1,6}\.l\.\d{1,12}\.t\.\d{1,3}$/
+
+export type YahooContractCaptureRequest =
+  | { resource: 'league_teams'; leagueKey: string }
+  | { resource: 'team_roster_week_stats'; teamKey: string; week: number }
+  | { resource: 'league_scoreboard_week'; leagueKey: string; week: number }
+  | { resource: 'pending_trades_for_team'; leagueKey: string; teamKey: string }
+
+export class YahooContractCaptureRequestError extends Error {}
+
+function assertCaptureWeek(week: unknown): number {
+  if (typeof week !== 'number' || !Number.isInteger(week) || week < 1 || week > 18) {
+    throw new YahooContractCaptureRequestError('week must be an integer from 1 to 18')
+  }
+  return week
+}
+
+function assertLeagueKey(key: unknown): string {
+  if (typeof key !== 'string' || !YAHOO_LEAGUE_KEY_PATTERN.test(key)) {
+    throw new YahooContractCaptureRequestError('not a Yahoo league key')
+  }
+  return key
+}
+
+function assertTeamKey(key: unknown): string {
+  if (typeof key !== 'string' || !YAHOO_TEAM_KEY_PATTERN.test(key)) {
+    throw new YahooContractCaptureRequestError('not a Yahoo team key')
+  }
+  return key
+}
+
+/**
+ * The path (after the API base, before `?format=json`) for one allowlisted capture resource.
+ * Throws `YahooContractCaptureRequestError` for anything outside the four resources or for a key
+ * or week that does not match Yahoo's grammar — the allowlist cannot be widened by a parameter.
+ */
+export function buildYahooContractCapturePath(request: YahooContractCaptureRequest): string {
+  switch (request?.resource) {
+    case 'league_teams':
+      return `league/${assertLeagueKey(request.leagueKey)}/teams`
+    case 'team_roster_week_stats': {
+      const week = assertCaptureWeek(request.week)
+      // The import's verified `team/{key}/roster/players`, narrowed to week N with each player's
+      // stats for that week (Yahoo's documented `roster;week=N` and `stats;type=week;week=N`).
+      return `team/${assertTeamKey(request.teamKey)}/roster;week=${week}/players/stats;type=week;week=${week}`
+    }
+    case 'league_scoreboard_week':
+      // Same form as `fetchYahooCategoryMatchupForWeek` above.
+      return `league/${assertLeagueKey(request.leagueKey)}/scoreboard;week=${assertCaptureWeek(request.week)}`
+    case 'pending_trades_for_team': {
+      const leagueKey = assertLeagueKey(request.leagueKey)
+      const teamKey = assertTeamKey(request.teamKey)
+      if (!teamKey.startsWith(`${leagueKey}.t.`)) {
+        throw new YahooContractCaptureRequestError('team key is not in that league')
+      }
+      // Same filter `fetchYahooPendingTrades` sends, as one page.
+      return `league/${leagueKey}/transactions;types=pending_trade;team_key=${teamKey}`
+    }
+    default:
+      throw new YahooContractCaptureRequestError('resource is not on the capture allowlist')
+  }
+}
+
+/** One captured request. `body` is the parsed JSON on a 2xx, else null — an error body is never kept. */
+export type YahooContractCaptureResult = {
+  resource: YahooContractCaptureRequest['resource']
+  httpStatus: number
+  body: unknown | null
+}
+
+/** A status-preserving GET: 0 when Yahoo could not be reached, never the URL or an error body. */
+async function yahooCaptureGet(path: string, context: YahooApiFetchContext): Promise<{ httpStatus: number; body: unknown | null }> {
+  const url = `${YAHOO_API_BASE}/${path}?format=json`
+  let response: Response
+  try {
+    response = await yahooRequestWithResilience(url, context.accessToken)
+    if (response.status === 401 && context.refreshToken) {
+      // Mutates `context` (see refreshYahooCredential); a failed refresh throws the connection error.
+      const refreshedToken = await refreshYahooCredential(context)
+      response = await yahooRequestWithResilience(url, refreshedToken)
+    }
+  } catch (error) {
+    if (error instanceof YahooApiResponseError) return { httpStatus: error.status, body: null }
+    throw error
+  }
+  if (!response.ok) {
+    await Promise.resolve(response.body?.cancel?.()).catch(() => {})
+    return { httpStatus: response.status, body: null }
+  }
+  const text = await response.text().catch(() => null)
+  if (text == null) return { httpStatus: response.status, body: null }
+  try {
+    return { httpStatus: response.status, body: JSON.parse(text) }
+  } catch {
+    return { httpStatus: response.status, body: null }
+  }
+}
+
+/** The team in a `league/{key}/teams` body that Yahoo marks as owned by the signed-in account. */
+export function findYahooOwnedTeamKey(teamsBody: unknown): string | null {
+  const leagueNode = (teamsBody as any)?.fantasy_content?.league
+  const teams = getYahooCollectionItems(getYahooProperty(leagueNode, 'teams'))
+  for (const wrapper of teams) {
+    const team = mergeYahooEntityFragments(wrapper, 'team')
+    const teamKey = typeof team.team_key === 'string' ? team.team_key : ''
+    if (teamKey && isTruthyProviderFlag(team.is_owned_by_current_login)) return teamKey
+  }
+  return null
+}
+
+/**
+ * Run the owner-only Yahoo contract capture on `userId`'s OWN stored credential: the league's
+ * teams (only to find which team Yahoo says the signed-in account owns), that team's week-N roster
+ * with each player's week stats, the week-N scoreboard, and the pending trades involving that team.
+ *
+ * Returns the raw bodies for the caller to REDACT before anything leaves the server, plus the
+ * credential values the redactor must prove absent. Those values never leave this process.
+ * Throws `YahooImportConnectionError` when Yahoo is not connected.
+ */
+export async function runYahooContractCapture(
+  userId: string,
+  leagueInput: string,
+  week: number,
+): Promise<{
+  leagueKey: string
+  ownerTeamKey: string | null
+  results: YahooContractCaptureResult[]
+  credentialValues: string[]
+}> {
+  assertCaptureWeek(week)
+  const context = await loadYahooCredential(userId)
+  // Every token value this capture holds, including the one it started with if a refresh replaces it.
+  const seenCredentials = new Set([context.accessToken, context.refreshToken])
+  const resolved = await resolveYahooLeagueLookup(leagueInput, context)
+  seenCredentials.add(context.accessToken).add(context.refreshToken)
+  const leagueKey = assertLeagueKey(resolved.leagueKey)
+  const results: YahooContractCaptureResult[] = []
+
+  const run = async (request: YahooContractCaptureRequest) => {
+    const got = await yahooCaptureGet(buildYahooContractCapturePath(request), context)
+    seenCredentials.add(context.accessToken).add(context.refreshToken)
+    results.push({ resource: request.resource, ...got })
+    return got
+  }
+
+  const teams = await run({ resource: 'league_teams', leagueKey })
+  const ownerTeamKey = teams.body ? findYahooOwnedTeamKey(teams.body) : null
+  if (ownerTeamKey && YAHOO_TEAM_KEY_PATTERN.test(ownerTeamKey)) {
+    await run({ resource: 'team_roster_week_stats', teamKey: ownerTeamKey, week })
+  }
+  await run({ resource: 'league_scoreboard_week', leagueKey, week })
+  if (ownerTeamKey && ownerTeamKey.startsWith(`${leagueKey}.t.`)) {
+    await run({ resource: 'pending_trades_for_team', leagueKey, teamKey: ownerTeamKey })
+  }
+
+  const credentialValues = [...seenCredentials].filter(
+    (v): v is string => typeof v === 'string' && v.length > 0,
+  )
+  return { leagueKey, ownerTeamKey, results, credentialValues }
+}
+
 /** Test seam for the roster split — see `parseEspnRosterEntriesForTest`. */
 export { parseYahooRoster as parseYahooRosterForTest }
 export { parseYahooTeamMatchups as parseYahooTeamMatchupsForTest }

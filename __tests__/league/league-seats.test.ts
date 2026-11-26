@@ -151,9 +151,24 @@ describe('assignLeagueSeat', () => {
     expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Open Team 2', open: true })
   })
 
-  it('leaves a draft that has started alone', async () => {
+  // This used to read "leaves a draft that has started alone". Seen live on 2026-11-25: two managers
+  // who had claimed seats were still "Open Team 2" and "Open Team 3" on the board and on the clock for a
+  // whole draft. Owner's call: the label follows the seat during a draft too.
+  it.each(['in_progress', 'paused'])('relabels the seat in a draft that is %s, on join and on leave', async (status) => {
     const db = nativeLeague()
-    db.draftSession = table([{ id: 'draft', leagueId: 'L', status: 'in_progress',
+    db.draftSession = table([{ id: 'draft', leagueId: 'L', status,
+      slotOrder: [{ slot: 2, rosterId: 'r2', displayName: 'Open Team 2', open: true }, { slot: 3, rosterId: 'r3', displayName: 'Open Team 3', open: true }] }])
+    expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Amy', open: false })
+    expect(db.draftSession.rows[0].slotOrder[1]).toMatchObject({ rosterId: 'r3', displayName: 'Open Team 3', open: true })
+    expect(db.draftSession.rows[0].status).toBe(status)
+    expect((await releaseLeagueSeat(db, { leagueId: 'L', rosterId: 'r2' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Open Team 2', open: true })
+  })
+
+  it('leaves a finished draft alone: its board is the record of who drafted', async () => {
+    const db = nativeLeague()
+    db.draftSession = table([{ id: 'draft', leagueId: 'L', status: 'completed',
       slotOrder: [{ slot: 2, rosterId: 'r2', displayName: 'Open Team 2', open: true }] }])
     expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).ok).toBe(true)
     expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ displayName: 'Open Team 2', open: true })

@@ -46,7 +46,10 @@ describe('Settings → Home page', () => {
     fireEvent.click(switchOf('league-trades'))
     // Before the request resolves, the row already reads OFF.
     expect(row('league-trades').dataset.shown).toBe('false')
-    expect(row('league-trades').textContent).toMatch(/Hidden/)
+    expect(switchOf('league-trades').checked).toBe(false)
+    expect(row('league-trades').textContent).toMatch(/\bOff\b/)
+    // No HIDDEN tag beside the title (2026-11-25): the switch and its Off say it.
+    expect(row('league-trades').textContent).not.toMatch(/Hidden/)
 
     await waitFor(() => expect(onRefetch).toHaveBeenCalled())
     const [url, init] = fetchMock.mock.calls[0]

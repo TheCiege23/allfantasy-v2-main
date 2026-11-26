@@ -16,6 +16,7 @@ import { buildPlayerDataFromSections, getNormalizedLineupSections } from '@/lib/
 import { buildLineupListsFromPlayerData } from '@/lib/league/lineup-swap'
 import { optimalLineupListsRespectingLocks, type LineupPlayerInfo } from '@/lib/league/native/nativeScreenModels'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
+import { isNpcDraftPersonalityId, type NpcDraftPersonalityId } from '@/lib/live-draft-engine/npcDraftPersonalityTypes'
 
 export const AF_MANAGED_LINEUPS_KEY = 'af_managed_lineups'
 
@@ -35,8 +36,33 @@ export function isAutopilotStyle(v: unknown): v is AutopilotStyle {
 /**
  * Chimmy autopilot (AF Commissioner): everything inactive manager mode does, plus roster decisions in
  * the chosen style. Lineup-only management stays free; `autopilot` marks the paid upgrade.
+ *
+ * `personality` is the manager Chimmy is for this team in season (./managerProfile.ts): the one it
+ * drafted with when that is known at the handover. Absent on older entries and on teams Chimmy did not
+ * draft, which get theirs from the roster id.
  */
-export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: string }
+export type ChimmyAutopilot = { style: AutopilotStyle; since: string; byUserId: string; personality?: NpcDraftPersonalityId; trades?: AutopilotTradeMode }
+
+/**
+ * What a Chimmy team does about trades (owner decision 2026-11-25):
+ *   off              takes no offers — the offer is refused before it is made, as it always was.
+ *   answer           the default. Chimmy accepts or declines offers made to the team; it sends none.
+ *   answer_and_send  also sends offers of its own: at most one a day (./autopilotTradeOffers.ts).
+ * A team with nothing saved is `answer`.
+ */
+export const AUTOPILOT_TRADE_MODES = ['off', 'answer', 'answer_and_send'] as const
+export type AutopilotTradeMode = (typeof AUTOPILOT_TRADE_MODES)[number]
+export const DEFAULT_AUTOPILOT_TRADE_MODE: AutopilotTradeMode = 'answer'
+
+export function isAutopilotTradeMode(v: unknown): v is AutopilotTradeMode {
+  return typeof v === 'string' && (AUTOPILOT_TRADE_MODES as readonly string[]).includes(v)
+}
+
+/** How this Chimmy team handles trades; `off` for a team Chimmy is not running on autopilot. */
+export function autopilotTradeMode(entry: ManagedLineup | null | undefined): AutopilotTradeMode {
+  if (!entry?.autopilot) return 'off'
+  return entry.autopilot.trades ?? DEFAULT_AUTOPILOT_TRADE_MODE
+}
 
 /**
  * `ownerUserId` is who owned the team when the commissioner switched it on (phase 9, 2026-10-29). The
@@ -72,6 +98,8 @@ export function readManagedLineups(settings: unknown): ManagedLineups {
     const ap = o.autopilot && typeof o.autopilot === 'object' ? (o.autopilot as Record<string, unknown>) : null
     if (ap && typeof ap.since === 'string' && typeof ap.byUserId === 'string') {
       entry.autopilot = { style: isAutopilotStyle(ap.style) ? ap.style : DEFAULT_AUTOPILOT_STYLE, since: ap.since, byUserId: ap.byUserId }
+      if (isNpcDraftPersonalityId(ap.personality)) entry.autopilot.personality = ap.personality
+      if (isAutopilotTradeMode(ap.trades)) entry.autopilot.trades = ap.trades
     }
     out[rosterId] = entry
   }

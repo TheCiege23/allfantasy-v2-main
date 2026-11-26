@@ -1,37 +1,46 @@
 'use client'
 
 import React from 'react'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
-import {
-  Skull,
-  MessageSquare,
-  Settings,
-  Sparkles,
-  Zap,
-} from 'lucide-react'
+import { Skull, Settings } from 'lucide-react'
 import { GuillotineChopAnimation } from './GuillotineChopAnimation'
 import { GuillotineAIPanel } from './GuillotineAIPanel'
 import { shareCardImage } from '@/components/decide/shareCard'
-import { GuillotineSpecialtyHome } from './GuillotineSpecialtyHome'
+import { GuillotineChopExtras } from './GuillotineSpecialtyHome'
+import { GuillySurvivalBoard, type BoardAction, type BoardWeekPicker } from './GuillySurvivalBoard'
 import { GuillotineSurvivalHistory } from './GuillotineSurvivalHistory'
 import { GuillotineNextChopPick } from './GuillotineNextChopPick'
+import { GuillotineLastWords } from './GuillotineLastWords'
+import type { LastWordsState } from '@/lib/guillotine/lastWordsStore'
 import type { NextChopPickState } from '@/lib/guillotine/nextChopPickStore'
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
+import type { ChopListOrder } from '@/lib/guillotine/chopListOrder'
+import type { TeamOutlook } from '@/lib/guillotine/survivalOutlook'
 import { RELEASE_OPTIONS } from '@/lib/guillotine/guillotineRules'
-import { guillotineRuleRows } from './guillotineHomeModel'
+import { boardFromHistoryWeek, boardFromNativeSummary, historyWeeks } from '@/lib/guillotine/survivalBoardModel'
+import { choppedTeamNames, guillotineRuleRows, guillotineWeekLabel } from './guillotineHomeModel'
 import './guillotine-identity.css'
+
+/**
+ * The Chop page of a Guilly league hosted here: the league's ONE page for "who is getting chopped".
+ *
+ * It used to be a hub: a hero, a chop line that stayed empty until the week had scores, a "your survival"
+ * card, a tiebreak card, a feed, a row of quick links, a history card and two folds — with the list that
+ * answered the question on a second sub-tab. Owner's decision, 2026-11-25 ("one list … too many tabs … cluttered"):
+ *
+ *   1. the survival board (GuillySurvivalBoard): your gap to the chop line, the clock, and every team in one list,
+ *      full all week (projected before anyone scores), with the weeks already chopped one step back;
+ *   2. the latest chop's moment, and the graveyard, inside that board;
+ *   3. only what is true for this viewer: their escape to share, their "who's next" pick once chopped;
+ *   4. three closed rows for reference: the season so far, Guilly Chimmy, the rules.
+ *
+ * Every number is the engine's, from /api/leagues/[leagueId]/guillotine/summary.
+ */
 
 function leagueQueryPath(leagueId: string, params: Record<string, string>) {
   const q = new URLSearchParams(params)
   return `/league/${encodeURIComponent(leagueId)}?${q.toString()}`
-}
-
-/** Deep-link target that exists in `LeagueShell` `view` / `tab` handling. */
-function intelligenceViewForSport(sport: string): string {
-  const s = sport.trim().toUpperCase()
-  if (s === 'NFL' || s === 'NCAAF') return 'trend'
-  return 'players'
 }
 
 type Summary = {
@@ -39,17 +48,27 @@ type Summary = {
   weekOrPeriod: number
   choppedThisWeek: { rosterId: string; displayName?: string }[]
   survivalStandings: { rosterId: string; displayName?: string; rank: number; seasonPointsCumul: number }[]
-  dangerTiers?: { rosterId: string; displayName?: string; tier: string; pointsFromChopZone: number }[]
+  dangerTiers?: { rosterId: string; displayName?: string; tier: string; pointsFromChopZone: number; immune?: boolean }[]
   recentChopEvents: { weekOrPeriod: number; choppedRosterIds: string[] }[]
   /** Your escapes from chops that happened, newest first (shareable moments, 2026-09-14). */
   myEscapes?: { weekOrPeriod: number; myPoints: number; chopLine: number; margin: number; choppedCount: number }[]
   assets: { leagueImage: string; introVideo: string }
-  /** The viewer's roster, so the chop line can say "you". */
+  /** The viewer's roster, so the list can say "you". */
   myRosterId?: string | null
-  /** Specialty-home extras (counts, chopped chips, next chop time, last chop). Null when unavailable. */
+  /** Counts, chopped teams, next chop time, last chop, the season's history. Null when unavailable. */
   home?: GuillotineHomeExtras | null
+  /** The teams alive when there is no chop line yet (lib/guillotine/guillotineField.ts). */
+  field?: { rosterId: string; displayName: string }[] | null
+  /** This week's live chop line, by the chop's own rules (lib/guillotine/chopWatch.ts). */
+  chopWatch?: { live: true; week: number; chopCount: number; chopLine: number | null } | null
+  /** Players and games left and the projection for them, per team (`?outlook=1`). */
+  outlook?: Record<string, TeamOutlook> | null
+  /** The league's calendar week; behind `weekOrPeriod` before chops start, when the week being played does not count. */
+  calendarWeek?: number | null
   /** "Who's next?" for chopped managers (lib/guillotine/nextChopPick.ts). */
   nextChopPick?: NextChopPickState | null
+  /** Chopped managers' last words (lib/guillotine/lastWords.ts). `canRemove`: the viewer is the commissioner. */
+  lastWords?: (LastWordsState & { canRemove?: boolean }) | null
   config?: {
     eliminationStartWeek: number
     eliminationEndWeek: number | null
@@ -57,33 +76,33 @@ type Summary = {
     tiebreakerOrder: string[]
     dangerMarginPoints: number | null
     rosterReleaseTiming: string
+    /** Which end of the list the chop zone sits at (lib/guillotine/chopListOrder.ts). */
+    chopListOrder?: ChopListOrder | null
   } | null
 }
 
 interface GuillotineHomeProps {
   leagueId: string
-  /** Used for AI / intelligence deep links (tab availability varies by sport). */
+  /** Passed to the Chimmy panel's links (tab availability varies by sport). */
   sport: string
   leagueName?: string | null
 }
 
-export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomeProps) {
+export function GuillotineHome({ leagueId }: GuillotineHomeProps) {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [replayChop, setReplayChop] = useState<{ play: boolean; name?: string }>({ play: false })
-  // null = the current week, resolved by the summary route (it used to be a frozen 1).
-  const [week] = useState<number | null>(null)
+  // null = the week being played; a number = a week already chopped, replayed from the season's history.
+  const [pastWeek, setPastWeek] = useState<number | null>(null)
   const [escapeShare, setEscapeShare] = useState<'idle' | 'working' | 'shared' | 'downloaded' | 'failed'>('idle')
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(
-        `/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary${week != null ? `?week=${week}` : ''}`,
-        { cache: 'no-store' }
-      )
+      // `outlook=1`: players and games left and the projection for them, which fill the list before anyone scores.
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary?outlook=1`, { cache: 'no-store' })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         setError(data.error ?? `Error ${res.status}`)
@@ -98,14 +117,59 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
     } finally {
       setLoading(false)
     }
-  }, [leagueId, week])
+  }, [leagueId])
 
   useEffect(() => {
+    setPastWeek(null)
     load()
   }, [load])
 
+  const liveBoard = useMemo(() => (summary ? boardFromNativeSummary(summary) : null), [summary])
+  // Who a replayed chop names. The overlay reads "Chopped @name"; it was handed "Week 3" and read "Chopped @Week 3".
+  const choppedNames = useCallback(
+    (week: number) => choppedTeamNames(summary?.home?.chopped, week),
+    [summary],
+  )
+  // Last words just written or taken down show at once, without another summary request.
+  const keepLastWords = useCallback((next: LastWordsState) => {
+    setSummary((s) => (s ? { ...s, lastWords: { ...next, canRemove: s.lastWords?.canRemove } } : s))
+  }, [])
+  const removeLastWords = useCallback(
+    (rosterId: string) => {
+      void fetch(`/api/leagues/${encodeURIComponent(leagueId)}/guillotine/summary`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove_last_words', rosterId }),
+      })
+        .then(async (res) => (res.ok ? ((await res.json()) as { lastWords?: LastWordsState | null }).lastWords : null))
+        .then((next) => {
+          if (next) keepLastWords(next)
+        })
+        .catch(() => {})
+    },
+    [leagueId, keepLastWords],
+  )
+  const liveWeek = liveBoard?.week ?? summary?.weekOrPeriod ?? null
+  const history = summary?.home?.history ?? null
+  // Weeks the chop has already scored, oldest first, then the week being played.
+  const weeks = useMemo(() => {
+    const past = historyWeeks(history).filter((w) => liveWeek == null || w < liveWeek)
+    return liveWeek != null ? [...past, liveWeek] : past
+  }, [history, liveWeek])
+  const board = useMemo(() => {
+    if (pastWeek == null || !summary) return liveBoard
+    return (
+      boardFromHistoryWeek(history, pastWeek, {
+        myRosterId: summary.myRosterId,
+        order: liveBoard?.order,
+        dangerMargin: summary.config?.dangerMarginPoints ?? null,
+      }) ?? liveBoard
+    )
+  }, [pastWeek, summary, history, liveBoard])
+
   const myEscape = summary?.myEscapes?.[0] ?? null
-  // The chop card above already shows that week's scores and the cut, so the banner then keeps only the share.
+  // The chop moment above already shows that week's scores and the cut, so the banner then keeps only the share.
   const escapeShownInChop = myEscape != null && summary?.home?.lastChop?.week === myEscape.weekOrPeriod
   const releaseLabel = summary?.config?.rosterReleaseTiming
     ? (RELEASE_OPTIONS.find((o) => o.value === summary.config?.rosterReleaseTiming)?.label ??
@@ -135,6 +199,22 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
     )
   }
 
+  const endWeek = summary?.config?.eliminationEndWeek
+  const shownWeek = pastWeek ?? liveWeek
+  const weekPicker: BoardWeekPicker | null =
+    shownWeek != null && weeks.length > 1
+      ? { weeks, selected: shownWeek, label: guillotineWeekLabel(shownWeek, endWeek), onSelect: (w) => setPastWeek(w === liveWeek ? null : w) }
+      : null
+  // A chopped manager has no roster to set and cannot bid, and a member with no team has neither: no buttons.
+  const playing = liveBoard != null && liveBoard.status !== 'chopped' && liveBoard.status !== 'spectator'
+  const actions: BoardAction[] = playing && pastWeek == null
+    ? [
+        { label: 'Set lineup', href: leagueQueryPath(leagueId, { view: 'team' }), primary: true },
+        { label: 'Waivers', href: leagueQueryPath(leagueId, { view: 'players' }) },
+      ]
+    : []
+  const hasHistory = (history?.weeks ?? []).some((w) => w.chopLine != null) || (summary?.recentChopEvents?.length ?? 0) > 0
+
   return (
     <div className="gl space-y-6">
       <GuillotineChopAnimation
@@ -143,45 +223,16 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         onComplete={() => setReplayChop({ play: false })}
       />
 
-      {/* Specialty-league home: hero, chop line, rail, phone home, and the chop moment (2026-10-18). */}
-      {summary ? (
-        <GuillotineSpecialtyHome leagueId={leagueId} sport={sport} leagueName={leagueName} summary={summary} />
-      ) : null}
-
-      {/* Quick links: Chat, Settings, Chimmy, Waivers — the only waivers and Chimmy links on the hub. */}
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href={leagueQueryPath(leagueId, { openChat: 'league' })}
-          className="gl-chip inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"
-          data-testid="guillotine-quick-chat"
-        >
-          <MessageSquare className="h-4 w-4" /> Chat
-        </Link>
-        <Link
-          href={leagueQueryPath(leagueId, { view: 'settings' })}
-          className="gl-chip inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"
-          title="League settings — everyone can view; only commissioner & co-commissioners can edit"
-          data-testid="guillotine-quick-settings"
-        >
-          <Settings className="h-4 w-4" /> Settings
-        </Link>
-        <Link
-          href={leagueQueryPath(leagueId, { view: intelligenceViewForSport(sport) })}
-          className="gl-chip inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"
-          data-tone="accent"
-          data-testid="guillotine-quick-ai"
-        >
-          <Sparkles className="h-4 w-4" /> Chimmy Tools
-        </Link>
-        <Link
-          href={leagueQueryPath(leagueId, { view: 'players' })}
-          className="gl-chip inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"
-          data-tone="warn"
-          data-testid="guillotine-quick-waivers"
-        >
-          <Zap className="h-4 w-4" /> Waivers
-        </Link>
-      </div>
+      <GuillySurvivalBoard
+        board={board}
+        actions={actions}
+        weekLabel={shownWeek != null ? guillotineWeekLabel(shownWeek, endWeek) : null}
+        chopAt={pastWeek == null ? summary?.home?.nextChopAt ?? null : null}
+        weekPicker={weekPicker}
+        // The latest chop's moment sits with this week's list, not with a replayed one.
+        extra={pastWeek == null ? <GuillotineChopExtras leagueId={leagueId} home={summary?.home} lastWords={summary?.lastWords?.entries} boardHasOdds={liveBoard?.hasOdds} /> : null}
+        onRemoveLastWords={summary?.lastWords?.canRemove ? removeLastWords : undefined}
+      />
 
       {/*
         Your latest escape — from a chop that HAPPENED, never the live projection — with a share button
@@ -229,52 +280,60 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         </section>
       ) : null}
 
-      {/* Survival history: each chop and every team's path (lib/guillotine/survivalHistory.ts). */}
-      <section id="guillotine-history" className="gl-card rounded-2xl border p-4 sm:p-6">
-        <h2 className="gl-text mb-4 flex items-center gap-2 text-lg font-semibold">
-          <Skull className="gl-bad h-5 w-5" />
-          Survival history
-        </h2>
-        {summary?.home?.history ? (
-          <GuillotineSurvivalHistory
-            history={summary.home.history}
-            myRosterId={summary.myRosterId}
-            closeCallMargin={summary.config?.dangerMarginPoints ?? 10}
-            onReplay={(week) => setReplayChop({ play: true, name: `Week ${week}` })}
-          />
-        ) : !summary?.recentChopEvents?.length ? (
-          <p className="gl-muted text-sm">No eliminations yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {summary.recentChopEvents.map((ev) => (
-              <li
-                key={`${ev.weekOrPeriod}-${ev.choppedRosterIds.join(',')}`}
-                className="gl-well flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
-              >
-                <span className="gl-text text-sm">Week {ev.weekOrPeriod}</span>
-                <span className="gl-text2 text-sm">
-                  {ev.choppedRosterIds.length} team(s) chopped
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setReplayChop({ play: true, name: `Week ${ev.weekOrPeriod}` })}
-                  className="gl-accent-text text-xs hover:underline"
-                >
-                  Replay animation
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* A chopped manager's own box. Everyone reads the messages on the chop moment and in the Graveyard. */}
+      {summary?.lastWords?.mine ? <GuillotineLastWords leagueId={leagueId} state={summary.lastWords} onSaved={keepLastWords} /> : null}
 
       {summary?.nextChopPick ? <GuillotineNextChopPick leagueId={leagueId} state={summary.nextChopPick} /> : null}
 
-      {/* Guillotine AI Panel: deterministic data first, then gated AI strategy */}
+      {/* The season so far: each chop and every team's path (lib/guillotine/survivalHistory.ts). A closed row, and
+          absent until a chop has happened — it was an open card reading "No chops yet" on every visit before one. */}
+      {hasHistory ? (
+        <details id="guillotine-history" data-testid="guillotine-history" className="gl-fold gl-card rounded-2xl border p-4 sm:p-6">
+          <summary className="gl-fold-summary">
+            <h2 className="gl-text flex items-center gap-2 text-lg font-semibold">
+              <Skull className="gl-bad h-5 w-5" />
+              The season so far
+            </h2>
+          </summary>
+          <div className="mt-4">
+            {history ? (
+              <GuillotineSurvivalHistory
+                history={history}
+                myRosterId={summary?.myRosterId}
+                closeCallMargin={summary?.config?.dangerMarginPoints ?? 10}
+                onReplay={(week) => setReplayChop({ play: true, name: choppedNames(week) })}
+              />
+            ) : (
+              <ul className="space-y-2">
+                {(summary?.recentChopEvents ?? []).map((ev) => (
+                  <li
+                    key={`${ev.weekOrPeriod}-${ev.choppedRosterIds.join(',')}`}
+                    className="gl-well flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
+                  >
+                    <span className="gl-text text-sm">Week {ev.weekOrPeriod}</span>
+                    <span className="gl-text2 text-sm">
+                      {ev.choppedRosterIds.length} team(s) chopped
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setReplayChop({ play: true, name: choppedNames(ev.weekOrPeriod) })}
+                      className="gl-accent-text text-xs hover:underline"
+                    >
+                      Replay animation
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </details>
+      ) : null}
+
+      {/* Guilly Chimmy: deterministic data first, then the gated strategy. A closed row. */}
       <div id="guillotine-ai">
       <GuillotineAIPanel
         leagueId={leagueId}
-        weekOrPeriod={summary?.weekOrPeriod ?? week ?? 1}
+        weekOrPeriod={summary?.weekOrPeriod ?? 1}
         deterministicSummary={
           summary
             ? {
@@ -290,11 +349,16 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       </div>
 
       {/* Settings / Rules */}
-      <section data-testid="guillotine-rules" className="gl-card rounded-2xl border p-4 sm:p-6">
-        <h2 className="gl-text mb-4 flex items-center gap-2 text-lg font-semibold">
-          <Settings className="gl-muted h-5 w-5" />
-          Rules & Settings
-        </h2>
+      {/* Closed until asked for (2026-11-24): the rules are reference, read once, and open they were ~480px
+          at the foot of every visit. "Format rules FAQ" in the header carries them too. */}
+      <details data-testid="guillotine-rules" className="gl-fold gl-card rounded-2xl border p-4 sm:p-6">
+        <summary className="gl-fold-summary">
+          <h2 className="gl-text flex items-center gap-2 text-lg font-semibold">
+            <Settings className="gl-muted h-5 w-5" />
+            Rules & Settings
+          </h2>
+        </summary>
+        <div className="mt-4">
         {summary?.config ? (
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             {guillotineRuleRows(summary.config).map((row) => (
@@ -330,7 +394,8 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         >
           League Settings
         </Link>
-      </section>
+        </div>
+      </details>
     </div>
   )
 }

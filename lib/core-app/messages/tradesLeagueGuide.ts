@@ -43,6 +43,7 @@ export const tradesLeagueGuideMessages = defineMessages({
     /** Followed by the time, in the viewer's own clock (LocalDateTime). */
     historyChecked: (refreshed: boolean) => `Trade history ${refreshed ? 'refreshed' : 'checked'} with Sleeper · grades updated`,
     leagueGradeShort: (got: string, gave: string) => `League grade · got ${got} for ${gave}`,
+    leagueGradeOnly: 'League grade',
     realizedShort: (net: string) => `Realized · ${net} pts while held`,
     /** `moment` is `gradeMoment(graded)`; `momentEs` is the same run through `tradeUiCopy`. */
     gradedWhen: (moment: string, _momentEs: string) => `Graded on this league’s values ${moment}.`,
@@ -82,6 +83,7 @@ export const tradesLeagueGuideMessages = defineMessages({
 
     historyChecked: (refreshed) => `Historial de intercambios ${refreshed ? 'actualizado' : 'revisado'} con Sleeper · calificaciones del`,
     leagueGradeShort: (got, gave) => `Calificación de la liga · recibió ${got} por ${gave}`,
+    leagueGradeOnly: 'Calificación de la liga',
     realizedShort: (net) => `Real · ${net} pts mientras los tuvo`,
     gradedWhen: (_moment, momentEs) => `Calificado con los valores de esta liga ${momentEs}.`,
     realizedCaveat: 'La calificación real cuenta los puntos de fantasy que sumaron los jugadores mientras estuvieron en el equipo. No ajusta por necesidades del equipo ni por probabilidades de playoffs.',

@@ -62,6 +62,8 @@ export function WaiverLeagueSettingsPanel({
   // These two live in the waiver-settings row's engine config, read from the effective settings.
   const [freeAgencyMode, setFreeAgencyMode] = useState<FreeAgencyMode>('standard')
   const [faabRollover, setFaabRollover] = useState<FaabRolloverRule | null>(null)
+  // Off unless a commissioner turns it on: a benched player whose game has started is locked too.
+  const [benchDropsAfterLock, setBenchDropsAfterLock] = useState(false)
   // Unset, a redraft renewal resets FAAB and a keeper / dynasty one carries it over. The server sends
   // `faabRolloverDefault` from the family the renew route applies (faabRolloverFamilyForLeague); this
   // form has no league variant or settings, so that answer replaces the first guess (league type and
@@ -74,8 +76,14 @@ export function WaiverLeagueSettingsPanel({
     let live = true
     void fetch(`/api/waiver-wire/leagues/${encodeURIComponent(leagueId)}/settings`, { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
-      .then((eff: { freeAgencyMode?: string | null; faabRolloverRule?: string | null; faabRolloverDefault?: string | null } | null) => {
+      .then((eff: {
+        freeAgencyMode?: string | null
+        faabRolloverRule?: string | null
+        faabRolloverDefault?: string | null
+        waiverEngineConfig?: Record<string, unknown> | null
+      } | null) => {
         if (!live || !eff) return
+        setBenchDropsAfterLock(eff.waiverEngineConfig?.can_drop_bench_after_lock === true)
         setFreeAgencyMode(readFreeAgencyMode(eff.freeAgencyMode))
         setFaabRollover(readFaabRolloverRule(eff.faabRolloverRule))
         const fallback = readFaabRolloverRule(eff.faabRolloverDefault)
@@ -240,6 +248,17 @@ export function WaiverLeagueSettingsPanel({
           ))}
         </select>
       </div>
+
+      <SettingsToggleRow
+        label="Allow bench drops after kickoff"
+        description="Off by default: once a player's game starts he can't be dropped, starter or bench. Turn on to let managers drop a benched player whose game has started."
+        checked={benchDropsAfterLock}
+        disabled={disabled}
+        onChange={(v) => {
+          setBenchDropsAfterLock(v)
+          debouncedSave({ waiverBenchDropsAfterLock: v })
+        }}
+      />
 
       <SettingsToggleRow
         label="Allow custom daily waivers"

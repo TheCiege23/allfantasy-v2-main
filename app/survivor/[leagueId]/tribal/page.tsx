@@ -48,10 +48,12 @@ export default function SurvivorTribalPage() {
           tribeName={tribe?.name ? stripLeadingTribeIcon(tribe.name) || tribe.name : null}
           backHref={base}
           idolHref={`/league/${encodeURIComponent(leagueId)}?tab=survivor`}
+          openFooter={
+            <p className="mx-auto mt-4 max-w-lg px-3 text-center text-[12px] text-white/45" data-testid="survivor-vote-chimmy-line">
+              Prefer chat? You can still vote privately with <Link href={`${base}/chimmy`} className="sv-link underline">@Chimmy</Link>. It is the same ballot.
+            </p>
+          }
         />
-        <p className="mx-auto mt-4 max-w-lg px-3 text-center text-[12px] text-white/45">
-          Prefer chat? You can still vote privately with <Link href={`${base}/chimmy`} className="sv-link underline">@Chimmy</Link>. It is the same ballot.
-        </p>
       </div>
     )
   }

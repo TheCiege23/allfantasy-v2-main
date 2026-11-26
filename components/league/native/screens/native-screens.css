@@ -203,6 +203,11 @@
 .nls-drag-overlay { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border: 1px solid var(--accent-line); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: 0 8px 24px rgba(0, 0, 0, .35); cursor: grabbing; }
 .nls-lrow-action { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .nls-lock-reason { max-width: 180px; color: var(--muted); font-size: 11px; line-height: 1.3; text-align: right; }
+.nls-lock { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; cursor: help; }
+.nls-lock-pill { appearance: none; background: transparent; cursor: help; opacity: 1; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--line2); border-radius: 999px; color: var(--muted); font: 600 11px var(--nl-mono); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.nls-lock-pill svg { width: 11px; height: 11px; flex: none; }
+.nls-lock-when { color: var(--faint, var(--muted)); font-size: 11px; white-space: nowrap; }
+.nls-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .nls-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 18px; }
 .nls-stat { padding: 14px 16px; border-radius: 8px; background: var(--surface2); }
 .nls-stat dt { margin-bottom: 8px; color: var(--faint); font: 700 11px var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
@@ -311,7 +316,9 @@
   .nls-head { align-items: flex-start; }
   .nls-head-actions { width: 100%; }
   .nls-seg { width: 100%; overflow-x: auto; scrollbar-width: none; }
-  .nls-seg button { flex: 1; min-height: 44px; }
+  /* Grow to fill, never shrink below the label: `flex: 1` let a 7-item bar (Waivers: Search … My claims) squeeze
+     every button to 46px on a 375px phone, and the nowrap labels ran into each other. Too many items now scroll. */
+  .nls-seg button { flex: 1 0 auto; min-height: 44px; }
   .nls-card { padding: 18px 16px; }
   .nls-btn { min-height: 44px; }
   .nls-aside { display: flex; }
@@ -332,11 +339,17 @@
   .nls-mrow { grid-template-columns: minmax(0, 1fr) 48px 48px 48px minmax(0, 1fr); gap: 6px; min-height: 64px; padding: 8px 14px; }
   .nls-mrow .nls-pts { font-size: 16px; }
   .nls-mrow .nls-pos { min-width: 44px; }
-  /* Photo and team crest stay on a phone, above the name: a 40px column is too narrow beside it. */
-  .nls-mrow .nls-pl[data-media=true] { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .nls-mrow .nls-player[data-side=right] .nls-pl[data-media=true] { flex-direction: column; align-items: flex-end; }
-  .nls-mrow .nls-mavatar .nls-pavatar { width: 34px; height: 34px; }
-  .nls-mrow .nls-mavatar .nls-pavatar-crest { width: 17px; height: 17px; }
+  /* No photo on a phone (2026-11-24, the simplify pass). A 40px column is too narrow beside it, and stacked
+     above the name it made every starter row ~170px: nine rows were most of the page. The name, game and
+     points are the row; the photo is on the player card a tap away. */
+  .nls-mrow .nls-mavatar { display: none; }
+  .nls-mrow .nls-pl { width: 100%; }
+  .nls-mrow .nls-pl-text { flex: 1 1 auto; }
+  /* With the photo gone the names get the width back: 40px point and position columns, 4px gaps (84px a side at 390px). */
+  .nls-mrow { grid-template-columns: minmax(0, 1fr) 40px 40px 40px minmax(0, 1fr); gap: 4px; }
+  .nls-mrow .nls-pos { min-width: 40px; }
+  /* The scoreboard glance under the insight card: on a phone "League scoreboard" is the tab at the top. */
+  .nls-aside .nls-glance { display: none; }
   .nls-mrow .nls-pl-text > small:not(.nls-oprank) { white-space: normal; overflow: visible; line-height: 1.35; }
   .nls-player strong { font-size: 14px; }
   .nls-player small { font-size: 11px; }
@@ -425,7 +438,10 @@
 .nls-trade-overview>div{min-width:0;padding:16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,rgba(14,165,178,.13),var(--surface))}
 .nls-trade-overview span{display:block;color:var(--text2);font-size:12px}.nls-trade-overview strong{display:block;margin-top:7px;color:var(--text);font-size:24px;line-height:1}
 .nls-zombie-trade-note{padding:12px 14px;border:1px solid rgba(163,230,53,.3);border-radius:10px;background:rgba(54,83,20,.2);color:#ecfccb;font-size:13px}
-@media(max-width:600px){.nls-trade-overview{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.nls-trade-overview>div{padding:12px}.nls-trade-overview strong{font-size:20px}}
+/* Phone (2026-11-24, the simplify pass): the four counts are one row, not a 2x2 block, and an open offer's
+   sentence takes the full width with its status and Cancel under it (squeezed beside them it ran six lines).
+   Standings' playoff-format rows (.nls-dl) are 36px, not 48: four facts read as a list, not four buttons. */
+@media(max-width:600px){.nls-dl>div{min-height:36px;font-size:14px}.nls-trade-overview{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.nls-trade-overview>div{padding:10px 8px}.nls-trade-overview span{font-size:11px;line-height:1.25}.nls-trade-overview strong{margin-top:5px;font-size:20px}.nls-offer-out>.nls-grow{flex:1 1 100%}}
 
 /*
  * A lineup row in a narrow column: a phone, and the desktop workspace's 300px lineup card alike, so it

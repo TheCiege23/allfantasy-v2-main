@@ -53,6 +53,14 @@ afterEach(() => {
 })
 
 describe('Guilly Rules & Settings, in words', () => {
+  it('the rules are a closed row, the heading its summary (2026-11-24)', async () => {
+    const card = await rulesCard(CONFIG)
+    expect(card.tagName).toBe('DETAILS')
+    expect((card as HTMLDetailsElement).open).toBe(false)
+    expect(card.querySelector('summary h2')?.textContent).toContain('Rules & Settings')
+  })
+
+
   it('prints no stored keys: no snake_case anywhere in the card', async () => {
     const card = await rulesCard(CONFIG)
     expect(card.textContent).not.toMatch(/[a-z]+_[a-z]+/)

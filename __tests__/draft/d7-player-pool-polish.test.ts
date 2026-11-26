@@ -72,12 +72,14 @@ describe('ADP column shows one number (2026-11-16)', () => {
 
 
 describe('null stat cells — dimmed for "no data" clarity (Commit 22)', () => {
-  it("em-dash values get text-white/30 class in the default stat branch", () => {
-    expect(tableSrc).toMatch(/display === '—'[\s\S]{0,40}text-white\/30/)
+  // /50, not /30: still dimmer than a real value (/85), but /30 measured 2.68:1 on the pool surface
+  // and /50 holds 4.5:1 there and on the hover and selected row fills (2026-11-25).
+  it("em-dash values get text-white/50 class in the default stat branch", () => {
+    expect(tableSrc).toMatch(/display === '—'[\s\S]{0,40}text-white\/50/)
   })
 
   it('className is only applied conditionally — actual values stay unstyled', () => {
-    expect(tableSrc).toMatch(/display === '—' \? 'text-white\/30' : undefined/)
+    expect(tableSrc).toMatch(/display === '—' \? 'text-white\/50' : undefined/)
   })
 })
 

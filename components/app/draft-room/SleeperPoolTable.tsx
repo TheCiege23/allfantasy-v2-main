@@ -85,6 +85,11 @@ interface SleeperPoolTableProps {
   /** Viewer's next pick — adds the LEFT @ column. Null for spectators / idle drafts. */
   leftAtPick?: { overall: number; label: string } | null
   /**
+   * A line across the list at the viewer's next pick: `picksAway` available players sit above it
+   * (the ones other teams take first, if the list holds its order). Null draws nothing.
+   */
+  nextPickLine?: { picksAway: number; text: string; title?: string } | null
+  /**
    * Dynasty only: show the shared Rookie / Prospect chip (`resolveDraftRoomPlayerLabel`) beside the
    * position. Off by default so redraft pools render exactly as before.
    */
@@ -229,7 +234,7 @@ function SleeperRow(props: SleeperRowProps) {
       case 'rk':
         return (
           <Cell key={col.key} width={col.width} align="right">
-              <span className="text-white/45 text-[11px] font-medium" data-testid={`${testIdBase}-rk`}>
+              <span className="text-white/50 text-[11px] font-medium" data-testid={`${testIdBase}-rk`}>
               {rank}
             </span>
           </Cell>
@@ -286,9 +291,9 @@ function SleeperRow(props: SleeperRowProps) {
               <div className="flex min-w-0 items-center gap-1">
                 <PositionChip pos={p.position} sport={draftSport} />
                 {p.team ? (
-                  <span className="truncate text-[11px] text-white/38">{p.team}</span>
+                  <span className="truncate text-[11px] text-white/50">{p.team}</span>
                 ) : isProspect ? (
-                  <span className="truncate text-[11px] text-white/38" data-testid={`${testIdBase}-prospect-unsigned`}>
+                  <span className="truncate text-[11px] text-white/50" data-testid={`${testIdBase}-prospect-unsigned`}>
                     {t('draftRoom.pool.prospectUnsigned')}
                   </span>
                 ) : null}
@@ -314,7 +319,16 @@ function SleeperRow(props: SleeperRowProps) {
                     className="flex-shrink-0 rounded px-1 py-px"
                   />
                 ) : null}
-                {p.display?.stats?.seasonLabel ? <span className="shrink-0 text-[11px] text-cyan-200/70" title="Recorded season statistics. Projections are labeled separately.">{p.display.stats.seasonLabel}</span> : null}
+                {/* Last season's numbers beside this season's must not read as this season's. */}
+                {p.display?.stats?.seasonLabel && p.display.stats.seasonIsPrevious ? (
+                  <span
+                    className="shrink-0 rounded border border-amber-300/35 bg-amber-500/12 px-1 py-px text-[11px] font-semibold text-amber-100"
+                    title={t('draftRoom.pool.lastSeasonStatsTooltip')}
+                    data-testid={`${testIdBase}-last-season-stats`}
+                  >
+                    {p.display.stats.seasonLabel} · {t('draftRoom.pool.lastSeasonStats')}
+                  </span>
+                ) : p.display?.stats?.seasonLabel ? <span className="shrink-0 text-[11px] text-cyan-200/70" title="Recorded season statistics. Projections are labeled separately.">{p.display.stats.seasonLabel}</span> : null}
               </div>
               {showAi ? (
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">
@@ -595,7 +609,7 @@ function SleeperRow(props: SleeperRowProps) {
             <span
               data-testid={statTestId}
               title={tipFor(col.key, col.statLabel ?? def.label, tipRaw)}
-              className={display === '—' ? 'text-white/30' : undefined}
+              className={display === '—' ? 'text-white/50' : undefined}
             >
               {display}
             </span>
@@ -637,6 +651,21 @@ function SleeperRow(props: SleeperRowProps) {
 
 const MemoSleeperRow = React.memo(SleeperRow)
 
+/**
+ * The row the next-pick line sits above: the one reached after `picksAway` still-available players.
+ * Null when the viewer is up now (nothing goes before them) or the list is too short to reach it.
+ */
+export function nextPickLineRowIndex<T>(rows: readonly T[], picksAway: number, isDrafted: (row: T) => boolean): number | null {
+  if (!Number.isFinite(picksAway) || picksAway < 1) return null
+  let available = 0
+  for (let i = 0; i < rows.length; i += 1) {
+    if (isDrafted(rows[i]!)) continue
+    if (available === Math.trunc(picksAway)) return i
+    available += 1
+  }
+  return null
+}
+
 export function SleeperPoolTable(props: SleeperPoolTableProps) {
   const {
     filtered,
@@ -661,6 +690,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
     onSortChange,
     aiOverlaySignals,
     leftAtPick = null,
+    nextPickLine = null,
     showExperienceLabel = false,
   } = props
 
@@ -690,6 +720,11 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
     overscan: 8,
     enabled: !disableVirtualization,
   })
+
+  const nextPickLineIndex = useMemo(
+    () => (nextPickLine ? nextPickLineRowIndex(filtered, nextPickLine.picksAway, isPlayerDrafted) : null),
+    [filtered, nextPickLine, isPlayerDrafted],
+  )
 
   const items = virtualizer.getVirtualItems()
   const totalSize = disableVirtualization ? filtered.length * rowHeight : virtualizer.getTotalSize()
@@ -778,6 +813,21 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
           position: 'relative',
         }}
       >
+        {nextPickLine && nextPickLineIndex != null ? (
+          <div
+            role="separator"
+            aria-label={nextPickLine.text}
+            title={nextPickLine.title}
+            data-testid="sleeper-pool-next-pick-line"
+            data-row-index={nextPickLineIndex}
+            className="pointer-events-none absolute left-0 z-[5] h-0 w-full border-t-2 border-cyan-300"
+            style={{ top: nextPickLineIndex * rowHeight }}
+          >
+            <span className="sticky left-2 inline-block -translate-y-1/2 whitespace-nowrap rounded-full bg-cyan-300 px-2 py-px text-[11px] font-extrabold leading-4 text-[#06121f]">
+              {nextPickLine.text}
+            </span>
+          </div>
+        ) : null}
         {disableVirtualization ? (
           filtered.map((p, idx) => {
             const k = rowKey(p)

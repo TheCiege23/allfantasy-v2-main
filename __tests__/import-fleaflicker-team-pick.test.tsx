@@ -9,7 +9,7 @@
  *  - The preview showed no per-bucket coverage; it now lists each one, state in words.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 const discoverProviderLeagues = vi.fn()
 const submitImportCreation = vi.fn()
@@ -241,7 +241,13 @@ describe('search on a long "Which team is yours?" list', () => {
   async function openBigPreview() {
     fetchImportPreview.mockResolvedValue({ ok: true, data: BIG_PREVIEW })
     render(<ImportV4 defaultProvider="fleaflicker" initialLeagueSourceId="206154" />)
-    return screen.findByTestId('import-preview-team-pick')
+    const pick = await screen.findByTestId('import-preview-team-pick')
+    // ImportV4 clears the team search in an effect each time a preview arrives. `findByTestId` can
+    // resolve as soon as the list is in the DOM, before that effect has run; typing then queues the
+    // search text FIRST and the pending clear second, and the list never narrows. Seen once on a loaded
+    // CI runner (2026-11-25, "expected … to have a length of 1 but got 12"). Let the effect run.
+    await act(async () => {})
+    return pick
   }
 
   it('a short list has no search box', async () => {

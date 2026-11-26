@@ -187,7 +187,7 @@ export function harnessOdds(standings: LeagueStandingsResult): StandingsOdds | n
     sosRanked: board.teams.length,
     leagueMu: 112,
     iterations: 10_000,
-    you: { rosterId: me.rosterId, playoffPct: byRoster[me.rosterId].playoffPct, whatDecidesIt: 'Win one of your last two and you are in nine times in ten.' },
+    you: { rosterId: me.rosterId, playoffPct: byRoster[me.rosterId].playoffPct, whatDecidesIt: 'Win two of your last three and you are in nine times in ten.' },
     stakes: null,
     basis: '10,000 simulated seasons (harness fixture).',
     href: `/core/season-outlook?league=${HARNESS_LEAGUE_ID}`,
@@ -275,7 +275,7 @@ export function harnessOutlook(): { league: OutlookLeague; swing: SwingMatchup; 
     byeTeams: 2,
     you,
     teams,
-    whatDecidesIt: 'Win one of your last two and you are in nine times in ten.',
+    whatDecidesIt: 'Win two of your last three and you are in nine times in ten.',
     href: `/core?league=${HARNESS_LEAGUE_ID}`,
     milestones: {
       totalGames: WEEKS,

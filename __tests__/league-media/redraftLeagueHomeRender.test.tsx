@@ -65,6 +65,13 @@ afterEach(() => {
 })
 
 describe('native redraft League home', () => {
+  it('in season, says the week once: no "Next up" card under the week strip, and no separate chat card (2026-11-24)', async () => {
+    renderHome(league())
+    await screen.findByTestId('redraft-score-bug')
+    expect(document.querySelector('.nl-next')).toBeNull()
+    expect(document.querySelector('.nl-chat-preview')).toBeNull()
+  })
+
   it('draws the playoff race with the line at the league’s field, the score bug and last week’s recap', async () => {
     renderHome(league())
     expect(screen.getByTestId('redraft-playoff-race')).toBeTruthy()

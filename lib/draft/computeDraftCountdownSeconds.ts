@@ -28,3 +28,18 @@ export function computeDraftCountdownSeconds(
   }
   return serverRemainingSeconds ?? null
 }
+
+/**
+ * The value to print BEFORE the browser clock is read — the server render and the first client
+ * render. Derived only from the snapshot (its own `remainingSeconds`, computed when the snapshot was
+ * built), so both sides print the same text and hydration cannot mismatch on a second that ticked
+ * in between. Never reads `Date.now()`.
+ */
+export function snapshotDraftCountdownSeconds(
+  timerStatus: 'running' | 'paused' | 'expired' | 'none',
+  serverRemainingSeconds: number | null | undefined,
+): number | null {
+  if (timerStatus === 'expired') return 0
+  if (serverRemainingSeconds == null || !Number.isFinite(serverRemainingSeconds)) return null
+  return Math.max(0, Math.ceil(serverRemainingSeconds))
+}

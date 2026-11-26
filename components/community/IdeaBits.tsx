@@ -3,6 +3,7 @@ import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { clubhousePostHref } from '@/lib/community/channels'
 import { IDEA_STATUS_COPY, type IdeaStatus } from '@/lib/community/ideas'
 import { displayNameOf, timeAgo } from '@/lib/community/format'
+import { formatBytes, type IdeaAttachmentView } from '@/lib/community/attachments'
 import type { CommunityAuthor, IdeaView, PostSummary } from '@/lib/community/service'
 import { AuthorLine, TagPills } from './CommunityBits'
 import { UpvoteButton } from './IdeaClient'
@@ -91,5 +92,41 @@ export function IdeaCard({
         </div>
       </div>
     </article>
+  )
+}
+
+/** Photos and PDFs on an idea. Photos show inline; every file opens full size in a new tab. */
+export function IdeaAttachments({ files }: { files: IdeaAttachmentView[] }) {
+  if (files.length === 0) return null
+  const images = files.filter((f) => f.isImage)
+  const docs = files.filter((f) => !f.isImage)
+  return (
+    <section aria-label="Attached files" className="ch-attachments" data-testid="idea-attachments">
+      {images.length > 0 && (
+        <div className="ch-attach-grid">
+          {images.map((f) => (
+            <a key={f.id} href={f.href} target="_blank" rel="noopener noreferrer" className="ch-attach-img" title={f.fileName}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- streamed from our own route, not optimisable */}
+              <img src={f.href} alt={f.fileName} loading="lazy" />
+            </a>
+          ))}
+        </div>
+      )}
+      {docs.length > 0 && (
+        <ul className="ch-attach-docs">
+          {docs.map((f) => (
+            <li key={f.id}>
+              <a href={f.href} target="_blank" rel="noopener noreferrer" className="ch-attach-doc">
+                <span aria-hidden>📄</span>
+                <span className="min-w-0 truncate">{f.fileName}</span>
+                <span className="ch-mono ml-auto shrink-0 whitespace-nowrap text-xs" style={{ color: 'var(--faint)' }}>
+                  PDF · {formatBytes(f.byteSize)}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }

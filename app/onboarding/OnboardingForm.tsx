@@ -247,12 +247,10 @@ export default function OnboardingForm({
         </div>
       )}
 
-      {/* Avatar */}
-      <div>
-        <label style={{ display: "block", fontSize: 12, marginBottom: 8, color: "color-mix(in srgb, var(--color-text) 70%, transparent)" }}>
-          Avatar
-        </label>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
+      {/* Avatar: one closed row, your avatar and "Choose an avatar" (2026-11-24, the simplify pass). Open, the
+          twenty presets were ~250px above the username on a phone; most people keep their initials. */}
+      <details data-testid="onboarding-avatar">
+        <summary style={{ display: "flex", alignItems: "center", gap: 14, cursor: "pointer", listStyle: "none", minHeight: 64 }}>
           <div
             style={{
               width: 60,
@@ -274,12 +272,13 @@ export default function OnboardingForm({
               size="md"
             />
           </div>
-          <p style={{ fontSize: 12.5, lineHeight: 1.5, color: "var(--color-neutral-500)", margin: 0 }}>
-            Pick a preset or upload your own. Change it any time.
-          </p>
-        </div>
+          <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>Choose an avatar</span>
+            <span style={{ fontSize: 12.5, lineHeight: 1.5, color: "var(--color-neutral-500)" }}>A preset or your own image. Change it any time.</span>
+          </span>
+        </summary>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginTop: 12 }}>
           <button
             type="button"
             onClick={() => {
@@ -369,7 +368,7 @@ export default function OnboardingForm({
         {avatarFileError && (
           <p style={{ marginTop: 8, fontSize: 12, color: "var(--color-error)" }}>{avatarFileError}</p>
         )}
-      </div>
+      </details>
 
       {/* Username */}
       <div className="field">
@@ -434,8 +433,17 @@ export default function OnboardingForm({
         />
       </div>
 
-      {/* Timezone */}
-      <div className="field">
+      {/* Time zone and language, one closed row showing what is set (2026-11-24): both are filled in from the
+          browser, so most people never change them. Open, they are the same two fields as before. */}
+      <details data-testid="onboarding-locale">
+        <summary style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 44, cursor: "pointer", listStyle: "none" }}>
+          <span style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 70%, transparent)" }}>Time zone &amp; language</span>
+          <span style={{ fontSize: 13, color: "var(--color-neutral-400)", textAlign: "right" }} data-testid="onboarding-locale-value">
+            {SIGNUP_TIMEZONES.find((t) => t.value === timezone)?.label ?? timezone} · {getLanguageOptionLabel(language)}
+          </span>
+          <span aria-hidden style={{ fontSize: 12, color: "var(--color-neutral-500)" }}>▾</span>
+        </summary>
+      <div className="field" style={{ marginTop: 12 }}>
         <label htmlFor="ob-tz">Timezone</label>
         <select
           id="ob-tz"
@@ -476,6 +484,7 @@ export default function OnboardingForm({
           ))}
         </select>
       </div>
+      </details>
 
       {/* Phone (optional) */}
       <div className="field">
@@ -491,7 +500,8 @@ export default function OnboardingForm({
           placeholder="+1 (555) 123-4567"
           autoComplete="tel"
         />
-        <p style={{ marginTop: 6, fontSize: 12, color: "var(--color-neutral-600)", display: "inline-flex", alignItems: "center", gap: 5 }}>
+        {/* One flowing sentence (2026-11-24): as an inline-flex row the link split the hint into three columns on a phone. */}
+        <p style={{ marginTop: 6, fontSize: 12, color: "var(--color-neutral-600)", ...(initialPhoneVerified ? { display: "inline-flex", alignItems: "center", gap: 5 } : {}) }}>
           {initialPhoneVerified ? (
             <>
               <CheckCircle2 size={13} style={{ color: "var(--color-accent-400)" }} />

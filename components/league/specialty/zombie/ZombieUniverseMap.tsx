@@ -41,6 +41,9 @@ export function ZombieUniverseMap({ universeId, leagueId }: { universeId: string
     <SpecialtyCard
       label="The universe · infection by league"
       testId="zombie-universe-map"
+      // A closed row on the league home (2026-11-24, the simplify pass): every league's board was ~600px under
+      // your week, and "Universe board" in the hero opens the full standings.
+      fold
       aside={
         <Link href={`/app/zombie-universe/${encodeURIComponent(universeId)}/standings`} className={z.leagueNote}>
           Universe standings

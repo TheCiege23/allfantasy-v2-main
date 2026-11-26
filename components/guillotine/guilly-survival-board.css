@@ -1,0 +1,160 @@
+/* Guilly survival board (GuillySurvivalBoard.tsx). Reads the native workspace's tokens when it sits inside
+   one and falls back to its own dark palette elsewhere (an imported league's classic tab). */
+.gsb {
+  --gsb-text: var(--text, #e8edf5);
+  --gsb-muted: var(--muted, #93a0b4);
+  --gsb-faint: var(--faint, #67738a);
+  --gsb-line: var(--line2, rgba(255, 255, 255, 0.1));
+  --gsb-card: var(--panel, rgba(255, 255, 255, 0.03));
+  --gsb-accent: var(--accent, #ff8a3d);
+  --gsb-bad: var(--bad, #ff5d6c);
+  --gsb-warn: var(--warn, #ffc46b);
+  --gsb-good: var(--good, #3ee0a1);
+  --gsb-mono: var(--nl-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--gsb-text);
+}
+.gsb-loading, .gsb-empty { padding: 24px; color: var(--gsb-muted); font-size: 14px; }
+.gsb-error { margin: 0; padding: 12px 16px; color: var(--gsb-bad); font-size: 14px; }
+
+/* 1 — the hero: one number, one action */
+.gsb-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 20px 22px 18px;
+  border: 1px solid var(--gsb-line);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--gsb-tone, var(--gsb-good)) 16%, transparent) 0%, transparent 55%),
+    var(--gsb-card);
+  --gsb-tone: var(--gsb-good);
+}
+.gsb-hero[data-status=danger] { --gsb-tone: var(--gsb-warn); }
+.gsb-hero[data-status=chop_zone] { --gsb-tone: var(--gsb-bad); border-color: color-mix(in srgb, var(--gsb-bad) 45%, transparent); }
+.gsb-hero[data-status=chopped] { --gsb-tone: var(--gsb-faint); }
+.gsb-hero[data-status=pre_scores], .gsb-hero[data-status=spectator] { --gsb-tone: var(--gsb-accent); }
+.gsb-hero[data-status=immune] { --gsb-tone: #7ab8ff; }
+.gsb-hero-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; }
+.gsb-eyebrow { color: var(--gsb-tone); font: 700 11px var(--gsb-mono); letter-spacing: .12em; text-transform: uppercase; }
+.gsb-alive { color: var(--gsb-muted); font: 600 12px var(--gsb-mono); }
+.gsb-hero-main { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.gsb-hero-icon { width: 26px; height: 26px; flex: none; color: var(--gsb-tone); }
+.gsb-headline { margin: 0; color: var(--gsb-tone); font-size: clamp(24px, 4.2vw, 36px); font-weight: 800; line-height: 1.1; letter-spacing: -.01em; }
+.gsb-hero[data-status=pre_scores] .gsb-headline, .gsb-hero[data-status=spectator] .gsb-headline, .gsb-hero[data-status=chopped] .gsb-headline { color: var(--gsb-text); }
+.gsb-detail { margin: 6px 0 0; color: var(--gsb-muted); font-size: 14px; line-height: 1.45; }
+.gsb-score-row { display: flex; flex-wrap: wrap; gap: 8px 28px; margin-top: 14px; }
+.gsb-score-row span { display: flex; flex-direction: column; gap: 2px; }
+.gsb-score-row small { color: var(--gsb-faint); font: 600 11px var(--gsb-mono); letter-spacing: .08em; text-transform: uppercase; }
+.gsb-score-row b { color: var(--gsb-text); font: 700 22px var(--gsb-mono); font-variant-numeric: tabular-nums; }
+.gsb-score-row i { color: var(--gsb-faint); font-size: 14px; font-style: normal; }
+
+/* 2 — the blade: every team on one score strip */
+.gsb-strip { margin-top: 34px; }
+.gsb-strip-rail { position: relative; height: 40px; margin: 0 16px; border-radius: 999px; background: linear-gradient(90deg, color-mix(in srgb, var(--gsb-text) 4%, transparent), color-mix(in srgb, var(--gsb-good) 10%, transparent)); }
+.gsb-strip-zone { position: absolute; inset: 0 auto 0 0; border-radius: 999px 0 0 999px; background: color-mix(in srgb, var(--gsb-bad) 16%, transparent); }
+.gsb-strip-blade { position: absolute; top: -8px; bottom: -8px; width: 0; border-left: 2px dashed var(--gsb-bad); }
+.gsb-strip-blade span { position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%); color: var(--gsb-bad); font: 700 11px var(--gsb-mono); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.gsb-dot { position: absolute; top: 50%; display: grid; place-items: center; width: 30px; height: 30px; margin: -15px 0 0 -15px; border: 1px solid var(--gsb-line); border-radius: 50%; background: #1a2130; color: var(--gsb-muted); font: 700 11px var(--gsb-mono); }
+.gsb-dot[data-tier=danger] { border-color: color-mix(in srgb, var(--gsb-warn) 60%, transparent); color: var(--gsb-warn); }
+.gsb-dot[data-tier=chop_zone] { border-color: var(--gsb-bad); color: var(--gsb-bad); }
+.gsb-dot[data-me] { z-index: 2; width: 38px; height: 38px; margin: -19px 0 0 -19px; border: 2px solid var(--gsb-accent); background: var(--gsb-accent); color: #10131a; box-shadow: 0 0 0 4px color-mix(in srgb, var(--gsb-accent) 25%, transparent); }
+.gsb-strip-scale { display: flex; justify-content: space-between; margin: 8px 16px 0; color: var(--gsb-faint); font: 600 11px var(--gsb-mono); text-transform: uppercase; letter-spacing: .08em; }
+
+.gsb-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.gsb-btn { min-height: 40px; padding: 0 16px; border: 1px solid var(--gsb-line); border-radius: 10px; background: transparent; color: var(--gsb-text); font-size: 14px; font-weight: 600; cursor: pointer; }
+a.gsb-btn { display: inline-flex; align-items: center; text-decoration: none; }
+.gsb-btn:hover { border-color: color-mix(in srgb, var(--gsb-text) 30%, transparent); }
+.gsb-btn[data-primary] { border-color: var(--gsb-accent); background: var(--gsb-accent); color: #10131a; }
+
+/* 3 — the race either side of you */
+.gsb-race { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.gsb-rival { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 2px 12px; padding: 14px 16px; border: 1px solid var(--gsb-line); border-radius: 12px; background: var(--gsb-card); }
+.gsb-rival-label { grid-column: 1 / -1; color: var(--gsb-faint); font: 700 11px var(--gsb-mono); letter-spacing: .1em; text-transform: uppercase; }
+.gsb-rival strong { overflow: hidden; color: var(--gsb-text); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.gsb-rival-pts { display: flex; flex-direction: column; align-items: flex-end; color: var(--gsb-text); font: 700 18px var(--gsb-mono); font-variant-numeric: tabular-nums; }
+.gsb-rival-pts small { color: var(--gsb-muted); font: 500 11px var(--gsb-mono); }
+.gsb-rival[data-tier=chop_zone] .gsb-rival-pts { color: var(--gsb-bad); }
+
+/* 4 — the field */
+.gsb-card { overflow: hidden; border: 1px solid var(--gsb-line); border-radius: 12px; background: var(--gsb-card); }
+.gsb-card-head { display: flex; justify-content: space-between; gap: 12px; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--gsb-line); color: var(--gsb-muted); font: 700 11px var(--gsb-mono); letter-spacing: .1em; text-transform: uppercase; }
+.gsb-rows { margin: 0; padding: 0; list-style: none; }
+.gsb-rows > li + li .gsb-row { border-top: 1px solid color-mix(in srgb, var(--gsb-line) 60%, transparent); }
+.gsb-row { display: grid; grid-template-columns: 22px 34px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 58px; padding: 8px 18px; }
+.gsb-row[data-me] { background: color-mix(in srgb, var(--gsb-accent) 8%, transparent); box-shadow: inset 3px 0 0 var(--gsb-accent); }
+.gsb-row[data-tier=chop_zone] { background: color-mix(in srgb, var(--gsb-bad) 7%, transparent); }
+.gsb-rank { color: var(--gsb-faint); font: 600 13px var(--gsb-mono); }
+.gsb-avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: color-mix(in srgb, var(--gsb-text) 8%, transparent); color: var(--gsb-muted); font: 700 12px var(--gsb-mono); }
+.gsb-row[data-me] .gsb-avatar { background: var(--gsb-accent); color: #10131a; }
+.gsb-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gsb-name strong { overflow: hidden; color: var(--gsb-text); font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.gsb-name em { margin-left: 8px; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--gsb-accent) 18%, transparent); color: var(--gsb-accent); font-size: 11px; font-style: normal; font-weight: 700; text-transform: uppercase; }
+.gsb-name small { color: var(--gsb-muted); font: 12px var(--gsb-mono); }
+.gsb-row[data-tier=safe] .gsb-name small { color: color-mix(in srgb, var(--gsb-good) 80%, var(--gsb-muted)); }
+.gsb-row[data-tier=danger] .gsb-name small { color: var(--gsb-warn); }
+.gsb-row[data-tier=chop_zone] .gsb-name small, .gsb-row[data-tier=chop_zone] .gsb-pts { color: var(--gsb-bad); }
+.gsb-pts { color: var(--gsb-text); font: 700 18px var(--gsb-mono); font-variant-numeric: tabular-nums; }
+.gsb-cut { display: flex; align-items: center; gap: 10px; padding: 6px 18px; color: var(--gsb-bad); font: 700 11px var(--gsb-mono); letter-spacing: .12em; text-transform: uppercase; }
+.gsb-cut::before, .gsb-cut::after { content: ''; flex: 1; border-top: 2px dashed color-mix(in srgb, var(--gsb-bad) 65%, transparent); }
+.gsb-foot { margin: 0; padding: 12px 18px; border-top: 1px solid var(--gsb-line); color: var(--gsb-faint); font: 12px var(--gsb-mono); }
+
+/* 5 — the graveyard: a week-by-week strip */
+.gsb-grave { display: flex; gap: 8px; margin: 0; padding: 14px 18px; overflow-x: auto; list-style: none; scrollbar-width: thin; }
+.gsb-grave li { display: flex; flex: none; flex-direction: column; align-items: center; gap: 4px; width: 92px; padding: 10px 6px; border: 1px solid var(--gsb-line); border-radius: 10px; text-align: center; }
+.gsb-grave li[data-me] { border-color: var(--gsb-accent); }
+.gsb-grave-week { color: var(--gsb-faint); font: 700 11px var(--gsb-mono); text-transform: uppercase; }
+.gsb-grave-icon { width: 18px; height: 18px; color: var(--gsb-bad); opacity: .8; }
+.gsb-words { display: grid; gap: 10px; margin: 0; padding: 0 18px 16px; list-style: none; }
+.gsb-words li { display: grid; gap: 3px; padding-top: 10px; border-top: 1px solid var(--gsb-line); }
+.gsb-words-who { color: var(--gsb-faint); font: 700 11px var(--gsb-mono); text-transform: uppercase; }
+.gsb-words blockquote { margin: 0; color: var(--gsb-muted); font-size: 14px; font-style: italic; overflow-wrap: anywhere; }
+.gsb-words-remove { justify-self: start; min-height: 36px; padding: 0 12px; border: 1px solid var(--gsb-line); border-radius: 8px; background: none; color: var(--gsb-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+.gsb-grave-name { overflow: hidden; width: 100%; color: var(--gsb-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .gsb-hero { padding: 16px 16px 14px; }
+  .gsb-row { grid-template-columns: 20px 30px minmax(0, 1fr) auto; gap: 10px; padding: 8px 14px; }
+  .gsb-avatar { width: 30px; height: 30px; }
+  .gsb-strip-rail { margin: 0 20px; }
+  .gsb-dot { width: 26px; height: 26px; margin: -13px 0 0 -13px; }
+}
+
+/* Outlook: % safe and players left */
+.gsb-odds b { color: var(--gsb-good); }
+.gsb-odds[data-band=danger] b { color: var(--gsb-warn); }
+.gsb-odds[data-band=chop_zone] b { color: var(--gsb-bad); }
+.gsb-pts { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.gsb-row-odds { padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--gsb-good) 14%, transparent); color: var(--gsb-good); font: 700 11px var(--gsb-mono); }
+.gsb-row-odds[data-band=danger] { background: color-mix(in srgb, var(--gsb-warn) 14%, transparent); color: var(--gsb-warn); }
+.gsb-row-odds[data-band=chop_zone] { background: color-mix(in srgb, var(--gsb-bad) 16%, transparent); color: var(--gsb-bad); }
+.gsb-name .gsb-row-left { color: var(--gsb-faint); }
+.gsb-foot-note { border-top: 0; padding-bottom: 0; }
+
+/* The clock beside the headline: when this week's chop locks */
+.gsb-hero-body { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
+.gsb-hero-text { flex: 1 1 320px; min-width: 0; }
+.gsb-clock { display: flex; flex: none; flex-direction: column; gap: 2px; margin-top: 10px; padding: 10px 14px; border: 1px solid var(--gsb-line); border-radius: 12px; background: color-mix(in srgb, var(--gsb-text) 4%, transparent); text-align: center; }
+.gsb-clock small { color: var(--gsb-tone); font: 700 11px var(--gsb-mono); letter-spacing: .1em; text-transform: uppercase; }
+.gsb-clock b { color: var(--gsb-text); font: 700 24px var(--gsb-mono); font-variant-numeric: tabular-nums; }
+.gsb-clock i { color: var(--gsb-faint); font: 11px var(--gsb-mono); font-style: normal; }
+
+/* Zone names inside the list. The chop zone's is the dashed marker (.gsb-cut). */
+.gsb-zone { padding: 10px 18px 4px; color: var(--gsb-good); font: 700 11px var(--gsb-mono); letter-spacing: .12em; text-transform: uppercase; }
+.gsb-zone[data-tier=danger] { color: var(--gsb-warn); }
+.gsb-rows > li:first-child .gsb-cut { padding-top: 12px; }
+
+/* Stepping through the weeks already chopped */
+.gsb-weeks { display: inline-flex; align-items: center; gap: 6px; color: var(--gsb-text); letter-spacing: .04em; }
+.gsb-weeks button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--gsb-line); border-radius: 8px; background: transparent; color: var(--gsb-text); cursor: pointer; }
+.gsb-weeks button:disabled { opacity: .35; cursor: default; }
+.gsb-weeks svg { width: 14px; height: 14px; }
+.gsb-list-note { margin: 0; padding: 8px 18px 0; color: var(--gsb-faint); font: 600 11px var(--gsb-mono); letter-spacing: .08em; text-transform: uppercase; }
+
+@media (max-width: 560px) {
+  .gsb-clock { flex: 1 1 100%; flex-direction: row; align-items: baseline; justify-content: space-between; margin-top: 4px; text-align: left; }
+  .gsb-clock b { font-size: 18px; }
+  .gsb-clock i { display: none; }
+  .gsb-zone { padding: 10px 14px 4px; }
+}

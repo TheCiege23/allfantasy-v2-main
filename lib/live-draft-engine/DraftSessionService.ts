@@ -1100,7 +1100,29 @@ export async function setTimerSeconds(
     }
   }
   await updateSessionWithArchive(session, { ...data, updatedAt: new Date() }, 'reset_timer')
+  await persistPickTimerToLeague(leagueId, sec)
   return true
+}
+
+/**
+ * 🛑 A TIMER CHANGED IN THE ROOM USED TO LAST ONE PICK (2026-11-24). `setTimerSeconds` wrote only the
+ * session, but resume and reset re-derive the clock from LeagueSettings / the draft config
+ * (`computeEffectivePickTimerSeconds`), so the first resume or reset put the OLD length back and
+ * every later pick ran on it. The new length is written where those readers look, too.
+ * Best-effort: the session already holds the new length, which is what the next pick reads.
+ */
+async function persistPickTimerToLeague(leagueId: string, seconds: number): Promise<void> {
+  try {
+    const { classifySeconds } = await import('@/lib/draft/timer-presets')
+    const { preset, customSeconds } = classifySeconds(seconds)
+    await prisma.leagueSettings.updateMany({ where: { leagueId }, data: { pickTimerPreset: preset, pickTimerCustomValue: customSeconds } })
+    const ui = await getDraftUISettingsForLeague(leagueId)
+    const slow = ui.timerMode === 'soft_pause' || ui.timerMode === 'overnight_pause'
+    const { updateDraftConfigForLeague } = await import('@/lib/draft-defaults/DraftVariantSettingsHub')
+    await updateDraftConfigForLeague(leagueId, { timer_seconds: seconds, ...(slow && seconds >= 300 ? { slow_timer_seconds: seconds } : {}) })
+  } catch (error) {
+    logStructured('warn', 'draft_session_service', 'pick_timer_persist_failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
+  }
 }
 
 /**

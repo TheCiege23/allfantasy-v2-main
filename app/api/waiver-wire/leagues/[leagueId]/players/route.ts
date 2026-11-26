@@ -11,6 +11,7 @@ import { getRosterPlayerIds } from "@/lib/waiver-wire/roster-utils"
 import { loadLeagueWaiverPlayerPool } from "@/lib/waiver-wire/current-nba-player-pool"
 import { normalizePoolRowToUnified } from "@/lib/player-data/normalizeProviderPlayer"
 import { serializeUnifiedPlayerForApi } from "@/lib/player-data/serializeUnifiedPlayerForApi"
+import { fillStoredHeadshots } from "@/lib/player-media/fillStoredHeadshots"
 import { loadWaiverPoolEnrichment, type WaiverPoolEnrichment } from "@/lib/waiver-wire/waiverPoolEnrichment"
 import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire/settings-service"
 import {
@@ -229,6 +230,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     // Priced with or without AF's learned factors per the viewer's plan (afJson reverts them as well).
     priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, {
       canonical: true, afIntelligence: (await readAfIntelligenceAccess(userId)).unlocked })
+
+    // The stored photo for a player the pool row has none for — mostly this year's rookies
+    // (lib/player-media/fillStoredHeadshots.ts). NFL untouched.
+    priced = await fillStoredHeadshots(String(league.sport), priced as any[])
 
     // What each player scored last week under this league's scoring (lib/waiver-wire/lastWeekPoints.ts).
     // Every sport's points leagues; null for a categories league, and the screen then shows no such figure.

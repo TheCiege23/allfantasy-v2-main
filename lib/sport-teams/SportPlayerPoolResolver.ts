@@ -1,4 +1,5 @@
 import { reconcileCurrentProRows } from '@/lib/draft-room/currentProRoster'
+import { loadPlayedThisSeasonIds } from '@/lib/draft-room/playedThisSeason'
 /**
  * Resolves player pool by sport so leagues only load players for their sport.
  * Uses SportsPlayer and PlayerIdentityMap; draft room and waiver wire filter by league sport.
@@ -16,6 +17,8 @@ import { formatNflTeamDefenseName } from '@/lib/redraft/teamDefenseIdentity'
 import { cachedFetch, cacheKey } from '@/lib/api-cache'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { createTtlMemo } from '@/lib/ttl-memo'
+import { loadNcaabSeasonBoxes, type NcaabSeasonBoxes } from './ncaabSeasonBoxes'
+import { ncaabPoolRowImage, ncaabPoolRowVerdict, ncaabProductionPerGame } from './ncaabPlayerPoolRules'
 import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
@@ -562,8 +565,37 @@ async function buildPlayerPoolRecords(
   // row that won.
   // Filtered here, after the cache, so the cached row set stays the whole table for every caller.
   const isNfl = sport === 'NFL'
-  const sourceRows = isNfl ? collapseNflRowsOntoSleeper(rows) : scorableSoccerRowsOnly(sport, rows)
-  const poolRows = reconcileCurrentProRows(sport, sourceRows, rows, options?.currentRosterOnly === true)
+  /*
+   * College basketball (ncaabPlayerPoolRules.ts): departed players leave the pool, a row's photo
+   * is ESPN's or none, and this season's production decides who a size-limited pool keeps. A
+   * failed box-score read changes nothing but the photos.
+   */
+  const isNcaab = sport === 'NCAAB'
+  const ncaabBoxes: NcaabSeasonBoxes | null = isNcaab
+    ? await loadNcaabSeasonBoxes().catch((err) => {
+        console.warn('[player-pool] NCAAB box scores unavailable:', err instanceof Error ? err.message : String(err))
+        return null
+      })
+    : null
+  const ncaabPlayed = ncaabBoxes?.season != null
+    ? new Set([...ncaabBoxes.byRiId].flatMap(([riId, lines]) => (lines.current ? [riId] : [])))
+    : null
+  const ncaabPhotoOnlyIds = new Set<string>()
+  const ncaabRows = isNcaab
+    ? rows.flatMap((row) => {
+        const verdict = ncaabPoolRowVerdict(row, ncaabPlayed)
+        if (verdict === 'drop') return []
+        if (verdict === 'photo_only') ncaabPhotoOnlyIds.add(row.id)
+        return [{ ...row, imageUrl: ncaabPoolRowImage(row.imageUrl) }]
+      })
+    : null
+  const sourceRows = isNfl ? collapseNflRowsOntoSleeper(rows) : ncaabRows ?? scorableSoccerRowsOnly(sport, rows)
+  // Who has played this season, for the current-roster filter. A failed read is "no such evidence":
+  // the pool is then what it was before this evidence existed, never an error.
+  const playedThisSeason = options?.currentRosterOnly === true
+    ? await loadPlayedThisSeasonIds(sport).catch(() => new Set<string>())
+    : new Set<string>()
+  const poolRows = reconcileCurrentProRows(sport, sourceRows, rows, options?.currentRosterOnly === true, Date.now(), playedThisSeason)
   // NFL keys on the club CODE, so the vendor rows left over after the collapse still merge across
   // "PHI" / "Philadelphia Eagles"; other sports' team strings are not NFL clubs and stay as they are.
   const teamKeyOf = (team: string | null) =>
@@ -582,6 +614,8 @@ async function buildPlayerPoolRecords(
     if (isHttpImage(row.imageUrl) && quality > (bestImageByKey.get(key)?.quality ?? -1)) {
       bestImageByKey.set(key, { url: String(row.imageUrl), quality })
     }
+    // Its photo was offered above; the row itself is never a player the pool offers.
+    if (ncaabPhotoOnlyIds.has(row.id)) continue
     const current = bestByKey.get(key)
     const rowScorable = isScorablePoolId(sport, row)
     const currentScorable = current ? isScorablePoolId(sport, current) : false
@@ -625,6 +659,11 @@ async function buildPlayerPoolRecords(
   const adpRankByKey = await loadAdpRankByPlayerKey(sport)
   const dedupedRows = [...bestByKey.values()]
     .sort((a, b) => {
+      if (ncaabBoxes) {
+        const aProduction = ncaabProductionPerGame(ncaabBoxes.byRiId.get(String(a.externalId ?? ''))?.current?.rates)
+        const bProduction = ncaabProductionPerGame(ncaabBoxes.byRiId.get(String(b.externalId ?? ''))?.current?.rates)
+        if (aProduction !== bProduction) return bProduction - aProduction
+      }
       const aRank = adpRankByKey.get(buildPlayerKey(String(a.name ?? ''), a.position))
       const bRank = adpRankByKey.get(buildPlayerKey(String(b.name ?? ''), b.position))
       if (aRank === undefined && bRank === undefined) return rosteredPlayerSignal(b) - rosteredPlayerSignal(a)
