@@ -4451,6 +4451,7 @@ export function DraftRoomPageClient({
           picks: session.picks ?? null,
           leagueId,
           queue: queue.map((q) => ({ playerName: q.playerName, position: q.position, team: q.team ?? null })),
+          nominationMedia: auctionNominationMedia(auctionSnapshot?.state?.currentNomination ?? null, players),
         }
       : null
   const postDraftViewNode = isDraftCompleted ? (
@@ -5840,4 +5841,27 @@ export function DraftRoomPageClient({
     )}
   </AfAdpLockContext.Provider>
   )
+}
+
+/**
+ * The nominated player's photo and crest from the pool, by id first and then name + position
+ * (a nomination often carries another id, or none). Null when the pool has no match: the
+ * stage's avatar then shows initials and the team abbreviation.
+ */
+function auctionNominationMedia(
+  nomination: { playerId?: string | null; playerName?: string | null; position?: string | null } | null,
+  pool: PlayerEntry[],
+): { headshotUrl: string | null; teamLogoUrl: string | null } | null {
+  if (!nomination) return null
+  const id = String(nomination.playerId ?? '').trim()
+  const name = String(nomination.playerName ?? '').trim().toLowerCase()
+  const pos = String(nomination.position ?? '').trim().toUpperCase()
+  const hit =
+    (id ? pool.find((p) => String(p.playerId ?? p.display?.playerId ?? p.id ?? '').trim() === id) : undefined) ??
+    (name ? pool.find((p) => String(p.name ?? '').trim().toLowerCase() === name && (!pos || String(p.position ?? '').trim().toUpperCase() === pos)) : undefined)
+  if (!hit) return null
+  return {
+    headshotUrl: hit.display?.assets?.headshotUrl ?? hit.display?.assets?.headshotFallbackUrl ?? null,
+    teamLogoUrl: hit.display?.assets?.teamLogoUrl ?? hit.display?.assets?.teamLogoFallbackUrl ?? null,
+  }
 }

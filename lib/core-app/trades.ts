@@ -279,6 +279,8 @@ export type TradesData = {
      * no source to open.
      */
     sourceLink: SourceScreenLink | null
+    /** The league's sport, so player photos and crests resolve from that sport (never an NFL guess). */
+    sport?: string | null
   }
   /** Grading context the handoff prints above every grade. */
   gradingContext: SectionState<{ leagueName: string; format: string | null; teamCount: number }>
@@ -624,6 +626,7 @@ export async function startTradesRead(
         id: league.id,
         name: leagueDisplayName(league.name),
         platform: String(league.platform ?? 'manual').toLowerCase(),
+        sport: league.sport ?? null,
         sourceLink: resolveSourceScreenLink({
           platform: league.platform,
           sourceLeagueId: league.platformLeagueId,

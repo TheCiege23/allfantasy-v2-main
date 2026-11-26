@@ -313,7 +313,8 @@ export function waiverStateResponse() {
 export function tradesResponse(sport: HarnessSport) {
   const mine = teamPlayers(sport, 0)
   const theirs = teamPlayers(sport, 3)
-  const asset = (p: Player) => ({ id: p.id, label: p.name, sublabel: `${p.position} · ${p.team}` })
+  // The route's real asset shape (app/api/league/trades-panel assetLabel): the player's id, club and crest ride along.
+  const asset = (p: Player) => ({ id: p.id, label: p.name, sublabel: `${p.position} · ${p.team}`, playerId: p.id, team: p.team, headshotUrl: null, teamLogoUrl: teamLogoUrl(sport, p.team) })
   const now = Date.now()
   return {
     tradeBlock: [teamPlayers(sport, 5).bench[0], teamPlayers(sport, 6).starters[3], teamPlayers(sport, 8).bench[2]].map((p, i) => ({ id: `tb${i}`, ownerName: MANAGERS[5 + i], name: p.name, position: p.position, team: p.team })),
