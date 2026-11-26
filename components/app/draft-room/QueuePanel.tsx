@@ -207,7 +207,9 @@ export function QueuePanel({
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/92">Queue</span>
         </div>
         {autopickSlot || autoDraft ? null : (
-        <label className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/75">
+        /* The label is the tap target (a 12px checkbox is not): 44px tall, the pill inside keeps its size. */
+        <label className="inline-flex min-h-[44px] cursor-pointer items-center" data-testid="draft-queue-autopick-toggle-target">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/75">
           <input
             type="checkbox"
             checked={autoPickFromQueue}
@@ -225,6 +227,7 @@ export function QueuePanel({
             className="h-3 w-3 rounded border-white/20"
           />
           Auto-pick
+          </span>
         </label>
         )}
       </div>
