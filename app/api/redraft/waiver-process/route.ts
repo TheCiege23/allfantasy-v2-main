@@ -527,6 +527,64 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Chimmy autopilot answers trade offers made to the teams it runs (lib/inactive-manager/
+   * autopilotTradeService.ts): accept or decline, through the same rules a manager's click goes
+   * through. Guarded and on its own job identity, like the sweeps above.
+   */
+  let autopilotTrades: unknown = null
+  try {
+    const { runAutopilotTradeAnswers } = await import('@/lib/inactive-manager/autopilotTradeService')
+    const { runAutopilotLeagueTradeAnswers } = await import('@/lib/inactive-manager/autopilotLeagueTrades')
+    autopilotTrades = await withSyncJobRun(
+      { jobName: 'cron-chimmy-autopilot-trades', trigger: 'cron' },
+      // Both trade engines: the older redraft proposals, and the league page's trades (AfLeagueTrade).
+      async () => {
+        const [redraft, league] = await Promise.all([runAutopilotTradeAnswers(), runAutopilotLeagueTradeAnswers()])
+        return {
+          offers: redraft.offers + league.offers,
+          accepted: redraft.accepted + league.accepted,
+          rejected: redraft.rejected + league.rejected,
+          countered: redraft.countered + league.countered,
+          skipped: { ...redraft.skipped, ...Object.fromEntries(Object.entries(league.skipped).map(([k, v]) => [`league:${k}`, v])) },
+          failures: [...redraft.failures, ...league.failures.map((f) => ({ leagueId: f.leagueId, proposalId: f.tradeId, error: f.error }))],
+        }
+      },
+      (r) => ({
+        rowsRead: r.offers,
+        rowsWritten: r.accepted + r.rejected,
+        errors: r.failures.map((f) => `${f.leagueId}/${f.proposalId}: ${f.error}`),
+        metadata: { accepted: r.accepted, rejected: r.rejected, countered: r.countered, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] chimmy autopilot trades failed', e)
+    autopilotTrades = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Chimmy autopilot sends a trade offer for a team whose commissioner switched that on: at most one
+   * a day per team, in the team's own hour (lib/inactive-manager/autopilotTradeOffers.ts). Guarded and
+   * on its own job identity.
+   */
+  let autopilotOffers: unknown = null
+  try {
+    const { runAutopilotTradeOffers } = await import('@/lib/inactive-manager/autopilotTradeService')
+    autopilotOffers = await withSyncJobRun(
+      { jobName: 'cron-chimmy-autopilot-offers', trigger: 'cron' },
+      () => runAutopilotTradeOffers(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.sent,
+        errors: r.failures.map((f) => `${f.leagueId}/${f.rosterId}: ${f.error}`),
+        metadata: { skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] chimmy autopilot offers failed', e)
+    autopilotOffers = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Lineup minimums for eliminated teams (lib/eliminated-lineups): an AF Commissioner rule. Fills only
    * the short slots of a team out of the race, from its bench, and tells its manager once a week what is
    * still short. Hourly for the same reason as inactive manager mode; guarded and on its own job identity.
@@ -667,5 +725,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, byeStarterSweep, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, byeStarterSweep, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, autopilotTrades, autopilotOffers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

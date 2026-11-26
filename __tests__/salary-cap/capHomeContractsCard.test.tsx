@@ -81,4 +81,21 @@ describe('narrow card: the table fits', () => {
     expect(band).toMatch(/\.tagsUnder\s*>\s*span\s*\{[^}]*white-space:\s*normal/)
     expect(css).toMatch(/^\.tagsUnder\s*\{[^}]*display:\s*none/m)
   })
+
+  it('in season, the calendar and the cap rules are closed rows; no blurb explains the format (2026-11-24)', () => {
+    const { container } = render(<SalaryCapSpecialtyHome summary={summary as any} onOpenContracts={() => {}} onOpenBid={() => {}} tradesHref="#" />)
+    for (const id of ['salary-offseason', 'salary-cap-rules']) {
+      const card = screen.getByTestId(id) as HTMLDetailsElement
+      expect(card.tagName).toBe('DETAILS')
+      expect(card.open).toBe(false)
+    }
+    expect(container.textContent).not.toContain('Every player has a salary and a contract length')
+    expect(container.textContent).not.toContain('the offseason steps run in this order')
+  })
+
+  it('in the offseason the calendar is the live schedule, so it stays open', () => {
+    const offseason = { ...summary, config: { ...summary.config, offseasonPhase: 'extension' } }
+    render(<SalaryCapSpecialtyHome summary={offseason as any} onOpenContracts={() => {}} onOpenBid={() => {}} tradesHref="#" />)
+    expect(screen.getByTestId('salary-offseason').tagName).toBe('SECTION')
+  })
 })

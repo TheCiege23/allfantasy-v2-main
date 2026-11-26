@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { LeagueSection, CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
-import { ArrowRight, MessageSquare, PlayCircle, Shield } from 'lucide-react'
+import { ArrowRight, PlayCircle, Shield } from 'lucide-react'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetupChecklist'
 import { GuillotineAutopilotCard } from '@/components/guillotine/GuillotineAutopilotCard'
@@ -134,7 +134,9 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
       <LeagueSection id="week">{hosted && inSeason && <LeagueYourWeekStrip leagueId={league.id} week={currentWeek} onSelectTab={onSelectTab} scoreBug={redraft ? { sport: String(league.sport) } : undefined} />}</LeagueSection>
       <LeagueSection id="week">{recapWeek != null && <RedraftLastWeekRecap leagueId={league.id} season={season} week={recapWeek} />}</LeagueSection>
       {redraft && inSeason && <LeagueRulesHomeHost leagueId={league.id} blocked={settingsOpen} />}
-      {imported && predraft ? null : predraft && !redraft ? <section className="nl-card nl-draft-feature" data-testid="native-draft-feature">
+      {/* In season the week strip above already carries the matchup, so "Next up · Week 9 · Open matchup"
+          said it again (2026-11-24, the simplify pass). It stays for the draft, the offseason, Survivor and imports. */}
+      {(imported && predraft) || (hosted && inSeason && !survivor) ? null : predraft && !redraft ? <section className="nl-card nl-draft-feature" data-testid="native-draft-feature">
         <div className="nl-card-label"><span>Draft board</span><span>AF Draft HQ</span></div>
         <h2>{date && Number.isFinite(date.getTime()) ? 'Your draft is scheduled' : 'Your draft is not scheduled yet'}</h2>
         <p>{date && Number.isFinite(date.getTime()) ? draftLabel : 'Get ready, set your rankings, and gather your league.'}</p>
@@ -166,7 +168,8 @@ export function NativeLeagueHome({ league, teams, userTeamId, isCommissioner, dr
     </div>
     <aside className="nl-home-secondary" aria-label="League overview"><LeagueSection id="team"><section className="nl-card"><div className="nl-card-label">Your team</div><h2>{team?.teamName || (hostOnly ? 'Commissioner host' : 'Join a team')}</h2>{team ? <><dl className="nl-team-stats"><div><dt>Record</dt><dd>{team.wins}–{team.losses}{team.ties ? `–${team.ties}` : ''}</dd></div><div><dt>PF</dt><dd>{team.pointsFor.toFixed(1)}</dd></div><div><dt>FAAB</dt><dd>{team.faabRemaining ?? '—'}</dd></div></dl><div className="nl-actions">{hasTab('roster') && <button type="button" className="nl-button" onClick={() => onSelectTab('roster')}>My team</button>}{hasTab('players') && <button type="button" className="nl-button" onClick={() => onSelectTab('players')}>Players</button>}</div></> : <p>{imported ? 'Your team in this league is not linked to your account yet.' : hostOnly ? 'You are hosting this season without a playing team. Manage invitations, rules, and league readiness from Commissioner.' : 'Ask your commissioner for a team invitation.'}</p>}</section></LeagueSection>
       {dynasty && dynastyHub && <LeagueSection id="format"><DynastyPickCapitalCard picks={dynastyHub.picks} onSelectTab={onSelectTab} availableTabIds={availableTabIds} /><DynastyPipelineCard pipeline={dynastyHub.pipeline} onSelectTab={onSelectTab} availableTabIds={availableTabIds} /></LeagueSection>}
-      <LeagueSection id="chat">{(hosted || hasTab('league_chat')) && <section className="nl-card nl-chat-preview"><div className="nl-card-label"><span>League chat</span><MessageSquare size={16} aria-hidden /></div><h2>Your league, together</h2><p>Announcements, draft discussion, and league conversation.</p><button type="button" className="nl-button" onClick={() => onSelectTab('league_chat')}>Open league chat</button></section>}</LeagueSection>
+      {/* The "League chat · Your league, together" card went 2026-11-24: wherever it showed, League activity
+          above already carries "Open league chat" and the tab bar has Chat. */}
       <LeagueSection id="standings">{race ? <RedraftPlayoffRace race={race} onOpenStandings={() => onSelectTab('standings')} /> : <section className="nl-card"><div className="nl-card-label"><span>Standings</span><button type="button" className="nl-text-link" onClick={() => onSelectTab('standings')}>Full table</button></div><ol className="nl-standings-preview">{standings.map((row, index) => <li key={row.id} data-own-team={row.id === userTeamId}><span>{index + 1}</span><strong>{row.teamName}</strong><span>{row.wins}–{row.losses}{row.ties ? `–${row.ties}` : ''}</span></li>)}</ol>{!standings.length && <p>Standings appear when teams are ready.</p>}</section>}</LeagueSection>
     </aside>
   </div>

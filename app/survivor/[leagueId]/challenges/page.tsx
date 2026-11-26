@@ -87,10 +87,10 @@ export default function SurvivorChallengesPage() {
               {ch.description || ch.instructions || 'Your commissioner sets the story beat — stay ready.'}
             </p>
 
-            <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/25 p-4">
+            {automatic || live ? <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/25 p-4" data-testid="survivor-challenge-how">
               <p className="sv-kicker text-[11px]">{automatic ? 'How it works' : 'Where to submit'}</p>
               <p className="mt-1 text-[13px] text-white/80">{automatic ? 'Nothing to submit: set your best lineup. Chimmy settles it from the final scores.' : submitWhere}</p>
-            </div>
+            </div> : null}
 
             <div className="mt-4 rounded-xl border border-[rgba(240,163,94,0.3)] bg-[rgba(240,163,94,0.06)] p-4">
               <p className="sv-kicker text-[11px]">Reward</p>
@@ -126,12 +126,14 @@ export default function SurvivorChallengesPage() {
       {leagueId ? <RealGameChallengeCard leagueId={leagueId} /> : null}
       {leagueId ? <WeeklyCallCard leagueId={leagueId} /> : null}
 
-      <section className="mt-8">
-        <h2 className="sv-kicker mb-3 text-[12px]">
-          Past challenges
-        </h2>
-        {past && past.length === 0 ? <p className="text-[13px] text-white/50">No challenge results yet.</p> : null}
-        <div className="space-y-2">
+      {/* Past challenges: one closed row with the count (folded in #4213). Its summary is a 44px tap target, and
+          the count is the number listed, at most 12 (2026-11-24). */}
+      <details className="mt-8" data-testid="survivor-past-challenges">
+        <summary className="sv-kicker flex min-h-[44px] cursor-pointer items-center text-[12px]">
+          Past challenges{past && past.length ? ` (${Math.min(past.length, 12)})` : ''}
+        </summary>
+        {past && past.length === 0 ? <p className="mt-3 text-[13px] text-white/50">No challenge results yet.</p> : null}
+        <div className="mt-3 space-y-2">
           {(past ?? []).slice(0, 12).map((row) => (
             <div key={row.id} className="survivor-panel rounded-xl p-3">
               <p className="text-[13px] font-semibold text-white/85">Week {row.week} · {row.title || 'Challenge'}</p>
@@ -139,16 +141,18 @@ export default function SurvivorChallengesPage() {
             </div>
           ))}
         </div>
-      </section>
+      </details>
 
-      <div className="mt-8 text-center md:hidden">
-        <Link
-          href={`/survivor/${leagueId}/chat`}
-          className="sv-btn min-h-[56px] w-full text-[var(--survivor-torch)]"
-        >
-          Open chat for submissions
-        </Link>
-      </div>
+      {live && !automatic ? (
+        <div className="mt-8 text-center md:hidden" data-testid="survivor-challenge-chat-cta">
+          <Link
+            href={`/survivor/${leagueId}/chat`}
+            className="sv-btn min-h-[56px] w-full text-[var(--survivor-torch)]"
+          >
+            Open chat for submissions
+          </Link>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -94,3 +94,14 @@ describe('WeekGuide — Also needs you', () => {
     expect(renderGuide([])).not.toContain('week-guide-needs')
   })
 })
+
+/* The simplify pass (2026-11-24): every "Why it matters" is a closed fold, and the headline has no intro line. */
+describe('WeekGuide — plain', () => {
+  it('teaches behind closed folds and drops the intro line', () => {
+    const html = renderGuide(weekNeedsFromSignals([signal('v', { recommendedAction: 'Vote before Tribal' })], LEAGUES))
+    expect(html).toContain('data-testid="home-why"')
+    expect(html).not.toMatch(/<details[^>]*data-testid="home-why"[^>]*open/)
+    expect(html).not.toContain('af-decision-why')
+    expect(html).not.toContain('Close games first')
+  })
+})

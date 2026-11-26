@@ -266,6 +266,12 @@ interface AvailablePlayer {
    */
   display?: { stats?: Record<string, number> | null } | null
   nflDraftProjectionSplits?: DraftStatPlayerSource['nflDraftProjectionSplits']
+  /*
+   * The season the stat columns are from, and whether that is LAST season (the player has no game
+   * this season yet). The live room tags such a row; so does this one. Optional for older saved mocks.
+   */
+  statSeason?: string | null
+  statSeasonIsPrevious?: boolean
   /* Optional so a mock saved before headshots existed still restores. */
   headshotUrl?: string | null
   teamLogoUrl?: string | null
@@ -305,6 +311,16 @@ interface DraftState {
   auctionValues?: Record<string, number>
   /** When the draft was paused, so auction clocks can resume where they stopped. */
   pausedAtMs?: number
+  /**
+   * The user's team picks as soon as it is on the clock. Turned on when the user's clock runs out
+   * (the same rule as a live draft: a missed clock puts the team on auto), and by the AUTO pill.
+   */
+  userAutoPick?: boolean
+}
+
+/** The next turn's length: none for the user's team while it is on auto (it picks at once). */
+function userTurnMs(state: DraftState, isUser: boolean): number {
+  return isUser && state.userAutoPick ? 0 : mockTurnDurationMs(state.settings.speed, isUser)
 }
 
 interface SaveResponse {
@@ -876,6 +892,10 @@ export default function MockDraftSleeperRoomClient({
   // AF ADP's lock (components/app/draft-room/afAdpLock.tsx), read off the pool response.
   const [afAdpLock, setAfAdpLock] = useState<ReturnType<typeof afAdpLockOf>>(null)
   const afAdpTitle = afAdpLockedTitle(useOptionalLanguage().language)
+  // The live room's own words for a stat line from the season before (SleeperPoolTable).
+  const { t: tPool } = useOptionalLanguage()
+  const lastSeasonLabel = tPool('draftRoom.pool.lastSeasonStats')
+  const lastSeasonTooltip = tPool('draftRoom.pool.lastSeasonStatsTooltip')
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -1229,8 +1249,24 @@ export default function MockDraftSleeperRoomClient({
     [draftId, leaguePayload?.leagueId],
   )
 
+  /** The AUTO pill. Turning auto off while on the clock gives the user a full clock again. */
+  const toggleUserAutoPick = useCallback(() => {
+    setDraftState((current) => {
+      if (!current) return current
+      const next = !current.userAutoPick
+      const userOnClock = current.status === 'drafting' && Boolean(current.teams.find((team) => team.slot === current.onTheClock)?.isUser)
+      if (next || !userOnClock) return { ...current, userAutoPick: next }
+      return {
+        ...current,
+        userAutoPick: false,
+        timerSeconds: current.settings.speed,
+        turnDeadlineMs: Date.now() + mockTurnDurationMs(current.settings.speed, true),
+      }
+    })
+  }, [])
+
   const handlePick = useCallback(
-    (player: AvailablePlayer, isAiPick: boolean, expectedOverall?: number) => {
+    (player: AvailablePlayer, isAiPick: boolean, expectedOverall?: number, autoReason?: string) => {
       setDraftState((current) => {
         if (!current || current.status !== 'drafting') return current
         if (expectedOverall != null && current.currentPick !== expectedOverall) return current
@@ -1254,7 +1290,7 @@ export default function MockDraftSleeperRoomClient({
           projectedPts: player.projectedPts,
           headshotUrl: player.headshotUrl ?? null,
           teamLogoUrl: player.teamLogoUrl ?? null,
-          aiReason: isAiPick ? generatePickReason(player, team, team.rosterNeeds, round) : undefined,
+          aiReason: isAiPick ? generatePickReason(player, team, team.rosterNeeds, round) : autoReason,
           isUser: team.isUser,
           managerName: team.managerName,
         }
@@ -1281,11 +1317,11 @@ export default function MockDraftSleeperRoomClient({
               : current.onTheClock,
           status: nextCurrentPick > totalPicks ? 'complete' : current.status,
           timerSeconds: current.settings.speed,
-          turnDeadlineMs: Date.now() + mockTurnDurationMs(current.settings.speed,
+          turnDeadlineMs: Date.now() + userTurnMs(current,
             Boolean(updatedTeams.find((entry) => entry.slot === getOnTheClockSlot(updatedTeams, current.settings, nextCurrentPick))?.isUser)),
           pausedRemainingMs: undefined,
           chatMessages:
-            isAiPick && pick.aiReason
+            pick.aiReason
               ? [...current.chatMessages, { role: 'ai', content: pick.aiReason, pick: pick.overall }]
               : current.chatMessages,
         }
@@ -1365,7 +1401,7 @@ export default function MockDraftSleeperRoomClient({
 
   useEffect(() => {
     if (!draftState || draftState.status !== 'drafting' || draftState.auction || !onTheClockTeam?.isUser) return
-    if (draftState.settings.speed === 0 || draftState.timerSeconds > 0) return
+    if (!draftState.userAutoPick && (draftState.settings.speed === 0 || draftState.timerSeconds > 0)) return
 
     const queuedPlayer = queue
       .map((id) => draftState.availablePlayers.find((player) => player.id === id))
@@ -1377,7 +1413,19 @@ export default function MockDraftSleeperRoomClient({
       null
 
     if (fallbackPlayer) {
-      handlePick(fallbackPlayer, false, draftState.currentPick)
+      // A missed clock puts the user's team on auto for the rest of the draft (the AUTO pill turns it off).
+      const wasOnAuto = Boolean(draftState.userAutoPick)
+      setDraftState((current) => (current && !current.userAutoPick ? { ...current, userAutoPick: true } : current))
+      // Said in chat, as for every Chimmy pick: why this player, and that the team is now on auto.
+      const why = queuedPlayer ? 'the next player in your queue' : 'the best player left on the board'
+      handlePick(
+        fallbackPlayer,
+        false,
+        draftState.currentPick,
+        wasOnAuto
+          ? `You're on auto, so Chimmy took ${why}: ${fallbackPlayer.name}.`
+          : `Your clock ran out, so Chimmy took ${why}: ${fallbackPlayer.name}. You're on auto now; tap AUTO to turn it off.`,
+      )
     }
   }, [draftState, draftedIds, handlePick, onTheClockTeam?.isUser, queue])
 
@@ -1613,6 +1661,8 @@ export default function MockDraftSleeperRoomClient({
           isRookie: raw.isRookie === true,
           byeWeek: numberFromUnknown(raw.byeWeek) ?? numberFromUnknown(raw.bye),
           display: { stats: numericStatsFromUnknown(recordFromUnknown(raw.display)?.stats) },
+          statSeason: stringFromUnknown(raw.statSeason),
+          statSeasonIsPrevious: raw.statSeasonIsPrevious === true,
           nflDraftProjectionSplits:
             (recordFromUnknown(raw.nflDraftProjectionSplits) as DraftStatPlayerSource['nflDraftProjectionSplits']) ?? null,
           age: numberFromUnknown(raw.age),
@@ -2571,6 +2621,15 @@ export default function MockDraftSleeperRoomClient({
                       {sportHasByeWeeks(sport) && player.byeWeek != null ? (
                         <span data-testid={`mock-draft-player-bye-${player.id}`}> · BYE {player.byeWeek}</span>
                       ) : null}
+                      {player.statSeason && player.statSeasonIsPrevious ? (
+                        <span
+                          className="ml-1 rounded border border-amber-300/35 bg-amber-500/12 px-1 py-px font-semibold text-amber-100"
+                          title={lastSeasonTooltip}
+                          data-testid={`mock-draft-player-last-season-${player.id}`}
+                        >
+                          {player.statSeason} · {lastSeasonLabel}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   {queued ? (
@@ -2829,7 +2888,9 @@ export default function MockDraftSleeperRoomClient({
           timerSeconds={draftState.settings.speed > 0 && !draftState.auction ? draftState.settings.speed : null}
           isCommissioner={false}
           draftStatus={status === 'drafting' ? 'in_progress' : status === 'complete' ? 'completed' : 'paused'}
-          showAutoPickPill={false}
+          showAutoPickPill={!draftState.auction}
+          autoPickEnabled={Boolean(draftState.userAutoPick)}
+          onToggleAutoPick={toggleUserAutoPick}
           showInvite={false}
           controlsSlot={pausePill}
           extraMenuItems={[

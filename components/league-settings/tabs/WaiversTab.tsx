@@ -202,6 +202,10 @@ export function WaiversSection({
   const [holdByPosition, setHoldByPosition] = useState<Record<string, number>>(() =>
     readHoldHoursByPosition(savedOr<unknown>(leagueId, 'waiverHoldHoursByPosition', null)),
   )
+  // Off unless a commissioner turns it on: a benched player whose game has started is locked too.
+  const [benchDropsAfterLock, setBenchDropsAfterLock] = useState(() =>
+    savedOr<boolean>(leagueId, 'waiverBenchDropsAfterLock', false) === true,
+  )
   const touchedRef = useRef(new Set<string>())
   useEffect(() => {
     let live = true
@@ -231,6 +235,9 @@ export function WaiversSection({
         }
         if (!touchedRef.current.has('holdByPosition')) {
           setHoldByPosition(readHoldHoursByPosition(eff.waiverEngineConfig?.[HOLD_HOURS_BY_POSITION_KEY]))
+        }
+        if (!touchedRef.current.has('benchDrops')) {
+          setBenchDropsAfterLock(eff.waiverEngineConfig?.can_drop_bench_after_lock === true)
         }
       } catch {
         // The defaults stay; a save still writes what the commissioner picks.
@@ -577,6 +584,24 @@ export function WaiversSection({
             queuePatch({ waiverHoldHoursByPosition: next })
           }}
         />
+
+        <div className="flex items-center gap-3" data-testid="league-settings-waiver-bench-drops">
+          <div className="min-w-0 flex-1">
+            <p id={`bench-drops-label-${leagueId}`} className="text-[13px] font-semibold text-white/90">{t('lsHub.wv.benchDrops')}</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-white/40">{t('lsHub.wv.benchDropsHint')}</p>
+          </div>
+          <SettingsSwitch
+            id={`bench-drops-toggle-${leagueId}`}
+            checked={benchDropsAfterLock}
+            onChange={(next) => {
+              touchedRef.current.add('benchDrops')
+              setBenchDropsAfterLock(next)
+              queuePatch({ waiverBenchDropsAfterLock: next })
+            }}
+            disabled={!canEdit}
+            labelledBy={`bench-drops-label-${leagueId}`}
+          />
+        </div>
 
         <div className="border-t border-white/[0.06] pt-4">
           <div className="flex items-center gap-3">

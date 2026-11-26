@@ -149,6 +149,7 @@ export function weekBoardFixture(sport: HarnessSport): LeagueWeekBoard {
   const side = (i: number, k: number) => ({ rosterId: ids[i], name: MANAGERS[i], avatarUrl: null, projected: Math.round(scale * (0.92 + k * 0.03) * 10) / 10 })
   return {
     format: 'head-to-head',
+    sport,
     leagueId: 'e2e-redraft-core',
     leagueName: 'Sunday Night Redraft',
     platform: 'allfantasy',

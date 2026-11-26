@@ -4,6 +4,7 @@ import type {
   TradeWindowRow,
   TradesBoardData,
 } from '@/lib/core-app/tradesBoard'
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import BoardActionLink from '@/components/core-app/boards/BoardActionLink'
@@ -520,9 +521,7 @@ export function TradesBoard({ data, allHref, totalLeagues, embedded = false, lan
         </details>
       ) : null}
       {embedded ? (
-        <p className="af-tg-teach">
-          <b>{guide.why}</b> {guide.tradesTeach}
-        </p>
+        <WhyFold label={guide.why}>{guide.tradesTeach}</WhyFold>
       ) : null}
 
       {!embedded && data.deadlineUnknown > 0 ? (

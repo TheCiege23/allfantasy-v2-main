@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMockNextRequest } from '../helpers/createMockNextRequest'
 
 const h = vi.hoisted(() => ({
-  onAutopilot: vi.fn(async (_l: string, _owner: string) => false),
+  onAutopilot: vi.fn(async (_l: string, _owner: string): Promise<string | null> => null),
   validate: vi.fn(async (_input: unknown) => ({ ok: true, warnings: [] })),
   snapshot: vi.fn(async () => null),
   dispatch: vi.fn(async (_input: unknown) => undefined),
@@ -28,7 +28,7 @@ const h = vi.hoisted(() => ({
   } as Record<string, { id: string; ownerId: string; ownerName: string; teamName: string | null }>,
 }))
 
-vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ isOwnerOnAutopilot: h.onAutopilot }))
+vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ autopilotTradeModeForOwner: h.onAutopilot }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'uA' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({
@@ -95,7 +95,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.created = []
   h.capConfig = null
-  h.onAutopilot.mockResolvedValue(false)
+  h.onAutopilot.mockResolvedValue(null)
 })
 
 describe('creating a three-team trade', () => {
@@ -147,8 +147,8 @@ describe('creating a three-team trade', () => {
     expect(h.created).toHaveLength(0)
   })
 
-  it('refuses when the extra team is on Chimmy autopilot', async () => {
-    h.onAutopilot.mockImplementation(async (_l: string, owner: string) => owner === 'uC')
+  it('refuses when the extra team is on Chimmy autopilot, even one that answers two-team offers', async () => {
+    h.onAutopilot.mockImplementation(async (_l: string, owner: string) => (owner === 'uC' ? 'answer' : null))
     const r = await propose({ additionalRosterIds: ['r-3'], assets: ring3 })
     expect(r.status).toBe(409)
     expect(r.json.code).toBe('RECEIVER_ON_AUTOPILOT')

@@ -321,7 +321,8 @@ export async function finalizeRedraftTrade(
       leagueId: proposal.leagueId,
       seasonId: proposal.seasonId,
       leagueConcept: 'redraft' as const,
-      actor: decidedByUserId ? { type: 'user' as const, id: decidedByUserId } : { type: 'system' as const },
+      // A `system:` actor (the review window, Chimmy running a team) is not a user.
+      actor: decidedByUserId && !decidedByUserId.startsWith('system:') ? { type: 'user' as const, id: decidedByUserId } : { type: 'system' as const },
       source: 'route:trade-votes',
       subjects: [{ kind: 'trade', id: proposal.id }],
     }

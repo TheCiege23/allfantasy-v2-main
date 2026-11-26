@@ -251,7 +251,8 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
     { key: 'season', label: 'Season', value: num(l.season) != null ? String(l.season) : DASH },
     { key: 'scoring', label: 'Scoring Format', value: str(l.scoring) },
   ]
-  if (l.medianGame != null) {
+  // A guillotine league has no matchups, so no median game to play: the row is not offered there.
+  if (l.medianGame != null && kind !== 'guillotine') {
     setup.push({ key: 'median', label: 'League Median Game', description: 'Every team also plays the weekly median score', value: yesNo(l.medianGame), toggle: { field: 'medianGame', on: l.medianGame === true } })
   }
   // A league drafted mid-season: do the weeks played before the draft count? (lib/redraft/preLeagueWeeksRules.ts)

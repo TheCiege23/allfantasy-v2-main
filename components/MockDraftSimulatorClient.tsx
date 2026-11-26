@@ -1541,7 +1541,8 @@ export default function MockDraftSimulatorClient({
       </div>
       <div className="bg-black/60 border border-purple-900/50 rounded-2xl p-6">
         <h3 className="text-lg font-medium mb-4">Customize Simulation</h3>
-        <div className="grid md:grid-cols-3 gap-6">
+        {/* Two settings across on a phone, three from md (2026-11-24, the simplify pass): one per row was ~650px. */}
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-6" data-testid="mock-draft-customize">
           <div>
             <label className="block text-sm text-gray-400 mb-2">Rounds</label>
             <Select value={customRounds.toString()} onValueChange={(v) => setCustomRounds(Number(v))}>
@@ -1597,7 +1598,7 @@ export default function MockDraftSimulatorClient({
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-2">Validation Mode</label>
-            <Button type="button" variant={casualMode ? 'default' : 'outline'} className={casualMode ? 'w-full bg-amber-500 hover:bg-amber-400 text-black' : 'w-full'} onClick={() => setCasualMode(prev => !prev)}>
+            <Button type="button" variant={casualMode ? 'default' : 'outline'} className={casualMode ? 'h-auto min-h-10 w-full whitespace-normal bg-amber-500 hover:bg-amber-400 text-black' : 'h-auto min-h-10 w-full whitespace-normal'} onClick={() => setCasualMode(prev => !prev)}>
               {casualMode ? 'Casual (warn only)' : 'Strict (enforce constraints)'}
             </Button>
           </div>
@@ -1613,7 +1614,7 @@ export default function MockDraftSimulatorClient({
               {useAiBoardAdp ? 'Chimmy ADP On' : 'Chimmy ADP Off'}
             </Button>
           </div>
-          <div className="md:col-span-3">
+          <div className="col-span-2 md:col-span-3">
             <label className="block text-sm text-gray-400 mb-2">Scenario Assumptions</label>
             <div className="flex flex-wrap gap-2">
               {[
@@ -1643,8 +1644,13 @@ export default function MockDraftSimulatorClient({
               })}
             </div>
           </div>
-          <div className="flex items-end gap-3">
-            <Button onClick={startMockDraft} data-testid="mock-draft-run-button" disabled={isSimulating || loading || !selectedLeagueId} className="flex-1 h-10 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700">
+          {/*
+            ⚠ THIS ROW DID NOT WRAP, AND ON A 390px PHONE IT MADE THE PAGE 1,448px WIDE (found 2026-11-24): eight
+            buttons in one nowrap flex row set the grid track's minimum width, so the card and every select in it
+            ran off the right edge. It spans the full card and wraps; Run Mock Draft takes its own row on a phone.
+          */}
+          <div className="col-span-2 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end md:col-span-3" data-testid="mock-draft-actions">
+            <Button onClick={startMockDraft} data-testid="mock-draft-run-button" disabled={isSimulating || loading || !selectedLeagueId} className="col-span-2 sm:flex-1 h-10 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700">
               {isSimulating || loading ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simulating...</>
               ) : (

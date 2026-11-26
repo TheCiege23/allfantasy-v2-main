@@ -12,6 +12,7 @@ import type {
   SGBladeMeter, SGChopCard, SGMultiRow, SGReleasedPlayer, buildReversals, buildTribeDraw, buildTribeSetupView,
 } from '@/lib/survivor-guillotine/visual-boards'
 import s from './survguil.module.css'
+import sp from '@/components/league/specialty/specialty.module.css'
 
 function cx(...p: Array<string | false | null | undefined>) {
   return p.filter(Boolean).join(' ')
@@ -33,9 +34,9 @@ export function SGLineupMeter({ meter, heldIdolId, idolLabel, onPlayIdol, lockTe
         <div>
           <SpecialtyTag tone={tone}>{meter.tier === 'chop_zone' ? 'Chop zone' : meter.tier === 'danger' ? 'Danger' : meter.tier === 'immune' ? 'Tribe ahead' : 'Safe'}</SpecialtyTag>
           <h3 style={{ margin: '6px 0 2px', fontSize: 20 }}>{meter.headline}</h3>
-          <p style={{ margin: 0, color: '#b9c0d0', fontSize: 14 }}>{meter.sub}</p>
+          <p style={{ margin: 0, color: 'var(--sp-t2, #b9c0d0)', fontSize: 14 }}>{meter.sub}</p>
         </div>
-        <div style={{ textAlign: 'right' }}><b className={s.mono} style={{ fontSize: 30 }}>{meter.you.toFixed(1)}</b><div style={{ fontSize: 12, color: '#9aa3b8' }}>your live points</div></div>
+        <div style={{ textAlign: 'right' }}><b className={s.mono} style={{ fontSize: 30 }}>{meter.you.toFixed(1)}</b><div style={{ fontSize: 12, color: 'var(--sp-t3, #9aa3b8)' }}>your live points</div></div>
       </div>
       {meter.tier !== 'immune' ? (
         <div className={s.meterWrap}>
@@ -57,7 +58,7 @@ export function SGLineupMeter({ meter, heldIdolId, idolLabel, onPlayIdol, lockTe
           </div>
         </div>
       ) : null}
-      <p style={{ margin: '10px 0 0', fontSize: 12, color: '#9aa3b8' }}>Set starters in your league roster (or the daily lineup below for capped-games NBA). The meter uses live points against the engine&apos;s chop field.</p>
+      <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--sp-t3, #9aa3b8)' }}>Live points. Set your starters on the Roster tab before lock.</p>
     </SpecialtyCard>
   )
 }
@@ -86,7 +87,8 @@ export function SGMultiRaceBoard({ rows }: { rows: SGMultiRow[] }) {
 }
 
 /* SGTribeDraw + MobileSGTribeDraw: your tribe and your sealed idol */
-export function SGTribeDrawCard({ draw }: { draw: ReturnType<typeof buildTribeDraw> }) {
+export function SGTribeDrawCard({ draw, choppedInPeriod = null }: { draw: ReturnType<typeof buildTribeDraw>; choppedInPeriod?: number | null }) {
+  const out = choppedInPeriod != null
   const reduced = usePrefersReducedMotion()
   const [open, setOpen] = useState(false)
   return (
@@ -96,11 +98,11 @@ export function SGTribeDrawCard({ draw }: { draw: ReturnType<typeof buildTribeDr
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={draw.tribe.buffSrc} alt="" aria-hidden style={{ width: 64, height: 'auto' }} className={reduced ? undefined : s.pop} />
           <div>
-            <h3 className={s.cinzel} style={{ margin: 0, color: draw.tribe.color }}>{draw.tribe.name}{draw.captain ? ' · captain' : ''}</h3>
-            <p style={{ margin: '2px 0 0', fontSize: 13, color: '#b9c0d0' }}>{draw.tribemates.length ? `With ${draw.tribemates.join(', ')}` : 'Tribemates appear here.'}</p>
+            <h3 className={s.cinzel} style={{ margin: 0, color: draw.tribe.color }}>{draw.tribe.name}{draw.captain && !out ? ' · captain' : ''}</h3>
+            <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--sp-t2, #b9c0d0)' }}>{out ? `Your torch went out${choppedInPeriod ? ` in period ${choppedInPeriod}` : ''}.` : draw.tribemates.length ? `With ${draw.tribemates.join(', ')}` : 'Tribemates appear here.'}</p>
           </div>
         </div>
-      ) : <p style={{ margin: 0, color: '#b9c0d0' }}>Tribes are not set yet. {draw.formation}.</p>}
+      ) : <p style={{ margin: 0, color: 'var(--sp-t2, #b9c0d0)' }}>Tribes are not set yet. {draw.formation}.</p>}
       {draw.idols.length ? (
         <div style={{ marginTop: 12 }}>
           {!open ? (
@@ -136,17 +138,17 @@ export function SGTribeSetupCard({ view, rulesHref }: { view: ReturnType<typeof 
           </span>
         ))}
       </div>
-      <p style={{ margin: '8px 0', fontSize: 13, color: '#b9c0d0' }}>{view.tribeCount} tribes · {view.counts.find((c) => c.count === view.tribeCount)?.sizes}. {view.formation}.{view.shuffles.length ? ` Shuffles in period${view.shuffles.length > 1 ? 's' : ''} ${view.shuffles.join(', ')}.` : ''}</p>
+      <p style={{ margin: '8px 0', fontSize: 13, color: 'var(--sp-t2, #b9c0d0)' }}>{view.tribeCount} tribes · {view.counts.find((c) => c.count === view.tribeCount)?.sizes}. {view.formation}.{view.shuffles.length ? ` Shuffles in period${view.shuffles.length > 1 ? 's' : ''} ${view.shuffles.join(', ')}.` : ''}</p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {view.tribes.map((t) => (
           // eslint-disable-next-line @next/next/no-img-element
           <img key={t.tribeId} src={t.buffSrc} alt={t.name} title={t.name} style={{ width: 52, height: 'auto' }} />
         ))}
-        <span style={{ color: '#9aa3b8', fontSize: 13 }}>→</span>
+        <span style={{ color: 'var(--sp-t3, #9aa3b8)', fontSize: 13 }}>→</span>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={view.merged.buffSrc} alt={`Merged: ${view.merged.name}`} style={{ width: 52, height: 'auto' }} />
       </div>
-      <p style={{ margin: '8px 0 0', fontSize: 12, color: '#9aa3b8' }}>Display names use the Island words pack. Custom names, rival pairs and theme packs are not saved by the league yet.</p>
+      <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--sp-t3, #9aa3b8)' }}>Tribe names come from the island set.</p>
       {rulesHref ? <a className={s.textLink} href={rulesHref}>Change tribe count or formation</a> : null}
     </SpecialtyCard>
   )
@@ -156,7 +158,7 @@ export function SGTribeSetupCard({ view, rulesHref }: { view: ReturnType<typeof 
 export function SGChopCardView({ card }: { card: SGChopCard }) {
   return (
     <SpecialtyCard label="League chat · AF chop card" testId="sg-chopcard">
-      <div className={s.chatCard}>
+      <div className={`${s.chatCard} ${sp.stayDark}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={card.art} alt="" aria-hidden />
         <div>
@@ -164,13 +166,13 @@ export function SGChopCardView({ card }: { card: SGChopCard }) {
           {card.lines.map((l) => <span key={l}>{l}</span>)}
         </div>
       </div>
-      <p style={{ margin: '8px 0 0', fontSize: 12, color: '#9aa3b8' }}>Posted to the league channel by the chop. Private tribe channels are not part of this league format yet.</p>
+      <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--sp-t3, #9aa3b8)' }}>Posted to league chat after each chop.</p>
     </SpecialtyCard>
   )
 }
 
 /* SGWaivers */
-export function SGWaiversCard({ players, faab, waiverHref, teamName }: { players: SGReleasedPlayer[]; faab: number | null; waiverHref: string; teamName: (id: string) => string }) {
+export function SGWaiversCard({ players, faab, waiverHref, teamName, canBid = true }: { players: SGReleasedPlayer[]; faab: number | null; waiverHref: string; teamName: (id: string) => string; canBid?: boolean }) {
   if (!players.length) return null
   const period = players[0].period
   const from = [...new Set(players.map((p) => teamName(p.fromRosterId)))].join(', ')
@@ -185,8 +187,8 @@ export function SGWaiversCard({ players, faab, waiverHref, teamName }: { players
           </li>
         ))}
       </ul>
-      <p style={{ margin: '8px 0', fontSize: 13, color: '#b9c0d0' }}>Released by the period {period} chop. Bids are blind FAAB; the league waiver run decides them. Chopped managers cannot bid.</p>
-      <a className={s.primaryBtn} href={waiverHref}>Place FAAB bids</a>
+      <p style={{ margin: '8px 0', fontSize: 13, color: 'var(--sp-t2, #b9c0d0)' }}>Released by the period {period} chop. Bids are blind FAAB; the league waiver run decides them.{canBid ? '' : ' Chopped managers can’t bid.'}</p>
+      {canBid ? <a className={s.primaryBtn} href={waiverHref}>Place FAAB bids</a> : null}
     </SpecialtyCard>
   )
 }
@@ -201,9 +203,9 @@ export function SGReversalCard({ rows }: { rows: ReturnType<typeof buildReversal
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={`${SG_ART}/torch-lit.svg`} alt="" aria-hidden className={s.stageArt} style={{ width: 80, height: 160 }} />
         <div>
-          <span className={s.stageEyebrow}>Stat correction{r.when ? ` · ${new Date(r.when).toLocaleString()}` : ''}</span>
+          <span className={s.stageEyebrow}>Stat correction{r.when ? ` · ${new Date(r.when).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</span>
           <h3 className={s.stageTitle} style={{ fontSize: 24 }}>{r.restored} is back.{r.newlyChopped.length ? ` ${r.newlyChopped.join(', ')} ${r.newlyChopped.length > 1 ? 'are' : 'is'} chopped.` : ''}</h3>
-          <p style={{ margin: 0, color: '#d7dbe6', fontSize: 14 }}>Corrected final scores changed period {r.period}. Their roster came back, except any player another manager had already won on waivers.</p>
+          <p style={{ margin: 0, color: 'var(--sp-t2, #d7dbe6)', fontSize: 14 }}>Corrected final scores changed period {r.period}. Their roster came back, except any player another manager had already won on waivers.</p>
         </div>
       </div>
       <ol className={s.steps}>
@@ -213,7 +215,7 @@ export function SGReversalCard({ rows }: { rows: ReturnType<typeof buildReversal
             <img src={st.art} alt="" aria-hidden />
             <b>STEP {i + 1}</b>
             <span>{st.title}</span>
-            <span style={{ fontSize: 12, color: '#9aa3b8' }}>{st.detail}</span>
+            <span style={{ fontSize: 12, color: 'var(--sp-t3, #9aa3b8)' }}>{st.detail}</span>
           </li>
         ))}
       </ol>

@@ -94,10 +94,12 @@ type EpisodeLike = { week: number; scenes: Array<{ label: string; text: string }
  * The Tribal line of an episode card. ⚠ No Tribal scene is not "nobody went home": stored recaps
  * use other labels, and the current week's recap can exist while its vote is still open.
  */
-export function islandEpisodeTribalLine(episode: EpisodeLike, ctx: { openCouncilWeek: number | null }): string | null {
+export function islandEpisodeTribalLine(episode: EpisodeLike, ctx: { openCouncilWeek: number | null; votesClosed?: boolean }): string | null {
   const written = episode.scenes.find((s) => s.label === 'Tribal Council' || s.label === 'Tribal')?.text
   if (written) return written
-  if (ctx.openCouncilWeek != null && episode.week === ctx.openCouncilWeek) return 'The vote is still open.'
+  if (ctx.openCouncilWeek != null && episode.week === ctx.openCouncilWeek) {
+    return ctx.votesClosed ? 'The votes are in. The host reads them next.' : 'The vote is still open.'
+  }
   return null
 }
 
@@ -114,6 +116,15 @@ export function islandSeasonLabel(input: { sport?: string | null; week?: number 
   const name = input.sport ? `${input.sport} Survivor` : 'Survivor'
   if (input.phase === 'pre_draft' || input.phase === 'drafting') return `${name} · ${PHASE_LABEL[input.phase]}`
   return input.week ? `${name} · Week ${input.week}` : name
+}
+
+/** A challenge's scope in words: "Tribe challenge", "Individual challenge". */
+export function islandChallengeScopeWord(scope: string | null | undefined): string {
+  const raw = String(scope ?? 'tribe').toLowerCase()
+  if (raw === 'tribe') return 'Tribe challenge'
+  if (raw === 'individual') return 'Individual challenge'
+  if (raw === 'exile') return 'Exile challenge'
+  return `${raw.charAt(0).toUpperCase()}${raw.slice(1).replace(/_/g, ' ')} challenge`
 }
 
 export function islandExileCountLine(count: number): string {

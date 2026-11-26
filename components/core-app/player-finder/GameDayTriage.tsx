@@ -1,5 +1,6 @@
 'use client'
 
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import Link from 'next/link'
 import { useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -197,9 +198,10 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
         ) : null}
         </>
       )}
-      <p className="af-pf-triage-foot">
+      {/* Closed until tapped (2026-11-24, the simplify pass): a long method note under every visit's list. */}
+      <WhyFold label={m.triageFootLabel} className="af-pf-triage-foot">
         {m.triageFoot}
-      </p>
+      </WhyFold>
     </section>
   )
 }

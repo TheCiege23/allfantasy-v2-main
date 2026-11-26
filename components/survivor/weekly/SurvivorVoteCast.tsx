@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { TribalCouncilView } from '@/lib/survivor/survivorTribalView'
 import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
@@ -66,12 +66,15 @@ export function SurvivorVoteCast({
   backHref,
   idolHref,
   initialView = null,
+  openFooter = null,
 }: {
   leagueId: string
   tribeName?: string | null
   backHref: string
   idolHref?: string
   initialView?: TribalCouncilView | null
+  /** Shown only while the vote is open (the page's "vote with @Chimmy" line). */
+  openFooter?: ReactNode
 }) {
   const [view, setView] = useState<TribalCouncilView | null>(initialView)
   const [selected, setSelected] = useState<string | null>(initialView?.you.yourVoteTargetUserId ?? null)
@@ -240,6 +243,14 @@ export function SurvivorVoteCast({
         {view.you.isSafeFromVote && <p className="swl-vc-note">You’re safe at this council and don’t cast a vote.</p>}
       </aside>
 
+      {deadlinePassed ? (
+      <section className="swl-vc-center" aria-label="Your ballot" data-testid="survivor-vote-sealed">
+        <div className="swl-card" style={{ textAlign: 'center' }}>
+          <strong>{view?.you.hasVoted ? 'Your vote is in the urn' : 'No vote from you this time'}</strong>
+          <span className="swl-t2" style={{ display: 'block', marginTop: 6 }}>Nobody sees a vote until the host reads them.</span>
+        </div>
+      </section>
+      ) : (
       <section className="swl-vc-center" aria-label="Your ballot">
         <div className="swl-vc-stage">
           <div className={`swl-slip${phase === 'dropping' ? ' is-dropping' : ''}${phase === 'cast' ? ' is-gone' : ''}`} aria-hidden={phase === 'cast'}>
@@ -261,9 +272,10 @@ export function SurvivorVoteCast({
         <img className={`swl-urn${phase !== 'choose' && !instant ? ' is-bumping' : ''}`} src="/survivor/weekly/urn.svg" alt="Voting urn" />
         <div className="swl-vc-actions">{actions}</div>
       </section>
+      )}
 
       <aside className="swl-vc-rail">
-        {idol && idolName && <>
+        {idol && idolName && !deadlinePassed && <>
           <div className="swl-card swl-card-gold swl-idol-desktop" data-testid="survivor-vote-idol">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="swl-idol-art" src={`/survivor/idols/${IDOL_ART[idol.powerType] ?? 'immunity'}.svg`} alt="" />
@@ -289,6 +301,7 @@ export function SurvivorVoteCast({
       </aside>
     </div>
 
-    <div className="swl-vc-bar">{actions}</div>
+    {deadlinePassed ? null : <div className="swl-vc-bar">{actions}</div>}
+    {deadlinePassed ? null : openFooter}
   </div>
 }

@@ -670,6 +670,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
         now={now}
         sportLabel={activeSportLabel}
         hasRosterData={data.hasRosterData}
+        startersInHeadline={moment.kind === 'live'}
         liveOnly={liveOnly}
         onLiveOnly={setLiveOnly}
       />

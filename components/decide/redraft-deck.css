@@ -148,7 +148,7 @@
 .nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-section-title { font-weight: 850; }
 .nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-action { border-radius: 16px; }
 .nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-action:enabled:hover { border-color: var(--rd-accent-line); background: var(--rd-surface-elev, var(--surface2)); }
-.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-action > div > span:first-child { background: var(--rd-accent-soft); color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-action .af-admin-action-icon { background: var(--rd-accent-soft); color: var(--rd-accent-text); }
 .nl-workspace[data-format=redraft][data-sport] .af-league-admin .af-admin-action-state { font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 11px; }
 
 /* League health (the approved Commish mock): score ring + bars | checklist + managers. */

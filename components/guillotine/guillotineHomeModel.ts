@@ -159,3 +159,12 @@ export function guillotineRuleRows(config: {
 export function tierLabel(tier: ChopLineRow['tier']): string {
   return tier === 'chop_zone' ? 'Chop zone' : tier === 'danger' ? 'Danger' : 'Safe'
 }
+
+/**
+ * Who a replayed chop names. The replay overlay reads "Chopped @name"; it was handed "Week 3" and read
+ * "Chopped @Week 3". Undefined when no name is known: the overlay then plays without one.
+ */
+export function choppedTeamNames(chopped: ReadonlyArray<{ name?: string | null; week?: number | null }> | null | undefined, week: number): string | undefined {
+  const names = (chopped ?? []).filter((c) => c.week === week).map((c) => c.name?.trim()).filter((n): n is string => Boolean(n))
+  return names.length > 0 ? names.join(' & ') : undefined
+}

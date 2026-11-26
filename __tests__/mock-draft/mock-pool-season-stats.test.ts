@@ -3,6 +3,8 @@
  * readers the live pool uses, joined by identity, scored with the mock's own PPR setting. A row
  * with no match keeps its dashes, and a failed read leaves the pool as it was.
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const riSeason = vi.fn()
@@ -45,6 +47,24 @@ describe('mergeSeasonStatsIntoEntry', () => {
       statSeason: '2025–26',
     })
     expect(mergeSeasonStatsIntoEntry(row, null)).toBe(row)
+  })
+
+  it('marks a line from the season before, and only beside a season label', () => {
+    const row = { name: 'A' }
+    expect(mergeSeasonStatsIntoEntry(row, { stats: { pointsPerGame: 19.5 }, statSeason: '2025–26', statSeasonIsPrevious: true }))
+      .toMatchObject({ statSeason: '2025–26', statSeasonIsPrevious: true })
+    expect(mergeSeasonStatsIntoEntry(row, { stats: { pointsPerGame: 27.1 }, statSeason: '2026–27', statSeasonIsPrevious: false }))
+      .not.toHaveProperty('statSeasonIsPrevious')
+    expect(mergeSeasonStatsIntoEntry(row, { stats: { pointsPerGame: 27.1 }, statSeasonIsPrevious: true }))
+      .not.toHaveProperty('statSeasonIsPrevious')
+  })
+
+  it('the mock room keeps the mark and shows the live room\'s tag for it', () => {
+    const room = readFileSync(resolve(process.cwd(), 'components/mock-draft/MockDraftSleeperRoomClient.tsx'), 'utf8')
+    expect(room).toMatch(/^\s*statSeasonIsPrevious: raw\.statSeasonIsPrevious === true,/m)
+    expect(room).toMatch(/^\s*\{player\.statSeason && player\.statSeasonIsPrevious \? \(/m)
+    expect(room).toMatch(/data-testid=\{`mock-draft-player-last-season-\$\{player\.id\}`\}/)
+    expect(room).toMatch(/tPool\('draftRoom\.pool\.lastSeasonStats'\)/)
   })
 })
 

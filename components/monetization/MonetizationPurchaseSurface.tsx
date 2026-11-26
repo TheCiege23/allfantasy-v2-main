@@ -33,6 +33,7 @@ import CouponInput from "@/components/promotions/CouponInput";
 import { trackCouponApplied } from "@/lib/promotions/couponAnalytics";
 import { useLaunchOffer } from "@/components/launch/LaunchOfferContext";
 import { LaunchOfferStrip } from "@/components/launch/LaunchOfferStrip";
+import { HolidaySaleStrip, useHolidaySale } from "@/components/launch/HolidaySaleStrip";
 
 type PlanFamily =
   | "af_pro"
@@ -218,6 +219,7 @@ export default function MonetizationPurchaseSurface({
    * Stripe takes one discount per checkout, so typing a code replaces the founding discount.
    */
   const launchOffer = useLaunchOffer();
+  const holidaySale = useHolidaySale();
   const foundingMember = launchOffer?.founding?.audience === "member";
 
   const searchParams = useSearchParams();
@@ -579,7 +581,8 @@ export default function MonetizationPurchaseSurface({
           <AFSupremeBundleSpotlight className="mb-4" />
         ) : null}
 
-        {!nativeApp && <LaunchOfferStrip offer={launchOffer} surface="upgrade" className="mb-4" />}
+        {/* Black Friday → Cyber Monday: its banner replaces the strip (its 50% outranks founding pricing). */}
+        {!nativeApp && (holidaySale ? <HolidaySaleStrip surface="pricing" className="mb-4" /> : <LaunchOfferStrip offer={launchOffer} surface="upgrade" className="mb-4" />)}
 
         <section className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="monetization-plan-explanations">
           <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300/80">What each plan includes</h2>

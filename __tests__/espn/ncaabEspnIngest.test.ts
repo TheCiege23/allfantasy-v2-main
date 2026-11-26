@@ -211,6 +211,45 @@ describe('syncEspnNcaabRosters', () => {
     expect(canonical.writeCanonicalHeadshot).not.toHaveBeenCalled()
   })
 
+  it('still writes the photo onto the RI row when it has no canonical identity', async () => {
+    // The row photo rests on the same school + name + jersey match as the ESPN id. It used to be
+    // skipped with the canonical writes: 2,275 active rows held an ESPN id and no photo (2026-11-25).
+    seedSchool({ imageUrl: null })
+    db.playerProviderIdentity.findMany.mockReset()
+      .mockResolvedValueOnce([]) // the RI row has NO canonical identity
+      .mockResolvedValueOnce([]) // no existing ESPN identity
+    const r = await run(vi.fn(async () => roster([dillon])))
+    expect(db.sportsPlayer.update).toHaveBeenCalledWith({ where: { id: 'sp-1' }, data: { imageUrl: HEADSHOT } })
+    expect(r).toMatchObject({ headshotsWritten: 1, matched: 0 })
+    expect(canonical.writeCanonicalHeadshot).not.toHaveBeenCalled()
+  })
+
+  it('with no canonical identity, still stores no photo the CDN does not serve and leaves another source’s photo', async () => {
+    seedSchool({ imageUrl: null })
+    db.playerProviderIdentity.findMany.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    served.isServedImage.mockResolvedValue(false)
+    const unserved = await run(vi.fn(async () => roster([dillon])))
+    expect(unserved).toMatchObject({ headshotsWritten: 0, headshotsMissing: 1 })
+    expect(db.sportsPlayer.update).not.toHaveBeenCalled()
+
+    served.isServedImage.mockResolvedValue(true)
+    seedSchool({ imageUrl: 'https://r2.thesportsdb.com/images/media/player/cutout/real.png' })
+    db.playerProviderIdentity.findMany.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    const kept = await run(vi.fn(async () => roster([dillon])))
+    expect(kept).toMatchObject({ headshotsWritten: 0, headshotsKeptOther: 1 })
+    expect(db.sportsPlayer.update).not.toHaveBeenCalled()
+  })
+
+  it('writes no photo for an athlete ESPN already links to a different player', async () => {
+    seedSchool({ imageUrl: null })
+    db.playerProviderIdentity.findMany.mockReset()
+      .mockResolvedValueOnce([]) // the RI row has NO canonical identity
+      .mockResolvedValueOnce([{ id: 'ppi-1', providerPlayerId: '5241333', playerId: 'someone-else' }])
+    const r = await run(vi.fn(async () => roster([dillon])))
+    expect(db.sportsPlayer.update).not.toHaveBeenCalled()
+    expect(r.headshotsWritten).toBe(0)
+  })
+
   it('never gives one ESPN id to a second identity row', async () => {
     seedSchool({ imageUrl: null })
     db.playerIdentityMap.findFirst.mockResolvedValue({ rollingInsightsId: '99999' })

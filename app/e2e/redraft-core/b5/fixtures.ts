@@ -110,7 +110,7 @@ export function draftHqFixture(sport: HarnessSport, platform: string): DraftHqDa
       },
     },
     lottery: missing('this league does not run a draft lottery'),
-    queue: missing(reason),
+    queue: missing('a prepared queue belongs to a draft AllFantasy runs, and none is set up for this league'),
     keepers: missing('this league keeps no players'),
   } as unknown as DraftHqData
 }

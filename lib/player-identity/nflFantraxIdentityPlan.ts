@@ -94,7 +94,7 @@ export function looseNflNameKey(nameKey: string): string {
  * current club, DL against LB is one player filed two ways (Fantrax "Curry, Caden | IND | DE", registry
  * "Caden Curry / IND / LB"). No other pair of groups is treated as compatible.
  */
-function compatibleRoles(a: Set<string>, b: Set<string>): boolean {
+export function compatibleRoles(a: Set<string>, b: Set<string>): boolean {
   if ([...a].some((g) => b.has(g))) return true
   return (a.has('DL') && b.has('LB')) || (a.has('LB') && b.has('DL'))
 }

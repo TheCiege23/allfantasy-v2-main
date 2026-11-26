@@ -39,7 +39,7 @@ export const WEEKLY_PROMPTS: readonly WeeklyPrompt[] = [
   {
     channel: 'other-apps',
     title: 'What does your other fantasy app do better than anyone?',
-    body: 'Be honest. If there is a feature you would steal for AllFantasy, name it.',
+    body: 'Be honest. Where does it fall short, and how should AllFantasy improve on it?',
   },
   {
     channel: 'commish-corner',
