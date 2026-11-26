@@ -1,5 +1,6 @@
 /**
- * Fairness and veto risk, READ OFF THE ONE GRADE. Pure and dependency-free apart from types.
+ * Fairness and veto risk, READ OFF THE ONE GRADE. Pure; its only runtime import is the
+ * dependency-free grade scale (`lib/trade-intel/gradeScale.ts`).
  *
  * 🛑 WHY THIS EXISTS (2026-11-26). `/api/trade-evaluator` took its letter from the canonical grader
  * (`evaluateTrade` → `createLeagueTradeGrader`/`gradeDeal`) but kept a fairness of its own beside it:
@@ -25,7 +26,7 @@
  * viewer's roster-adjusted one; whether a LEAGUE would contest the deal is a league-value question, so
  * these read `market` there. Everywhere else `market` is absent and the headline is league value.
  */
-import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
+import { projectedLetterFor, signedGapPct, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type { TradeGradeView } from './tradeGrade'
 
 export type GradeControversyLevel = 'high' | 'medium' | 'low' | 'unknown'
@@ -176,5 +177,89 @@ export function vetoRiskFromGrade(grade: TradeGradeView): GradeVetoRisk {
     warningText: null,
     level: 'low',
     withheldReason: null,
+  }
+}
+
+/* ── The IDP ceiling caveat, on the grade's scale ───────────────────────────
+ *
+ * 🛑 IT USED TO BE A RANGE ON A SCALE THE GRADE DOES NOT USE (fixed 2026-11-26). `/api/trade-evaluator`
+ * varied the unmeasured defence-vs-offence ceiling (`idpCeilingCompositeBand`), scored both ends with
+ * its old composite fairness (`computeValueFairness`: 50 + tanh, 50 = even) and spoke when that range
+ * crossed 50 — "changes who it favours". The letter beside it is a value gap on the PROJECTED bands
+ * (C inside ±10%, B/D to ±25%, A/F beyond), so the two disagreed in both directions: a band crossing
+ * even can sit wholly inside one C (nothing the manager sees changes), and a band that never crosses
+ * even can move B to A.
+ *
+ * So both ends now go through the SAME arithmetic as the grade: `signedGapPct` → the letter
+ * (`projectedLetterFor`) and `fairnessScoreFromPercentDiff`. It speaks only when the two letters
+ * differ, and only beside a real grade.
+ *
+ * ⚠ THE BAND IS PRICED ON THE ROUTE'S OWN COMPOSITE TOTALS, NOT THE GRADE'S VALUES. Both ends are
+ * read on the grade's bands, but the band's centre need not equal the letter on screen. When the
+ * letter shown is outside the band's letter range the caveat would contradict it, so it says nothing
+ * rather than "could change the grade from B to C" beside a D.
+ */
+const LETTER_RANK: Record<GradeLetter, number> = { A: 0, B: 1, C: 2, D: 3, F: 4 }
+
+export type IdpCeilingBandTotals = {
+  low: { received: number; gave: number }
+  high: { received: number; gave: number }
+}
+
+export type IdpCeilingGradeCaveat = {
+  /** The grade's own league-value letter for the `give` side — the letter the caveat qualifies. */
+  gradeLetter: GradeLetter
+  /** Signed value gap at the low / high ceiling, by `signedGapPct` (+ = the give side receives more). */
+  lowPercentDiff: number
+  highPercentDiff: number
+  /** `fairnessScoreFromPercentDiff` of each end — the same N/100 the grade's fairness reads. */
+  lowFairness: number
+  highFairness: number
+  lowLetter: GradeLetter
+  highLetter: GradeLetter
+  /** Always true when a caveat exists — it is the gate. */
+  changesGrade: true
+  note: string
+}
+
+/** The two ends of the IDP-ceiling band as the grade would read them; null unless the letter moves. */
+export function idpCeilingGradeCaveat(
+  band: IdpCeilingBandTotals | null | undefined,
+  fairness: GradeFairness,
+): IdpCeilingGradeCaveat | null {
+  // ⚠ Only beside a real grade: a withheld grade has no letter for the defender rate to move.
+  if (!band || !fairness.graded) return null
+  const end = (side: { received: number; gave: number }) => {
+    if (!Number.isFinite(side.received) || !Number.isFinite(side.gave) || !(side.received > 0) || !(side.gave > 0)) return null
+    const percentDiff = signedGapPct(side.gave, side.received)
+    const letter = projectedLetterFor({ percentDiff, hasSignal: true })
+    return letter ? { percentDiff, letter, fairness: fairnessScoreFromPercentDiff(percentDiff) } : null
+  }
+  const low = end(band.low)
+  const high = end(band.high)
+  if (!low || !high || low.letter === high.letter) return null
+
+  const shown = fairness.letter
+  const lo = Math.min(LETTER_RANK[low.letter], LETTER_RANK[high.letter])
+  const hi = Math.max(LETTER_RANK[low.letter], LETTER_RANK[high.letter])
+  if (LETTER_RANK[shown] < lo || LETTER_RANK[shown] > hi) return null
+
+  const others = [low.letter, high.letter].filter((l) => l !== shown)
+  return {
+    gradeLetter: shown,
+    lowPercentDiff: low.percentDiff,
+    highPercentDiff: high.percentDiff,
+    lowFairness: low.fairness,
+    highFairness: high.fairness,
+    lowLetter: low.letter,
+    highLetter: high.letter,
+    changesGrade: true,
+    note:
+      'This trade sends defenders one way and offence the other, so its grade rests on how much a ' +
+      'defender is worth against an offensive player — a rate no market publishes and that we set ' +
+      'ourselves. Across a defensible range of that rate it grades ' +
+      `${low.letter} (${low.fairness}/100) at the low end and ${high.letter} (${high.fairness}/100) at the high end, ` +
+      `which could change the grade from ${shown} to ${others.join(' or ')}. Treat it as close, and ` +
+      'weigh what your lineup actually needs.',
   }
 }

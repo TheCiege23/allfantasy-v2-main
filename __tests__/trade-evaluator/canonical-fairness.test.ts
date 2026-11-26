@@ -94,10 +94,21 @@ describe('trade labels judge value only through the grade letter', () => {
 
 // ───────────────────────────── the route ─────────────────────────────
 
-const { gradeOverride, routeTextCallMock } = vi.hoisted(() => ({
+const { gradeOverride, routeTextCallMock, idpBandOverride } = vi.hoisted(() => ({
   gradeOverride: { current: null as TradeGradeView | null },
   routeTextCallMock: vi.fn(),
+  /** When set, stands in for `idpCeilingCompositeBand` — the deal below has no defenders of its own. */
+  idpBandOverride: { current: null as null | { low: { received: number; gave: number }; high: { received: number; gave: number } } },
 }))
+
+vi.mock('@/lib/hybrid-valuation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/hybrid-valuation')>()
+  return {
+    ...actual,
+    idpCeilingCompositeBand: (...args: Parameters<typeof actual.idpCeilingCompositeBand>) =>
+      idpBandOverride.current ?? actual.idpCeilingCompositeBand(...args),
+  }
+})
 
 vi.mock('@/lib/decision-os/trade/evaluateTrade', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/decision-os/trade/evaluateTrade')>()
@@ -187,6 +198,7 @@ describe('POST /api/trade-evaluator — fairness and veto follow the canonical g
   }, 180_000)
   beforeEach(() => {
     routeTextCallMock.mockResolvedValue({ ok: false })
+    idpBandOverride.current = null
   })
 
   it('a lopsided A/F grade: fairness 60 on both sides, likely veto, from the grade', async () => {
@@ -222,6 +234,29 @@ describe('POST /api/trade-evaluator — fairness and veto follow the canonical g
     expect(b.valuationReport.teamA.fairnessScore).toBeNull()
     expect(b.valuationReport.teamB.fairnessScore).toBeNull()
     expect(b.valuationReport.teamA.fairnessWithheldReason).toBe('No values on file for this league yet.')
+    expect(b.tradeInsights.idpCeilingCaveat).toBeUndefined()
+  })
+
+  it('IDP ceiling caveat: in letters and N/100 on the grade\'s bands, only when the letter changes', async () => {
+    // −9% (C, 91) at the low defender rate, +13% (B, 87) at the high one, beside a C.
+    idpBandOverride.current = { low: { received: 1000, gave: 1100 }, high: { received: 1150, gave: 1000 } }
+    const b = await evaluate(graded(3, 'C', 'C'))
+    expect(b.tradeInsights.idpCeilingCaveat).toMatchObject({
+      gradeLetter: 'C', lowLetter: 'C', highLetter: 'B', lowFairness: 91, highFairness: 87, changesGrade: true,
+    })
+    expect(b.tradeInsights.idpCeilingCaveat.note).toContain('could change the grade from C to B')
+    expect(b.tradeInsights.idpCeilingCaveat).not.toHaveProperty('flipsWinner')
+  })
+
+  it('IDP ceiling caveat: a band that crosses even but stays inside one C is not reported', async () => {
+    idpBandOverride.current = { low: { received: 960, gave: 1000 }, high: { received: 1060, gave: 1000 } }
+    const b = await evaluate(graded(1, 'C', 'C'))
+    expect(b.tradeInsights.idpCeilingCaveat).toBeUndefined()
+  })
+
+  it('IDP ceiling caveat: withheld grade → no caveat even with a letter-moving band', async () => {
+    idpBandOverride.current = { low: { received: 1000, gave: 1100 }, high: { received: 1150, gave: 1000 } }
+    const b = await evaluate(WITHHELD)
     expect(b.tradeInsights.idpCeilingCaveat).toBeUndefined()
   })
 
