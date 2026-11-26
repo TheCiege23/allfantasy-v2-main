@@ -2,7 +2,7 @@
  * Which leagues' drafts start at their scheduled time whatever "Autostart Draft" says.
  *
  * `startScheduledRedraftDrafts` (the minute draft tick) starts every scheduled native redraft
- * draft in NFL, NBA, NHL and MLB at its time (owner's decision, 2026-10-20), so for those
+ * draft in the sports below at its time (owner's decision, 2026-10-20), so for those
  * leagues the Autostart toggle does nothing and the settings UI hides it. Survivor and
  * Guillotine leagues are started by `startScheduledSurvivorDrafts`, which still honours the
  * toggle; every other league keeps it too.
@@ -13,8 +13,14 @@
 
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 
-/** Redraft sports whose scheduled drafts start on the server. */
-export const SCHEDULED_REDRAFT_SPORTS = ['NFL', 'NBA', 'NHL', 'MLB'] as const
+/**
+ * Redraft sports whose scheduled drafts start on the server: every sport a native league is made in.
+ * College basketball, college football and soccer were missing until 2026-11-25, so their scheduled
+ * redraft drafts waited for the commissioner to press Start, while the room showed a countdown to a
+ * start that would never come by itself. Nothing in the starter is sport-specific; it refuses until
+ * the player pool is ready.
+ */
+export const SCHEDULED_REDRAFT_SPORTS = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAB', 'NCAAF', 'SOCCER'] as const
 
 /**
  * League types whose scheduled draft starts at its time, whatever "Autostart Draft" says.

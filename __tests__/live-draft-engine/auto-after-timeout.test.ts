@@ -69,6 +69,20 @@ describe('a seat with no manager', () => {
     hm.pickFindMany.mockResolvedValue([{ rosterId: 'open-3' }, { rosterId: 'human' }])
     expect(await listAutoDraftRosterIds({ leagueId: 'L', draftSessionId: 'ds' })).toEqual(['open-3'])
   })
+
+  it('in an auto draft, every team is AUTO from the first pick, picked for yet or not', async () => {
+    // A 54-team auto draft showed AUTO on only the open seats already picked for (2026-11-25).
+    hm.rosterFindMany.mockResolvedValue([{ id: 'open-3' }, { id: 'open-4' }, { id: 'human' }])
+    hm.pickFindMany.mockResolvedValue([])
+    expect(await listAutoDraftRosterIds({ leagueId: 'L', draftSessionId: 'ds', executionMode: 'auto' })).toEqual(['open-3', 'open-4', 'human'])
+    // Control: the same league in a live draft keeps the per-seat rule.
+    hm.rosterFindMany.mockResolvedValue([
+      { id: 'open-3', platformUserId: null, managerUserId: null },
+      { id: 'open-4', platformUserId: null, managerUserId: null },
+      { id: 'human', platformUserId: 'u1', managerUserId: null },
+    ])
+    expect(await listAutoDraftRosterIds({ leagueId: 'L', draftSessionId: 'ds', executionMode: 'live' })).toEqual([])
+  })
 })
 
 describe('a team with a manager', () => {

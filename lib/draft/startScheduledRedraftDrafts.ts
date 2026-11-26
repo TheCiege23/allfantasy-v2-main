@@ -129,7 +129,7 @@ async function startDueDraft(
 
 /**
  * Called by the minute draft tick (`/api/cron/draft-tick`). Starts native redraft and Classic Best Ball
- * drafts (NFL, NBA, NHL, MLB) whose `LeagueSettings.draftDateUtc` has passed, through the same `startDraftSession` the
+ * drafts (every sport in SCHEDULED_REDRAFT_SPORTS) whose `LeagueSettings.draftDateUtc` has passed, through the same `startDraftSession` the
  * commissioner's Start button calls. A scheduled redraft draft starts at its time whether or not
  * "Autostart Draft" is on (owner's decision, 2026-10-20): the draft time is the commitment.
  *
