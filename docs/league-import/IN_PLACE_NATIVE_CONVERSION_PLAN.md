@@ -1,6 +1,6 @@
 # Converting an imported league to native IN PLACE — design and migration plan
 
-Status: **plan only, no production code.** Written 2026-11-26 against `origin/main` at
+Status: **decided; being built.** Steps 1–2 merged; owner decisions in §13. Written 2026-11-26 against `origin/main` at
 `1270c0fbe`. Every `file:line` below was read at that commit; line numbers drift, so re-read
 before building on one.
 
@@ -145,8 +145,8 @@ The copy flow remaps team ids in history because it writes new rows anyway. In p
   provider id would orphan a team's past.
 - `WeeklyMatchup` and `LeaguePlayerWeeklyScore` (3392ff, 3439ff) are keyed by the **provider
   league id**, not `League.id`, and other users' imports of the same provider league keep writing
-  them. They are not ours to rewrite. Decision for the owner (Q4): leave them as provider-scoped
-  history, or snapshot the converted league's past weeks into native score tables at switchover.
+  them. They are not ours to rewrite. **Decided 2026-11-26 (Q4): copy** the converted league's past
+  weeks into native score tables at the switch, leaving the provider-keyed rows untouched.
 
 ### 3.3 Readers that would break if ids were left provider-shaped
 
@@ -257,7 +257,7 @@ The provider identity has to survive for three things:
 - refusing re-import (§6.2);
 - the history tab's "previously on Sleeper" line.
 
-Proposed: a small table, which needs an owner decision (Q5):
+Approved by the owner 2026-11-26 (Q5). The original sketch; `prisma/schema.prisma` has the final model:
 
 ```prisma
 model LeagueNativeConversion {
@@ -311,7 +311,7 @@ and refusals without writing.
 | Already native / already converted | Idempotency |
 | Another `League` row exists for the same provider league + season (other users' copies) | Run `duplicateLeagueMerge` first (`scripts/merge-duplicate-imported-leagues.ts`). Report the copies and their members |
 | A provider draft is in progress (`DraftSession` mirrorable status with `sleeperDraftId`) | Wait for it to finish, or the board forks |
-| Season in progress and the commissioner did not pass `midSeason: true` | Offseason is the default. Mid-season needs Q2 answered first |
+| Season in progress | Offseason only (Q2) |
 | Any team with zero or more than one matching roster (`matchImportedRoster`) | Same refusal the copy flow makes |
 | Duplicate player ownership; any unmapped, ambiguous or many-to-one player id | Same refusals |
 | A traded future pick naming a team that cannot be mapped | In place cannot skip it: it would stay provider-keyed |
@@ -352,7 +352,7 @@ large.
    `Roster.id`. Then set `platformUserId`, `isOrphan = !claimed` and `role`.
    **`teamName`, `avatarUrl` and `ownerName` are left untouched** — that is the owner's
    requirement 3. Unclaimed teams keep their names and logos. `ownerName` on an unclaimed seat
-   keeps the provider manager's name until Q3 says otherwise.
+   keeps the provider manager's name (Q3).
 5. **Membership.** `RedraftLeagueMember` per claimed manager (commissioner = `COMMISSIONER`).
    `LeagueEntrySlot` per seat, `FILLED` or `OPEN`, `rosterId = Roster.id`. Create only rows that
    are missing.
@@ -360,7 +360,8 @@ large.
    - rewrite `RedraftRoster.ownerId` two-phase, to the same keys as `Roster.platformUserId`;
    - translate active `RedraftRosterPlayer.playerId` to native ids (same map);
    - set `acquisitionType` from `imported` to the carried-over marker the redraft engines accept.
-     Check with the waiver engine owner which value that is: Q6.
+     Carried players behave exactly like drafted players (Q6), so use the value a native draft
+     writes.
 
    Completed past seasons stay as history.
 7. **Future picks.** Rewrite `originalRosterId`/`currentOwnerId` on every row, provider team id →
@@ -386,8 +387,8 @@ large.
 - post a system message in league chat ("This league now runs on AllFantasy").
 
 **Step 5 — Notify managers.** In-app notice to every claimed manager. Open seats get the existing
-invite flow (`LeagueInvite`), so unclaimed teams can be claimed natively. Q7: should provider
-managers who never claimed be emailed an invite?
+invite flow (`LeagueInvite`): one link per open seat for the commissioner to share, and no emails
+(Q7).
 
 **Step 6 — Hand off to the native offseason.** In the offseason the commissioner continues with
 the existing native flows:
@@ -406,15 +407,15 @@ native.
   the league is still a working import.
 - **Idempotent.** A retry after a timeout first checks `LeagueNativeConversion`: if applied, it
   returns the receipt; if snapshot-only, it re-runs Step 3.
-- **Undo window.** `POST …/convert-to-native/undo` restores the snapshot (platform, ids,
-  `playerData`, owner ids, picks, `sleeperDraftId`) **only while no native write has happened**:
-  - no `WaiverClaim`, `AfLeagueTrade` or `DraftPick` with `createdAt > convertedAt`;
-  - no `RedraftRosterPlayer` change;
-  - no new season.
-
-  After the first native write, undo is refused with a reason. Re-importing provider state over
-  native activity would silently discard it, and syncing it back is not something AF can do —
-  nothing is `CONNECTED` (`lib/league/write-authority.ts:51`).
+- **Undo window — decided 2026-11-26: until the league's first native season starts** (Q10).
+  `POST …/convert-to-native/undo` restores the snapshot (platform, ids, `playerData`, owner ids,
+  picks, `sleeperDraftId`) at any point before then, **even after native activity**. So undo
+  discards whatever the league did on AllFantasy since the switch — waiver claims, trades,
+  lineup changes, a rookie draft — and it must list what it will throw away and ask the
+  commissioner to confirm before it runs. Nothing can be synced back to the provider; nothing is
+  `CONNECTED` (`lib/league/write-authority.ts:51`). When the first native season starts,
+  `LeagueNativeConversion.undoClosedAt` is stamped, undo is refused from then on, and the
+  snapshot may be dropped.
 - **Chat, history and the link need no undo**: they never changed.
 - **No production run without the owner**, per CLAUDE.md. The first real conversion is a
   supervised one on a league the owner names.
@@ -443,8 +444,8 @@ native.
 2. **Sync is per-season, per-row.** A Sleeper renewal is a new provider league id, and
    `followRenewedLeagues` creates or follows a **new** `League` row per season. "Mirror until
    switchover" across seasons therefore means: the switch converts the **latest** season's row, and
-   earlier seasons stay as linked history (`LeagueSeason`/`LeagueDynastySeason`). Q1: is that the
-   owner's model, or should the mirror phase fold renewals into one row?
+   earlier seasons stay as linked history (`LeagueSeason`/`LeagueDynastySeason`). **Decided
+   2026-11-26: latest season only** (Q1).
 3. **Unmapped players surface only at switch time.** Add a read-only "native readiness" card in
    the commissioner workspace during the mirror phase. It runs the Step 1 dry run, so a
    commissioner sees in July what would block them in March.
@@ -453,19 +454,19 @@ native.
    product-copy gap more than an engineering one.
 5. **Settings edited in AF during the mirror phase.** If the commissioner tunes scoring or roster
    settings on the shadow league in AF, step 3.10 must not overwrite them with provider-converted
-   values. "Create only when absent" handles the rows. Settings JSON keys need a precedence rule
-   (Q8).
+   values. "Create only when absent" handles the rows. **Decided 2026-11-26: AF edits win** (Q8):
+   a settings key the commissioner changed in AF keeps the AF value, and provider-converted values
+   fill only keys AF never touched.
 
 ## 10. What happens to `/create-league?fromLeague=`
 
-- **UI:** once in-place ships, the "Make it native" entry point should point at the in-place
-  switch. That is the one from the open PR TheCiege23/allfantasy-v2-main#4287
-  (`lib/league/makeNativeLeague.ts`), which is not on `main` at `1270c0fbe`. The copy flow
-  creates exactly the second copy the owner rejected.
-- **Code:** keep `carryOverImportedLeague` as the copy applier over the shared planner (§5). Two
-  legitimate uses remain: a commissioner who wants a *new* native league seeded from an import
-  while the import continues (Q9: does the owner still want that offered?), and the test suite
-  that pins the translation rules.
+**Decided 2026-11-26: retire it** (Q9).
+
+- **UI:** once in-place ships, "Make it a native league" (`lib/league/makeNativeLeague.ts`, from
+  TheCiege23/allfantasy-v2-main#4287) runs the in-place switch, and no entry point leads to the
+  copy flow, which creates exactly the second copy the owner rejected.
+- **Code:** keep `carryOverImportedLeague` as internal plumbing over the shared planner (§5), with
+  its tests pinning the translation rules. No "start a new league from this one" option.
 - **Existing copies already made:** leave them. They are independent native leagues now. A
   one-time report listing `settings.importCarryover.sourceLeagueId` pairs where both rows are
   still active tells the owner how many "two copies" exist.
@@ -502,8 +503,9 @@ NFL dynasty league and a Fantrax MLB points league through the **import commit p
   does not refuse on pick owners;
 - the chat message count, `LeagueSeason` count and the league URL are unchanged;
 - a re-import of the old provider id is refused with a link to the native league;
-- undo restores a byte-identical snapshot of every changed row; undo after one native waiver
-  claim is refused;
+- undo restores a byte-identical snapshot of every changed row, including after a native waiver
+  claim (Q10: it lists the claim as discarded first); undo after the first native season starts is
+  refused;
 - a sync write-back racing the transaction (two connections) cannot land provider `playerData` on
   the converted row.
 
@@ -520,39 +522,34 @@ the same `where`) and fails on a new one. That shape is what §4's two leftovers
 | Re-import creates a new copy | `LeagueNativeConversion` lookup at every import entry point (§6.2) |
 | Transaction timeout on big leagues | The carryover's sizing formula; work is linear in teams × players |
 | Two `isNativePlatform` predicates drift further | Only `'manual'` is written; consider collapsing them as separate work |
-| Mid-season conversion corrupts the current week | Refused by default; Q2 |
+| Mid-season conversion corrupts the current week | Offseason only (Q2); the readiness check blocks it |
 | An unmapped history id orphans a team's past | Remap the §3.2 team-id facts; player ids stay provider-namespaced, as the copy flow does |
 
-## 13. Open questions for the owner
+## 13. Owner decisions (answered 2026-11-26)
 
-1. **Seasons.** The switch converts the latest season's row, and prior provider seasons stay as
-   linked history rows. OK, or should renewals fold into one row during the mirror phase?
-2. **Mid-season.** Offseason only, or allow mid-season (the current week finishes on the provider,
-   AF takes over next week)?
-3. **Unclaimed seats.** Keep the provider manager's name as `ownerName`, or show "Open seat" while
-   keeping the team name and logo?
-4. **Provider weekly scores** (`WeeklyMatchup`/`LeaguePlayerWeeklyScore`, keyed by provider league
-   id). Leave them as provider-scoped history, or copy the converted league's past weeks into
-   native tables?
-5. **Schema.** OK to add a `LeagueNativeConversion` table (a migration, applied by the owner per
-   CLAUDE.md), or keep the record in `League.settings` JSON?
-6. **Waiver semantics.** After the switch, should carried players be treated like drafted players
-   (the `acquisitionType` question)?
-7. **Invites.** Email provider managers who never claimed a team on AF?
-8. **Precedence.** When AF-side settings edited during the mirror phase disagree with the
-   provider's, which wins?
-9. **The copy flow.** Retire it from the UI entirely, or keep it as "start a new league from this
-   one"?
-10. **Undo.** Is "undo until the first native write" enough, or does the owner want a longer
-    window, e.g. until the new season starts?
+All ten questions are answered. Where an answer differs from this doc's recommendation, the row says
+so, because the build follows the answer.
 
-## 14. Implementation order (after owner answers)
+| # | Question | Decision |
+|---|---|---|
+| 1 | Seasons | **Latest season's row only.** Earlier provider seasons stay as linked history |
+| 2 | Mid-season | **Offseason only.** The readiness check (#4300) already blocks an in-season switch |
+| 3 | Unclaimed seats | **Keep the provider username** as the manager line, with the team name and logo. *(Recommendation was "Open seat".)* |
+| 4 | Provider weekly scores | **Copy** the converted league's past weeks into native tables at the switch |
+| 5 | Schema | **Add `LeagueNativeConversion`** — step 3, a migration the owner applies |
+| 6 | Carried players | **Exactly like drafted players**: same waiver and trade rules |
+| 7 | Never-joined managers | **One invite link per open seat** for the commissioner to share; no emails (providers rarely give us addresses) |
+| 8 | Settings precedence | **AF edits made during the mirror phase win**; provider values fill only untouched keys |
+| 9 | The copy flow | **Retire it.** The button runs the in-place switch |
+| 10 | Undo | **Until the first native season starts**, even after native activity, which undo then discards (§8). *(Recommendation was "until the first native action".)* |
 
-1. Refactor `carryOverImportedLeague` into planner + copy applier. No behaviour change; existing
-   tests stay green.
-2. The read-only dry-run endpoint and the "native readiness" card (mirror-phase gap 3). Ships
-   value before any write path exists.
-3. Migration for `LeagueNativeConversion` (owner applies).
+## 14. Implementation order
+
+1. ✅ Refactor `carryOverImportedLeague` into planner + copy applier: TheCiege23/allfantasy-v2-main#4296.
+2. ✅ The read-only dry-run endpoint and the "native readiness" card: TheCiege23/allfantasy-v2-main#4300.
+3. Migration for `LeagueNativeConversion` (owner applies). The model in `prisma/schema.prisma`
+   supersedes the §6.1 sketch: it adds `status`, `snapshotVersion`, `undoClosedAt` and
+   `undoneByUserId` for the undo window decided in Q10.
 4. The in-place applier and DB integration suite.
 5. The re-import refusal at every import entry point (§6.2).
 6. Undo.
