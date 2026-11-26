@@ -6387,6 +6387,8 @@ model League {
   id                                    String                                 @id @default(uuid())
   pirateProtectionSets                  PirateProtectionSet[]
   pirateClaims                          PirateClaim[]
+  /// Set once this imported league has been switched to native IN PLACE (docs/league-import/IN_PLACE_NATIVE_CONVERSION_PLAN.md).
+  nativeConversion                      LeagueNativeConversion?
   // Commissioner OS tenancy — T-101. See prisma/tenancy.prisma and
   // docs/commissioner-os/TENANCY.md §5.
   //
@@ -16870,6 +16872,48 @@ model RedraftLeagueChatRoom {
 
   @@index([leagueId])
   @@map("redraft_league_chat_rooms")
+}
+
+/// An imported league switched to native IN PLACE: the same League row stops syncing from its provider and runs on
+/// AllFantasy (docs/league-import/IN_PLACE_NATIVE_CONVERSION_PLAN.md). One row per league, written before the switch.
+///
+/// It does three jobs, and each column belongs to one of them:
+///   - remember the provider identity the switch overwrites (`League.platform`/`platformLeagueId` become `manual` /
+///     `manual-<uuid>`), so a re-import of that provider league is refused and sent here instead of making a copy;
+///   - hold the pre-switch snapshot of every row the switch rewrites, so the commissioner can undo it;
+///   - record where the switch got to, so a retry after a timeout is safe.
+///
+/// ⚠ UNDO STAYS OPEN UNTIL THE NEW SEASON STARTS (owner, 2026-11-26), not merely until the first native action. Undo
+/// therefore discards whatever the league did on AllFantasy since the switch, and must say so before it runs. The
+/// snapshot is kept until `undoClosedAt` is set.
+model LeagueNativeConversion {
+  id                   String    @id @default(cuid())
+  leagueId             String    @unique
+  /// snapshotted -> applied -> (undone); failed when the switch rolled back. A retry reads this first.
+  status               String    @default("snapshotted") @db.VarChar(16)
+  /// The provider identity before the switch: `League.platform`, `platformLeagueId` and `season` as they were.
+  fromPlatform         String    @db.VarChar(24)
+  fromPlatformLeagueId String
+  fromSeason           Int
+  convertedByUserId    String
+  /// Every row the switch rewrites, keyed by primary key, as it was. Shape versioned by `snapshotVersion`.
+  snapshot             Json
+  snapshotVersion      Int       @default(1)
+  /// When the switch committed. Null while only snapshotted.
+  convertedAt          DateTime?
+  /// When the league's first native season started; undo is refused from then on and the snapshot may be dropped.
+  undoClosedAt         DateTime?
+  undoneAt             DateTime?
+  undoneByUserId       String?
+  /// Why a switch attempt failed, in plain words. Never a stack trace or a provider URL.
+  error                String?   @db.VarChar(200)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  league               League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([fromPlatform, fromPlatformLeagueId, fromSeason])
+  @@index([status])
+  @@map("league_native_conversions")
 }
 
 model LeagueEntrySlot {
