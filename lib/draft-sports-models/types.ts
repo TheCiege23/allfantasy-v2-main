@@ -168,6 +168,8 @@ export interface NormalizedDraftEntry {
   classYearLabel?: string | null
   /** A college player's transfer-portal move, one line (lib/devy/portalMoves.ts). */
   transferNote?: string | null
+  /** A college football player's place at his school by usage (lib/college/usageDepth.ts). */
+  depthNote?: string | null
   draftGrade?: string | null
   projectedLandingSpot?: string | null
   /** Devy: draft-eligible year */

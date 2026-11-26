@@ -64,6 +64,15 @@ vi.mock('@/lib/college/devySchoolConferences', async (orig) => ({
   loadDevySchoolConferences: (...a: unknown[]) => hm.loadDevySchoolConferences(...a),
 }))
 
+// The usage depth index is a DB read; its matching (usageForSchool) stays real.
+vi.mock('@/lib/college/usageDepthStore', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  loadUsageDepthIndex: async () => ({
+    bySchool: new Map([['texas', { games: 4, byStat: { att: [], car: [], rec: [{ name: 'Cam Coleman', nameKey: 'camcoleman', rank: 1, total: 24, share: 0.3, perGame: 6 }] } }]]),
+    riToCfbd: new Map(),
+  }),
+}))
+
 vi.mock('@/lib/devy', () => ({
   isDevyLeague: (...a: unknown[]) => hm.isDevyLeague(...a),
   getPromotedProPlayerIdsExcludedFromRookiePool: vi.fn().mockResolvedValue(new Set()),
@@ -218,6 +227,8 @@ describe('getResolvedDraftPoolForLeague', () => {
     // The college player's portal move rides along to his card (lib/devy/portalMoves.ts).
     const coleman = scoped.entries.find((e) => e.name === 'Cam Coleman') as { transferNote?: string | null } | undefined
     expect(coleman?.transferNote).toMatch(/^Transferred from Auburn to Texas \(\d{4} portal\), eligible right away$/)
+    // And his place at his school by usage (lib/college/usageDepth.ts): college football has no published chart.
+    expect((coleman as { depthNote?: string | null } | undefined)?.depthNote).toBe('1st at Texas in catches, last 4 games (6 a game, 30%)')
     expect(collegeWhere()?.school).toEqual({ in: ['Alabama', 'Ohio State', 'Notre Dame'] })
     expect(collegeWhere()?.sport).toBe('NCAAF')
 

@@ -738,6 +738,7 @@ export function DraftRoomPageClient({
             school: e.school ?? null,
             classYearLabel: e.classYearLabel ?? e.display?.metadata?.classYearLabel ?? null,
             transferNote: e.transferNote ?? null,
+            depthNote: e.depthNote ?? null,
             draftGrade: e.draftGrade ?? e.display?.metadata?.draftGrade ?? null,
             projectedLandingSpot: e.projectedLandingSpot ?? e.display?.metadata?.projectedLandingSpot ?? null,
             graduatedToNFL: e.graduatedToNFL,

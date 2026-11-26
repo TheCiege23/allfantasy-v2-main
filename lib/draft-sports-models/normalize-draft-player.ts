@@ -36,6 +36,8 @@ export type RawDraftPlayerLike = {
   classYearLabel?: string | null
   /** A college player's transfer-portal move, one line (lib/devy/portalMoves.ts). */
   transferNote?: string | null
+  /** A college football player's place at his school by usage (lib/college/usageDepth.ts). */
+  depthNote?: string | null
   draftGrade?: string | null
   projectedLandingSpot?: string | null
   draftEligibleYear?: number | null
@@ -235,6 +237,7 @@ export function normalizeDraftPlayer(
     school: school != null ? String(school).trim() : undefined,
     classYearLabel: raw.classYearLabel != null ? String(raw.classYearLabel).trim() : undefined,
     transferNote: raw.transferNote != null && String(raw.transferNote).trim() ? String(raw.transferNote).trim() : undefined,
+    depthNote: raw.depthNote != null && String(raw.depthNote).trim() ? String(raw.depthNote).trim() : undefined,
     draftGrade: raw.draftGrade != null ? String(raw.draftGrade).trim() : undefined,
     projectedLandingSpot: raw.projectedLandingSpot != null ? String(raw.projectedLandingSpot).trim() : undefined,
     draftEligibleYear: draftEligibleYear ?? undefined,

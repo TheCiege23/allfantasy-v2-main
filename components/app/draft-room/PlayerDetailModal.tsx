@@ -48,6 +48,8 @@ interface PlayerDetailPlayer {
   jersey?: number | null
   /** A college player's transfer-portal move, as one line (lib/devy/portalMoves.ts). */
   transferNote?: string | null
+  /** A college football player's place at his school by usage, not a published depth chart (lib/college/usageDepth.ts). */
+  depthNote?: string | null
 }
 
 interface LeagueContext {
@@ -456,6 +458,16 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                   <StatChip label="Exp" value={yearsExp == null ? '—' : yearsExp === 0 ? 'Rookie' : String(yearsExp)} />
                   <StatChip label="College" value={college ?? '—'} />
                 </div>
+                {player.depthNote ? (
+                  <p
+                    className="mt-2 flex max-w-xl items-start gap-1.5 text-[12px] font-semibold leading-snug text-cyan-100/90"
+                    data-testid="player-detail-depth-note"
+                    title="From his snaps in recent games. College football has no published depth charts."
+                  >
+                    <span className="shrink-0 rounded bg-cyan-400/20 px-1 text-[11px] font-black uppercase tracking-wide">Role</span>
+                    <span>{player.depthNote}</span>
+                  </p>
+                ) : null}
                 {player.transferNote ? (
                   <p
                     className="mt-2 inline-flex max-w-xl items-start gap-1.5 rounded-md border border-amber-300/30 bg-amber-400/10 px-2 py-1 text-[12px] font-semibold leading-snug text-amber-100"
