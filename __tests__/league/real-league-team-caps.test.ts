@@ -23,12 +23,18 @@ describe('capToRealLeague', () => {
   it('leaves a Tournament, whose sizes are pools of several leagues', () => {
     expect(capToRealLeague('NFL', 'tournament', [32, 64, 224])).toEqual([32, 64, 224])
   })
+
+  it('leaves C2C, which is sized by its pro player pool instead (2026-11-24)', () => {
+    expect(capToRealLeague('NFL', 'c2c', [32, 64, 104])).toEqual([32, 64, 104])
+    expect(capToRealLeague('NBA', 'c2c', [30, 46])).toEqual([30, 46])
+  })
 })
 
 describe('the create form and the catalog agree on every list', () => {
   it('no pro-sport format offers more teams than the real league', () => {
     for (const [type, sports] of Object.entries(CATALOG.allowedSportsByConcept)) {
-      if (type === 'tournament') continue
+      // Tournament sizes are pools of leagues; C2C is bounded by its pro player pool (below).
+      if (type === 'tournament' || type === 'c2c') continue
       for (const sport of sports) {
         const max = PRO_LEAGUE_TEAMS[sport]
         if (!max) continue
@@ -51,9 +57,11 @@ describe('the create form and the catalog agree on every list', () => {
     }
   })
 
-  it('Devy and C2C: 32 for an NFL league; a college C2C league stops where its PRO side runs out', () => {
+  it('Devy: 32 for an NFL league. C2C: as far as its pro player pool goes; a college C2C league stops where its PRO side runs out', () => {
     expect(Math.max(...getTeamCountOptions('NFL', 'devy'))).toBe(32)
-    expect(Math.max(...getTeamCountOptions('NFL', 'c2c'))).toBe(32)
+    // 2026-11-24: 21 NFL seats a team against about 2,200 NFL players; 23 NBA seats against about 1,080.
+    expect(Math.max(...getTeamCountOptions('NFL', 'c2c'))).toBe(104)
+    expect(Math.max(...getTeamCountOptions('NBA', 'c2c'))).toBe(46)
     // Owner's decision, 2026-11-22: 16 NFL seats a team against about 2,200 NFL players (dynasty supply),
     // 15 NBA seats against about 1,080 NBA players.
     expect(Math.max(...getTeamCountOptions('NCAAF', 'c2c'))).toBe(137)
