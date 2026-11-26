@@ -164,13 +164,15 @@ export function guillotineRuleRows(config: {
   dangerMarginPoints: number | null
   trades?: GuillotineTradeWindow | null
   freeAgencyFromWeek?: number | null
+  /** 2 in a two-week league: a chop ends each two-week period, not each week. */
+  periodWeeks?: number | null
 }): { label: string; value: string | string[] }[] {
   const ties = tiebreakLabels(config.tiebreakerOrder)
   const t = config.trades
   return [
     { label: 'First chop', value: `Week ${config.eliminationStartWeek}` },
     { label: 'Last chop', value: config.eliminationEndWeek != null ? `Week ${config.eliminationEndWeek}` : 'No last week set' },
-    { label: 'Chopped each week', value: `${config.teamsPerChop} ${config.teamsPerChop === 1 ? 'team' : 'teams'}` },
+    { label: (config.periodWeeks ?? 1) > 1 ? 'Chopped each two-week period' : 'Chopped each week', value: `${config.teamsPerChop} ${config.teamsPerChop === 1 ? 'team' : 'teams'}` },
     {
       label: 'Danger tier',
       value: config.dangerMarginPoints != null ? `Within ${config.dangerMarginPoints} points of the cut` : 'Not set',

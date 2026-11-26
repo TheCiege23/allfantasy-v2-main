@@ -134,5 +134,7 @@ describe('trades on the home (owner, 2026-11-26): said before a manager makes an
     const { guillotineWeekLabel } = await import('@/components/guillotine/guillotineHomeModel')
     expect(guillotineWeekLabel(4, 18, 2)).toBe('Weeks 3–4 of 18')
     expect(guillotineWeekLabel(4, 18)).toBe('Week 4 of 18')
+    const card = await rulesCard({ ...CONFIG, periodWeeks: 2 })
+    expect(value(card, 'Chopped each two-week period').textContent).toBe('1 team')
   })
 })
