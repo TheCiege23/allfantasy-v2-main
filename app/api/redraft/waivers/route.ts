@@ -1,49 +1,14 @@
-import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { assertLeagueMember } from '@/lib/league/league-access'
 import { legacyRedraftWaiverClaimsRetiredResponse } from '@/lib/redraft/legacyWaiverClaimsRetired'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
-  const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const seasonId = req.nextUrl.searchParams?.get('seasonId')?.trim()
-  const rosterId = req.nextUrl.searchParams?.get('rosterId')?.trim()
-  if (!seasonId || !rosterId) {
-    return NextResponse.json({ error: 'seasonId and rosterId required' }, { status: 400 })
-  }
-
-  const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId } })
-  if (!season) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const gate = await assertLeagueMember(season.leagueId, userId)
-  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
-
-  const roster = await prisma.redraftRoster.findFirst({
-    where: { id: rosterId, seasonId, leagueId: season.leagueId },
-    select: { ownerId: true },
-  })
-  if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(season.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
-  const claims = await prisma.redraftWaiverClaim.findMany({
-    where: { seasonId, rosterId },
-    orderBy: { submittedAt: 'desc' },
-  })
-
-  return NextResponse.json({ claims })
-}
-
 /**
- * Retired 2026-11-26: claims go through the main waiver system now (lib/redraft/legacyWaiverClaimsRetired.ts),
- * and a production count found this table empty, so creating and cancelling both refuse. GET stays because the
- * redraft Waivers screen still lists from it; it returns an empty list.
+ * Retired 2026-11-26. This listed, created and cancelled claims in `redraft_waiver_claims`, which a production
+ * count found empty; claims go through the main waiver system (lib/redraft/legacyWaiverClaimsRetired.ts) and
+ * the redraft Waivers screen no longer reads from here. Every method refuses with 410 and points there.
  */
 async function refuse(leagueId: string | null) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -51,12 +16,19 @@ async function refuse(leagueId: string | null) {
   return legacyRedraftWaiverClaimsRetiredResponse(leagueId)
 }
 
-export async function POST(req: NextRequest) {
+async function leagueIdFromBody(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as { leagueId?: string } | null
-  return refuse(body?.leagueId ?? null)
+  return body?.leagueId ?? null
+}
+
+export async function GET(req: NextRequest) {
+  return refuse(req.nextUrl.searchParams.get('leagueId'))
+}
+
+export async function POST(req: NextRequest) {
+  return refuse(await leagueIdFromBody(req))
 }
 
 export async function DELETE(req: NextRequest) {
-  const body = (await req.json().catch(() => null)) as { leagueId?: string } | null
-  return refuse(body?.leagueId ?? null)
+  return refuse(await leagueIdFromBody(req))
 }
