@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { canMoveRosterPlayers } from '@/lib/league/rosterMoveAccess'
 import { movePlayer } from '@/lib/c2c/rosterEngine'
 import { c2cPlayerWeekPoints } from '@/lib/c2c/playerWeekPoints'
 
@@ -56,6 +57,9 @@ export async function PATCH(req: NextRequest) {
 
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  if (!(await canMoveRosterPlayers(leagueId, userId, rosterId))) {
+    return NextResponse.json({ error: 'That team is not yours.', code: 'NOT_YOUR_TEAM' }, { status: 403 })
+  }
 
   try {
     const updated = await movePlayer(leagueId, rosterId, playerId, targetBucket)

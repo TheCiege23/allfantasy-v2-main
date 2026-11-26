@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { isAnyC2CLeague } from '@/lib/c2c/c2cLeagueSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,8 +20,7 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(leagueId, session.user.id)
   if (!gate.ok) return NextResponse.json({ options: [] }, { status: 403 })
 
-  const c2c = await prisma.c2CLeague.findUnique({ where: { leagueId }, select: { id: true } })
-  if (!c2c) return NextResponse.json({ type: 'command', options: [] })
+  if (!(await isAnyC2CLeague(leagueId))) return NextResponse.json({ type: 'command', options: [] })
 
   const low = draft.toLowerCase()
   const after = low.includes('@chimmy') ? draft.slice(low.indexOf('@chimmy') + '@chimmy'.length).trim() : draft
