@@ -15,7 +15,7 @@ import { prisma } from '@/lib/prisma'
 import { computeRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
 import type { TradeValueSnapshot } from '@/lib/trade-value/types'
 import { indexBoard, resolveBoardPlayer } from '@/lib/decision-os/trade/sportPointsValue'
-import { loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
+import type { LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 import { priceDealOnBoard, type RosterIdentity } from './chimmyBoardValue'
 
 type SnapshotInput = Parameters<typeof computeRedraftTradeValueSnapshot>[0]
@@ -77,7 +77,8 @@ export async function loadRosterIdentities(sport: string, ids: string[]): Promis
 }
 
 export const defaultChimmyPricingDeps: ChimmyPricingDeps = {
-  board: (leagueId) => loadLeagueValueBoard(leagueId),
+  // Loaded on first use: the board module pulls in the projection and Value OS code behind every Chimmy import.
+  board: async (leagueId) => (await import('@/lib/sport-values/leagueValueBoard')).loadLeagueValueBoard(leagueId),
   identities: loadRosterIdentities,
   fallback: computeRedraftTradeValueSnapshot,
 }

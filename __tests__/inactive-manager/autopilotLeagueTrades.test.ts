@@ -36,12 +36,14 @@ const m = vi.hoisted(() => {
     create: vi.fn(async () => ({ id: 'counter-1' })),
     log: vi.fn(async () => ({ id: 'a' })),
     values: {} as Record<string, number>,
+    grade: vi.fn(async () => ({ graded: true, giveValue: 100, getValue: 200 }) as Record<string, unknown>),
   }
 })
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/server/services/auditService', () => ({ logAction: m.log }))
 vi.mock('@/lib/league-trade-engine/chimmyActor', () => ({ chimmyTradeTeams: m.teams }))
 vi.mock('@/lib/league-trade-engine/tradeService', () => ({ acceptAfLeagueTrade: m.accept, rejectAfLeagueTrade: m.reject, createAfLeagueTrade: m.create }))
+vi.mock('@/lib/league-trade-engine/serverTradeDecision', () => ({ proposalOneGrade: m.grade }))
 vi.mock('@/lib/trade-value/captureSnapshot', () => ({
   computeRedraftTradeValueSnapshot: vi.fn(async (input: { assets: Array<{ fromRosterId: string; toRosterId: string; playerId?: string; assetType: string }> }) => ({
     grade: { insufficientData: false },
@@ -49,6 +51,7 @@ vi.mock('@/lib/trade-value/captureSnapshot', () => ({
   })),
 }))
 
+import { computeRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
 import { LEAGUE_TRADE_ACCEPT_ACTION, LEAGUE_TRADE_COUNTER_ACTION, LEAGUE_TRADE_REJECT_ACTION, pricingAsset, runAutopilotLeagueTradeAnswers } from '@/lib/inactive-manager/autopilotLeagueTrades'
 
 const item = (itemReference: string, from: string, to: string, extra: Record<string, unknown> = {}) => ({ itemType: 'player', itemReference, fromRosterId: from, toRosterId: to, faabAmount: null, metadata: {}, ...extra })
@@ -64,6 +67,20 @@ beforeEach(() => {
 })
 
 describe('runAutopilotLeagueTradeAnswers', () => {
+  it('in a devy or C2C league answers on the trade screen grade, from its own side, and never counters', async () => {
+    const settings = (await m.prisma.league.findUnique()).settings
+    m.prisma.league.findUnique.mockResolvedValue({ settings, leagueType: 'c2c', leagueVariant: null } as never)
+    m.state.trades = [trade([item('b1', 'rC', 'rA'), item('espn:ncaab:4433', 'rA', 'rC')])]
+    expect(await runAutopilotLeagueTradeAnswers()).toMatchObject({ accepted: 1, rejected: 0, countered: 0 })
+    expect(m.grade).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L', proposerRosterId: 'rC', proposedByUserId: null }))
+    expect(computeRedraftTradeValueSnapshot).not.toHaveBeenCalled()
+
+    m.grade.mockResolvedValueOnce({ graded: true, giveValue: 100, getValue: 101 })
+    expect(await runAutopilotLeagueTradeAnswers()).toMatchObject({ accepted: 0, rejected: 1, countered: 0 })
+    expect(m.create).not.toHaveBeenCalled()
+    m.prisma.league.findUnique.mockResolvedValue({ settings } as never)
+  })
+
   it('accepts a good offer through the engine, as the team, answered by the commissioner who handed it over', async () => {
     expect(await runAutopilotLeagueTradeAnswers()).toMatchObject({ offers: 1, accepted: 1, rejected: 0, countered: 0 })
     expect(m.accept).toHaveBeenCalledWith({ tradeId: 't1', leagueId: 'L', userId: 'commish', chimmyForRosterId: 'rC' })
