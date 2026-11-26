@@ -23,9 +23,10 @@ describe('Survivor Guilly visual audit', () => {
     const { container } = await renderLeague()
     const text = container.textContent ?? ''
     expect(text).not.toMatch(/tribe-\d/)
-    const race = screen.getByRole('heading', { level: 2, name: 'Tribe race' }).closest('section')!
-    expect(within(race).getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Vela · yours', 'Koa'])
-    expect(text).toContain('Koa won immunity. Hidden Advantage saved by idols.')
+    // 2026-11-24: the tribe lists live on the island only (the controls below no longer repeat them).
+    const race = screen.getByTestId('sg-race')
+    expect(within(race).getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Vela', 'Koa'])
+    expect(within(screen.getByTestId('sg-timeline')).getByText(/Koa immune · chopped: Last Gamble · saved: Hidden Advantage/)).toBeTruthy()
     expect(text).toContain('Vela captain tie fallback')
     // Every option in the commissioner's tie selector is a tribe name.
     const tieTribe = screen.getByRole('combobox', { name: 'Immune tribe' }) as HTMLSelectElement
@@ -35,8 +36,11 @@ describe('Survivor Guilly visual audit', () => {
 
   it('labels replayed periods with the format name, not the mode code', async () => {
     await renderLeague()
-    const replay = screen.getByRole('heading', { level: 2, name: 'Chop Night & replay' }).closest('section')!
-    expect([...replay.querySelectorAll('strong')].map(s => s.textContent)).toEqual(['Period 3 · Match Play', 'Period 2 · Match Play'])
+    // 2026-11-24: the period recap is the island's Season so far; replays below are one button per period.
+    const timeline = screen.getByTestId('sg-timeline')
+    expect(timeline.textContent).toMatch(/Match Play/)
+    expect(timeline.textContent).not.toMatch(/match_play/)
+    expect(screen.getByRole('heading', { level: 2, name: 'Chop Night replays' }).closest('section')!.textContent).not.toMatch(/match_play/)
   })
 
   it('hangs a blade-meter label inward near either end so it stays on the card', () => {

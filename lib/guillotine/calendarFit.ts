@@ -21,7 +21,7 @@
  */
 import { DEFAULT_FAAB_AFTER_CHOP, MAX_CHOPS_PER_WEEK, scheduledChops, type GuillotineAdvanced } from './chopSchedule'
 
-type CalendarFitInput = {
+export type CalendarFitInput = {
   teamCount: number
   startWeek: number
   endWeek: number
@@ -35,7 +35,7 @@ type CalendarFitInput = {
   periodWeeks?: number
 }
 
-type CalendarFit = {
+export type CalendarFit = {
   fits: boolean
   /** Teams still alive at `endWeek` if the schedule runs out first; `threshold` when it fits. */
   survivorsAtEnd: number
@@ -59,6 +59,51 @@ export function guillotineCalendarFit(input: CalendarFitInput): CalendarFit {
   if (alive > input.threshold) return { fits: false, survivorsAtEnd: alive, lastChopWeek, finishWeek: null }
   const finishWeek = (lastChopWeek ?? input.startWeek - 1) + input.finalPeriods * periodWeeks
   return { fits: finishWeek <= input.endWeek, survivorsAtEnd: alive, lastChopWeek, finishWeek }
+}
+
+/** One week of the season as the schedule would run it, for the rules page's preview strip. */
+export type SeasonPreviewWeek = {
+  week: number
+  /**
+   * chop      teams are chopped this week (`chops` of them)
+   * no_chop   a week the schedule skips (a holiday week set to "no chop")
+   * waiting   the first week of a two-week period: scored, chopped next week
+   * final     a week of a Final N: no chop, the best total wins
+   */
+  kind: 'chop' | 'no_chop' | 'waiting' | 'final'
+  chops: number
+  /** Teams still alive once this week is done. */
+  aliveAfter: number
+}
+
+/**
+ * The season week by week, by the SAME walk as `guillotineCalendarFit` (it returns that function's answer too, so
+ * the strip and the save's refusal cannot disagree). Stops at the week the result is known, or at `endWeek` when
+ * the schedule runs out first.
+ */
+export function guillotineSeasonPreview(input: CalendarFitInput): { weeks: SeasonPreviewWeek[]; fit: CalendarFit } {
+  const fit = guillotineCalendarFit(input)
+  const periodWeeks = Math.max(1, Math.floor(input.periodWeeks ?? 1))
+  const weeks: SeasonPreviewWeek[] = []
+  let alive = Math.max(0, Math.floor(input.teamCount))
+  let week = input.startWeek
+  for (; week <= input.endWeek && alive > input.threshold; week += 1) {
+    // A period's chop lands on its last week (see guillotineCalendarFit).
+    const periodEnd = (week - input.startWeek + 1) % periodWeeks === 0
+    if (!periodEnd) {
+      weeks.push({ week, kind: 'waiting', chops: 0, aliveAfter: alive })
+      continue
+    }
+    const chops = Math.min(scheduledChops(input.advanced, week, input.baseChops), alive - input.threshold)
+    alive -= Math.max(0, chops)
+    weeks.push({ week, kind: chops > 0 ? 'chop' : 'no_chop', chops: Math.max(0, chops), aliveAfter: alive })
+  }
+  if (alive <= input.threshold) {
+    for (let i = 0; i < input.finalPeriods * periodWeeks && week <= input.endWeek; i += 1, week += 1) {
+      weeks.push({ week, kind: 'final', chops: 0, aliveAfter: alive })
+    }
+  }
+  return { weeks, fit }
 }
 
 /** The sentence an editor shows when a calendar cannot finish. */

@@ -72,7 +72,39 @@ const ESPN_TEAMS: Partial<Record<SportType, readonly { code: string; name: strin
 /** The registry's code for a spelling: its own code, or the code an alias points at. */
 function canonicalCode(sport: SportType, abbreviation: string): string {
   const abbr = abbreviation.trim().toUpperCase()
-  return TEAM_CODE_ALIAS[sport]?.[abbr] ?? abbr
+  const aliased = TEAM_CODE_ALIAS[sport]?.[abbr]
+  if (aliased) return aliased
+  const byName = codeForTeamName(sport, abbreviation)
+  return byName ? TEAM_CODE_ALIAS[sport]?.[byName] ?? byName : abbr
+}
+
+/**
+ * A club's code from its NAME ("Denver Nuggets", "Nuggets", "LA Clippers"), for NBA / MLB / NHL.
+ *
+ * 🛑 HOSTED NBA ROSTERS CARRY THE FULL NAME IN `team`, AND EVERY CREST BUILT FROM IT WAS A 404 (owner report,
+ * 2026-11-24). Rolling Insights rows store "Denver Nuggets", and the lookup above only knew codes, so the
+ * registry fell through to `logoUrlForAbbrev` and built `…/nba/500/denver nuggets.png`. Measured on
+ * production: every player on an NBA guilly roster had such a URL, and the Team screen showed initials.
+ * The same club names are already here (`ESPN_TEAMS`); this reads them. Null for anything that is not
+ * unambiguously one club (a short value is a code, not a name).
+ */
+function codeForTeamName(sport: SportType, value: string): string | null {
+  const teams = ESPN_TEAMS[sport]
+  const v = value.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')
+  if (!teams || v.length < 4 || !v.includes(' ') && v.length <= 4) return null
+  const norm = (n: string) => n.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')
+  const exact = teams.filter((t) => norm(t.name) === v)
+  if (exact.length === 1) return exact[0]!.code.toUpperCase()
+  // "Nuggets" alone, or "LA Clippers" for "Los Angeles Clippers": the same nickname, and only one club has it.
+  const nickOf = (n: string) => {
+    const words = norm(n).split(' ')
+    // Two-word nicknames: Trail Blazers, Red Sox, White Sox, Blue Jays, Maple Leafs, Golden Knights, Blue Jackets, Red Wings.
+    const two = words.slice(-2).join(' ')
+    return /^(trail blazers|red sox|white sox|blue jays|maple leafs|golden knights|blue jackets|red wings)$/.test(two) ? two : words[words.length - 1]!
+  }
+  const vNick = nickOf(v)
+  const byNick = teams.filter((t) => nickOf(t.name) === v || nickOf(t.name) === vNick)
+  return byNick.length === 1 ? byNick[0]!.code.toUpperCase() : null
 }
 
 /** NCAA Football: FBS team abbreviations (subset for logo/display; expand via DB or ingestion). Unique abbrevs. */

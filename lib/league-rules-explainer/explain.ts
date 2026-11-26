@@ -47,7 +47,7 @@ const LINEUP_LOCKS = new Set(['per_player', 'first_game', 'manual'])
 const ENDGAMES = new Set(['last_team_standing', 'final_four', 'final_three', 'final_two'])
 const ENDGAME_TEAMS: Record<string, number> = { final_four: 4, final_three: 3, final_two: 2 }
 const RELEASES = new Set(['immediate', 'next_waiver_run'])
-const FAAB_ON_CHOP = new Set(['keep', 'split'])
+const FAAB_ON_CHOP = new Set(['keep', 'split', 'top_scorer', 'low_scorer', 'waiver_order'])
 const IMMUNITY = new Set(['off', 'top_scorer'])
 const TIEBREAKS = new Set(['bench_points', 'season_points', 'previous_period', 'draft_slot', 'commissioner', 'random'])
 const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
@@ -206,6 +206,8 @@ function describeValue(key: RuleKey, value: unknown, snapshot: ChangeContext): R
       return isNum(value) && value >= 0 ? money(value) : null
     case 'dangerMarginPoints':
       return isNum(value) && value >= 0 ? plural('v.points', value) : null
+    case 'faabOnChopPercent':
+      return isNum(value) && Number.isInteger(value) && value >= 1 && value <= 100 ? text('v.percent', { n: value }) : null
     case 'waiverProcessHour':
       return isNum(value) && Number.isInteger(value) && value >= 0 && value <= 23 ? text('v.hourOfDay', { h: value }) : null
     case 'medianGame':

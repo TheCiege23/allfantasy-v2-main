@@ -45,6 +45,8 @@ export interface PlayerAssetModel {
 export interface PlayerStatSnapshotModel {
   /** Actual stored season, including a previous-season fallback. */
   seasonLabel?: string | null
+  /** True when `seasonLabel` is the season BEFORE the one being drafted: no game played in it yet. */
+  seasonIsPrevious?: boolean
   /** e.g. "ADP 12" or "PPG 22.1" */
   primaryStatLabel?: string | null
   primaryStatValue?: number | null
@@ -67,6 +69,8 @@ export interface PlayerStatSnapshotModel {
   fieldGoalPercentage?: number | null
   freeThrowPercentage?: number | null
   gamesPlayed?: number | null
+  /** Projected fantasy points PER GAME (MLB / NHL AF projection; college basketball under the league's scoring). */
+  projectedPointsPerGame?: number | null
   lifetimeValue?: number | null
   /** Rolling Insights numbers when RI did not replace snapshot PPG (supplemental only). */
   rollingInsightsSupplemental?: {

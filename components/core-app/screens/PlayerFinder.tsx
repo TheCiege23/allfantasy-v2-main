@@ -970,7 +970,7 @@ export function PlayerFinder({
           <header className="af-pf-home-head">
             {/* What the page is for (2026-11-13 guide): game-day alerts land here; search by name or team. */}
             <h2 className="af-display af-pf-home-title" data-testid="pf-home-title">{homeTitle}</h2>
-            <p className="af-pf-home-sub">{g.homeSub}</p>
+            {/* No sub-line (2026-11-24, the simplify pass): the search box right above says what it does. */}
           </header>
         ) : null}
         {/* Push reaches 2 of 42 managers (2026-10-10); ask here on the days the game-day banner does not. */}

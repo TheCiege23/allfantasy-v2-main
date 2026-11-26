@@ -134,7 +134,8 @@ describe('every specialty format rules route checks the lock and writes the log'
   const calls = (path: string, fn: string) =>
     readFileSync(path, 'utf8').split('\n').filter((l) => l.includes(`${fn}(`) && !/^\s*(\*|\/\/|import)/.test(l))
   it.each([
-    ['app/api/leagues/[leagueId]/guillotine/summary/route.ts', 3],
+    // First chop week, league rules, chop schedule, and scheduled roster changes (`{ rosterSchedule }`).
+    ['app/api/leagues/[leagueId]/guillotine/summary/route.ts', 4],
     ['app/api/leagues/[leagueId]/pirate/route.ts', 1],
     ['app/api/leagues/[leagueId]/big-brother/config/route.ts', 1],
     // Its `update_config` action is the second Big Brother rules write path.

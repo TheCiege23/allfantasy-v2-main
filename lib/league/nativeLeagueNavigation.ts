@@ -62,6 +62,12 @@ const BIG_BROTHER_NAV: Record<string, [string, string, string]> = {
 const SAME_SCREEN_ALIASES: string[][] = [['matchups', 'matchup']]
 
 /**
+ * The head-to-head tab ids a guillotine league does not show: its Chop tab is that screen (see `guilly` in
+ * buildNativeLeagueNavigation). LeagueShell reads this list to send a link to any of them to the Chop page.
+ */
+export const GUILLY_MATCHUP_ALIASES: readonly string[] = ['matchups', 'matchup', 'fixtures']
+
+/**
  * More-tools tabs that open a DIFFERENT screen from a main-group item they read as a copy of: `players` is the player
  * search (the main "Players & waivers" is `waivers`), `commissioner` is commissioner operations (the main
  * "Commissioner" is `settings`). Both stay reachable, always under a name of their own.
@@ -155,10 +161,17 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   const keepers = solo(item('league.nav.keepers', 'Keepers', 'career', 'keeper'))
   const draftHq = () => item('league.nav.draftHq', 'Draft HQ', 'draft', 'draft')
   const draftTab = options.draftDone ? [] : top('league.nav.tab.draft', 'Draft', 'draft', draftHq())
-  const matchup = top('league.nav.tab.matchup', 'Matchup', 'matchup', [
-    // A guillotine league's defining screen (chop line, danger zone, history): this week's scoring decides it.
-    ...item('league.nav.guilly', 'Guilly', 'guillotine', 'guillotine'),
-    ...item('league.nav.matchup', 'Matchup', 'matchup', 'matchups', 'matchup', 'fixtures'),
+  /*
+   * A guillotine league has no opponent, so it has no Matchup: its first tab is Chop, as Sleeper's is (owner's
+   * decision, 2026-11-25 — "too many tabs"). The Chop page IS the matchup screen there (one list, the whole
+   * league against the chop line), so the head-to-head tab is not offered as a second sub-tab beside it.
+   * LeagueShell sends a `matchups` link in such a league to the Chop page, so nothing that opens it is lost.
+   */
+  const guilly = tabs.some(tab => tab.id === 'guillotine')
+  if (guilly) for (const id of GUILLY_MATCHUP_ALIASES) used.add(id)
+  const matchup = top(guilly ? 'league.nav.tab.chop' : 'league.nav.tab.matchup', guilly ? 'Chop' : 'Matchup', guilly ? 'guillotine' : 'matchup', [
+    ...item('league.nav.chop', 'Chop', 'guillotine', 'guillotine'),
+    ...(guilly ? [] : item('league.nav.matchup', 'Matchup', 'matchup', 'matchups', 'matchup', 'fixtures')),
     ...item('league.nav.liveScores', 'Live scores', 'scores', 'scores'),
     ...item('league.nav.schedule', 'Schedule', 'schedule', 'schedule'),
     ...item('league.nav.warRoom', 'War Room', 'war', 'war_room'),
@@ -179,7 +192,8 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   const overview = nativeOverview.length ? nativeOverview : item('league.nav.overview', 'Overview', 'home', 'decide')
   const leagueChildren = [
     ...overview,
-    ...(isSurvivor ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')),
+    // Survivor and guillotine seasons end with the last team standing: neither has playoffs to name here.
+    ...(isSurvivor || guilly ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')),
     ...item('league.nav.activity', 'Activity', 'more', 'activity'),
     ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
     ...item('league.nav.legacy', 'Legacy', 'legacy', 'legacy', 'history'),

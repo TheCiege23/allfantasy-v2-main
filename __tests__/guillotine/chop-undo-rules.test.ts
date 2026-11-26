@@ -111,3 +111,13 @@ describe('putting back a FAAB top-up or reset (owner, 2026-11-22: undo reverses 
     expect(chopUndoBlockers({ ...clear, faabResetWithoutChanges: true })).toEqual(['faab_reset_unknown'])
   })
 })
+
+describe('giving back a payout made under any rule (lib/guillotine/faabOnChop.ts)', () => {
+  it('a share to one team: that team gives back what it got, the chopped team gets back what was taken, not its whole balance', () => {
+    // Half of a $90 balance went to the week's highest scorer.
+    const event = { key: 's1:1', weekOrPeriod: 1, pool: 45, shares: { top: 45 }, taken: { chopped: 45 }, policy: 'top_scorer', applied: 'top_scorer', percent: 50, __eventId: 'e1' }
+    const plan = faabReturnPlan(event, ['chopped'])!
+    expect(Object.fromEntries(plan.fromSurvivors)).toEqual({ top: 45 })
+    expect(Object.fromEntries(plan.toChopped)).toEqual({ chopped: 45 })
+  })
+})

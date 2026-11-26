@@ -1,5 +1,6 @@
 'use client'
 
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
@@ -571,7 +572,7 @@ function AllLeaguesTradeHub(props: {
           subClassName="af-hg-intro"
           eyebrow={guide.eyebrow(props.leagues.length)}
           title={<span id="af-tg-h1">{title}</span>}
-          sub={guide.intro}
+          /* No intro sentence (2026-11-24, the simplify pass): the headline and the chips say what this week holds. */
         />
         {chips.length > 0 ? (
           <ul className="af-hg-chips">
@@ -586,15 +587,20 @@ function AllLeaguesTradeHub(props: {
 
       <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} waitingOnly />
 
+      {/*
+        Closed until tapped (2026-11-24, the simplify pass): the full trade builder was ~950px open on a phone
+        on every visit, ahead of the trades in your leagues. Its title and sub-line are the summary; the
+        builder and its lesson are inside, unchanged.
+      */}
       <section className="af-tc-hub-evaluator af-tg-check" aria-labelledby="af-tg-check-h">
-        <div className="af-tg-sec-head">
-          <h2 id="af-tg-check-h">{guide.checkTitle}</h2>
-          <p>{guide.checkSub}</p>
-        </div>
-        <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} offerHint />
-        <p className="af-tg-teach">
-          <b>{guide.why}</b> {guide.checkTeach}
-        </p>
+        <details className="af-tg-checkfold" data-testid="trades-check-fold">
+          <summary className="af-tg-sec-head">
+            <h2 id="af-tg-check-h">{guide.checkTitle}</h2>
+            <p>{guide.checkSub}</p>
+          </summary>
+          <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} offerHint />
+          <WhyFold label={guide.why}>{guide.checkTeach}</WhyFold>
+        </details>
       </section>
 
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
@@ -642,9 +648,7 @@ function AllLeaguesTradeHub(props: {
       >
         <section className="af-tg-market" aria-label={guide.marketTitle}>
           <TradeMarketMovers limit={5} heading={guide.marketTitle} testId="trade-hub-market" />
-          <p className="af-tg-teach">
-            <b>{guide.why}</b> {guide.marketTeach}
-          </p>
+          <WhyFold label={guide.why}>{guide.marketTeach}</WhyFold>
         </section>
         <label className="af-tc-hub-search">
           <span className="af-sr-only">{copy('Search leagues')}</span>

@@ -141,6 +141,41 @@ export function formatClockTime(date: Date, locale = 'en-US', timeZone?: string)
   return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', ...(timeZone ? { timeZone } : {}) }).format(date)
 }
 
+/**
+ * "12:00 AM" (or "12:00 a.m.") in `locale`, fixed in UTC: as wide as a clock time gets. A due time
+ * holds this place, invisibly, until the room has mounted — so the line does not jump when the real
+ * time arrives.
+ */
+export function clockTimePlaceholder(locale = 'en-US'): string {
+  return formatClockTime(new Date(Date.UTC(2000, 0, 1, 0, 0)), locale, 'UTC')
+}
+
+/**
+ * The wall-clock deadline beside a long pick clock ("due 6:31 PM"), or null when none is shown.
+ *
+ * ⚠ HYDRATION: `nowMs` is null until the component has mounted. The server and the browser's first
+ * render run seconds apart AND usually in different time zones (the server is UTC; the viewer is
+ * not), so a time read and formatted during render differs between them and React discards the
+ * tree. Before mount this therefore returns `time: null` — decided from props alone — and the
+ * caller reserves `placeholder`'s width; the mounted render fills in the viewer's local time.
+ */
+export function resolvePickDueTime(input: {
+  timerStatus: string
+  timerSeconds: number | null | undefined
+  timerEndAtIso: string | null | undefined
+  quietWindow: QuietWindow | null | undefined
+  locale: string
+  nowMs: number | null
+}): { time: string | null; placeholder: string } | null {
+  if (input.timerStatus !== 'running' || !isLongPickClock(input.timerSeconds) || !input.timerEndAtIso) return null
+  const endMs = Date.parse(input.timerEndAtIso)
+  if (!Number.isFinite(endMs)) return null
+  const placeholder = clockTimePlaceholder(input.locale)
+  if (input.nowMs == null) return { time: null, placeholder }
+  const due = effectiveDueAt(input.nowMs, endMs, input.quietWindow ?? null)
+  return { time: formatClockTime(due, input.locale), placeholder }
+}
+
 /** "ET" for America/New_York; falls back to the zone id. */
 export function shortZoneName(timeZone: string, at: Date, locale = 'en-US'): string {
   try {

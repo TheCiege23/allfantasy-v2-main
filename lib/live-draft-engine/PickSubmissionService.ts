@@ -55,6 +55,16 @@ import { createDraftCollegeRight } from '@/lib/devy/nbaDraftRights'
 import { isDevyLeague } from '@/lib/devy/DevyLeagueConfig'
 import { isC2CLeague } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 
+/** `pickMetadata.autopick.reason`, when an automatic pick recorded why it chose this player. */
+function autoPickReasonFrom(meta: unknown): string | null {
+  const auto = meta && typeof meta === 'object' ? (meta as { autopick?: unknown }).autopick : null
+  const reason = auto && typeof auto === 'object' ? (auto as { reason?: unknown }).reason : null
+  return typeof reason === 'string' && reason.trim() ? reason.trim() : null
+}
+
+/** How close to its deadline an automatic pick still counts as the clock having run out. */
+const TIMEOUT_AUTO_GRACE_MS = 3_000
+
 export interface SubmitPickInput {
   leagueId: string
   playerName: string
@@ -595,6 +605,26 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     throw error
   }
 
+  // The system picked because this team's clock ran out: the team stays on auto for the rest of the
+  // draft (./instantAutopick.ts). Read off the clock this pick was made against, so an instant
+  // "Auto-pick me" or Chimmy pick on a running clock is not counted. A few seconds of grace covers
+  // the room's own expiry call landing just before the server's deadline.
+  if (
+    input.source === 'auto' &&
+    session.status === 'in_progress' &&
+    session.timerEndAt != null &&
+    session.timerEndAt.getTime() <= Date.now() + TIMEOUT_AUTO_GRACE_MS
+  ) {
+    await import('./instantAutopick')
+      .then(({ markTeamAutoAfterTimeout }) => markTeamAutoAfterTimeout({ draftSessionId: session.id, rosterId: effectiveRosterId }))
+      .catch((error) =>
+        logStructured('warn', 'submit_pick', 'mark_auto_after_timeout_failed', {
+          leagueId: input.leagueId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
+  }
+
   // Sampled: record successful pick submission for draft-room analytics.
   recordEngineTelemetrySample(ENGINE.DRAFT_PICK_SUBMITTED, {
     meta: {
@@ -791,6 +821,8 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
         headshotUrl: pick.playerImageUrl ?? input.playerImageUrl ?? null,
         // D.6.3 — flips the AI badge on the rendered card. Mutually exclusive with commissionerOverride below.
         aiManager: input.source === 'auto',
+        // Why it was auto-picked (queue / Draft like me / best available), shown under the pick in chat.
+        autoPickReason: autoPickReasonFrom(input.pickMetadata),
         // Commit T — flips the Commissioner badge on the rendered card.
         commissionerOverride: input.source === 'commissioner',
       }),

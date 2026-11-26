@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useMessages } from '@/components/i18n/useMessages'
 import { redraftHomeDeckMessages } from '@/lib/core-app/messages/redraftHomeDeck'
@@ -47,7 +48,13 @@ function Side({ side, align }: { side: RedraftDeckSide; align: 'start' | 'end' }
   )
 }
 
-export function RedraftHomeDeck({ deck, leagueId, season }: { deck: Deck; leagueId: string; season: number | null }) {
+export function RedraftHomeDeck({ deck, leagueId, season, under }: {
+  deck: Deck
+  leagueId: string
+  season: number | null
+  /** Rendered in the deck's left column under the recap (Home's tiles), beside the playoff race. */
+  under?: ReactNode
+}) {
   const m = useMessages(redraftHomeDeckMessages)
   const q = `?league=${encodeURIComponent(leagueId)}`
   const bug = deck.scoreBug
@@ -76,7 +83,7 @@ export function RedraftHomeDeck({ deck, leagueId, season }: { deck: Deck; league
         <RedraftSeasonTrack facts={deck.track} phase={deck.phaseLabel} />
       </div>
 
-      {bug || race || recap ? (
+      {bug || race || recap || under ? (
         <div className="af-lh-rd-grid" data-has-race={race ? 'true' : undefined}>
           {bug ? (
             <Link href={`/core/matchup${q}`} className="af-lh-rd-bug" data-state={bug.state} data-testid="redraft-score-bug">
@@ -166,6 +173,8 @@ export function RedraftHomeDeck({ deck, leagueId, season }: { deck: Deck; league
               </dl>
             </section>
           ) : null}
+
+          {under ? <div className="af-lh-rd-under" data-testid="redraft-deck-under">{under}</div> : null}
         </div>
       ) : null}
     </section>

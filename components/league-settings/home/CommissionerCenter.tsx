@@ -63,8 +63,7 @@ const NAV_GROUPS: ReadonlyArray<{ key: 'league' | 'rules' | 'ops'; items: Readon
       { id: 'trades', key: 'trades' },
       { id: 'playoffs', key: 'playoffs' },
       { id: 'af-options', key: 'afOptions' },
-      { id: 'guillotine-first-chop', key: 'firstChop' },
-      { id: 'guillotine-chop-rules', key: 'chopRules' },
+      // One Guilly rules page (GuillotineRulesPage); it was three entries.
       { id: 'guillotine-rules', key: 'guillotineRules' },
       // Listed here for the category picker; the sidebar pins it above the groups instead.
       { id: 'pirate-rules', key: 'pirateRules' },

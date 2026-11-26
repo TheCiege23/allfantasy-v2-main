@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 
 vi.mock('next/link', () => ({
@@ -7,8 +7,12 @@ vi.mock('next/link', () => ({
 }))
 
 import { buildChopLine, guillotineHeadline, tiebreakLabels } from '@/components/guillotine/guillotineHomeModel'
-import { GuillotineChopMoment, GuillotineSpecialtyHome } from '@/components/guillotine/GuillotineSpecialtyHome'
+import { GuillotineChopExtras, GuillotineChopMoment } from '@/components/guillotine/GuillotineSpecialtyHome'
 import { bottomScores } from '@/lib/league-specialty/guillotineHome'
+
+// The chop moment remembers, per league, that this browser has watched a chop (it opens on the result next
+// time). Each test starts as a first visit.
+beforeEach(() => window.localStorage.clear())
 
 const tiers = [
   { rosterId: 'z', displayName: 'Open Team 11', tier: 'chop_zone', pointsFromChopZone: 0 },
@@ -100,76 +104,39 @@ describe('the chop moment', () => {
   })
 })
 
-describe('GuillotineSpecialtyHome', () => {
-  it('wires the hero, chop line, rail and chopped chips to the summary', () => {
-    render(
-      <GuillotineSpecialtyHome
-        leagueId="L1"
-        sport="NFL"
-        leagueName="Guilly League 26"
-        summary={{
-          weekOrPeriod: 5,
-          dangerTiers: tiers,
-          myRosterId: 'me',
-          myEscapes: [{ weekOrPeriod: 4, margin: 22.1 }],
-          config: { tiebreakerOrder: ['season_points'], teamsPerChop: 1, dangerMarginPoints: 12 },
-          home: {
-            season: 2026,
-            scores,
-            teamCount: 14,
-            aliveCount: 3,
-            chopped: [{ rosterId: 'x', name: 'Open Team 3', week: 1, points: 71.2 }],
-            nextChopAt: new Date(Date.now() + 86400000).toISOString(),
-            chopLabel: 'Tuesday 7:00 AM ET',
-            nextWaiversAt: null,
-            waiverLabel: null,
-            lastChop,
-          },
-        }}
-      />,
-    )
-    // One header, not two: the workspace banner carries the name and team count, so the hero leads with the week.
-    expect(screen.queryByText('Guilly League 26')).toBeNull()
-    expect(screen.queryByText('14 teams · 3 alive')).toBeNull()
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('35.9 over the cut')
-    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5')
-    expect(screen.getByTestId('guillotine-row-chop_zone').textContent).toContain('92.7')
-    expect(screen.getByTestId('guillotine-cut-line').textContent).toBe('CUT LINE · 92.7')
-    expect(screen.getByTestId('guillotine-your-survival').textContent).toContain('You’re 1st of 3. The cut is at 92.7.')
-    expect(screen.getByText('Open Team 3 was chopped')).toBeTruthy()
-    expect(screen.getByText('You survived week 4')).toBeTruthy()
+describe('GuillotineChopExtras (what the Chop page draws under its list)', () => {
+  const home = {
+    season: 2026,
+    scores,
+    teamCount: 14,
+    aliveCount: 3,
+    chopped: [{ rosterId: 'x', name: 'Open Team 3', week: 1, points: 71.2 }],
+    nextChopAt: null,
+    chopLabel: null,
+    nextWaiversAt: null,
+    waiverLabel: 'Wednesday 7:00 AM ET',
+    lastChop,
+    history: { weeks: [], teams: [] },
+  }
+
+  it('draws the latest chop moment, with the teams still alive and the waiver run from the summary', () => {
+    render(<GuillotineChopExtras leagueId="L1" home={home} />)
     expect(screen.getByTestId('guillotine-chop-moment')).toBeTruthy()
-    // Projected has no data source yet: present, honest, and not clickable.
-    expect((screen.getByRole('button', { name: 'Projected' }) as HTMLButtonElement).disabled).toBe(true)
-    // A manager still alive is offered both hero actions.
-    expect(screen.getByTestId('guillotine-hero-lineup')).toBeTruthy()
-    expect(screen.getByTestId('guillotine-hero-waivers')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('guillotine-drop-blade'))
+    expect(screen.getByText('Open Team 11 is out with 92.7. 3 teams remain. Their roster is on waivers.')).toBeTruthy()
+    expect(screen.getByText(/next waiver process \(Wednesday 7:00 AM ET\)/)).toBeTruthy()
   })
 
-  it('a chopped manager is not offered Set lineup or Waivers in the hero', () => {
-    render(
-      <GuillotineSpecialtyHome
-        leagueId="L1"
-        sport="NFL"
-        leagueName="Guilly League 26"
-        summary={{
-          weekOrPeriod: 5,
-          dangerTiers: tiers,
-          myRosterId: 'x',
-          config: { tiebreakerOrder: ['season_points'], teamsPerChop: 1, dangerMarginPoints: 12 },
-          home: {
-            season: 2026, scores, teamCount: 14, aliveCount: 3,
-            chopped: [{ rosterId: 'x', name: 'Open Team 3', week: 1, points: 71.2 }],
-            nextChopAt: null, chopLabel: null, nextWaiversAt: null, waiverLabel: null, lastChop,
-          },
-        }}
-      />,
-    )
-    // One header: the verdict leads the hero, the week sits under it.
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Chopped in week 1')
-    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5')
-    expect(screen.queryByTestId('guillotine-hero-lineup')).toBeNull()
-    expect(screen.queryByTestId('guillotine-hero-waivers')).toBeNull()
-    expect(screen.getByTestId('guillotine-hero-chop')).toBeTruthy()
+  it('🛑 is not a second hub: no hero, no second chop line, no "your survival" card, no phone copy', () => {
+    render(<GuillotineChopExtras leagueId="L1" home={home} />)
+    for (const id of ['specialty-hero', 'guillotine-chop-line', 'guillotine-your-survival', 'guillotine-tiebreaks', 'guillotine-feed', 'guillotine-phone-home']) {
+      expect(screen.queryByTestId(id), id).toBeNull()
+    }
+    expect(screen.queryByRole('button', { name: 'Projected' })).toBeNull()
+  })
+
+  it('[control] before any chop there is no moment', () => {
+    render(<GuillotineChopExtras leagueId="L1" home={{ ...home, lastChop: null }} />)
+    expect(screen.queryByTestId('guillotine-chop-moment')).toBeNull()
   })
 })

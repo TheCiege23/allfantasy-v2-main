@@ -42,6 +42,8 @@ type DraftPickMetaWire = {
   teamLogoUrl: string | null
   /** D.6.3 — true when this pick was made by an AI / autopick manager. */
   aiManager?: boolean | null
+  /** Why Chimmy made this automatic pick (queue, Draft like me, best available). */
+  autoPickReason?: string | null
 }
 
 export type DraftRoomEventWire = {
@@ -399,6 +401,10 @@ export function buildDraftChatWireMessage(
           // D.6.3 — preserved across the wire so the chat card can show the
           // "AI Manager" badge when the pick was an autopick.
           aiManager: metaRecord.aiManager === true ? true : null,
+          autoPickReason:
+            metaRecord.aiManager === true && typeof metaRecord.autoPickReason === 'string' && metaRecord.autoPickReason.trim()
+              ? metaRecord.autoPickReason.trim()
+              : null,
         }
       : null
 

@@ -161,6 +161,9 @@ test.describe('@draft-room commissioner and queue regressions', () => {
   test('draft queue toggles and queue actions work in browser', async ({ page }) => {
     await page.goto('/e2e/draft-queue')
     await expect(page.getByRole('heading', { name: /e2e draft queue harness/i })).toBeVisible()
+    // The switches live in a folded "Queue & Chimmy options" row in every room (2026-11-25), so the
+    // queued players get the space. Open it before using them.
+    await page.getByTestId('draft-queue-ai-options').locator('summary').click()
     await expect(page.getByRole('checkbox', { name: /auto-pick from queue/i })).toBeVisible()
 
     const autoPickToggle = page

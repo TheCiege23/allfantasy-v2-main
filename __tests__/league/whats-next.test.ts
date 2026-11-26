@@ -214,6 +214,25 @@ describe('Zombie, Guillotine, Pirate', () => {
     const view = resolveWhatsNext(guillotineFacts({ weekOrPeriod: 6, dangerTiers: tiers, myRosterId: 'me', home: { aliveCount: 8 }, config: { eliminationStartWeek: 2, teamsPerChop: 1 } }, NOW)!, { isCommissioner: false })!
     expect(view.message).toMatch(/on the chop line/)
   })
+  it('🛑 a Guilly league that has drafted is not "pre-season" just because nobody has scored yet', () => {
+    const field = [{ rosterId: 'me', displayName: 'Mine' }, { rosterId: 'x', displayName: 'X' }, { rosterId: 'y', displayName: 'Y' }, { rosterId: 'z', displayName: 'Z' }]
+    const facts = guillotineFacts({ weekOrPeriod: 6, dangerTiers: [], survivalStandings: [], field, myRosterId: 'me', home: { aliveCount: 4 }, config: { eliminationStartWeek: 6, teamsPerChop: 1 } }, NOW)!
+    expect(facts.phase).toBe('chop_week')
+    const view = resolveWhatsNext(facts, { isCommissioner: true })!
+    expect(view.title).toBe('Week 6: 4 teams left')
+    expect(view.title).not.toMatch(/not started/)
+    // Before chops start it says when they do.
+    expect(guillotineFacts({ weekOrPeriod: 3, dangerTiers: [], field, config: { eliminationStartWeek: 6 } }, NOW)!.phase).toBe('before_chops')
+  })
+  it('🛑 a drafted league whose calendar week is before the first chop week is "chops start", not "Week 7: 4 teams left"', () => {
+    const field = [{ rosterId: 'me', displayName: 'Mine' }, { rosterId: 'x', displayName: 'X' }]
+    const facts = guillotineFacts({ weekOrPeriod: 7, calendarWeek: 6, dangerTiers: [], field, config: { eliminationStartWeek: 7 } }, NOW)!
+    expect(facts.phase).toBe('before_chops')
+    expect(facts.week).toBe(6)
+  })
+  it('[control] with no field (no draft yet) it is still pre-season', () => {
+    expect(guillotineFacts({ weekOrPeriod: 1, dangerTiers: [], survivalStandings: [], config: { eliminationStartWeek: 1 } }, NOW)!.phase).toBe('pre_season')
+  })
   it('Pirate hands the winning manager the claim', () => {
     const payload = { week: 3, myRosterId: 'w', rosters: [{ id: 'w', name: 'Wolves' }, { id: 'l', name: 'Lambs' }], claims: [{ status: 'awaiting_selection', winnerRosterId: 'w', loserRosterId: 'l', selectionDeadlineAt: LATER }] }
     const view = resolveWhatsNext(pirateFacts(payload, NOW)!, { isCommissioner: false })!

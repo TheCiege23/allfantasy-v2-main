@@ -5,6 +5,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { isIosSafariWithoutStandalone } from '@/components/notifications/EnableWebPushCard'
 import { useWebPushSubscription } from '@/lib/push-notifications/useWebPushSubscription'
 import { pushAskCopy, type PushAskPlacement } from '@/lib/core-app/pushAskCopy'
+import { trackPushAsk } from '@/lib/push-notifications/trackPushAsk'
 
 /**
  * Ask for push at a moment of intent (2026-10-10). Measured in production that morning: of the 42
@@ -36,13 +37,8 @@ function weekKey(placement: PushAskPlacement, now: Date): string {
 /** NFL game days in local time — where the shell's GameDayAlertsBanner already asks. */
 const GAME_DAYS = new Set([0, 1, 4])
 
-function track(event: string, placement: PushAskPlacement): void {
-  if (typeof window === 'undefined') return
-  void fetch('/api/analytics/track', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ event, toolKey: 'push_ask', path: window.location?.pathname ?? null, meta: { placement } }),
-  }).catch(() => {})
+function track(event: 'push_ask_shown' | 'push_ask_enabled' | 'push_ask_dismissed', placement: PushAskPlacement): void {
+  trackPushAsk(event, placement)
 }
 
 export function PushAsk({

@@ -64,11 +64,11 @@ describe('GuillotineHome — your escape', () => {
 
   it('no escape (or an older summary without the field) renders nothing', async () => {
     mount(summary({ myEscapes: [] }))
-    await waitFor(() => expect(screen.getByTestId('guillotine-specialty-home')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('guilly-survival-board')).toBeTruthy())
     expect(screen.queryByTestId('guillotine-my-escape')).toBeNull()
     vi.unstubAllGlobals()
     mount(summary())
-    await waitFor(() => expect(screen.getAllByTestId('guillotine-specialty-home').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByTestId('guilly-survival-board').length).toBeGreaterThan(0))
     expect(screen.queryByTestId('guillotine-my-escape')).toBeNull()
   })
 })

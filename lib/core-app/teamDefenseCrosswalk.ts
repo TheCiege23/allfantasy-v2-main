@@ -78,6 +78,17 @@ export function teamDefenseSleeperId(platform: string | null | undefined, row: T
   }
 
   if (!TEAM_DEFENSE_POSITIONS.has(position)) return null
+
+  /*
+   * A PASTED Yahoo defence names its CITY ("Philadelphia", "New York") beside the club code ("Phi",
+   * "NYG") — Yahoo's own D/ST label. A bare city is refused below, so the code decides, and only when
+   * it is a club: a name that DOES name a club must name the same one.
+   */
+  if (String(platform ?? '').trim().toLowerCase() === 'yahoo') {
+    if (!fromTeam) return null
+    return fromName && fromName !== fromTeam ? null : fromTeam
+  }
+
   if (!fromName) return null
   if (String(row.team ?? '').trim() && fromTeam !== fromName) return null
   return fromName

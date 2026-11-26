@@ -10,7 +10,10 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, canSubmitPickForRoster, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { recordCommissionerDraftAction, refuseIfSleeperMirrored } from '@/lib/draft-room/commissionerDraftActions'
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
+import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { AUTO_DRAFT_HAND_PICK_ERROR, refusesHandPickInAutoDraft } from '@/lib/live-draft-engine/autoDraftPickRule'
 import {
+  DRAFT_PICK_AUTO_DRAFT,
   DRAFT_PICK_NOT_ON_CLOCK,
   httpStatusForPickAuthorityCode,
   type PickAuthorityCode,
@@ -128,6 +131,15 @@ export const POST = withTimedRoute('draft_pick', async (
   const isComm = await canCommissionerAct(leagueId, userId, 'league')
   if (source === 'commissioner' && !isComm) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  // An auto draft takes no pick by hand (autoDraftPickRule.ts). A settings read that fails refuses
+  // nothing: a pick is never lost to this check.
+  const executionMode = await getDraftUISettingsForLeague(leagueId).then((ui) => ui.executionMode).catch(() => null)
+  if (refusesHandPickInAutoDraft(executionMode, source)) {
+    return NextResponse.json(
+      { error: AUTO_DRAFT_HAND_PICK_ERROR, code: DRAFT_PICK_AUTO_DRAFT },
+      { status: httpStatusForPickAuthorityCode(DRAFT_PICK_AUTO_DRAFT) },
+    )
   }
   if (source === 'commissioner') {
     // Sleeper rewrites a mirrored draft on every sync; a pick made for a team here would be undone.

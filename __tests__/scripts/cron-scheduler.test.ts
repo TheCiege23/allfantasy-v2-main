@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { ESLint } from 'eslint'
 import { compileCron, dueSchedules, parseField } from '../../scripts/cron-scheduler.mjs'
 import { classifyCrons, readCronSchedule, slowTierSchedules } from '../../scripts/cron-tier.mjs'
 import { withFastTierOperationalOverlays } from '../../scripts/cron-fast-tier-loop.mjs'
@@ -128,3 +130,51 @@ describe('Dockerfile.cron carries everything the scripts read', () => {
     }
   })
 })
+
+/*
+ * 🛑 THE SCHEDULER CRASHED ONCE A MINUTE FOR 18 HOURS AND NOTHING WENT RED (2026-11-24 → 25).
+ * #4192 added `catchupLoop`, which calls `catchupOnce` — and never imported it. A `.mjs` file is not
+ * typechecked and an ESM import does not resolve a function body's names, so every test passed and
+ * the image built; the process threw `ReferenceError: catchupOnce is not defined` at second 45 of each
+ * minute and restarted. Any job phased later than that in its window — `/api/redraft/score-sync`
+ * among them — never fired again, and no league's matchup scores moved from 19:59 UTC.
+ * So every script the image ships is linted for undefined names.
+ */
+describe('every script in the cron image refers only to names it defines or imports', () => {
+  const docker = fs.readFileSync('Dockerfile.cron', 'utf8')
+  const scripts = [...docker.matchAll(/^COPY (.+) \S+$/gm)]
+    .flatMap((m) => m[1].trim().split(/\s+/))
+    .filter((f) => f.endsWith('.mjs'))
+  const lint = (files: string[]) =>
+    new ESLint({
+      useEslintrc: false,
+      overrideConfig: {
+        parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+        env: { node: true, es2022: true },
+        rules: { 'no-undef': 'error' },
+      },
+    }).lintFiles(files)
+
+  it('covers the scheduler and its catch-up module', () => {
+    expect(scripts).toContain('scripts/cron-scheduler.mjs')
+    expect(scripts).toContain('scripts/worker-release-catchup.mjs')
+  })
+
+  it('no undefined names', async () => {
+    const results = await lint(scripts)
+    const undefinedNames = results.flatMap((r) => r.messages.map((m) => `${r.filePath.split('/scripts/')[1]}:${m.line} ${m.message}`))
+    expect(undefinedNames).toEqual([])
+    // Every file was actually parsed (a fatal parse error is a message too, so it would show above).
+    expect(results).toHaveLength(scripts.length)
+  }, 30_000)
+
+  it('positive control: the lint reports the exact defect that shipped', async () => {
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'cron-lint-'))
+    const broken = path.join(dir, 'broken.mjs')
+    fs.writeFileSync(broken, 'export async function catchupLoop() {\n  await catchupOnce({ log: console.log })\n}\n')
+    const [result] = await lint([broken])
+    fs.rmSync(dir, { recursive: true, force: true })
+    expect(result!.messages.map((m) => m.message)).toEqual(["'catchupOnce' is not defined."])
+  }, 30_000)
+})
+

@@ -152,6 +152,53 @@ describe('runBatchedDeploy', () => {
     expect(h.sleeps).toEqual([])
   })
 
+  describe('a run that finds its commit already live', () => {
+    // 2026-11-25: 976895ad17 was built by the 04:52 run and again by the 05:00 run queued behind it.
+    const liveList = (sha: unknown) => (call: Call) =>
+      call.query.includes('meta') ? { body: { data: { deployments: { edges: [{ node: { id: 'old', status: 'REMOVED', meta: { commitHash: NEWER } } }, { node: { id: 'live', status: 'SUCCESS', meta: { commitHash: sha } } }] } } } } : undefined
+    const deployed = (api: { calls: Call[] }) => api.calls.some((c) => c.query.includes('serviceInstanceDeployV2'))
+
+    it('starts no build and reports it as a success', async () => {
+      const api = fakeApi({ respond: liveList(SHA) })
+      const h = harness({ fetchImpl: api.fetchImpl, quietSeconds: 0, skipIfLive: true })
+      await expect(runBatchedDeploy(h.opts)).resolves.toMatchObject({ outcome: 'already-live', sha: SHA, deploymentId: null })
+      expect(deployed(api)).toBe(false)
+      expect(h.logs.join('\n')).toMatch(/already live/)
+    })
+
+    it('still deploys when the live commit is older, missing or malformed', async () => {
+      for (const live of [NEWER, undefined, 'abc', 42]) {
+        const api = fakeApi({ respond: liveList(live) })
+        await expect(runBatchedDeploy(harness({ fetchImpl: api.fetchImpl, quietSeconds: 0, skipIfLive: true }).opts)).resolves.toMatchObject({ outcome: 'live' })
+        expect(deployed(api)).toBe(true)
+      }
+    })
+
+    it('still deploys when the live commit cannot be read at all', async () => {
+      const api = fakeApi({ respond: (call) => (call.query.includes('meta') ? { body: { errors: [{ message: 'Cannot query field "meta"' }] } } : undefined) })
+      const h = harness({ fetchImpl: api.fetchImpl, quietSeconds: 0, skipIfLive: true })
+      await expect(runBatchedDeploy(h.opts)).resolves.toMatchObject({ outcome: 'live' })
+      expect(deployed(api)).toBe(true)
+      expect(h.logs.join('\n')).toMatch(/Could not read the live commit/)
+    })
+
+    it('is off unless asked for, and a named commit always builds', async () => {
+      const plain = fakeApi({ respond: liveList(SHA) })
+      await runBatchedDeploy(harness({ fetchImpl: plain.fetchImpl, quietSeconds: 0 }).opts)
+      expect(deployed(plain)).toBe(true)
+      expect(plain.calls.some((c) => c.query.includes('meta'))).toBe(false)
+      const named = fakeApi({ respond: liveList(SHA) })
+      await runBatchedDeploy(harness({ fetchImpl: named.fetchImpl, quietSeconds: 0, skipIfLive: true, deploySha: SHA }).opts)
+      expect(deployed(named)).toBe(true)
+    })
+
+    it('the workflow asks for it on a push and never on a manual run', async () => {
+      const { readFileSync } = await import('node:fs')
+      const yml = readFileSync('.github/workflows/railway-deploy.yml', 'utf8')
+      expect(yml).toMatch(/^\s*SKIP_IF_LIVE: \$\{\{ github\.event_name == 'push' && '1' \|\| '0' \}\}/m)
+    })
+  })
+
   it('DEPLOY_SHA overrides the newest main', async () => {
     const api = fakeApi({})
     await runBatchedDeploy(harness({ fetchImpl: api.fetchImpl, quietSeconds: 0, deploySha: NEWER, readSha: () => SHA }).opts)
