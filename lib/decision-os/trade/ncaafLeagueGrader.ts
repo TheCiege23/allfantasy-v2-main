@@ -49,7 +49,7 @@ export function createNcaafLeagueGrader(
    * so the one grader priced those deals on the NFL market chart (owner's fix, 2026-11-26). Now every college
    * concept has a college basis or a withheld reason; null means only that another grader owns it (Zombie).
    */
-  const plan = collegeGradingFor(league.leagueType.type)
+  const plan = collegeGradingFor(league.leagueType.type, league.settings)
   const isRedraft = String(league.leagueType.type).toLowerCase() === 'redraft'
   const isDynasty = plan != null && 'basis' in plan && plan.basis === 'dynasty'
   let base: Promise<NcaafRedraftBaseResult> | null = null

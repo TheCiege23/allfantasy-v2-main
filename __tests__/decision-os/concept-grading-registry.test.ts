@@ -105,7 +105,9 @@ function registryDecision(rule: ConceptGradingRule, formatRule: string | null): 
 const POINTS_SPORTS = ['NBA', 'NCAAB', 'NHL', 'MLB', 'SOCCER']
 const INTENDED_CHANGES = {
   /** 1. NCAAF: college evidence for every concept. Rosters reset → the college redraft basis. */
-  ncaafThisSeason: ['best_ball', 'survivor', 'tournament', 'big_brother', 'guillotine', 'pirate', 'efl', 'survivor_guillotine'],
+  ncaafThisSeason: ['best_ball', 'survivor', 'tournament', 'big_brother', 'guillotine', 'survivor_guillotine'],
+  /** 1 + 2. NCAAF Pirate and EFL follow the league's book: college dynasty, or rest of season on a confirmed-redraft Pirate. */
+  ncaafLeagueBook: ['pirate', 'efl'],
   /** 1. NCAAF multi-season concepts with no format adjustment of their own → the college dynasty basis. */
   ncaafMultiSeason: ['devy', 'c2c'],
   /** 1. NCAAF concepts whose format adjustment has no college form (and the unconfirmed import) → withheld. */
@@ -121,6 +123,7 @@ function expectedDecision(type: string, variant: string | null, sport: string, o
   const changed = (fix: string, d: Partial<Decision>) => ({ decision: { ...old, ...d }, fix })
   if (sport === 'NCAAF') {
     if (INTENDED_CHANGES.ncaafThisSeason.includes(type)) return changed('1', { core: 'ncaaf_college', basis: 'rest_of_season' })
+    if (INTENDED_CHANGES.ncaafLeagueBook.includes(type)) return changed('1', { core: 'ncaaf_college', basis: 'league_book' })
     if (INTENDED_CHANGES.ncaafMultiSeason.includes(type)) return changed('1', { core: 'ncaaf_college', basis: 'dynasty' })
     if (INTENDED_CHANGES.ncaafWithheld.includes(type)) return changed('1', { core: 'withheld', basis: null })
   }
@@ -198,7 +201,11 @@ describe('(b) the registry picks the same sub-grader as the old if-chain, except
   })
 
   it('the intended changes touch exactly the rows the owner approved', () => {
-    // Fix 1: 13 NCAAF rows (8 this-season, 2 multi-season, 3 withheld). Fix 2: pirate + efl × 5 sports.
+    // Fix 1: 13 NCAAF rows (6 this-season, 2 on the league's book, 2 multi-season, 3 withheld). Fix 2: pirate + efl × 5 sports.
+    const ncaafBasis = (basis: string) => registeredGradedConcepts().filter((c) => resolveConceptGrading({ type: c, sport: 'NCAAF' }).rule.college === basis)
+    expect(ncaafBasis('league_book')).toEqual(['pirate', 'efl'])
+    expect(ncaafBasis('rest_of_season')).toHaveLength(1 + INTENDED_CHANGES.ncaafThisSeason.length) // + redraft
+    expect(ncaafBasis('dynasty')).toHaveLength(1 + INTENDED_CHANGES.ncaafMultiSeason.length) // + dynasty
     // Fix 3: guillotine × NCAAB/SOCCER, plus a guillotine variant on every other non-Zombie base there.
     const nonZombieBases = registeredGradedConcepts().length + 3 - 2 // + legacy types, − zombie, − guillotine itself
     expect(changedByFix.get('1')?.size).toBe(13)

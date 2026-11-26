@@ -263,10 +263,11 @@ the manager reads.
   × 5 sports, guillotine × NCAAB/SOCCER incl. a guillotine variant on any non-Zombie base) and still pins
   every other row to the old chain:
   1. **NCAAF never prices on the NFL chart.** Concepts whose rosters reset (best ball, survivor, tournament,
-     big brother, guillotine, pirate, EFL, survivor guillotine) take the college rest-of-season basis; devy
-     and C2C the college dynasty basis (C2C: Campus picks only); keeper, salary cap and an unconfirmed
-     `imported` college league are withheld with a reason — their format adjustment has no college form.
-  2. **Pirate and EFL outside football grade on the league's book** (`leagueVariantFor`): five seasons +
+     big brother, guillotine, survivor guillotine) take the college rest-of-season basis; devy
+     and C2C the college dynasty basis (C2C: Campus picks only); pirate and EFL follow the league's book
+     (rule 2) on the college bases; keeper, salary cap and an unconfirmed `imported` college league are
+     withheld with a reason — their format adjustment has no college form.
+  2. **Pirate and EFL outside NFL grade on the league's book** (`leagueVariantFor`): five seasons +
      picks on the dynasty book (EFL always; Pirate unless confirmed redraft), this season otherwise.
   3. **Guillotine in NCAAB and soccer uses the guillotine grader's survival weighting**, on the daily-sport
      model (points board on the week, NCAAB's recorded opener, soccer's recorded gameweeks).

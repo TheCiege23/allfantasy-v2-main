@@ -213,7 +213,35 @@ describe('createNcaafLeagueGrader', () => {
    * college league that was neither redraft nor dynasty returned null here, and the one grader priced
    * the deal on the NFL market chart. The basis now comes from the concept registry.
    */
-  it.each(['best_ball', 'survivor', 'tournament', 'big_brother', 'guillotine', 'pirate', 'efl', 'survivor_guillotine'])(
+  /*
+   * Pirate and EFL follow the league's BOOK in college football too, exactly as outside football
+   * (`leagueVariantFor`): EFL is always dynasty; Pirate is dynasty unless the commissioner confirmed a redraft
+   * base, and a Pirate league with no stated base is dynasty.
+   */
+  const confirmedPirate = (baseFormat: 'dynasty' | 'redraft') => ({ ...RULES.settings, leagueTypeConfirmation: { type: 'pirate', baseFormat } })
+  it.each([
+    ['efl', RULES.settings],
+    ['pirate', RULES.settings],
+    ['pirate', confirmedPirate('dynasty')],
+  ] as const)('%s on the dynasty book is graded on the college dynasty basis: class years and freshman-priced picks', async (type, settings) => {
+    const grader = createNcaafLeagueGrader({
+      id: 'L1', platform: null, settings, leagueType: { ...dynasty, type },
+      leagueSize: 4, season: 2026, status: 'in_season',
+    }, { loadBase: loadNcaafRedraftBase, loadClassYears: async () => new Map([['101', 1], ['102', 4]]) })
+    const trade = await grader.grade([p('Arch Manning')], [p('Jeremiah Smith', '102')])
+    expect(trade).toMatchObject({ graded: true, getValue: 66, basis: expect.stringContaining('recorded class year') })
+    // The freshman QB's later seasons count: more than his one-season 40.
+    if (trade?.graded) expect(trade.giveValue).toBeGreaterThan(40)
+    expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1, overall: 1 }])).toMatchObject({ graded: true, basis: expect.stringContaining('rostered freshmen') })
+  })
+
+  it('a Pirate league on a confirmed redraft base keeps the college rest-of-season basis, picks refused', async () => {
+    const grader = createNcaafLeagueGrader({ id: 'L1', platform: null, settings: confirmedPirate('redraft'), leagueType: { ...redraft, type: 'pirate' } })
+    expect(await grader.grade([p('Arch Manning')], [p('Jeremiah Smith', '102')])).toMatchObject({ graded: true, giveValue: 40, getValue: 66, letter: 'A' })
+    expect(await grader.grade([p('Arch Manning')], [{ kind: 'pick', year: 2027, round: 1 }])).toEqual({ graded: false, reason: NCAAF_SEASON_ONLY_PICKS_REASON, basis: null })
+  })
+
+  it.each(['best_ball', 'survivor', 'tournament', 'big_brother', 'guillotine', 'survivor_guillotine'])(
     '%s is graded on the college rest-of-season basis — the same numbers as college redraft',
     async (type) => {
       const grader = createNcaafLeagueGrader({ id: 'L1', platform: null, settings: RULES.settings, leagueType: { ...redraft, type } })

@@ -22,7 +22,7 @@
  *   1. NCAAF is graded on college evidence for every concept — never the NFL chart. Concepts whose
  *      rosters reset take the college rest-of-season basis; multi-season ones the college dynasty basis,
  *      or are withheld where their format adjustment (keeper costs, cap contracts) has no college form.
- *   2. Pirate and EFL outside football grade on the league's book: five seasons + picks when it is the
+ *   2. Pirate and EFL grade on the league's book in every sport but NFL (in NCAAF on the college bases): five seasons + picks when it is the
  *      dynasty book (EFL always; Pirate unless the commissioner said redraft), this season otherwise.
  *   3. Guillotine in college basketball and soccer uses the guillotine grader's survival weighting.
  *
@@ -35,6 +35,8 @@
 import type { LeagueSport } from '@prisma/client'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import type { LeagueConceptType } from '@/lib/league/leagueConceptOptions'
+// Pure (no prisma): the one answer every value surface gives to "is this league on the dynasty book".
+import { leagueVariantFor } from '@/lib/core-app/valueBook'
 
 /** The sub-graders `createLeagueTradeGrader` can hand a deal to. */
 export type ConceptGrader =
@@ -59,10 +61,12 @@ export type ConceptGradingRule = {
   /**
    * `ncaaf_college` only: which college basis prices the deal. `rest_of_season` is college points over
    * replacement for the weeks left (picks refused — the rosters do not carry over); `dynasty` is five
-   * seasons by class year plus picks from freshman estimates. The college view is always final: an
-   * NCAAF deal never falls through to the NFL chart.
+   * seasons by class year plus picks from freshman estimates; `league_book` is `dynasty` when the league
+   * prices on the dynasty book (`leagueVariantFor` — EFL always, Pirate unless confirmed redraft) and
+   * `rest_of_season` otherwise. The college view is always final: an NCAAF deal never falls through to
+   * the NFL chart.
    */
-  college?: 'rest_of_season' | 'dynasty'
+  college?: 'rest_of_season' | 'dynasty' | 'league_book'
   /** `ncaaf_college` dynasty only: every pick must be a Campus pick (Canton/Combined picks are NFL rookie picks with no college price). */
   collegePicks?: 'campus_only'
   /**
@@ -130,6 +134,13 @@ const COLLEGE_MULTI_SEASON: ConceptGradingRule = {
   grader: 'ncaaf_college',
   college: 'dynasty',
   basis: 'Five seasons of college points over replacement plus picks priced from freshman class estimates, as in college dynasty.',
+}
+
+/** College Pirate and EFL: the league's book decides, exactly as outside football (fix 2). */
+const COLLEGE_LEAGUE_BOOK: ConceptGradingRule = {
+  grader: 'ncaaf_college',
+  college: 'league_book',
+  basis: 'On the dynasty book (EFL always; Pirate unless the commissioner confirmed a redraft base): five seasons of college points over replacement plus picks from freshman class estimates. On a redraft base: college points over replacement for the rest of the season; picks withheld.',
 }
 
 export const NCAAF_KEEPER_REASON =
@@ -205,7 +216,7 @@ export const CONCEPT_GRADING_REGISTRY = {
   big_brother: { NFL: CHART, NCAAF: COLLEGE_THIS_SEASON, ...pointsSports(POINTS) },
   pirate: {
     NFL: CHART,
-    NCAAF: COLLEGE_THIS_SEASON,
+    NCAAF: COLLEGE_LEAGUE_BOOK,
     ...pointsSports(POINTS_LEAGUE_BOOK),
   },
   survivor_guillotine: {
@@ -215,7 +226,7 @@ export const CONCEPT_GRADING_REGISTRY = {
   },
   efl: {
     NFL: CHART,
-    NCAAF: COLLEGE_THIS_SEASON,
+    NCAAF: COLLEGE_LEAGUE_BOOK,
     ...pointsSports(POINTS_LEAGUE_BOOK),
   },
 } as const satisfies Record<GradedConceptId, Record<LeagueSport, ConceptGradingRule>>
@@ -292,16 +303,19 @@ export function resolveConceptGrading(args: { type: string | null | undefined; v
 /**
  * How the college grader (`./ncaafLeagueGrader.ts`) grades an NCAAF league of this type — read from the
  * registry so the one grader and the Trade Center console, which both build that grader, cannot disagree.
- * PURE. Null when another sub-grader owns the type (Zombie).
+ * PURE. Null when another sub-grader owns the type (Zombie). `settings` decides a `league_book` row.
  */
-export function collegeGradingFor(type: string | null | undefined):
+export function collegeGradingFor(type: string | null | undefined, settings?: unknown):
   | { basis: 'rest_of_season' | 'dynasty'; campusPicksOnly: boolean }
   | { withheld: string }
   | null {
   const { rule } = resolveConceptGrading({ type, sport: 'NCAAF' })
   if (rule.grader === 'withheld') return { withheld: rule.reason ?? UNREGISTERED_CONCEPT_REASON(String(type ?? '')) }
   if (rule.grader !== 'ncaaf_college' || !rule.college) return null
-  return { basis: rule.college, campusPicksOnly: rule.collegePicks === 'campus_only' }
+  const basis = rule.college === 'league_book'
+    ? leagueVariantFor(settings ?? null, String(type ?? '')).dynasty ? 'dynasty' : 'rest_of_season'
+    : rule.college
+  return { basis, campusPicksOnly: rule.collegePicks === 'campus_only' }
 }
 
 /**
