@@ -317,6 +317,20 @@
   font: 800 30px/1 'Archivo', system-ui, sans-serif;
   color: var(--faint);
 }
+/* The photo plus its club crest on the bottom-right corner (outside the photo's clip). */
+.af-pc-face-wrap {
+  position: relative;
+  flex: none;
+}
+.af-pc-crest {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  display: inline-flex;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--surface);
+}
 
 .af-pc-id-main {
   flex: 1;

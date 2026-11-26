@@ -665,8 +665,9 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const record = formatRecord({ wins: userTeam.wins, losses: userTeam.losses, ties: userTeam.ties })
   const place = ordinal(userTeam.currentRank)
   const startersProj = lists ? projectedTotal(lists.starters, players) : null
-  // Headshots and crests are drawn when the roster carries any; a sport with none keeps its plain rows.
-  const showMedia = Object.values(players).some((p) => p.headshotUrl || p.teamLogoUrl)
+  // Headshots and crests on every sport: a row with no image still gets initials and its club's
+  // abbreviation in the crest corner (PlayerAvatar), so rows read the same across sports.
+  const showMedia = Object.values(players).some((p) => p.headshotUrl || p.imageUrl || p.teamLogoUrl || p.team)
   const afFormProjected = Object.values(players).some((p) => p.projectionsSource === AF_FORM_PROJECTION_SOURCE)
   const faab = data?.faabRemaining ?? null
   const runLabel = nextRunAt ? new Date(nextRunAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : null
@@ -778,7 +779,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           onTap={() => (editable && (picked || !p) ? onTap(tap) : openCard({ id: p?.id ?? id, name: p?.name, position: p?.position, team: p?.team, imageUrl: p?.headshotUrl ?? p?.imageUrl }))}
         >
           <span className="nls-pl" data-media={showMedia || undefined}>
-            {showMedia ? <PlayerAvatar name={p?.name} headshotUrl={p?.headshotUrl ?? p?.imageUrl} teamLogoUrl={p?.teamLogoUrl} empty={!p} /> : null}
+            {showMedia ? <PlayerAvatar name={p?.name} headshotUrl={p?.headshotUrl ?? p?.imageUrl} teamLogoUrl={p?.teamLogoUrl} team={p?.team} sport={league.sport} empty={!p} /> : null}
             <span className="nls-pl-text">
               <strong>
                 {p?.name ?? (id ? 'Unknown player' : 'Empty')}

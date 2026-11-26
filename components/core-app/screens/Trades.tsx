@@ -213,7 +213,7 @@ function AgentIdeas({ state }: { state: NonNullable<TradesData['agentIdeas']> })
   )
 }
 
-function TradeCard({ trade }: { trade: TradeRecord }) {
+function TradeCard({ trade, sport }: { trade: TradeRecord; sport: string }) {
   const language = useOptionalLanguage().language
   const m = useMessages(tradesScreenMessages)
   const lg = useMessages(tradesLeagueGuideMessages)
@@ -322,15 +322,15 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
               <span className="af-tr-players-list">
                 {side.received.map((p, j) => (
                   <span className="af-tr-player-asset" key={p.sleeperId}>
-                    <PlayerImage sleeperId={p.sleeperId} sport="NFL" name={p.name} position={p.position ?? undefined} headshotUrl={p.headshotUrl} size={28} />
+                    <PlayerImage sleeperId={p.sleeperId} sport={sport} name={p.name} position={p.position ?? undefined} headshotUrl={p.headshotUrl} size={28} />
                     <PlayerName
-                      sport="NFL"
+                      sport={sport}
                       sleeperId={p.sleeperId}
                       name={p.name}
                       position={p.position}
                       team={p.team}
                     />
-                    {p.team ? <TeamLogo teamAbbr={p.team} sport="NFL" logoUrl={p.teamLogoUrl} size={20} /> : null}
+                    {p.team ? <TeamLogo teamAbbr={p.team} sport={sport} logoUrl={p.teamLogoUrl} size={20} /> : null}
                     {values[j] != null ? <em className="af-tr-asset-value af-num">{Math.round(values[j]!).toLocaleString(getAppIntlLocale())}</em> : null}
                   </span>
                 ))}
@@ -568,7 +568,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
             <>
               <ul className="af-tr-list" id="af-tr-history-list">
                 {(showAllTrades ? history : history.slice(0, HISTORY_PREVIEW)).map((t) => (
-                  <TradeCard key={t.transactionId} trade={t} />
+                  <TradeCard key={t.transactionId} trade={t} sport={data.league.sport ?? 'NFL'} />
                 ))}
               </ul>
               {history.length > HISTORY_PREVIEW ? (

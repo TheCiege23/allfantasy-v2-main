@@ -169,6 +169,8 @@
 .nls-pavatar > img:first-child { width: 100%; height: 100%; border-radius: 999px; object-fit: cover; object-position: top center; }
 .nls-pavatar[data-empty=true] { border-style: dashed; background: transparent; }
 .nls-pavatar-crest { position: absolute; right: -5px; bottom: -4px; width: 20px; height: 20px; padding: 2px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line2); object-fit: contain; }
+/* No crest image (unknown club, or the CDN refused it): the abbreviation in the same corner chip. */
+.nls-pavatar-crest-text { display: grid; place-items: center; width: auto; min-width: 20px; padding: 0 3px; font: 700 8px/1 var(--nl-mono); letter-spacing: -0.02em; color: var(--text); }
 .nls-player small.nls-oprank { display: inline-flex; align-items: center; padding: 2px 7px; border: 1px solid var(--line2); border-radius: 999px; color: var(--text2); font: 600 11px/1.3 var(--nl-mono); overflow: visible; }
 .nls-oprank b { font-weight: 700; }
 .nls-pl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
@@ -260,6 +262,12 @@
 .nls-givegets ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .nls-givegets li { color: var(--text); font-size: 15px; font-weight: 600; }
 .nls-givegets li small { margin-left: 6px; color: var(--muted); font: 12px var(--nl-mono); font-weight: 400; }
+/* A traded player: his face and club crest beside the name (a pick or FAAB line stays plain text). */
+.nls-givegets li[data-media] { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+.nls-givegets li[data-media] .nls-pavatar { width: 36px; height: 36px; font-size: 12px; }
+.nls-givegets li[data-media] .nls-pavatar-crest { width: 17px; height: 17px; right: -4px; bottom: -3px; }
+.nls-givegets li[data-media] .nls-pavatar-crest-text { width: auto; }
+.nls-givegets .nls-asset-text { min-width: 0; }
 .nls-offer-actions { margin-top: 18px; }
 .nls-grade-big { display: flex; align-items: baseline; gap: 16px; margin: 4px 0 18px; }
 .nls-grade-big b { color: var(--good); font-size: 72px; font-weight: 700; line-height: 1; }
