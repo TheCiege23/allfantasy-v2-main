@@ -2,7 +2,7 @@ import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { analyzeLeagueGovernance } from './LeagueGovernanceAnalyzer'
-import { analyzeTradeFairness } from './TradeFairnessAnalyzer'
+import { loadTradeFairnessWatchlist } from './TradeFairnessAnalyzer'
 import { toLeagueSport } from './SportCommissionerResolver'
 import type { DraftInsight, LeagueInsightReport, MatchupInsight, WaiverInsight, WeeklyRecapPost } from './types'
 
@@ -114,7 +114,7 @@ export async function generateLeagueInsights(
 
   const [governance, controversialTrades, latestWeekRows, waiverRows, draftRows] = await Promise.all([
     analyzeLeagueGovernance({ leagueId: input.leagueId, sport, season }),
-    analyzeTradeFairness({ leagueId: input.leagueId, sport, season, limit: 6 }),
+    loadTradeFairnessWatchlist({ leagueId: input.leagueId, sport, season, limit: 6 }),
     prisma.matchupFact
       .findMany({
         where: { leagueId: input.leagueId, sport, season },
@@ -196,8 +196,10 @@ export async function generateLeagueInsights(
     matchupCount: matchupSummaries.length,
     waiverCount: waiverHighlights.length,
     tradeCount: controversialTrades.length,
-    controversialTradeCount: controversialTrades.filter((trade) => trade.controversyLevel !== 'low')
-      .length,
+    // A withheld grade ('unknown') is not a controversy — only a graded lean is.
+    controversialTradeCount: controversialTrades.filter(
+      (trade) => trade.controversyLevel === 'high' || trade.controversyLevel === 'medium'
+    ).length,
     draftCommentaryCount: draftCommentary.length,
     pendingWaiverClaims: governance.pendingWaiverClaims,
   })
