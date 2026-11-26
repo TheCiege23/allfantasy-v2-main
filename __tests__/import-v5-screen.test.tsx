@@ -154,3 +154,13 @@ describe('bring your leaguemates', () => {
     expect(screen.queryByTestId('import-invite-card')).toBeNull()
   })
 })
+
+describe('the page header (2026-11-26)', () => {
+  it('has no number tiles, and says "read-only, no password" once, by the connect button', () => {
+    const { container } = render(<ImportV4 defaultProvider="sleeper" />)
+    expect(container.querySelector('.af-im-hero-stats')).toBeNull()
+    expect(container.textContent).not.toMatch(/Passwords asked/)
+    expect(container.textContent).not.toMatch(/nothing on your platform ever changes/)
+    expect(container.querySelector('.af-im-account-note')?.textContent).toMatch(/read-only/)
+  })
+})

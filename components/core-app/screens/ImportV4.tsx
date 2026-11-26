@@ -794,16 +794,6 @@ const PROVIDER_PILL_TAG: Partial<Record<ImportProvider, string>> = {
 }
 
 /*
- * The hero's numbers. Derived from provider-ui-config so they move when a platform is switched on
- * or off, the same rule the row itself follows — a literal "5 platforms" would be wrong the day
- * Yahoo comes back.
- */
-const LIVE_PLATFORM_COUNT = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available).length
-const LIVE_SPORT_COUNT = new Set(
-  IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available).flatMap((o) => [...o.supportedSports]),
-).size
-
-/*
  * How much work each platform is, on its tile — the thing people want to know before they press
  * one. ESPN is the honest outlier: a one-time cookie copy on a computer.
  */
@@ -2279,23 +2269,10 @@ export function ImportV4({
             <h1 className="af-im-title">Bring your league to AllFantasy.</h1>
             <p className="af-im-sub">
               Pick where you play and follow the steps. We build a read-only copy of your teams,
-              matchups and scoring &mdash; nothing on your platform ever changes.
+              matchups and scoring.
             </p>
           </div>
-          <dl className="af-im-hero-stats">
-            <div className="af-im-hero-stat">
-              <dt>Platforms</dt>
-              <dd className="af-num">{LIVE_PLATFORM_COUNT}</dd>
-            </div>
-            <div className="af-im-hero-stat">
-              <dt>Sports</dt>
-              <dd className="af-num">{LIVE_SPORT_COUNT}</dd>
-            </div>
-            <div className="af-im-hero-stat">
-              <dt>Passwords asked</dt>
-              <dd className="af-num">0</dd>
-            </div>
-          </dl>
+          {/* No number tiles (2026-11-26): "0 passwords" is said by the lock line under the connect button. */}
         </div>
         <nav className="af-im-create-row" aria-label="Other ways to start">
           <p className="af-im-create-option">
