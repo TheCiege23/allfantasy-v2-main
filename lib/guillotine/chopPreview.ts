@@ -133,7 +133,7 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
       ? { ...base, outcome: 'season_over', headline: 'One team is left — the season is decided.' }
       : { ...base, outcome: 'final_stage', headline: `${teams(alive)} left: the final stage decides the champion, with no more chops.` }
   }
-  const weekChops = scheduledChops(input.advanced, input.week, input.teamsPerChop)
+  const weekChops = scheduledChops(input.advanced, input.week, input.teamsPerChop, alive)
   if (weekChops === 0) {
     return { ...base, outcome: 'no_chop_week', headline: `Week ${input.week} is a no-chop week on your schedule. Scores still count for tiebreaks.` }
   }

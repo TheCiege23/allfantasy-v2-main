@@ -122,6 +122,8 @@ export type GuillotineEventType =
   | 'removal_request'
   /** Survivors' FAAB topped up or reset after a chop (./faabAfterChop.ts); once per season and week. */
   | 'faab_after_chop'
+  /** The week's top scorer's bonus FAAB (./faabBonus.ts); once per season and week, undone with the chop. */
+  | 'faab_bonus'
   /** A chopped manager's "Who's next?" pick (./nextChopPick.ts). */
   | 'next_chop_pick'
   /** The once-a-week chop-zone warning went out (./chopAlerts.ts); its presence stops a resend. */

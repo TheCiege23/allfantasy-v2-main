@@ -24,6 +24,7 @@ import { resolveRosterDisplayNames } from './rosterDisplayNames'
 import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
 import { applyImmunity, immuneRosterIds, readAdvanced, scheduledChops } from './chopSchedule'
+import { applyTopScorerBonus } from './faabBonus'
 import { previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
 import { describeFaabPayout, movesChoppedFaab, readFaabOnChop, readFaabOnChopPercent } from './faabOnChop'
 import { redistributeChoppedFaab } from './faabOnChopApply'
@@ -151,7 +152,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   const endgame = resolveGuillotineEndgame(endgameLeague ?? {})
   // AF Commissioner chop schedule (lib/guillotine/chopSchedule.ts): steps, double-chop and no-chop weeks.
   const advanced = readAdvanced(endgameLeague?.settings)
-  const weekChops = scheduledChops(advanced, input.weekOrPeriod, teamsPerChop)
+  // How many this week calls for, given the teams alive going into it (a "when N teams remain" rule needs it).
+  const chopsFor = (aliveBefore: number) => scheduledChops(advanced, input.weekOrPeriod, teamsPerChop, aliveBefore)
   const started = await prisma.guillotineRosterState.findMany({
     where: {
       leagueId: input.leagueId, choppedInPeriod: input.weekOrPeriod,
@@ -162,7 +164,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   let recoveryScores: PeriodScoreRow[] | null = null
   if (started.length > 0) {
     const saved = await prisma.guillotinePeriodScore.findMany({ where: { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, ...(input.season != null ? { season: input.season } : {}) }, select: { rosterId: true, periodPoints: true, seasonPointsCumul: true } })
-    const expected = Math.min(weekChops, saved.length - endgame.threshold)
+    // A saved score is a team that was alive going into the week.
+    const expected = Math.min(chopsFor(saved.length), saved.length - endgame.threshold)
     if (seasonId && expected > 0 && started.length === expected && started.every(row => saved.some(score => score.rosterId === row.rosterId))) recoveryScores = saved
     else return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already started; audit recovery required' }
   }
@@ -219,6 +222,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
    * points read them) and the season's scoring period moves past it — the native driver picks its next
    * week from max(last chop, current period) + 1, so without this it would offer the same week forever.
    */
+  const weekChops = chopsFor(evalResult.activeRosterIds.length)
   if (weekChops === 0 && !recoveryScores) {
     await savePeriodScores({ leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, season: input.season ?? null, scores: evalResult.scores })
     if (seasonId) {
@@ -636,10 +640,18 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
  * again — once, because the step keeps its own marker.
  */
 async function settleFaabAfterChop(leagueId: string, seasonId: string | null, season: number | null | undefined, weekOrPeriod: number): Promise<void> {
+  const seasonKey = seasonId ?? `season:${season ?? 'unknown'}`
   try {
-    await applyFaabAfterChop({ leagueId, seasonKey: seasonId ?? `season:${season ?? 'unknown'}`, weekOrPeriod })
+    await applyFaabAfterChop({ leagueId, seasonKey, weekOrPeriod })
   } catch (e) {
     console.warn('[guillotine] FAAB after chop not applied yet', JSON.stringify({ leagueId, weekOrPeriod, error: e instanceof Error ? e.message : String(e) }))
+  }
+  // After the reset, so a "resets to $X" rule cannot wipe the bonus out (./faabBonus.ts). Idempotent like it, and
+  // finished by the "period already processed" branch when this pass fails.
+  try {
+    await applyTopScorerBonus({ leagueId, seasonKey, season, weekOrPeriod })
+  } catch (e) {
+    console.warn('[guillotine] top scorer FAAB bonus not applied yet', JSON.stringify({ leagueId, weekOrPeriod, error: e instanceof Error ? e.message : String(e) }))
   }
 }
 

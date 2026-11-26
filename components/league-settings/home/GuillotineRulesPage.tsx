@@ -11,7 +11,7 @@ import {
   type GuillotineRuleField,
   type GuillotineRules,
 } from '@/lib/guillotine/guillotineRules'
-import { DEFAULT_ADVANCED, MAX_CHOPS_PER_WEEK, MAX_FAAB_AMOUNT, isDefault, type FaabAfterChop, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
+import { DEFAULT_ADVANCED, MAX_CHOPS_PER_WEEK, MAX_FAAB_AMOUNT, MAX_TEAMS_LEFT, isDefault, type FaabAfterChop, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { DEFAULT_FAAB_ON_CHOP_PERCENT, FAAB_ON_CHOP_OPTIONS, FAAB_ON_CHOP_PERCENT_CHOICES, movesChoppedFaab, type FaabOnChop } from '@/lib/guillotine/faabOnChop'
 import { CHOP_LIST_ORDER_OPTIONS, DEFAULT_CHOP_LIST_ORDER, type ChopListOrder } from '@/lib/guillotine/chopListOrder'
 import { CHOP_PATTERN_OPTIONS, applyChopPattern, chopPatternWeeks, describeWeeks, type ChopPatternKind } from '@/lib/guillotine/chopPatterns'
@@ -197,6 +197,8 @@ export function GuillotineRulesPage({
   const patternTo = pattern.to != null && weeks.includes(pattern.to) && pattern.to >= patternFrom ? pattern.to : weeks[weeks.length - 1]!
   const patternWeeks = chopPatternWeeks({ kind: pattern.kind, fromWeek: patternFrom, toWeek: patternTo }, { startWeek: firstWeek, periodWeeks: rules.periodWeeks })
   const firstWeekValid = Number.isInteger(firstWeek) && firstWeek >= 1 && firstWeek <= rules.eliminationEndWeek
+  // "Once N teams are left": from one fewer than the league has, down to the last two.
+  const teamsLeftChoices = Array.from({ length: Math.max(1, Math.min(MAX_TEAMS_LEFT, (view.teamCount ?? 12) - 1) - 1) }, (_, i) => Math.min(MAX_TEAMS_LEFT, (view.teamCount ?? 12) - 1) - i).filter((n) => n >= 2)
   // Roster changes: the list as it would run from today's roster, by the save's own walk.
   const rosterWeeks = roster ? Array.from({ length: Math.max(0, roster.toWeek - roster.fromWeek + 1) }, (_, i) => roster.fromWeek + i) : []
   const rosterWalk = roster ? walkRosterSchedule(roster.layout, rosterChanges, roster.spots) : null
@@ -423,6 +425,55 @@ export function GuillotineRulesPage({
           </button>
         </Field>
 
+        {/* "When N teams remain" (lib/guillotine/chopSchedule.ts `remaining`): the field size, not the calendar. */}
+        <Field
+          label="When only a few teams are left"
+          paid={scheduleLocked}
+          help="For example: two a week until 8 teams are left, then one a week; or no more chops once 3 are left. Beats a change set by week; a special week still beats both."
+        >
+          {(advanced.remaining ?? []).map((r, i) => (
+            <div key={i} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2" data-testid="guillotine-remaining">
+              <label className="text-[11px] text-white/50">Once this many are left
+                <select
+                  className={inputClass}
+                  value={r.teamsLeft}
+                  disabled={scheduleLocked}
+                  onChange={(e) => updateAdvanced({ ...advanced, remaining: (advanced.remaining ?? []).map((x, j) => (j === i ? { ...x, teamsLeft: Number(e.target.value) } : x)) })}
+                  data-testid="guillotine-remaining-teams"
+                >
+                  {teamsLeftChoices.map((n) => <option key={n} value={n}>{n} teams</option>)}
+                </select>
+              </label>
+              <label className="text-[11px] text-white/50">Teams a {week}
+                <select
+                  className={inputClass}
+                  value={r.chops}
+                  disabled={scheduleLocked}
+                  onChange={(e) => updateAdvanced({ ...advanced, remaining: (advanced.remaining ?? []).map((x, j) => (j === i ? { ...x, chops: Number(e.target.value) } : x)) })}
+                  data-testid="guillotine-remaining-chops"
+                >
+                  <option value={0}>No chop</option>
+                  {CHOPS.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <button type="button" className={ghostBtn} onClick={() => updateAdvanced({ ...advanced, remaining: (advanced.remaining ?? []).filter((_, j) => j !== i) })}>Remove</button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className={ghostBtn}
+            disabled={scheduleLocked || teamsLeftChoices.every((n) => (advanced.remaining ?? []).some((r) => r.teamsLeft === n))}
+            data-testid="guillotine-add-remaining"
+            onClick={() => {
+              const used = new Set((advanced.remaining ?? []).map((r) => r.teamsLeft))
+              const n = teamsLeftChoices.find((x) => !used.has(x)) ?? teamsLeftChoices[0]!
+              updateAdvanced({ ...advanced, remaining: [...(advanced.remaining ?? []), { teamsLeft: n, chops: 1 }] })
+            }}
+          >
+            Add a rule
+          </button>
+        </Field>
+
         <Field label="Special weeks" paid={scheduleLocked} help="A week with no chop, or a double chop. A special week wins over everything above.">
           {/* Repeating weeks, set in one go (lib/guillotine/chopPatterns.ts): they are written as special weeks. */}
           <div className="grid grid-cols-2 items-end gap-2 rounded-lg border border-white/10 p-3 sm:grid-cols-[1.4fr_1fr_1fr_1.2fr_auto]" data-testid="guillotine-pattern">
@@ -585,6 +636,25 @@ export function GuillotineRulesPage({
                 onChange={(e) => updateAdvanced({ ...advanced, faab: { ...advanced.faab, amount: Math.round(Number(e.target.value)) } })} />
             )}
           </div>
+        </Field>
+
+        {/* The week's top scorer among the survivors (lib/guillotine/faabBonus.ts). */}
+        <Field label="Bonus FAAB for the week's top scorer" paid={scheduleLocked} help="After each chop, the surviving team with the week's highest score gets this much more FAAB. A tie splits it. Only matters if your league uses FAAB bidding.">
+          <select
+            className={inputClass}
+            value={advanced.topScorerBonus ?? 0}
+            disabled={scheduleLocked}
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              const { topScorerBonus: _old, ...rest } = advanced
+              updateAdvanced(n > 0 ? { ...rest, topScorerBonus: n } : rest)
+            }}
+            data-testid="guillotine-faab-bonus"
+          >
+            {[...new Set([0, 5, 10, 20, 25, 50, 100, advanced.topScorerBonus ?? 0])].sort((a, b) => a - b).map((n) => (
+              <option key={n} value={n}>{n === 0 ? 'No bonus' : `$${n}`}</option>
+            ))}
+          </select>
         </Field>
       </Group>
 

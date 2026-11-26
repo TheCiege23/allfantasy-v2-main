@@ -603,6 +603,43 @@ describe.runIf(enabled)('a Guilly chop week against a real database', () => {
       expect(await prisma.guillotineEventLog.count({ where: { leagueId: lg.leagueId, eventType: 'faab_after_chop' } })).toBe(0)
     })
 
+    it('pays the week’s top scorer a FAAB bonus once, after the reset, and undo takes it back (owner, 2026-11-25)', async () => {
+      const lg = await league(TEAMS, { settings: { guillotine_advanced: { steps: [], overrides: {}, immunity: 'off', faab: { mode: 'set', amount: 100 }, topScorerBonus: 20 } } })
+      for (const r of lg.rosters) await prisma.roster.update({ where: { id: r.rosterId }, data: { faabRemaining: 90 } })
+      await sync(lg, 2, afterWeek(1))
+      const faab = async () =>
+        Object.fromEntries((await prisma.roster.findMany({ where: { leagueId: lg.leagueId }, select: { id: true, faabRemaining: true } })).map((r) => [lg.rosters.find((x) => x.rosterId === r.id)!.name, r.faabRemaining]))
+      const bonuses = () => prisma.guillotineEventLog.count({ where: { leagueId: lg.leagueId, eventType: 'faab_bonus' } })
+      // Every survivor reset to 100, then Axes (week 1's top score, 300 yards) gets $20 on top: the reset did not wipe it.
+      expect(await faab()).toEqual({ Axes: 120, Blades: 90, Cleavers: 100, Daggers: 100 })
+      expect(await bonuses()).toBe(1)
+      // A second score-sync pass over the same chopped week pays nothing more.
+      await sync(lg, 2, afterWeek(1))
+      expect(await faab()).toEqual({ Axes: 120, Blades: 90, Cleavers: 100, Daggers: 100 })
+      expect(await bonuses()).toBe(1)
+      // Undo: the bonus first, then the reset; everyone is back to 90.
+      expect(await undoLatestChop({ leagueId: lg.leagueId, userId: owner(lg), week: 1 })).toMatchObject({ ok: true })
+      expect(await faab()).toEqual({ Axes: 90, Blades: 90, Cleavers: 90, Daggers: 90 })
+      expect(await bonuses()).toBe(0)
+    })
+
+    it('"chop this team instead" pays the bonus again for the re-chop', async () => {
+      const lg = await league(TEAMS, { settings: { guillotine_advanced: { steps: [], overrides: {}, immunity: 'off', faab: { mode: 'unchanged', amount: 0 }, topScorerBonus: 20 } } })
+      for (const r of lg.rosters) await prisma.roster.update({ where: { id: r.rosterId }, data: { faabRemaining: 90 } })
+      await sync(lg, 2, afterWeek(1))
+      expect(await undoLatestChop({ leagueId: lg.leagueId, userId: owner(lg), week: 1, chopInstead: [lg.byName('Daggers').rosterId] })).toMatchObject({ ok: true })
+      const faab = Object.fromEntries((await prisma.roster.findMany({ where: { leagueId: lg.leagueId }, select: { id: true, faabRemaining: true } })).map((r) => [lg.rosters.find((x) => x.rosterId === r.id)!.name, r.faabRemaining]))
+      expect(faab).toEqual({ Axes: 110, Blades: 90, Cleavers: 90, Daggers: 90 })
+      expect(await prisma.guillotineEventLog.count({ where: { leagueId: lg.leagueId, eventType: 'faab_bonus' } })).toBe(1)
+    })
+
+    it('a "when 4 teams remain, chop 2" rule chops two from a four-team field (owner, 2026-11-25)', async () => {
+      const lg = await league(TEAMS, { settings: { guillotine_advanced: { steps: [], overrides: {}, immunity: 'off', faab: { mode: 'unchanged', amount: 0 }, remaining: [{ teamsLeft: 4, chops: 2 }] } } })
+      await sync(lg, 2, afterWeek(1))
+      // Week 1: Blades 150 and Daggers 200 are the two lowest.
+      expect((await state(lg)).choppedByWeek).toEqual({ Blades: 1, Daggers: 1 })
+    })
+
     it('refuses once a waiver run has processed claims since the chop, and changes nothing', async () => {
       const lg = await league()
       await sync(lg, 2, afterWeek(1))
