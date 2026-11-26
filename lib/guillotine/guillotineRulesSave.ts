@@ -139,7 +139,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
   }
 
   /*
-   * Two-week periods (./eliminationPeriods.ts): MLB only, and fixed once a chop has happened — the
+   * Two-week periods (./eliminationPeriods.ts): every sport, and fixed once a chop has happened — the
    * periods are paired from the first chop week, so switching mid-season would re-pair weeks already scored.
    */
   if (patch.periodWeeks !== undefined && patch.periodWeeks !== current.rules.periodWeeks) {
@@ -147,7 +147,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       return { ok: false, status: 409, error: 'The first chop has happened, so the elimination period is fixed for this season.', field: 'periodWeeks' }
     }
     if (patch.periodWeeks === 2 && !current.periodWeeksAvailable) {
-      return { ok: false, status: 400, error: 'Two-week elimination periods are for MLB leagues.', field: 'periodWeeks' }
+      return { ok: false, status: 400, error: 'Two-week elimination periods are not available for this league.', field: 'periodWeeks' }
     }
   }
 

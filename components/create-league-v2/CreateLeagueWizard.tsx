@@ -1336,8 +1336,8 @@ export function LeagueBasicsStep({
       </label>
       ) : null}
 
-      {/* MLB Guilly only: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). */}
-      {getEffectiveLeagueType(state) === 'guillotine' && state.sport === 'MLB' ? (
+      {/* Guilly, every sport: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). */}
+      {getEffectiveLeagueType(state) === 'guillotine' ? (
       <label
         className={cx(
           'flex min-h-12 cursor-pointer touch-manipulation items-start gap-3 rounded-xl border px-4 py-3 text-sm transition',

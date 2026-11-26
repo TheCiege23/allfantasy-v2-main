@@ -371,7 +371,7 @@ export function GuillotineRulesPage({
           </select>
         </Field>
 
-        {/* MLB only (lib/guillotine/eliminationPeriods.ts): two weeks' scores added, one chop per pair. */}
+        {/* Every sport (lib/guillotine/eliminationPeriods.ts): two weeks' scores added, one chop per pair. */}
         {view.periodWeeksAvailable === true && (
           <Field
             label="Elimination period"

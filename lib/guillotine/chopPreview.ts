@@ -14,6 +14,7 @@
  */
 import { applyImmunity, immuneRosterIds, scheduledChops, type GuillotineAdvanced } from './chopSchedule'
 import { resolveTiebreak, type DraftSlotByRoster } from './GuillotineTiebreakResolver'
+import { draftSlotTiebreakLastWeek } from './eliminationPeriods'
 import { DEFAULT_FAAB_ON_CHOP_PERCENT, distributeChoppedFaab, faabTakenFromChopped, movesChoppedFaab, type FaabOnChop } from './faabOnChop'
 import { chopAnnouncementText } from './chopAnnouncement'
 import { RELEASE_OPTIONS, tiebreakLabel, type GuillotineRules } from './guillotineRules'
@@ -153,6 +154,7 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
     teamsPerChop: chopCount,
     weekOrPeriod: input.week,
     draftSlotByRoster: input.draftSlotByRoster,
+    draftSlotLastWeek: draftSlotTiebreakLastWeek(input.eliminationStartWeek, input.periodWeeks ?? 1),
     tiebreakSeed: input.tiebreakSeed,
   })
   const chopped = new Set(choppedRosterIds)

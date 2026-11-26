@@ -63,8 +63,8 @@ export type GuillotineRules = {
    */
   bestBall: boolean
   /**
-   * Weeks per elimination period: 1, or 2 for MLB (both weeks' scores added, one chop at the end of the
-   * pair). Stored as League.settings.guillotine_period_weeks (./eliminationPeriods.ts); fixed once the
+   * Weeks per elimination period: 1, or 2 (both weeks' scores added, one chop at the end of the pair), in
+   * every sport. Stored as League.settings.guillotine_period_weeks (./eliminationPeriods.ts); fixed once the
    * first chop has happened.
    */
   periodWeeks: 1 | 2
@@ -120,6 +120,7 @@ const TIEBREAK_OPTIONS: ReadonlyArray<{ value: TiebreakStep; label: string }> = 
  */
 export function tiebreakLabel(step: string, periodWeeks?: number): string {
   if (step === 'previous_period' && (periodWeeks ?? 1) > 1) return 'Lower score last period is chopped'
+  if (step === 'draft_slot' && (periodWeeks ?? 1) > 1) return 'Later draft slot is chopped (first period only)'
   return TIEBREAK_OPTIONS.find((o) => o.value === step)?.label ?? step
 }
 

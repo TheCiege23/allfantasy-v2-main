@@ -26,7 +26,7 @@ import type { GuillotineChopResult, PeriodScoreRow } from './types'
 import { applyImmunity, immuneRosterIds, readAdvanced, scheduledChops } from './chopSchedule'
 import { applyTopScorerBonus } from './faabBonus'
 import { effectiveReleaseTiming, readFreeAgencyFromWeek } from './freeAgencyFromWeek'
-import { previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
+import { draftSlotTiebreakLastWeek, previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
 import { describeFaabPayout, movesChoppedFaab, readFaabOnChop, readFaabOnChopPercent } from './faabOnChop'
 import { redistributeChoppedFaab } from './faabOnChopApply'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
@@ -252,6 +252,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     teamsPerChop: chopCount,
     weekOrPeriod: input.weekOrPeriod,
     draftSlotByRoster,
+    draftSlotLastWeek: draftSlotTiebreakLastWeek(config.eliminationStartWeek, readPeriodWeeks(endgameLeague?.settings)),
     commissionerChoppedRosterIds: input.commissionerChoppedRosterIds?.length
       ? input.commissionerChoppedRosterIds
       : undefined,

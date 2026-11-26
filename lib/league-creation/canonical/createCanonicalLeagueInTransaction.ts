@@ -555,7 +555,7 @@ export async function createCanonicalLeagueInTransaction(
   // Best ball Guilly: lineups set themselves (lib/guillotine/guillotineBestBall.ts). The settings flag,
   // never `bestBallMode`, which would make this a Best Ball league everywhere.
   if (isGuillotine && body.conceptSetup?.guillotineBestBall === true) mergedSettings[GUILLOTINE_BEST_BALL_KEY] = true
-  // MLB Guilly: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). Anything else is
+  // Guilly: two-week elimination periods (lib/guillotine/eliminationPeriods.ts), any sport. Anything else is
   // refused by validateCreateLeague; the default (no key) is one week.
   if (isGuillotine && supportsTwoWeekPeriods(sport) && body.conceptSetup?.guillotinePeriodWeeks === 2) mergedSettings[PERIOD_WEEKS_KEY] = 2
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
