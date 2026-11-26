@@ -104,6 +104,7 @@ import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineC
 import type { PickTradeDeadlineView } from '@/lib/trade-deadline/pickTradeDeadline'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { initialsFor } from '@/lib/draft-room/classify-avatar-source'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { DynastyPickCapitalPanel, pickDealKey } from './DynastyPickCapitalPanel'
@@ -617,7 +618,7 @@ function AllLeaguesTradeHub(props: {
           <div className="af-tc-value-action-list">
             {props.valueActions.slice(0, 6).map((player) => (
               <article key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
-                {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{initialsFor(player.name)}</span>} /> : <span className="af-tc-glyph">{initialsFor(player.name)}</span>}
                 <div>
                   <strong>{player.name}</strong>
                   <span>{player.position ?? copy('Player')}{copy(" · ")}{copy(player.stock === 'up' ? 'up' : 'down')} {money(Math.abs(player.stockDelta ?? 0))} {copy('over 30 days')}</span>
@@ -3271,7 +3272,7 @@ export function TradeCenter(props: {
             <div className="af-tc-value-action-list">
               {valueActions.map((player) => (
                 <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
-                  {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                  {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{initialsFor(player.name)}</span>} /> : <span className="af-tc-glyph">{initialsFor(player.name)}</span>}
                   <div>
                     <strong>{player.name}</strong>
                     <span>{player.position ?? 'Player'}{copy(" · ")}{player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`}{copy(" over 30 days")}</span>

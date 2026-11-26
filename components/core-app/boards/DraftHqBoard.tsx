@@ -179,6 +179,7 @@ function LiveDetail({ row, picks, m }: { row: DraftHqAllRow; picks: LiveDraftPic
                 imageUrl={p.imageUrl}
                 name={p.playerName ?? m.unnamedPick}
                 teamLogoUrl={teamLogoUrl(p.sport ?? 'NFL', p.team)}
+                team={p.team}
                 size="sm"
               />
               <span className="af-bd-asset-name">

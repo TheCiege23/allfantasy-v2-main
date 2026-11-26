@@ -35,7 +35,7 @@ import { PLAYERS_TABS, leagueScopeRows, rosteredByLabel, tabUsesLeagueScope, typ
 import { ProposeTradeModal } from '@/app/league/[leagueId]/tabs/ProposeTradeModal'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
-import { Card, InjuryFlag, PlayerNameButton, PosPill, ScreenHead, Segmented, useNativePlayerCard } from './NativeScreenParts'
+import { Card, InjuryFlag, PlayerAvatar, PlayerNameButton, PosPill, ScreenHead, Segmented, useNativePlayerCard } from './NativeScreenParts'
 import { claimStatusLabel, faabMeter, waiverClaimTypeLabel } from '@/lib/league-media/redraftScreens'
 import { RedraftScreen, RedraftWaiverHeader, useRedraftScreen } from './RedraftScreenParts'
 
@@ -268,6 +268,17 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     },
     [players, roster.names],
   )
+  // A claimed / added player's face and club for the claims and last-run lists, from the same adapter as the wire rows.
+  const mediaOf = useCallback(
+    (pid: string | null) => {
+      const p = pid ? players.find((x) => x.id === pid) : undefined
+      if (!p) return null
+      const a = adaptWaiverWirePlayer(p)
+      return { headshotUrl: a.displayHeadshotUrl ?? null, teamLogoUrl: a.displayTeamLogoUrl ?? null, team: p.team ?? null }
+    },
+    [players],
+  )
+  const waiverSport = settings?.sport ?? league.sport
 
   const list = useMemo(() => {
     if (tabUsesLeagueScope(tab)) {
@@ -631,6 +642,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                   return (
                     <li key={c.id} className="nls-claim">
                       <span className="nls-claim-order">{i + 1}</span>
+                      <div className="nls-pl nls-claim-who">
+                      <PlayerAvatar name={addName} headshotUrl={mediaOf(c.addPlayerId)?.headshotUrl} teamLogoUrl={mediaOf(c.addPlayerId)?.teamLogoUrl} team={mediaOf(c.addPlayerId)?.team} sport={waiverSport} />
                       <div>
                         <strong>Add {addName}</strong>
                         <small>{dropName ? `Drop ${dropName}` : c.dropPlayerId ? 'Drop a rostered player' : 'No drop'}</small>
@@ -640,6 +653,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                             {tInterpolate('waiverClaim.processesAfter', { date: claimProcessesAfterDate(holdUntil, language) })}
                           </small>
                         ) : null}
+                      </div>
                       </div>
                       <button type="button" className="nls-iconbtn" aria-label={`Cancel claim for ${addName}`} onClick={() => void cancelClaim(c.id)}>
                         <X size={16} aria-hidden />
@@ -678,7 +692,11 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
             <Card label={`Last waiver run${history[0]?.processedAt ? ` · ${DAYS[new Date(history[0].processedAt).getDay()]}` : ''}`}>
               <ul className="nls-feed">
                 {mine.map((t) => (
-                  <li key={t.id}>You added <b>{nameOf(t.addPlayerId) ?? 'a player'}</b>{t.faabSpent != null ? ` · $${t.faabSpent}` : ''}</li>
+                  <li key={t.id} className="nls-pl nls-feed-player">
+                    {/* An unnamed add (a player no longer in either list) would draw an empty circle: leave it text. */}
+                    {nameOf(t.addPlayerId) ? <PlayerAvatar name={nameOf(t.addPlayerId)} headshotUrl={mediaOf(t.addPlayerId)?.headshotUrl} teamLogoUrl={mediaOf(t.addPlayerId)?.teamLogoUrl} team={mediaOf(t.addPlayerId)?.team} sport={waiverSport} /> : null}
+                    <span>You added <b>{nameOf(t.addPlayerId) ?? 'a player'}</b>{t.faabSpent != null ? ` · $${t.faabSpent}` : ''}</span>
+                  </li>
                 ))}
                 {lastRunOthers ? <li>{lastRunOthers} {lastRunOthers === 1 ? 'move' : 'moves'} by other managers</li> : null}
               </ul>
@@ -690,7 +708,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       <WaiverClaimDrawer
         open={drawer != null}
         onClose={() => setDrawer(null)}
-        player={drawer ? { id: drawer.player.id, name: drawer.player.name, position: drawer.player.position, team: drawer.player.team } : null}
+        player={drawer ? { id: drawer.player.id, name: drawer.player.name, position: drawer.player.position, team: drawer.player.team, headshotUrl: mediaOf(drawer.player.id)?.headshotUrl ?? null, teamLogoUrl: mediaOf(drawer.player.id)?.teamLogoUrl ?? null } : null}
         faabMode={drawer?.immediate ? false : faabMode}
         faabRemaining={roster.faab}
         hasOpenRosterSpot={drawer?.immediate ? false : roster.capacity == null || roster.ids.length < roster.capacity}

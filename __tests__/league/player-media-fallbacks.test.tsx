@@ -26,6 +26,9 @@ vi.mock('@/components/app/draft-room/LazyDraftImage', () => ({
 
 import { PlayerAvatar as LeagueAvatar } from '@/components/league/native/screens/NativeScreenParts'
 import { PlayerAvatar as DraftAvatar } from '@/components/app/draft-room/PlayerAvatar'
+import { PlayerFace, clubAbbr } from '@/components/core-app/boards/PlayerFace'
+import { MatchupStarterRow } from '@/components/matchup-center/MatchupStarterRow'
+import WaiverClaimDrawer from '@/components/waiver-wire/WaiverClaimDrawer'
 
 describe('league-screen PlayerAvatar', () => {
   it('draws the headshot and the passed crest', () => {
@@ -83,5 +86,61 @@ describe('draft-room PlayerAvatar team badge', () => {
     fireEvent.error(logo)
     expect(screen.queryByTestId('player-avatar-team-logo')).toBeNull()
     expect(screen.getByText('NYY')).toBeTruthy()
+  })
+})
+
+describe('/core boards PlayerFace crest corner', () => {
+  it('shows the abbreviation when there is no crest, and when the crest fails to load', () => {
+    const { container, rerender } = render(<PlayerFace name="Saquon Barkley" teamLogoUrl={null} team="PHI" />)
+    expect(container.querySelector('.af-crest-abbr')?.textContent).toBe('PHI')
+    rerender(<PlayerFace name="Saquon Barkley" teamLogoUrl="https://x/phi.png" team="PHI" />)
+    const crest = container.querySelector('img.af-bd-club')!
+    expect(container.querySelector('.af-crest-abbr')).toBeNull()
+    fireEvent.error(crest)
+    expect(container.querySelector('.af-crest-abbr')?.textContent).toBe('PHI')
+  })
+
+  it('a free agent has no club, so no corner', () => {
+    const { container } = render(<PlayerFace name="Free Guy" team="FA" />)
+    expect(container.querySelector('.af-crest-abbr')).toBeNull()
+    expect(clubAbbr('Free Agent')).toBeNull()
+    expect(clubAbbr('nyy')).toBe('NYY')
+  })
+})
+
+describe('classic matchup row (embedded imports)', () => {
+  const slot = (name: string, team: string | null) =>
+    ({ playerId: name, name, position: 'C', team, opponent: 'BOS', headshotUrl: null, currentPoints: 1, projectedPoints: 2, gameStatus: 'upcoming', gameLabel: 'Tue 7:00 PM' }) as never
+
+  it('draws the crest on each photo for the league sport, with initials for a missing photo', () => {
+    render(<MatchupStarterRow position="C" sport="NHL" left={slot('Connor McDavid', 'EDM')} right={slot('Nathan MacKinnon', 'COL')} />)
+    expect(screen.getAllByTestId('matchup-row-team-logo')).toHaveLength(2)
+    expect(screen.getByText('CM')).toBeTruthy()
+    expect(screen.getByText('NM')).toBeTruthy()
+  })
+
+  it('a player with no club gets no crest', () => {
+    render(<MatchupStarterRow position="C" left={slot('Free Guy', 'FA')} right={null} />)
+    expect(screen.queryByTestId('matchup-row-team-logo')).toBeNull()
+  })
+})
+
+describe('waiver claim drawer header', () => {
+  it('shows the player with initials and the team abbreviation when no images are passed', () => {
+    render(
+      <WaiverClaimDrawer
+        open
+        onClose={() => {}}
+        player={{ id: 'p1', name: 'Aaron Judge', position: 'OF', team: 'NYY' }}
+        faabMode={false}
+        faabRemaining={null}
+        hasOpenRosterSpot
+        rosterPlayerIds={[]}
+        rosterPlayers={[]}
+        onSubmit={async () => {}}
+      />,
+    )
+    expect(screen.getByTestId('waiver-claim-avatar-initials').textContent).toBe('AJ')
+    expect(screen.getAllByText('NYY').length).toBeGreaterThan(0)
   })
 })

@@ -18,6 +18,8 @@ import Link from 'next/link'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { clubAbbr } from '@/components/core-app/boards/PlayerFace'
+import { initialsFor } from '@/lib/draft-room/classify-avatar-source'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -452,7 +454,7 @@ function PlayerHalf({
           <img className="af-mu-face" src={imageUrl} alt="" width={34} height={34} loading="lazy" onError={() => setFailedImageUrl(imageUrl)} />
         ) : (
           <span className="af-mu-face af-mu-face--none" aria-hidden>
-            {(cell.name ?? '?').charAt(0).toUpperCase()}
+            {initialsFor(cell.name)}
           </span>
         )}
         {/*
@@ -463,6 +465,8 @@ function PlayerHalf({
         {crest && crest !== failedLogoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img className="af-mu-club" src={crest} alt="" width={15} height={15} loading="lazy" onError={() => setFailedLogoUrl(crest)} />
+        ) : clubAbbr(cell.team) ? (
+          <span className="af-mu-club af-crest-abbr" aria-hidden>{clubAbbr(cell.team)}</span>
         ) : null}
       </span>
       <div className="af-mu-half-text">

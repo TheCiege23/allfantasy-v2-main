@@ -5,10 +5,13 @@ import { Sparkles } from 'lucide-react'
 import type { MatchupPlayerSlot } from '@/lib/matchup-center/types'
 import { AfInjuryTag } from '@/components/league/AfInjuryTag'
 import { POSITION_COLORS } from '@/lib/league-labels/catalog'
+import { TeamLogo } from '@/app/components/TeamLogo'
+import { isNoTeam } from '@/lib/players/teamLogos'
+import { initialsFor } from '@/lib/draft-room/classify-avatar-source'
 
 const MUTED = { color: 'var(--lsk-muted, rgba(255,255,255,.6))' }
 
-function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 'right' }) {
+function PlayerCell({ side, align, sport }: { side: MatchupPlayerSlot; align: 'left' | 'right'; sport: string }) {
   const prevPointsRef = useRef(side.currentPoints)
   const [delta, setDelta] = useState<number | null>(null)
   const [failedHeadshot, setFailedHeadshot] = useState<string | null>(null)
@@ -26,7 +29,8 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
   const rev = align === 'right'
   return (
     <div className={`flex min-w-0 flex-1 items-center gap-2.5 ${rev ? 'flex-row-reverse text-right' : ''}`}>
-      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/[0.06]">
+      <div className="relative h-12 w-12 shrink-0">
+      <div className="h-12 w-12 overflow-hidden rounded-full border border-white/10 bg-white/[0.06]">
         {side.headshotUrl && side.headshotUrl !== failedHeadshot ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -37,9 +41,16 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[12px] font-bold text-white/45">
-            {side.name.slice(0, 2).toUpperCase()}
+            {initialsFor(side.name)}
           </div>
         )}
+      </div>
+      {/* The club crest on the photo's corner; the shared TeamLogo shows the team's initials when no crest loads. */}
+      {side.team && !isNoTeam(side.team) ? (
+        <span className={`absolute -bottom-1 ${rev ? '-left-1' : '-right-1'} rounded-full ring-2 ring-[#0b1020]`} data-testid="matchup-row-team-logo">
+          <TeamLogo teamAbbr={side.team} sport={sport} size={20} />
+        </span>
+      ) : null}
       </div>
       <div className="min-w-0 flex-1">
         <div className={`flex items-center gap-1.5 text-[15px] font-bold ${rev ? 'flex-row-reverse' : ''}`} style={{ color: 'var(--lsk-text, #fff)' }}>
@@ -101,8 +112,11 @@ export function MatchupStarterRow({
   left,
   right,
   onStartSit,
+  sport = 'NFL',
 }: {
   position: string
+  /** The league's sport, for the crest on each player's photo. */
+  sport?: string
   left: MatchupPlayerSlot | null
   right: MatchupPlayerSlot | null
   /** Opens AI start/sit for this positional pairing when both sides exist. */
@@ -111,7 +125,7 @@ export function MatchupStarterRow({
   const chip = POSITION_COLORS[position.toUpperCase()]
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b py-3" style={{ borderColor: 'var(--lsk-line, rgba(255,255,255,.06))' }}>
-      {left ? <PlayerCell side={left} align="left" /> : <div className="opacity-40" />}
+      {left ? <PlayerCell side={left} align="left" sport={sport} /> : <div className="opacity-40" />}
       <div className="flex flex-col items-center gap-1 px-1">
         <span
           className="min-w-[2.75rem] rounded-md px-2 py-1 text-center text-[12px] font-extrabold"
@@ -130,7 +144,7 @@ export function MatchupStarterRow({
           </button>
         ) : null}
       </div>
-      {right ? <PlayerCell side={right} align="right" /> : <div className="opacity-40" />}
+      {right ? <PlayerCell side={right} align="right" sport={sport} /> : <div className="opacity-40" />}
     </div>
   )
 }

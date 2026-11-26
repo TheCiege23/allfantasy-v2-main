@@ -155,8 +155,11 @@ describe('My Team — the reported problems', () => {
     fireEvent.error(portrait.querySelector('img.af-mt-teamlogo')!)
     expect(portrait.querySelector('img.af-mt-teamlogo')?.getAttribute('src')).toContain('/den.png')
     fireEvent.error(portrait.querySelector('img.af-mt-teamlogo')!)
-    expect(portrait.querySelector('.af-mt-avatar--none')?.textContent).toBe('B')
+    // Two-letter initials (2026-11-26), the same mark every other player surface draws.
+    expect(portrait.querySelector('.af-mt-avatar--none')?.textContent).toBe('BN')
     expect(portrait.querySelector('img.af-mt-teamlogo')).toBeNull()
+    // With every crest image refused, the club still reads: its abbreviation in the same corner.
+    expect(portrait.querySelector('.af-crest-abbr')?.textContent).toBe('DEN')
   })
   it.each([{ eliminated: true }, { completed: true }])('does not offer lineup fixes for an inactive team: %j', (status) => {
     const t = text(<MyTeam data={data(status)} />)
