@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { useDialogKeyboardViewport } from '@/components/shared/useDialogKeyboardViewport'
 import { SUPPORT_WIDGET_TOOL } from '@/lib/support/support-widget'
+import { DISCORD_SUPPORT_INVITE_URL } from '@/lib/support/discordSupportCore'
 import '@/components/core-app/af-support.css'
 
 /**
@@ -416,6 +417,14 @@ export function SupportModal({
                 Cancel
               </button>
             </div>
+
+            <p className="af-sp-note" data-testid="support-discord-link">
+              Prefer Discord?{' '}
+              <a href={DISCORD_SUPPORT_INVITE_URL} target="_blank" rel="noopener noreferrer">
+                Ask in #support
+              </a>
+              . The channel is public, so keep account and billing questions in this form.
+            </p>
           </form>
         )}
       </div>
