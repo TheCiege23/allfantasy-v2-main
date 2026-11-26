@@ -177,8 +177,8 @@ export async function runAutopilotLeagueTradeAnswers(opts?: { now?: Date; deadli
       const multiTeam = participants.length > 2
 
       const verdict = await decide({ ctx, leagueId: trade.leagueId, trade, chimmyId, profile, multiTeam })
-      // No counter in a devy or C2C league: the screen grades a whole deal, so there is no per-player price to ask with.
-      const counter = verdict.code === 'not_enough' && !multiTeam && !ctx.devyFormat && !ctx.teams.has(trade.proposerRosterId)
+      // No counter on a deal answered on the screen's grade: it grades the whole deal, so there is no per-player price to ask with.
+      const counter = verdict.code === 'not_enough' && !multiTeam && !answersOnLeagueGrade(ctx, trade.items) && !ctx.teams.has(trade.proposerRosterId)
         ? await sendCounter({ ctx, leagueId: trade.leagueId, trade, chimmyId, actorUserId: team.actorUserId, profile, now }).catch((e) => {
             console.warn('[chimmy-autopilot] league counter-offer skipped', { tradeId: trade.id, error: String(e) })
             return null
@@ -218,13 +218,26 @@ export async function runAutopilotLeagueTradeAnswers(opts?: { now?: Date; deadli
 
 const reject = (code: TradeAnswer['code'], reason: string): TradeAnswer => ({ decision: 'reject', code, reason, give: 0, get: 0 })
 
+/**
+ * Deals Chimmy answers on the trade screen's own grade (./chimmyGradeDecision.ts) rather than its own
+ * per-player price: every deal in a devy or C2C league, and every deal carrying a DRAFT PICK.
+ *
+ * Picks follow one rule, the screen's: priced where the league has a next season to use them in (a
+ * dynasty league — the points grade's rookie curve, or the NFL pick market), refused in a redraft
+ * league. Chimmy used to price them on its own generic pick curve, so it could take a pick the screen
+ * says has no price, and value an NFL dynasty pick off the market.
+ */
+export function answersOnLeagueGrade(ctx: Pick<LeagueCtx, 'devyFormat'>, items: ReadonlyArray<{ itemType: string }>): boolean {
+  return ctx.devyFormat || items.some((i) => /pick/i.test(i.itemType))
+}
+
 async function decide(args: { ctx: LeagueCtx; leagueId: string; trade: { proposerRosterId: string; items: Item[] }; chimmyId: string; profile: ManagerProfile; multiTeam: boolean }): Promise<TradeAnswer> {
   const { ctx, trade, chimmyId, profile } = args
   if (args.multiTeam) return reject('multi_team', 'Chimmy only does two-team trades.')
   const mine = ctx.rosters.get(chimmyId)
   const theirs = ctx.rosters.get(trade.proposerRosterId)
   if (mine?.eliminated || theirs?.eliminated) return reject('eliminated', 'One of these teams is out of the league, so Chimmy passed.')
-  if (ctx.devyFormat) {
+  if (answersOnLeagueGrade(ctx, trade.items)) {
     // Loaded only here: the trade screen's grader pulls in the whole trade evaluation engine.
     const { proposalOneGrade } = await import('@/lib/league-trade-engine/serverTradeDecision')
     const grade = await proposalOneGrade({

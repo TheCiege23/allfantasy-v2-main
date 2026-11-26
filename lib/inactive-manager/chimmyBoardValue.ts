@@ -18,8 +18,9 @@
  *                getting him counts as nothing.
  *
  * In a dynasty league the value is the grade's five-season value, and a draft pick is priced on the same
- * points-based rookie curve the grade uses. Outside a dynasty league there is no pick price on this board
- * yet, so a deal with a pick (or FAAB) is left to the older pricing — never two units in one deal.
+ * points-based rookie curve the grade uses. Outside a dynasty league the screen refuses a pick (a redraft
+ * league has no next season to use it in), and this returns a blocked snapshot so Chimmy declines too.
+ * A deal with FAAB is left to the older pricing — never two units in one deal.
  *
  * Pure: the loader in ./chimmyBoardPricing.ts reads the board and the registry.
  */
@@ -132,7 +133,9 @@ export function priceDealOnBoard(args: {
   for (const a of args.assets) {
     let p: PricedBoardAsset
     if (a.assetType === 'draft_pick') {
-      if (!dynasty || a.pickSeason == null || a.pickRound == null || !isDynastyGradedSport(ctx.sport)) return null
+      // Outside a dynasty league the screen refuses a pick (no next season to use it in): so does Chimmy.
+      if (!dynasty || !isDynastyGradedSport(ctx.sport)) return blockedSnapshot()
+      if (a.pickSeason == null || a.pickRound == null) return null
       pool ??= youngPlayerPool({ ...ctx, sport: ctx.sport }, dynasty)
       const pick = pickDynastyValue({ sport: ctx.sport, pick: { kind: 'pick', year: a.pickSeason, round: a.pickRound }, pool, teams: ctx.teams, nextDraftYear: dynasty.nextDraftYear })
       if (!pick.ok) return null
@@ -166,6 +169,11 @@ export function priceDealOnBoard(args: {
     coverage: { status: 'complete', items: [] },
     source: `${ctx.sport.toLowerCase()}-board`,
   } as unknown as TradeValueSnapshot
+}
+
+/** A deal the screen will not grade: Chimmy's decision reads `blocked` as "cannot value", and declines. */
+function blockedSnapshot(): TradeValueSnapshot {
+  return { sides: [], grade: null, coverage: { status: 'blocked', items: [] } } as unknown as TradeValueSnapshot
 }
 
 /** One player on the board, by his roster id or the registry's alias for it. */
