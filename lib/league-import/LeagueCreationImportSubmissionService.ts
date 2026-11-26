@@ -323,6 +323,8 @@ export async function submitImportCreation(
     yahooLeagueRunBy?: 'member' | 'me'
     /** Edits from the "Review your import" screen, applied server-side to the fresh fetch. */
     reviewOverrides?: ImportReviewOverrides | null
+    /** The league type picked on the confirm screen; omitted means keep what was detected. */
+    leagueType?: string | null
   }
 ): Promise<SubmitImportResult> {
   // A pasted Yahoo league (yahoo-snapshot:<id>) is allowed through; the server decides who may use it.
@@ -348,6 +350,7 @@ export async function submitImportCreation(
         ...(provider === 'espn' && options?.espnLeagueRunBy ? { espnLeagueRunBy: options.espnLeagueRunBy } : {}),
         ...(provider === 'yahoo' && options?.yahooLeagueRunBy ? { yahooLeagueRunBy: options.yahooLeagueRunBy } : {}),
         ...(options?.reviewOverrides ? { reviewOverrides: options.reviewOverrides } : {}),
+        ...(options?.leagueType ? { leagueType: options.leagueType } : {}),
       }),
     });
     const data = await readImportResponseBody(res);
