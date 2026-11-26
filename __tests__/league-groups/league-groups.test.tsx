@@ -6,7 +6,9 @@ import {
   applyLeagueGroup,
   groupLeagues,
   planLeagueGroupPatch,
+  platformLabel,
   readLeagueGroup,
+  withExistingSpelling,
   type GroupableLeague,
 } from '@/lib/league-groups/leagueGroups'
 import { LeagueGroupForm } from '@/components/league-groups/LeagueGroupPanel'
@@ -63,6 +65,22 @@ describe('planLeagueGroupPatch', () => {
     expect(planLeagueGroupPatch({}, 'comm')).toMatchObject({ ok: false, status: 400 })
     expect(planLeagueGroupPatch({ name: 7 }, 'comm')).toMatchObject({ ok: false })
     expect(planLeagueGroupPatch({ name: 'x'.repeat(41) }, 'comm')).toMatchObject({ ok: false })
+  })
+})
+
+describe('withExistingSpelling', () => {
+  it('a name matching an existing group keeps that group\'s spelling; a new name is kept as typed', () => {
+    const typed = { name: 'af groups test', setBy: 'comm' }
+    expect(withExistingSpelling(typed, ['AF Groups  Test', 'Other'])).toEqual({ name: 'AF Groups Test', setBy: 'comm' })
+    expect(withExistingSpelling(typed, ['Other'])).toEqual(typed)
+    expect(withExistingSpelling(null, ['Other'])).toBeNull()
+  })
+})
+
+describe('platformLabel', () => {
+  it('every native platform spelling reads AllFantasy', () => {
+    for (const p of ['manual', 'MANUAL', 'allfantasy', 'native', '']) expect(platformLabel(p)).toBe('AllFantasy')
+    expect(platformLabel('fantrax')).toBe('Fantrax')
   })
 })
 

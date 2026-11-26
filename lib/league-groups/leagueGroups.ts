@@ -59,6 +59,19 @@ export function planLeagueGroupPatch(body: unknown, userId: string): LeagueGroup
   return { ok: true, value: { name, setBy: userId } }
 }
 
+/**
+ * A name that matches one of this commissioner's existing groups, ignoring case and spacing, is saved
+ * with the existing spelling. Without this, typing "road to glory" on the second league stored a second
+ * spelling of one group, and the group's heading showed whichever row the database returned first —
+ * seen live on 2026-11-26.
+ */
+export function withExistingSpelling(value: LeagueGroupTag | null, existingNames: string[]): LeagueGroupTag | null {
+  if (!value) return null
+  const want = value.name.toLowerCase()
+  const match = existingNames.find((n) => cleanGroupName(n).toLowerCase() === want)
+  return match ? { ...value, name: cleanGroupName(match) } : value
+}
+
 /** The settings object to write: the group set, or the key removed when the league leaves its group. */
 export function applyLeagueGroup(settings: unknown, value: LeagueGroupTag | null): Record<string, unknown> {
   const next = { ...asRecord(settings) }
@@ -100,7 +113,9 @@ const PLATFORM_LABEL: Record<string, string> = { sleeper: 'Sleeper', fantrax: 'F
 
 export function platformLabel(p: string): string {
   const k = String(p ?? '').trim().toLowerCase()
-  if (!k || k === 'native' || k === 'allfantasy' || k === 'af') return 'AllFantasy'
+  // A league made on AF is stored as 'manual' as often as 'allfantasy' or 'native' (17 / 62 / 6 write
+  // sites, 2026-11-26). Missing 'manual' showed "Manual" on the live page.
+  if (!k || k === 'native' || k === 'allfantasy' || k === 'af' || k === 'manual') return 'AllFantasy'
   return PLATFORM_LABEL[k] ?? k.charAt(0).toUpperCase() + k.slice(1)
 }
 
