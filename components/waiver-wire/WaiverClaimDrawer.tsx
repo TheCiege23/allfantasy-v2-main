@@ -9,13 +9,15 @@ import {
   parseOptionalNumber,
 } from "@/lib/waiver-wire/WaiverClaimFlowController"
 import { useHoldUnsavedWork } from "@/lib/core-app/unsavedWork"
+import { PlayerAvatar } from "@/components/app/draft-room/PlayerAvatar"
 
 type RosterOption = { id: string; name?: string | null }
 
 type DrawerProps = {
   open: boolean
   onClose: () => void
-  player: { id: string; name: string; position: string | null; team: string | null } | null
+  /** `headshotUrl` / `teamLogoUrl` are optional: without them the header shows initials and the team abbreviation. */
+  player: { id: string; name: string; position: string | null; team: string | null; headshotUrl?: string | null; teamLogoUrl?: string | null } | null
   faabMode: boolean
   faabRemaining: number | null
   hasOpenRosterSpot?: boolean
@@ -98,12 +100,23 @@ export default function WaiverClaimDrawer({
       aria-label={immediate ? `Add ${player.name}` : `Waiver claim for ${player.name}`}
     >
       <div className="flex items-start justify-between gap-3 border-b border-[var(--line2)] p-4">
+        <div className="flex min-w-0 items-center gap-3">
+        <PlayerAvatar
+          headshotUrl={player.headshotUrl ?? null}
+          displayName={player.name}
+          teamLogoUrl={player.teamLogoUrl ?? null}
+          teamAbbr={player.team && player.team.toUpperCase() !== "FA" ? player.team : null}
+          position={player.position}
+          size={44}
+          testIdBase="waiver-claim-avatar"
+        />
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-[var(--muted)]">{immediate ? "Add player" : "Waiver claim"}</p>
           <h2 className="truncate text-base font-semibold text-[var(--text)]">Add {player.name}</h2>
           <p className="text-xs text-[var(--muted)]">
             {player.position} · {player.team || "FA"}
           </p>
+        </div>
         </div>
         <button
           type="button"

@@ -148,6 +148,7 @@ export function CommissionerCenter({
   header,
   redraft = null,
   exitTo = 'home',
+  footer = null,
 }: {
   leagueId?: string
   leagueName?: string | null
@@ -166,6 +167,8 @@ export function CommissionerCenter({
   header?: (openSection: (id: SettingsSubPageId) => void) => ReactNode
   /** Native redraft leagues only (lib/league-media/redraftSettings.ts); null renders the default layout. */
   redraft?: RedraftSettingsView | null
+  /** Drawn below everything else (the "Export league" card). */
+  footer?: ReactNode
 }) {
   const { t, tInterpolate } = useOptionalLanguage()
   const allowed = editableSubPages(sections)
@@ -303,6 +306,7 @@ export function CommissionerCenter({
           {managers.inviteUrl ? <CopyInvite url={managers.inviteUrl} /> : <p className="lsh-help">{t('lsh.cc.managers.noInvite')}</p>}
         </section>
       </div>
+      {footer}
     </div>
   )
 }

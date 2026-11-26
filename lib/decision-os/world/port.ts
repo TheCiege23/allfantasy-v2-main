@@ -1397,6 +1397,17 @@ export async function loadAfProjectionRows(
   ids: string[],
   season: number,
   week: number | null,
+  /**
+   * Which id space the caller's ids are in. `sleeper` (the default, and every caller before this
+   * existed) crosses through `PlayerIdentityMap.sleeperId`. `rolling_insights` is a NATIVE NBA /
+   * NCAAB / NHL league's roster: its ids are Rolling Insights numbers, and the registry rows they
+   * reach carry NO Sleeper id at all (measured 2026-11-26: 0 of 874), so the Sleeper crossing found
+   * nothing and every such player was unpriced.
+   *
+   * 🛑 NEVER BOTH. A Rolling Insights number is a valid Sleeper id for somebody else ("1232" is Deni
+   * Avdija in RI and Robert Covington in Sleeper), so the crossing follows the caller's one space.
+   */
+  idSpace: 'sleeper' | 'rolling_insights' = 'sleeper',
 ): Promise<RawAfProjectionRow[]> {
   const clean = Array.from(new Set(ids.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
   if (clean.length === 0) return []
@@ -1422,14 +1433,20 @@ export async function loadAfProjectionRows(
    */
   const registryRows = await prisma.playerIdentityMap
     .findMany({
-      where: { sleeperId: { in: clean } },
-      select: { id: true, sleeperId: true },
+      // Rolling Insights numbers are per sport, so that crossing is scoped to the sport.
+      where: idSpace === 'rolling_insights'
+        ? { sport, rollingInsightsId: { in: clean } }
+        : { sleeperId: { in: clean } },
+      select: { id: true, sleeperId: true, rollingInsightsId: true },
     })
-    .catch(() => [] as Array<{ id: string; sleeperId: string | null }>)
+    .catch(() => [] as Array<{ id: string; sleeperId: string | null; rollingInsightsId: string | null }>)
 
   /** registry id -> the id the caller asked with, so rows come back in the caller's space. */
   const backToCaller = new Map<string, string>()
-  for (const r of registryRows) if (r.sleeperId) backToCaller.set(r.id, r.sleeperId)
+  for (const r of registryRows) {
+    const asked = idSpace === 'rolling_insights' ? r.rollingInsightsId : r.sleeperId
+    if (asked) backToCaller.set(r.id, asked)
+  }
 
   const lookupIds = Array.from(new Set([...clean, ...backToCaller.keys()]))
 

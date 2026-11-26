@@ -302,6 +302,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
                   position={row.pos}
                   left={row.left}
                   right={row.right}
+                  sport={sportU}
                   onStartSit={handleStartSit}
                 />
               ))

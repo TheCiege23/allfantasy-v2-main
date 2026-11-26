@@ -16,6 +16,7 @@ import { findScoringPresetRule } from '@/lib/league-creation-preset/scoring-pres
 import { leagueJoinUrl, nativeLeagueInviteCode } from '@/lib/league/league-invite-link'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { LeagueSettingsHome, type SettingsSubPageRender } from './LeagueSettingsHome'
+import { PlayerCsvDownload } from '@/components/league-export/PlayerCsvDownload'
 import { GuillotineRulesPage } from './GuillotineRulesPage'
 import { PirateRulesEditor } from './PirateRulesEditor'
 import type { PirateRules } from '@/lib/pirate/rules'
@@ -283,6 +284,7 @@ export function LeagueSettingsHomeContainer({
         onSubPageClosed={() => setReloadKey((k) => k + 1)}
         header={header}
         redraft={redraft}
+        footer={<PlayerCsvDownload leagueId={leagueId} />}
       />
     )
   }
@@ -299,6 +301,7 @@ export function LeagueSettingsHomeContainer({
       initialSubPage={ctx.isCommissioner ? initialSubPage : null}
       header={header}
       redraft={redraft}
+      footer={<PlayerCsvDownload leagueId={leagueId} />}
     />
   )
 }

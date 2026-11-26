@@ -6,6 +6,7 @@ import { matchupTone, type OpponentRank, type RosterGameWeather } from '@/lib/re
 import { redraftPositionTone } from '@/lib/league-media/redraftScreens'
 import { useRedraftScreenContext } from './RedraftScreenParts'
 import { usePlayerCard } from '@/components/core-app/player-card/PlayerCardProvider'
+import { teamLogoUrl as teamCrestUrl } from '@/lib/core-app/teamLogo'
 import './native-screens.css'
 
 /**
@@ -106,24 +107,53 @@ export function Card({ label, tone, flush, children, right, className }: { label
   )
 }
 
-/** Headshot with the club crest on its corner. Falls back to initials; a crest that fails to load hides itself. */
-export function PlayerAvatar({ name, headshotUrl, teamLogoUrl, empty }: { name?: string | null; headshotUrl?: string | null; teamLogoUrl?: string | null; empty?: boolean }) {
-  const [broken, setBroken] = useState(false)
+/**
+ * Headshot with the club crest on its corner, for every sport.
+ *
+ * Headshot falls back to initials. The crest is the passed `teamLogoUrl`, else the registry crest for
+ * `sport` + `team` (`lib/core-app/teamLogo` — a known club only, never a guess), else — and also when
+ * the crest image fails to load — the team's abbreviation in the same corner chip. So a row always
+ * carries its club: a missing image never leaves the corner blank while the team is known.
+ */
+export function PlayerAvatar({ name, headshotUrl, teamLogoUrl, team, sport, empty }: { name?: string | null; headshotUrl?: string | null; teamLogoUrl?: string | null; team?: string | null; sport?: string | null; empty?: boolean }) {
+  // The failed src is remembered, not a boolean, so a different player in the same slot gets a fresh try.
+  const [brokenHead, setBrokenHead] = useState<string | null>(null)
+  const [brokenCrest, setBrokenCrest] = useState<string | null>(null)
   const initials = (name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+  const teamCode = team?.trim() || null
+  const crest = teamLogoUrl?.trim() || registryCrest(sport, teamCode)
+  const head = headshotUrl?.trim() || null
   return (
-    <span className="nls-pavatar" aria-hidden data-empty={empty || undefined}>
-      {headshotUrl && !broken ? (
+    <span className="nls-pavatar" aria-hidden data-empty={empty || undefined} data-testid="nls-pavatar">
+      {head && head !== brokenHead ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={headshotUrl} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} />
+        <img src={head} alt="" loading="lazy" decoding="async" onError={() => setBrokenHead(head)} />
       ) : (
-        <span>{initials}</span>
+        <span data-testid="nls-pavatar-initials">{initials}</span>
       )}
-      {teamLogoUrl ? (
+      {crest && crest !== brokenCrest ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img className="nls-pavatar-crest" src={teamLogoUrl} alt="" loading="lazy" decoding="async" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+        <img className="nls-pavatar-crest" src={crest} alt="" loading="lazy" decoding="async" onError={() => setBrokenCrest(crest)} data-testid="nls-pavatar-crest" />
+      ) : teamCode && !isNoTeamCode(teamCode) ? (
+        <span className="nls-pavatar-crest nls-pavatar-crest-text" data-testid="nls-pavatar-crest-abbr">{teamCode.slice(0, 3).toUpperCase()}</span>
       ) : null}
     </span>
   )
+}
+
+function registryCrest(sport: string | null | undefined, team: string | null): string | null {
+  if (!team || !sport) return null
+  try {
+    return teamCrestUrl(sport, team)
+  } catch {
+    return null
+  }
+}
+
+/** "FA" / "Free Agent" carry no club, so they get no corner chip. */
+function isNoTeamCode(team: string): boolean {
+  const t = team.trim().toUpperCase()
+  return t === 'FA' || t === 'FREE AGENT' || t === 'NONE' || t === '-' || t === '—'
 }
 
 /** "vs QB 28th": how the week's opponent ranks against this player's position. 1st allows the fewest points. */

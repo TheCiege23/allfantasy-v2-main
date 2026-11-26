@@ -169,6 +169,9 @@
 .nls-pavatar > img:first-child { width: 100%; height: 100%; border-radius: 999px; object-fit: cover; object-position: top center; }
 .nls-pavatar[data-empty=true] { border-style: dashed; background: transparent; }
 .nls-pavatar-crest { position: absolute; right: -5px; bottom: -4px; width: 20px; height: 20px; padding: 2px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line2); object-fit: contain; }
+/* No crest image (unknown club, or the CDN refused it): the abbreviation in the same corner chip. */
+/* 11px is the app's type floor (__tests__/core-app/type-floor.test.ts), so the chip widens to fit rather than the text shrinking. */
+.nls-pavatar-crest-text { display: grid; place-items: center; width: auto; min-width: 20px; height: 18px; padding: 0 3px; font: 700 11px/1 var(--nl-mono); letter-spacing: -0.04em; color: var(--text); }
 .nls-player small.nls-oprank { display: inline-flex; align-items: center; padding: 2px 7px; border: 1px solid var(--line2); border-radius: 999px; color: var(--text2); font: 600 11px/1.3 var(--nl-mono); overflow: visible; }
 .nls-oprank b { font-weight: 700; }
 .nls-pl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
@@ -187,6 +190,15 @@
 .nls-swapper ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .nls-swapper li button { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 14px; width: 100%; min-height: 52px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); text-align: left; }
 .nls-swapper li button:hover:not(:disabled) { border-color: var(--accent-line); }
+/* The swap / start-in sheet: the same face and crest as the lineup row, a size down. */
+.nls-swapper li button { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; }
+.nls-swapper .nls-pl { gap: 8px; }
+/* A sheet squeezed into a narrow lineup column keeps the names readable rather than the faces. */
+.nls-swapper { container-type: inline-size; }
+@container (max-width: 300px) { .nls-swapper .nls-pavatar { display: none; } }
+.nls-swapper .nls-pavatar { width: 28px; height: 28px; font-size: 11px; }
+.nls-swapper .nls-pavatar-crest { width: 14px; height: 14px; right: -4px; bottom: -3px; }
+.nls-swapper .nls-pavatar-crest-text { width: auto; }
 .nls-swapper li button:disabled { opacity: .45; cursor: not-allowed; }
 .nls-swapper-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 /* Drag and drop: a grip column only when the lineup is editable. */
@@ -238,6 +250,12 @@
 .nls-claim { display: grid; grid-template-columns: 24px minmax(0, 1fr) 44px; gap: 12px; align-items: start; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
 .nls-claim-order { padding-top: 10px; color: var(--accent); font: 700 16px var(--nl-mono); }
 .nls-claim strong { display: block; color: var(--text); font-size: 15px; }
+/* The claimed player's face beside the claim text; the feed's "You added" lines likewise. */
+.nls-claim-who { align-items: flex-start; gap: 10px; }
+.nls-claim-who .nls-pavatar, .nls-feed-player .nls-pavatar { width: 34px; height: 34px; font-size: 11px; }
+.nls-claim-who .nls-pavatar-crest, .nls-feed-player .nls-pavatar-crest { width: 16px; height: 16px; right: -4px; bottom: -3px; }
+.nls-claim-who .nls-pavatar-crest-text, .nls-feed-player .nls-pavatar-crest-text { width: auto; }
+.nls-feed-player { gap: 10px; }
 .nls-claim small { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; }
 .nls-bid { display: flex; align-items: center; gap: 12px; margin-top: 14px; grid-column: 1 / -1; }
 .nls-bid label { color: var(--faint); font: 700 11px var(--nl-mono); letter-spacing: .1em; }
@@ -260,6 +278,12 @@
 .nls-givegets ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .nls-givegets li { color: var(--text); font-size: 15px; font-weight: 600; }
 .nls-givegets li small { margin-left: 6px; color: var(--muted); font: 12px var(--nl-mono); font-weight: 400; }
+/* A traded player: his face and club crest beside the name (a pick or FAAB line stays plain text). */
+.nls-givegets li[data-media] { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+.nls-givegets li[data-media] .nls-pavatar { width: 36px; height: 36px; font-size: 12px; }
+.nls-givegets li[data-media] .nls-pavatar-crest { width: 17px; height: 17px; right: -4px; bottom: -3px; }
+.nls-givegets li[data-media] .nls-pavatar-crest-text { width: auto; }
+.nls-givegets .nls-asset-text { min-width: 0; }
 .nls-offer-actions { margin-top: 18px; }
 .nls-grade-big { display: flex; align-items: baseline; gap: 16px; margin: 4px 0 18px; }
 .nls-grade-big b { color: var(--good); font-size: 72px; font-weight: 700; line-height: 1; }

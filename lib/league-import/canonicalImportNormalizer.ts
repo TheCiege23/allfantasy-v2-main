@@ -115,12 +115,17 @@ function collectConceptSignals(normalized: NormalizedImportResult): string {
   }
   parts.push(String(normalized.league.scoring ?? ''))
   parts.push(String(normalized.scoring?.scoring_format ?? ''))
+  // ⚠ A taxi squad is NOT a devy signal. This loop used to push a `taxi_devy` token, which filed every
+  // dynasty league that stashes rookies on taxi as devy and gave it two phantom college slots.
   for (const r of normalized.rosters) {
-    if (r.taxi_ids && r.taxi_ids.length > 0) parts.push('taxi_devy')
     if (r.reserve_ids && r.reserve_ids.length > 0) parts.push('reserve')
   }
   return parts.join(' ').toLowerCase()
 }
+
+/** "C2C", "Campus 2 Canton", "Campus to Canton", "College to Pro" — in the name or the settings. */
+const C2C_SIGNAL = /\bc2c\b|campus\s*(?:2|to)\s*canton|college\s*(?:2|to)\s*pro/
+const DEVY_SIGNAL = /\bdevy\b|\bdevelopmental\b/
 
 function heuristicConceptFromSignals(signals: string): string | null {
   if (/\bguill(?:otine|y)\b/.test(signals)) return 'guillotine'
@@ -128,8 +133,8 @@ function heuristicConceptFromSignals(signals: string): string | null {
   if (/\bzombie\b/.test(signals)) return 'zombie'
   if (/\btournament\b/.test(signals) || /\bbracket\b/.test(signals)) return 'tournament'
   if (/\bbig[\s_]*brother\b/.test(signals) || /\bbigbrother\b/.test(signals)) return 'big_brother'
-  if (/\bc2c\b|campus\s*2\s*canton|college\s*to\s*pro/.test(signals)) return 'c2c'
-  if (/\bdevy\b|\bdevelopmental\b/.test(signals) || signals.includes('taxi_devy')) return 'devy'
+  if (C2C_SIGNAL.test(signals)) return 'c2c'
+  if (DEVY_SIGNAL.test(signals)) return 'devy'
   if (/\bsalary[\s_]*cap\b|salarycap|\bcap\s*league\b/.test(signals)) return 'salary_cap'
   return null
 }
@@ -174,7 +179,15 @@ function inferLeagueConceptFromNormalized(normalized: NormalizedImportResult): {
   let conceptConfident = true
 
   if (!concept) {
-    if (normalized.league.isDynasty) concept = 'dynasty'
+    if (normalized.league.isDynasty) {
+      /*
+       * C2C and devy are dynasty leagues, so `isDynasty` used to end the search here and a Sleeper
+       * league named "Peach Bowl (C2C)" imported as plain dynasty. Sleeper has no devy or C2C type of
+       * its own, so the name is the only thing that says so.
+       */
+      const h = heuristicConceptFromSignals(signals)
+      concept = h === 'c2c' || h === 'devy' ? h : 'dynasty'
+    }
     else if (String(normalized.league.scoring ?? '').toLowerCase().includes('best')) concept = 'best_ball'
     else {
       const h = heuristicConceptFromSignals(signals)
@@ -264,8 +277,8 @@ function inferDerivedFlags(
   return {
     idp: scoringPresetId === 'fb_idp' || hasIdpSlot || hasIdpScoring,
     salaryCap: inferredConcept === 'salary_cap' || /\bsalary[\s_]*cap\b|salarycap/.test(signals),
-    devy: inferredConcept === 'devy' || signals.includes('taxi_devy') || /\bdevy\b/.test(signals),
-    c2c: inferredConcept === 'c2c' || /\bc2c\b|campus\s*2\s*canton/.test(signals),
+    devy: inferredConcept === 'devy' || DEVY_SIGNAL.test(signals),
+    c2c: inferredConcept === 'c2c' || C2C_SIGNAL.test(signals),
     bestBall: inferredConcept === 'best_ball' || /\bbest[\s_]*ball\b/.test(signals),
     dynasty: normalized.league.isDynasty || inferredConcept === 'dynasty',
     tournament: inferredConcept === 'tournament' || /\btournament\b|\bbracket\b/.test(signals),

@@ -208,3 +208,34 @@ describe('stamping each trade’s league format for trade learning', () => {
     expect(n).toBe(4)
   })
 })
+
+/**
+ * 🛑 A SLEEPER ID IS ONLY AN NFL PLAYER INSIDE THE NFL. Sleeper numbers each sport's players separately,
+ * so `SportsPlayer` holds NFL 1466 Travis Kelce (TE) AND NBA 1466 JaVale McGee (C), both `source='sleeper'`.
+ * The label lookup read every sport, the fresher row won, and on 2026-11-26 the market published Kelce's
+ * DYNASTY·SF row as "JaVale McGee C". The grade's quote then refused it on position (TE ≠ C) and a 2028
+ * 2nd for Kelce emailed as "1 asset has no value on this league's chart". Shapes are the production rows.
+ */
+describe('gatherFormatObservations — player labels are NFL rows', () => {
+  it('labels a Sleeper id from its NFL row, never a fresher NBA row with the same number', async () => {
+    const rows = [
+      { sport: 'NFL', sleeperId: '1', name: 'Travis Kelce', position: 'TE', source: 'sleeper', fetchedAt: new Date('2026-11-25T08:40:53Z') },
+      { sport: 'NBA', sleeperId: '1', name: 'JaVale McGee', position: 'C', source: 'sleeper', fetchedAt: new Date('2026-11-25T18:04:05Z') },
+      { sport: 'NFL', sleeperId: '2', name: 'Saquon Barkley', position: 'RB', source: 'sleeper', fetchedAt: new Date('2026-11-25T08:40:53Z') },
+      { sport: 'NBA', sleeperId: '2', name: 'AJ Dybantsa', position: 'PF', source: 'sleeper', fetchedAt: new Date('2026-11-25T18:04:05Z') },
+    ]
+    const prisma = {
+      ...fakePrisma(),
+      sportsPlayer: {
+        findMany: async (a: { where: { sport?: string; sleeperId?: { in?: string[] } } }) =>
+          rows.filter((r) => (!a.where.sport || r.sport === a.where.sport) && (a.where.sleeperId?.in ?? []).includes(r.sleeperId)),
+      },
+    }
+    const g = await gatherFormatObservations(prisma as never, { sinceSeason: 2024 })
+    const sf = g.byBook.get(bookKey({ format: 'DYNASTY', qbFormat: 'SUPERFLEX' }))!
+    expect(sf.byPlayer.get('1')).toMatchObject({ name: 'Travis Kelce', position: 'TE' })
+    expect(sf.byPlayer.get('2')).toMatchObject({ name: 'Saquon Barkley', position: 'RB' })
+    // And the lineup learner sees them at their real positions (an NBA "C" was dropped from it).
+    expect(g.lineupObservations.some((o) => o.position === 'TE')).toBe(true)
+  })
+})

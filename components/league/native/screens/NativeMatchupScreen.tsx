@@ -67,7 +67,9 @@ function SlotCell({ p, side, sport }: { p: MatchupPlayerSlot | null; side: 'left
   const status = slotGameLine(p)
   const team = p.team ? <span data-long>{p.team} · </span> : null
   const o = p.outlook ?? null
-  const media = Boolean(p.headshotUrl || o?.teamLogoUrl)
+  // Every sport: the crest comes from the outlook (NFL / NBA) or the team registry, with the
+  // abbreviation as the corner chip when neither has an image; initials stand in for a missing photo.
+  const media = Boolean(p.headshotUrl || o?.teamLogoUrl || p.team || p.name)
   const meta = o && p.gameStatus !== 'final' && (o.opponentRank || o.weather) ? (
     <span className="nls-pl-meta">
       <OpponentRankChip id={p.playerId} opponent={p.opponent} rank={o.opponentRank} testIdPrefix="matchup" />
@@ -77,7 +79,7 @@ function SlotCell({ p, side, sport }: { p: MatchupPlayerSlot | null; side: 'left
   return (
     <div className="nls-player" data-side={side}>
       <span className="nls-pl" data-media={media || undefined}>
-        {media ? <span className="nls-mavatar"><PlayerAvatar name={p.name} headshotUrl={p.headshotUrl} teamLogoUrl={o?.teamLogoUrl} /></span> : null}
+        {media ? <span className="nls-mavatar"><PlayerAvatar name={p.name} headshotUrl={p.headshotUrl} teamLogoUrl={o?.teamLogoUrl} team={p.team} sport={sport} /></span> : null}
         <span className="nls-pl-text">
           <strong title={p.name}>
             <PlayerNameButton name={p.name} onOpen={() => openCard({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl })}>

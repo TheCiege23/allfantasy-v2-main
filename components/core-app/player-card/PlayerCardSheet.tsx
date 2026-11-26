@@ -34,6 +34,8 @@ import {
   withheldGradeText,
 } from '@/lib/core-app/playerCardCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { TeamLogo } from '@/app/components/TeamLogo'
+import { isNoTeam } from '@/lib/players/teamLogos'
 import { PlayerValueHistoryChart } from './PlayerValueHistoryChart'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import GamesCountWeekPanel from './GamesCountWeekPanel'
@@ -471,24 +473,33 @@ export default function PlayerCardSheet({
         <div className="af-pc-body">
           {/* identity ──────────────────────────────────────────── */}
           <div className="af-pc-id">
-            <div className="af-pc-face">
-              {image ? (
-                <FallbackImg
-                  src={image}
-                  alt=""
-                  width={100}
-                  height={100}
-                  fallback={
-                    <span className="af-pc-face-none" aria-hidden>
-                      {initials(name)}
-                    </span>
-                  }
-                />
-              ) : (
-                <span className="af-pc-face-none" aria-hidden>
-                  {initials(name)}
+            <div className="af-pc-face-wrap">
+              <div className="af-pc-face">
+                {image ? (
+                  <FallbackImg
+                    src={image}
+                    alt=""
+                    width={100}
+                    height={100}
+                    fallback={
+                      <span className="af-pc-face-none" aria-hidden>
+                        {initials(name)}
+                      </span>
+                    }
+                  />
+                ) : (
+                  <span className="af-pc-face-none" aria-hidden>
+                    {initials(name)}
+                  </span>
+                )}
+              </div>
+              {/* The club crest on the photo's corner, any sport; the shared TeamLogo falls back to the
+                  team's initials when no crest loads. A free agent has no club, so no corner. */}
+              {team && !isNoTeam(team) ? (
+                <span className="af-pc-crest" data-testid="player-card-team-logo">
+                  <TeamLogo teamAbbr={team} sport={String(p?.sport ?? subject.sport ?? 'NFL')} size={30} />
                 </span>
-              )}
+              ) : null}
             </div>
             <div className="af-pc-id-main">
               <h2 className="af-pc-name">{name}</h2>

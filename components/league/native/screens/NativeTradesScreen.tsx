@@ -9,7 +9,7 @@ import { ProposeTradeModal } from '@/app/league/[leagueId]/tabs/ProposeTradeModa
 import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { useVisibleRefresh } from '@/hooks/useVisibleRefresh'
-import { Card, ScreenHead } from './NativeScreenParts'
+import { Card, PlayerAvatar, ScreenHead } from './NativeScreenParts'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { tradeCardState, tradeDeadlineState } from '@/lib/league-media/redraftScreens'
 import { RedraftDeadlineBar, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
@@ -38,17 +38,24 @@ function gradeTone(letter: string | null | undefined): 'good' | 'warn' | 'bad' {
   return 'bad'
 }
 
-function AssetList({ assets, dynasty = false, teamName }: { assets: LeagueTradeAsset[]; dynasty?: boolean; teamName?: (rosterId: string) => string | null }) {
+function AssetList({ assets, dynasty = false, teamName, sport }: { assets: LeagueTradeAsset[]; dynasty?: boolean; teamName?: (rosterId: string) => string | null; sport?: string | null }) {
   if (!assets.length) return <p className="nls-muted">Nothing</p>
   return (
     <ul>
-      {assets.map((a) => (
-        <li key={a.id}>
-          {/* Dynasty only: a pick is drawn as its chip; everything else, and every other league, as before. */}
-          {dynasty && a.pick ? <DynastyPickChip pick={a.pick} teamName={teamName} /> : a.label}
-          {a.sublabel && !(dynasty && a.pick) ? <small>{a.sublabel}</small> : null}
-        </li>
-      ))}
+      {assets.map((a) => {
+        // A player carries his face and club; a pick or FAAB line stays text.
+        const isPlayer = !a.pick && Boolean(a.playerId || a.headshotUrl)
+        return (
+          <li key={a.id} data-media={isPlayer || undefined}>
+            {isPlayer ? <PlayerAvatar name={a.label} headshotUrl={a.headshotUrl} teamLogoUrl={a.teamLogoUrl} team={a.team} sport={sport} /> : null}
+            <span className="nls-asset-text">
+              {/* Dynasty only: a pick is drawn as its chip; everything else, and every other league, as before. */}
+              {dynasty && a.pick ? <DynastyPickChip pick={a.pick} teamName={teamName} /> : a.label}
+              {a.sublabel && !(dynasty && a.pick) ? <small>{a.sublabel}</small> : null}
+            </span>
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -201,11 +208,11 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
             <div className="nls-givegets">
               <div>
                 <h4 className="nls-label">{isReview ? `${t.proposerName ?? 'Proposer'} gives` : 'You give'}</h4>
-                <AssetList assets={t.sent} dynasty={dynasty} teamName={teamName} />
+                <AssetList assets={t.sent} dynasty={dynasty} teamName={teamName} sport={league.sport} />
               </div>
               <div>
                 <h4 className="nls-label">{isReview ? `${t.receiverName ?? 'Receiver'} gives` : 'You get'}</h4>
-                <AssetList assets={t.received} dynasty={dynasty} teamName={teamName} />
+                <AssetList assets={t.received} dynasty={dynasty} teamName={teamName} sport={league.sport} />
               </div>
             </div>
             {g && !isReview && g.recommendation ? <p className="nls-muted nls-offer-note">{g.recommendation}</p> : null}

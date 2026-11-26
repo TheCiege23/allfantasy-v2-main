@@ -164,7 +164,9 @@ function assetLabel(
     sublabel: [position, team].filter(Boolean).join(' · ') || null,
     playerId,
     team,
-    headshotUrl: explicitHeadshot ?? sleeperPlayerHeadshot(playerId),
+    // The Sleeper CDN path is NFL-only: outside NFL the id is not a Sleeper NFL id, and building the
+    // URL anyway shows a stranger's face (lib/player-media-urls.ts `buildHeadshotUrl`). Initials instead.
+    headshotUrl: explicitHeadshot ?? (String(sport).trim().toUpperCase() === 'NFL' ? sleeperPlayerHeadshot(playerId) : null),
     teamLogoUrl: storedLogo?.(team) ?? teamLogoUrl(sport, team),
     // A pick's year, round and original team, from its own id; absent on every other asset.
     ...(pick ? { pick } : {}),

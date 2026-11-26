@@ -1277,3 +1277,25 @@ html[data-mode='af'] .af-core {
 @media (max-width: 760px) {
   .af-core { --af-title-size: 26px; }
 }
+
+/*
+ * The crest corner with no crest image: the club's abbreviation in the same chip (My Team, Matchup,
+ * the boards' PlayerFace). `span.` lifts it over each screen's own crest rule, which sizes an <img>.
+ */
+.af-core span.af-crest-abbr {
+  display: inline-grid;
+  place-items: center;
+  width: auto;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1.5px var(--surface2);
+  color: var(--text);
+  /* 11px: the app's type floor (__tests__/core-app/type-floor.test.ts). The chip widens to fit. */
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: -0.02em;
+  object-fit: initial;
+  opacity: 1;
+}

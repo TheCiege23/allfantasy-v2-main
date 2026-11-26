@@ -27,6 +27,29 @@ function rewardReferredImport(userId: string): void {
     .then((m) => m.awardReferralProWeekOnImport(userId))
     .catch(() => undefined)
 }
+
+/**
+ * Save the confirm screen's league type. Never fails the import: the league is already built, and the
+ * type can still be set from League format afterwards.
+ *
+ * ⚠ THE LEAGUE'S MAIN COMMISSIONER ONLY. The League format picker lets a co-commissioner set a type the
+ * main commissioner has not, but never change one they have (`league-type/handler.ts`). A re-import is
+ * not a way around that, so this path is narrower still: only the league's owner saves a type here.
+ */
+async function confirmImportedLeagueType(leagueId: string, userId: string, type: string): Promise<void> {
+  try {
+    const [{ prisma }, { confirmLeagueType }] = await Promise.all([
+      import('@/lib/prisma'),
+      import('@/lib/career/leagueTypeConfirmation'),
+    ])
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
+    if (league?.userId !== userId) return
+    const result = await confirmLeagueType({ leagueId, userId, type })
+    if (!result.ok) console.warn('[import commit] league type not saved', { leagueId, reason: result.reason })
+  } catch (e) {
+    console.warn('[import commit] league type not saved', { leagueId, error: e instanceof Error ? e.message : 'unknown' })
+  }
+}
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import {
@@ -221,6 +244,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     yahooLeagueRunBy?: string
     /** Commissioner edits from the review screen — see `lib/league-import/review/importReviewOverrides.ts`. */
     reviewOverrides?: unknown
+    /** The league type picked on the confirm screen (`LEAGUE_CONCEPT_OPTIONS` id); omitted keeps the detected one. */
+    leagueType?: unknown
   }
   try {
     body = await req.json()
@@ -425,6 +450,15 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
       if (persisted.joinedExisting !== true) {
         await applyAttestedCommissioner({ leagueId: persisted.league.id, appUserId: auth.userId })
       }
+    }
+
+    /*
+     * The type the commissioner picked on the confirm screen, saved as a CONFIRMED type — the same
+     * record the after-import picker writes — so a later re-sync cannot overwrite it with a guess.
+     * Only for the league's own commissioner, and never on another account's league.
+     */
+    if (typeof body.leagueType === 'string' && body.leagueType && persisted.joinedExisting !== true) {
+      await confirmImportedLeagueType(persisted.league.id, auth.userId, body.leagueType)
     }
 
     /*

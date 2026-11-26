@@ -1,0 +1,27 @@
+/* "Export league" card (PlayerCsvDownload.tsx). Theme variables inside .af-core; dark fallbacks in the
+   imported-league settings modal, which is not an .af-core surface. */
+.af-pcsv {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line2, rgba(255, 255, 255, 0.1));
+  background: var(--surface, rgba(255, 255, 255, 0.03));
+  color: var(--text, #fff);
+}
+.af-pcsv-title { margin: 0; font-size: 15px; font-weight: 800; color: var(--text, #fff); }
+.af-pcsv-help { margin: 6px 0 12px; font-size: 13px; line-height: 1.5; color: var(--muted, rgba(255, 255, 255, 0.6)); }
+.af-pcsv-btn {
+  min-height: 40px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line2, rgba(255, 255, 255, 0.16));
+  background: var(--surface2, rgba(255, 255, 255, 0.08));
+  color: var(--text, #fff);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-pcsv-btn:hover:not(:disabled) { border-color: var(--accent-line, rgba(255, 255, 255, 0.3)); }
+.af-pcsv-btn:focus-visible { outline: 2px solid var(--accent, #60a5fa); outline-offset: 2px; }
+.af-pcsv-btn:disabled { opacity: 0.6; cursor: progress; }
+.af-pcsv-error { margin: 10px 0 0; font-size: 13px; color: var(--danger, #f87171); }

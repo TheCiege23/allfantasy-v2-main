@@ -45,6 +45,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'commissioner-template': () => import('../commissioner-template/handler'),
   'league-log': () => import('../league-log/handler'),
   'league-type': () => import('../league-type/handler'),
+  'player-csv': () => import('../player-csv/handler'),
   'dispersal-draft': () => import('../dispersal-draft/handler'),
   'divisions': () => import('../divisions/handler'),
   'downsize': () => import('../downsize/handler'),

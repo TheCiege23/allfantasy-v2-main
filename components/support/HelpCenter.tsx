@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
-import { ArrowLeft, LifeBuoy, Send } from "lucide-react"
+import { ArrowLeft, LifeBuoy, MessageCircle, Send } from "lucide-react"
 
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import {
@@ -13,6 +13,7 @@ import {
   type SupportStatus,
   type SupportTopic,
 } from "@/lib/support/supportInboxCore"
+import { DISCORD_SUPPORT_INVITE_URL } from "@/lib/support/discordSupportCore"
 
 /**
  * /help — message AllFantasy, and read the replies (lib/support). One screen: the new-message form, your
@@ -54,6 +55,9 @@ const COPY = {
     signInBody: "Sign in so our reply can reach you. Or email support@allfantasy.ai.",
     newMessage: "New message",
     tooLong: `Keep it under ${SUPPORT_MESSAGE_MAX.toLocaleString("en-US")} characters.`,
+    discordTitle: "Prefer Discord?",
+    discordBody: "Ask in #support on the AllFantasy Support server. We answer there, and you'll get a ping when we do. Keep account and billing questions here, since the channel is public.",
+    discordCta: "Open #support on Discord",
   },
   es: {
     title: "Ayuda",
@@ -76,6 +80,9 @@ const COPY = {
     signInBody: "Inicia sesión para que nuestra respuesta te llegue. O escribe a support@allfantasy.ai.",
     newMessage: "Nuevo mensaje",
     tooLong: `Menos de ${SUPPORT_MESSAGE_MAX.toLocaleString("es-ES")} caracteres, por favor.`,
+    discordTitle: "¿Prefieres Discord?",
+    discordBody: "Pregunta en #support del servidor AllFantasy Support. Respondemos ahí y te llega una notificación. Las preguntas de cuenta y pagos, mejor aquí, porque el canal es público.",
+    discordCta: "Abrir #support en Discord",
   },
 } as const
 
@@ -188,6 +195,24 @@ export function HelpCenter({ signedIn, initialThreadId }: { signedIn: boolean; i
           {c.title}
         </h1>
       </header>
+
+      <section className="mb-4 rounded-2xl border p-4" style={panel} data-testid="help-discord">
+        <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text)" }}>
+          <MessageCircle className="h-4 w-4" style={{ color: "var(--accent)" }} aria-hidden />
+          {c.discordTitle}
+        </p>
+        <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>{c.discordBody}</p>
+        <a
+          href={DISCORD_SUPPORT_INVITE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex min-h-[40px] items-center rounded-xl border px-3 py-2 text-sm font-semibold"
+          style={{ borderColor: "var(--border)", color: "var(--text)" }}
+          data-testid="help-discord-link"
+        >
+          {c.discordCta}
+        </a>
+      </section>
 
       {!signedIn ? (
         <section className="rounded-2xl border p-4" style={panel} data-testid="help-signed-out">

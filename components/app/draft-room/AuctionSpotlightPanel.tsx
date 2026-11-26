@@ -6,13 +6,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { Pencil } from 'lucide-react'
 import type { AuctionSessionSnapshot, AuctionState, DraftPickSnapshot } from '@/lib/live-draft-engine/types'
 import { getAuctionMaxBid } from '@/lib/mock-draft/draft-engine'
-import { positionTintHex } from '@/lib/draft-room/positionTint'
-import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
 import { auctionBidLadderMessages } from '@/lib/core-app/messages/auctionBidLadder'
 import { auctionBidPlayerKey, ladderFor } from '@/lib/draft-room/auctionBidLadder'
 import { AuctionBidLadder, useAuctionBidHistory } from './AuctionBidLadder'
+import { PlayerAvatar } from './PlayerAvatar'
 
 export type AuctionQueuePick = { playerName: string; position: string; team?: string | null; playerId?: string | null; byeWeek?: number | null }
 
@@ -48,6 +47,12 @@ export type AuctionSpotlightPanelProps = {
    * to its own length instead of calling them for the whole lot.
    */
   bidClockSeconds?: number | null
+  /**
+   * The nominated player's photo and club crest, looked up from the player pool by the parent (the
+   * nomination itself carries only name, position and team). Missing either, the shared avatar falls
+   * back to initials and the team abbreviation.
+   */
+  nominationMedia?: { headshotUrl: string | null; teamLogoUrl: string | null } | null
 }
 
 export type AuctionTeamLine = {
@@ -131,13 +136,6 @@ export function goingCall(remaining: number | null, status: AuctionSpotlightPane
   return null
 }
 
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '—'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return `${parts[0]![0]}${parts[parts.length - 1]![0]}`.toUpperCase()
-}
-
 /** Shared bid maths for the stage and the phone dock. */
 export function useAuctionBidding(props: Pick<AuctionSpotlightPanelProps, 'auction' | 'currentUserRosterId' | 'rosterGateBlocksAuctionActions' | 'rosterSize' | 'picks' | 'minimumBid'>) {
   const { auction, currentUserRosterId, rosterGateBlocksAuctionActions = false, rosterSize = null, picks = null, minimumBid = 1 } = props
@@ -219,7 +217,6 @@ export function AuctionSpotlightPanel(props: AuctionSpotlightPanelProps) {
   const timerExpired = timerStatus === 'expired' || (timerRemainingSeconds != null && timerRemainingSeconds <= 0)
   const showResolve = (timerExpired || isCommissioner) && nomination != null
   const call = goingCall(timerRemainingSeconds, timerStatus, props.bidClockSeconds)
-  const tint = nomination ? positionTintHex(nomination.position) : null
   const upcoming = upcomingNominators(auction.nominationOrder, state.nominationOrderIndex, 5)
   const queuePicks = (queue ?? []).slice(0, 3)
   const stageState = nomination ? (leading ? 'leading' : 'bidding') : isMyTurnToNominate ? 'nominate' : 'waiting'
@@ -261,13 +258,15 @@ export function AuctionSpotlightPanel(props: AuctionSpotlightPanelProps) {
         {nomination ? (
           <div className="grid items-center gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] md:gap-5">
             <div className="flex min-w-0 items-center gap-3">
-              <span
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-base font-extrabold"
-                style={tint ? { backgroundColor: tint, color: SKIN_ON_FILL } : { background: '#1b2740', color: '#e8edf7' }}
-                aria-hidden
-              >
-                {initialsOf(nomination.playerName)}
-              </span>
+              <PlayerAvatar
+                headshotUrl={props.nominationMedia?.headshotUrl ?? null}
+                displayName={nomination.playerName}
+                teamLogoUrl={props.nominationMedia?.teamLogoUrl ?? null}
+                teamAbbr={nomination.team}
+                position={nomination.position}
+                size={48}
+                testIdBase="auction-nomination-avatar"
+              />
               <span className="flex min-w-0 flex-col">
                 <span className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-white/50">
                   {currentNominator?.displayName ? m.nominatedBy(currentNominator.displayName) : m.onTheBlock}

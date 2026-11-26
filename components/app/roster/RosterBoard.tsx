@@ -8,6 +8,7 @@ import { teamLogoUrl } from "@/lib/media-url"
 import PlayerCardAnalytics from "@/components/player-card/PlayerCardAnalytics"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { initialsFor } from '@/lib/draft-room/classify-avatar-source'
 
 type RosterBoardProps = {
   leagueId?: string
@@ -554,13 +555,13 @@ function PlayerCard({
             className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-white/10"
             fallback={
               <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#111a31] text-[11px] font-semibold text-white/90">
-                {player.position}
+                {initialsFor(player.name)}
               </div>
             }
           />
         ) : (
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#111a31] text-[11px] font-semibold text-white/90">
-            {player.position}
+            {initialsFor(player.name)}
           </div>
         )}
         <div className="min-w-0 flex-1">
