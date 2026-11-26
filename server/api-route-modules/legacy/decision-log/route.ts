@@ -12,6 +12,7 @@ import {
   RiskProfile,
 } from '@/lib/decision-log'
 import { prisma } from '@/lib/prisma'
+import { decisionGradeLine, decisionTradeGrade, withoutServerOnlyDecisionKeys } from '@/lib/decision-log-trade-grade'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 /*
@@ -94,7 +95,8 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/decision-log", tool: "
       userId: parsed.data.userId,
       leagueId: parsed.data.leagueId,
       decisionType: parsed.data.decisionType as DecisionType,
-      aiRecommendation: parsed.data.aiRecommendation,
+      // The one-trade-grade stamp is written by the analyzer only; a client cannot plant one.
+      aiRecommendation: withoutServerOnlyDecisionKeys(parsed.data.aiRecommendation),
       confidenceScore: parsed.data.confidenceScore,
       riskProfile: parsed.data.riskProfile as RiskProfile,
       contextSnapshot: parsed.data.contextSnapshot,
@@ -152,7 +154,18 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/decision-log", tool: "L
       take: limit,
     })
 
-    return NextResponse.json({ ok: true, decisions: logs })
+    return NextResponse.json({
+      ok: true,
+      decisions: logs.map((log) => {
+        const tradeGrade = decisionTradeGrade(log)
+        return {
+          ...log,
+          tradeGrade: tradeGrade?.letter ?? null,
+          tradeGradeWithheld: tradeGrade?.withheldReason ?? null,
+          gradeLine: decisionGradeLine(tradeGrade, log.outcome),
+        }
+      }),
+    })
   } catch (err: any) {
     console.error('[DECISION-LOG] GET error:', err)
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 })
