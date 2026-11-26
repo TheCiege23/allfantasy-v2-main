@@ -2,14 +2,12 @@
 /**
  * Every free-agent path holds the league waiver lock, and the native add sees the redraft engine's awards.
  *
- *   1. The redraft engine's hourly run (`processWaiverWindow`) took no lock: an instant add landing
- *      between its "is he rostered" read and its write put one player on two rosters.
+ *   1. The old redraft engine's hourly run took no lock (fixed, then the engine was deleted 2026-11-26;
+ *      its interleaving test went with it).
  *   2. Even serialized, the native add checked `Roster.playerData` only, which that engine never writes,
  *      so it could take a player the run had just awarded (redraftRosterHolder.ts).
  *   3. The waiver runtime's add and commissioner run (`/api/redraft/waiver-runtime`) took no lock either.
  *
- * Test 1 is a real interleaving against an in-memory roster table: the run is paused after its read,
- * the add is fired, then the run is released. Exactly one roster may end up holding the player.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -102,7 +100,6 @@ vi.mock('@/lib/league-runtime/redraftRosterMoveSync', () => ({
   }),
 }))
 
-import { processWaiverWindow } from '@/lib/redraft/waiverEngine'
 import { executeImmediateAddDrop, WAIVER_RUN_IN_PROGRESS_MESSAGE } from '@/lib/waiver-wire/free-agent-service'
 import { leagueWaiverLockKey } from '@/lib/waiver-wire/leagueWaiverLock'
 import { addNflRedraftFreeAgent, processNflRedraftWaiverWindow } from '@/lib/waiver-runtime/resolveNflRedraftWaiverRuntime'
@@ -117,28 +114,6 @@ beforeEach(() => {
   h.release = null
   h.platform = 'allfantasy'
   h.chopGate = { hold: false }
-})
-
-describe('the redraft waiver run and an instant add, interleaved', () => {
-  it('one player lands on one roster: the add waits for the run, then sees its award and is refused', async () => {
-    h.gate = new Promise<void>((resolve) => { h.release = resolve })
-    const run = processWaiverWindow('L', 's1')
-    // Let the run reach its pause (lock taken, availability read done).
-    await new Promise((r) => setTimeout(r, 20))
-    const add = executeImmediateAddDrop('L', 'gB', { addPlayerId: 'P' }).then(
-      () => 'added',
-      (e: Error) => e.message,
-    )
-    // Give an unlocked add every chance to finish first.
-    await new Promise((r) => setTimeout(r, 50))
-    h.release!()
-    const [ran, added] = await Promise.all([run, add])
-
-    expect(holders('P')).toEqual(['rrA'])
-    expect(ran).toEqual([{ claimId: 'c1', status: 'approved' }])
-    expect(added).toBe('This player is already on another roster in this league.')
-    expect(h.locks.size).toBe(0)
-  }, 10_000)
 })
 
 describe('the native add sees the redraft engine', () => {
@@ -179,27 +154,6 @@ describe('the waiver runtime holds the same lock', () => {
     await settled
     vi.useRealTimers()
     expect(db.redraftRosterPlayer.create).not.toHaveBeenCalled()
-  })
-
-  it('the hourly redraft run leaves claims pending while the league is held', async () => {
-    vi.useFakeTimers()
-    h.locks.set(leagueWaiverLockKey('L'), 'instant-add:x')
-    const attempt = processWaiverWindow('L', 's1')
-    await vi.runAllTimersAsync()
-    await expect(attempt).resolves.toEqual([])
-    vi.useRealTimers()
-    expect(db.redraftWaiverClaim.update).not.toHaveBeenCalled()
-    expect(db.redraftRosterPlayer.create).not.toHaveBeenCalled()
-  })
-})
-
-describe('the hourly redraft run and a Guilly chop that has not landed', () => {
-  it('settles nothing while the chop is due (lib/guillotine/chopBeforeWaivers.ts)', async () => {
-    h.chopGate = { hold: true, week: 5, message: 'x' }
-    await expect(processWaiverWindow('L', 's1')).resolves.toEqual([])
-    expect(db.redraftWaiverClaim.update).not.toHaveBeenCalled()
-    expect(db.redraftRosterPlayer.create).not.toHaveBeenCalled()
-    expect(db.sportsPlayer.findFirst).not.toHaveBeenCalled()
   })
 })
 

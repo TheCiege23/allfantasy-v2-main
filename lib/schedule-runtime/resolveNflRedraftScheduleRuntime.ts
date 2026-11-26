@@ -275,6 +275,8 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     // The same flags `updateStandings` reads: the league's current median setting over the season's copy.
     medianGame: !imported && Boolean(season.league?.medianGame ?? season.medianGame),
     medianInPlayoffs: readMedianGameInPlayoffs(season.league?.settings),
+    // `updateStandings` credits a bye in points leagues only; an imported schedule states its own points.
+    byeMedianCredit: !imported && isPointsScoring(season.league?.settings),
     divisionRivalsTwice,
     // An imported schedule states its own shape; a native one follows the league's setting.
     gamesPerWeek: imported ? inferGamesPerWeek(imported.matchups) : Math.max(readGamesPerWeek(season.league?.settings), inferGamesPerWeek(season.schedule.map(toScheduleMatchupInput))),
@@ -673,4 +675,10 @@ export async function advanceNflRedraftScheduleWeek(input: {
     currentWeek: transition.currentWeek,
     events: transition.events,
   }
+}
+
+/** `settings.scoring_mode` unset or `points` — the rule `updateStandings` uses for the bye credit. */
+function isPointsScoring(settings: unknown): boolean {
+  const mode = settings && typeof settings === 'object' ? (settings as Record<string, unknown>).scoring_mode : null
+  return mode == null || mode === 'points'
 }
