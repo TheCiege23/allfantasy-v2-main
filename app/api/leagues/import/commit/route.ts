@@ -31,14 +31,19 @@ function rewardReferredImport(userId: string): void {
 /**
  * Save the confirm screen's league type. Never fails the import: the league is already built, and the
  * type can still be set from League format afterwards.
+ *
+ * ⚠ THE LEAGUE'S MAIN COMMISSIONER ONLY. The League format picker lets a co-commissioner set a type the
+ * main commissioner has not, but never change one they have (`league-type/handler.ts`). A re-import is
+ * not a way around that, so this path is narrower still: only the league's owner saves a type here.
  */
 async function confirmImportedLeagueType(leagueId: string, userId: string, type: string): Promise<void> {
   try {
-    const [{ canCommissionerAct }, { confirmLeagueType }] = await Promise.all([
-      import('@/lib/league/commissionerAccess'),
+    const [{ prisma }, { confirmLeagueType }] = await Promise.all([
+      import('@/lib/prisma'),
       import('@/lib/career/leagueTypeConfirmation'),
     ])
-    if (!(await canCommissionerAct(leagueId, userId, 'league'))) return
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
+    if (league?.userId !== userId) return
     const result = await confirmLeagueType({ leagueId, userId, type })
     if (!result.ok) console.warn('[import commit] league type not saved', { leagueId, reason: result.reason })
   } catch (e) {
