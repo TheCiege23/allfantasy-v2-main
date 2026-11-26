@@ -42,6 +42,10 @@ import {
   type MarketValuesPayload,
 } from '@/lib/trade-intel/marketValueService'
 import type { TeamStance } from '@/lib/trade-value/types'
+import { createLeagueTradeGrader, gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import type { TradeGradeLine, TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { finderGradeOf, GRADE_FAILED, GRADE_TIMED_OUT, type FinderGrade } from '@/lib/trade-finder/finderGrade'
 
 /**
  * "Find me a trade" — trade IDEAS across the asker's whole league, for the Chimmy tool loop.
@@ -63,6 +67,14 @@ import type { TeamStance } from '@/lib/trade-value/types'
  * ⚠ IDEAS, NOT VERDICTS. A package is a starting offer from market value and roster shape. Grading
  * one — lineup before and after under the league's scoring — is `evaluate_trade`'s job, and the
  * block tells the model to offer that rather than to call an idea a win.
+ *
+ * 🛑 BUT EVERY VALUE AND BAND IT SAYS IS THE ONE GRADER'S (2026-11-26). The market chart above only
+ * GENERATES the packages. Each candidate is then graded by `gradeDeal` on ONE
+ * `createLeagueTradeGrader` for this league, from the asker's side, and the totals, each asset's
+ * value, the fairness band, "sendable" and the ranking are re-taken on that grade — the letter the
+ * Trade Center would show for the same offer. A candidate the grade withholds on is kept, written
+ * as not graded with the reason, and ranked after every graded one; one the grade calls lopsided is
+ * ranked last (and dropped from the pick / win-now searches, which never offered lopsided deals).
  */
 
 /** Ideas returned, one per partner. More than three is a list nobody reads in a chat reply. */
@@ -98,7 +110,16 @@ export function readTradeFinderPosition(raw: unknown): TradeFinderPosition | nul
 }
 
 /** `position` is `PICK` for a draft pick, named the way `evaluate_trade` reads one ("2027 1st"). */
-export type TradeIdeaAsset = { name: string; position: string; value: number | null; onTradeBlock: boolean }
+export type TradeIdeaAsset = {
+  name: string
+  position: string
+  /** THE grade's league value for this asset; null when the grade could not price it. */
+  value: number | null
+  onTradeBlock: boolean
+  /** What the grader is asked to price (not rendered): the roster id, or the pick's season and round. */
+  playerId?: string
+  pick?: { year: number; round: number }
+}
 
 
 export type TradeIdea = {
@@ -107,9 +128,13 @@ export type TradeIdea = {
   partnerStance: TeamStance
   give: TradeIdeaAsset[]
   get: TradeIdeaAsset[]
-  giveTotal: number
-  getTotal: number
+  /** THE grade's league value each way; null when the grade was withheld. */
+  giveTotal: number | null
+  getTotal: number | null
+  /** Banded on THE grade (`low confidence` when it was withheld). */
   fairness: FairnessBand
+  /** THE grade, from the asker's side. Absent only before `gradeIdeas` ran. */
+  grade?: FinderGrade
   /** No missing value, not lopsided: an offer a manager could send as-is. */
   sendable: boolean
   fillsNeed: boolean
@@ -191,6 +216,7 @@ function toIdea(
     position: a.position ?? '?',
     value: a.value,
     onTradeBlock: Boolean(a.playerId && block.has(a.playerId)),
+    ...(a.playerId ? { playerId: a.playerId } : {}),
   })
   const get = pkg.receiveAssets.filter((a) => a.kind === 'player').map(asset)
   const why = [...(match?.matchReasons ?? [])].filter((r) => !/exploratory/i.test(r))
@@ -212,14 +238,33 @@ function toIdea(
   }
 }
 
-function rankIdeas(ideas: Array<{ idea: TradeIdea; matchScore: number }>): TradeIdea[] {
+/** Generation order for grading: the same comparator, at most three candidates per partner. */
+function rankIdeasAll(ideas: Array<{ idea: TradeIdea; matchScore: number }>): Array<{ idea: TradeIdea; matchScore: number }> {
   const sorted = [...ideas].sort(
     (a, b) =>
       BAND_RANK[a.idea.fairness] - BAND_RANK[b.idea.fairness] ||
       Number(b.idea.sendable) - Number(a.idea.sendable) ||
       Number(b.idea.fillsNeed) - Number(a.idea.fillsNeed) ||
       b.matchScore - a.matchScore ||
-      b.idea.getTotal - a.idea.getTotal,
+      (b.idea.getTotal ?? -1) - (a.idea.getTotal ?? -1),
+  )
+  const perPartner = new Map<string, number>()
+  return sorted.filter(({ idea }) => {
+    const n = perPartner.get(idea.partnerTeam) ?? 0
+    perPartner.set(idea.partnerTeam, n + 1)
+    return n < 3
+  })
+}
+
+function rankIdeas(ideas: Array<{ idea: TradeIdea; matchScore: number }>): TradeIdea[] {
+  const sorted = [...ideas].sort(
+    (a, b) =>
+      Number(Boolean(b.idea.grade?.graded)) - Number(Boolean(a.idea.grade?.graded)) ||
+      BAND_RANK[a.idea.fairness] - BAND_RANK[b.idea.fairness] ||
+      Number(b.idea.sendable) - Number(a.idea.sendable) ||
+      Number(b.idea.fillsNeed) - Number(a.idea.fillsNeed) ||
+      b.matchScore - a.matchScore ||
+      (b.idea.getTotal ?? -1) - (a.idea.getTotal ?? -1),
   )
   /* One idea per partner: three offers to the same manager is one idea written three ways. */
   const seen = new Set<string>()
@@ -240,7 +285,7 @@ const PICK_ROUNDS = [1, 2, 3] as const
 /** Their players priced per partner in a pick / win-now search, best first. */
 const NOW_TARGETS_PER_PARTNER = 5
 
-type OwnPick = { name: string; value: number }
+type OwnPick = { name: string; value: number; year: number; round: number }
 
 /**
  * The user's next two seasons of 1st–3rd round picks, priced at the dynasty chart's round average.
@@ -258,7 +303,7 @@ function ownPicks(values: MarketValuesPayload, currentSeason: number): OwnPick[]
   return seasons.flatMap((season) =>
     PICK_ROUNDS.flatMap((round) => {
       const value = pickValue(values, String(season), round)
-      return value == null ? [] : [{ name: `${season} ${ORDINAL[round]}`, value }]
+      return value == null ? [] : [{ name: `${season} ${ORDINAL[round]}`, value, year: season, round }]
     }),
   )
 }
@@ -318,7 +363,8 @@ function pickAndNowIdeas(args: {
           if (fairness === 'lopsided') continue
           const why = [...(match?.matchReasons ?? [])].filter((r) => !/exploratory/i.test(r))
           if (block.has(target.playerId)) why.push('They have him on the trade block')
-          if (nowOf) why.push(`Raises your current-season value by ${Math.round(nowGain).toLocaleString('en-US')}`)
+          // The size of the gain is a market-chart number, so it is not said: the grade's values are.
+          if (nowOf) why.push('Raises your current-season value (this league’s redraft chart)')
           const scored: ScoredIdea = {
             matchScore: match?.matchScore ?? 0,
             nowGain,
@@ -329,10 +375,10 @@ function pickAndNowIdeas(args: {
               partnerManager: partner.managerDisplayName ?? null,
               partnerStance: partner.stance,
               give: [
-                { name: give.playerName, position: give.position, value: give.value, onTradeBlock: false },
-                ...(pick ? [{ name: pick.name, position: 'PICK', value: pick.value, onTradeBlock: false }] : []),
+                { name: give.playerName, position: give.position, value: give.value, onTradeBlock: false, playerId: give.playerId },
+                ...(pick ? [{ name: pick.name, position: 'PICK', value: pick.value, onTradeBlock: false, pick: { year: pick.year, round: pick.round } }] : []),
               ],
-              get: [{ name: target.playerName, position: target.position, value: target.value, onTradeBlock: block.has(target.playerId) }],
+              get: [{ name: target.playerName, position: target.position, value: target.value, onTradeBlock: block.has(target.playerId), playerId: target.playerId }],
               giveTotal: Math.round(giveTotal),
               getTotal: Math.round(getTotal),
               fairness,
@@ -348,10 +394,94 @@ function pickAndNowIdeas(args: {
     }
     if (top) best.push(top)
   }
-  return best
-    .sort((a, b) => compareScored(a, b, picks.length > 0))
+  // Every partner's best, in generation order: THE grade decides which three are said (`gradeIdeas`).
+  return best.sort((a, b) => compareScored(a, b, picks.length > 0)).map((s) => s.idea)
+}
+
+/** Candidates graded per search. Generation order decides only who is graded. */
+const GRADED_IDEAS = 12
+const GRADE_BUDGET_MS = 8_000
+
+function ideaGradeInputs(assets: readonly TradeIdeaAsset[]): GradeInputs {
+  const out: GradeInputs = { assets: [], unpriceable: [] }
+  for (const a of assets) {
+    if (a.pick) out.assets.push({ kind: 'pick', year: a.pick.year, round: a.pick.round, label: a.name })
+    else if (a.playerId) out.assets.push({ kind: 'player', playerId: a.playerId, name: a.name })
+    else out.unpriceable.push(a.name)
+  }
+  return out
+}
+
+/** Each asset's value on THE grade's lines, matched by side and order when they line up by name. */
+function lineValues(assets: TradeIdeaAsset[], lines: readonly TradeGradeLine[], side: 'give' | 'get'): TradeIdeaAsset[] {
+  const own = lines.filter((l) => l.side === side)
+  const aligned = own.length === assets.length && own.every((l, i) => normalizePlayerName(l.name) === normalizePlayerName(assets[i]!.name) || assets[i]!.pick)
+  return assets.map((a, i) => ({ ...a, value: aligned && own[i]!.leagueValue != null ? Math.round(own[i]!.leagueValue!) : null }))
+}
+
+/**
+ * THE grade on every idea, from the asker's side, with ONE grader (bounded, under a budget, never
+ * throws). Re-takes the totals, each asset's value, the band and `sendable` on the grade.
+ */
+async function gradeIdeas(ideas: TradeIdea[], grade: (give: GradeInputs, get: GradeInputs) => Promise<TradeGradeView>): Promise<TradeIdea[]> {
+  const pool = ideas.slice(0, GRADED_IDEAS)
+  const views: Array<TradeGradeView | { graded: false; reason: string }> = pool.map(() => ({ graded: false, reason: GRADE_TIMED_OUT }))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    Promise.all(
+      pool.map((idea, i) =>
+        Promise.resolve()
+          .then(() => grade(ideaGradeInputs(idea.give), ideaGradeInputs(idea.get)))
+          .then((v) => {
+            views[i] = v
+          })
+          .catch(() => {
+            views[i] = { graded: false, reason: GRADE_FAILED }
+          }),
+      ),
+    ),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, GRADE_BUDGET_MS)
+    }),
+  ])
+  if (timer) clearTimeout(timer)
+  return pool.map((idea, i) => {
+    const view = views[i]!
+    const g = finderGradeOf(view as TradeGradeView)
+    if (!view.graded || !g.graded) {
+      return {
+        ...idea,
+        give: idea.give.map((a) => ({ ...a, value: null })),
+        get: idea.get.map((a) => ({ ...a, value: null })),
+        giveTotal: null,
+        getTotal: null,
+        fairness: 'low confidence' as const,
+        sendable: false,
+        grade: g,
+      }
+    }
+    const fairness = fairnessFor(g.getValue - g.giveValue, Math.max(g.giveValue, g.getValue, 1), false)
+    return {
+      ...idea,
+      give: lineValues(idea.give, view.lines ?? [], 'give'),
+      get: lineValues(idea.get, view.lines ?? [], 'get'),
+      giveTotal: g.giveValue,
+      getTotal: g.getValue,
+      fairness,
+      sendable: idea.sendable && fairness !== 'lopsided',
+      grade: g,
+    }
+  })
+}
+
+/** Graded pick / win-now ideas: lopsided on THE grade dropped, then fairer first, three said. */
+function rankGradedPickIdeas(graded: TradeIdea[]): TradeIdea[] {
+  return graded
+    .map((idea, order) => ({ idea, order }))
+    .filter(({ idea }) => idea.fairness !== 'lopsided')
+    .sort((a, b) => Number(Boolean(b.idea.grade?.graded)) - Number(Boolean(a.idea.grade?.graded)) || BAND_RANK[a.idea.fairness] - BAND_RANK[b.idea.fairness] || a.order - b.order)
     .slice(0, MAX_TRADE_IDEAS)
-    .map((s) => s.idea)
+    .map(({ idea }) => idea)
 }
 
 /** Fairer first; then, when picks were offered, a package that uses one; then the bigger win-now gain. */
@@ -399,6 +529,13 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
   if (tradeBanReason({ leagueType: league.leagueType, isDynasty: marketContext.variant.dynasty, settings: league.settings })) {
     return { status: 'unavailable', reason: 'this league does not allow trades' }
   }
+
+  /*
+   * ONE grader for the league — membership was proven by `leagueContextFor` above, as the grader
+   * requires — loading while the market chart generates the candidates.
+   */
+  const graderPromise: Promise<LeagueTradeGrader | null> = createLeagueTradeGrader({ leagueId: input.leagueId, userId: input.userId }).catch(() => null)
+  const gradeFn = async (give: GradeInputs, get: GradeInputs) => gradeDeal(await graderPromise, { give, get, viewerSide: true })
 
   const values = await getMarketValues(marketContext).catch(() => null)
   if (!values) {
@@ -496,22 +633,23 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
     if (isLeagueWeekRefusal(basis)) return { status: 'unavailable', reason: basis.detail }
     const projections = await priceLeagueWeek(basis, ids, new Map([...byId].map(([id, row]) => [id, row.position])))
     const candidates = findWinNowPickTrades({ me, partners: others, ownedPicks, projections, slots,
-      position, outgoingPlayerId: outgoing?.playerId, max: MAX_TRADE_IDEAS })
+      position, outgoingPlayerId: outgoing?.playerId, max: GRADED_IDEAS })
     const suffix = (round: number) => round === 1 ? 'st' : round === 2 ? 'nd' : round === 3 ? 'rd' : 'th'
-    const ideas: TradeIdea[] = candidates.map(c => ({
+    const generated: TradeIdea[] = candidates.map(c => ({
       partnerTeam: c.partner.teamName, partnerManager: c.partner.managerDisplayName ?? null,
       partnerStance: c.partner.stance,
-      give: [{ name: c.outgoing.playerName, position: c.outgoing.position, value: c.outgoing.value, onTradeBlock: false },
+      give: [{ name: c.outgoing.playerName, position: c.outgoing.position, value: c.outgoing.value, onTradeBlock: false, playerId: c.outgoing.playerId },
         ...c.picks.map(p => ({ name: `${p.season} ${p.round}${suffix(p.round)}${p.originalTeamName ? ` (${p.originalTeamName})` : ''}`,
-          position: 'PICK', value: p.value, onTradeBlock: false }))],
+          position: 'PICK', value: p.value, onTradeBlock: false, pick: { year: p.season, round: p.round } }))],
       get: [{ name: c.target.playerName, position: c.target.position, value: c.target.value,
-        onTradeBlock: Boolean(c.partner.blockPlayerIds?.includes(c.target.playerId)) }],
+        onTradeBlock: Boolean(c.partner.blockPlayerIds?.includes(c.target.playerId)), playerId: c.target.playerId }],
       giveTotal: c.giveTotal, getTotal: c.getTotal, fairness: c.fairness,
       sendable: native, fillsNeed: myNeeds.includes(c.target.position),
       why: [`Your projected starters gain ${c.lineupDelta.toFixed(1)} points in Week ${basis.week.week}`,
         ...(c.partner.stance === 'rebuilder' ? ['They are rebuilding and receive future draft capital'] : ['They receive future draft capital'])],
       projectedLineupDelta: c.lineupDelta, projectedLineupBefore: c.lineupBefore, projectedLineupAfter: c.lineupAfter,
     }))
+    const ideas = rankGradedPickIdeas(await gradeIdeas(generated, gradeFn))
     return { status: 'ready', leagueName: leagueDisplayName(league.name), valuesMode: values.mode,
       you: { teamName: yours?.teamName ?? me.teamName, stance: me.stance,
         stanceSettled: me.stanceSettled ?? true, needs: myNeeds, surpluses: mySurpluses },
@@ -561,7 +699,9 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
   }
 
   if (nowOf || picks.length) {
-    const ideas = pickAndNowIdeas({ me, others, matchOf, myNeeds, mySurpluses, position, outgoing, nowOf, picks })
+    const ideas = rankGradedPickIdeas(
+      await gradeIdeas(pickAndNowIdeas({ me, others, matchOf, myNeeds, mySurpluses, position, outgoing, nowOf, picks }), gradeFn),
+    )
     return {
       status: 'ready',
       leagueName: leagueDisplayName(league.name),
@@ -620,7 +760,13 @@ export async function buildTradeFinder(input: TradeFinderInput): Promise<TradeFi
     }
   }
 
-  const ideas = rankIdeas(candidates)
+  /*
+   * Generation order (the same comparator, on the market chart) decides only WHICH candidates are
+   * graded; the three said are ranked on THE grade.
+   */
+  const pre = rankIdeasAll(candidates)
+  const gradedIdeas = await gradeIdeas(pre.map((c) => c.idea), gradeFn)
+  const ideas = rankIdeas(gradedIdeas.map((idea, i) => ({ idea, matchScore: pre[i]!.matchScore })))
   let noIdeasReason: string | null = null
   if (!ideas.length) {
     if (!outgoing && !mySurpluses.length) {
@@ -663,7 +809,7 @@ const FAIRNESS_WORDS: Record<FairnessBand, string> = {
   'slight edge you': 'a slight edge to you',
   'slight edge partner': 'a slight edge to them — easier to get accepted',
   lopsided: 'lopsided — would need a sweetener',
-  'low confidence': 'unpriced for at least one player, so treat the balance as unknown',
+  'low confidence': 'not graded, so treat the balance as unknown',
 }
 
 /** The tool result: prose the model repeats from, with every number it may use written out. */
@@ -674,7 +820,7 @@ export function renderTradeFinderBlock(result: TradeFinderResult): string {
   const lines: string[] = []
   lines.push(`TRADE IDEAS — ${result.leagueName}`)
   lines.push(
-    `Built from every roster in this league and AllFantasy market values for its format (${result.valuesMode}; values on a 0–10,000 scale). ` +
+    `Built from every roster in this league. Every value and balance below is THIS LEAGUE'S AllFantasy trade grade — the league chart and AllFantasy market every trade screen prices on (0–10,000 scale), the letter the Trade Center shows for the same offer. ` +
       (result.projectionWeek
         ? `Owned picks are valued by round average; exact draft slots are unknown. Lineup gains use Week ${result.projectionWeek.week}, ${result.projectionWeek.season} projections under this league’s scoring. These are opening offers, not acceptance or season forecasts.`
         : 'These are opening offers from roster shape and value, not verdicts.'),
@@ -711,9 +857,11 @@ export function renderTradeFinderBlock(result: TradeFinderResult): string {
     )
     lines.push(`   You give: ${listAssets(idea.give)}`)
     lines.push(`   You get: ${listAssets(idea.get)}`)
-    lines.push(`   Value: you give ${fmt(idea.giveTotal)}, you get ${fmt(idea.getTotal)} — ${FAIRNESS_WORDS[idea.fairness]}`)
-    if (idea.nowGive !== undefined) {
-      lines.push(`   This season (redraft chart): you give ${fmt(idea.nowGive ?? null)}, you get ${fmt(idea.nowGet ?? null)}`)
+    if (idea.grade?.graded) {
+      lines.push(`   League grade: ${idea.grade.letter} for you, ${idea.grade.partnerLetter} for them — ${idea.grade.label}`)
+      lines.push(`   Value: you give ${fmt(idea.giveTotal)}, you get ${fmt(idea.getTotal)} — ${FAIRNESS_WORDS[idea.fairness]}`)
+    } else {
+      lines.push(`   Not graded: ${(idea.grade && !idea.grade.graded ? idea.grade.reason : 'the league trade grade did not answer').replace(/\.$/, '')}. Quote no value or balance for this one.`)
     }
     if (idea.projectedLineupDelta != null) lines.push(`   Projected starters: ${idea.projectedLineupBefore?.toFixed(1)} before, ${idea.projectedLineupAfter?.toFixed(1)} after (+${idea.projectedLineupDelta.toFixed(1)} this week)`)
     if (idea.why.length) lines.push(`   Why it could work: ${idea.why.join('; ')}`)

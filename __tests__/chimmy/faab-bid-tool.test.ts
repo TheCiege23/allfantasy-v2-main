@@ -26,10 +26,28 @@ vi.mock('@/lib/prisma', () => ({
     weeklyMatchup: { findFirst: h.weekly, findMany: vi.fn(async () => []) },
   },
 }))
+/*
+ * 2026-11-26: the values are THE grader's league chart (`createLeagueTradeGrader(...).chart`), read
+ * through `marketValuesFromLeagueChart`. `h.values` still holds the fixture payload; the grader mock
+ * serves it as that chart's `fcPlayers`. `getMarketValues` throws, so a tool that reached for the old
+ * market service would fail here rather than quietly price on it.
+ */
 vi.mock('@/lib/trade-intel/marketValueService', async () => {
   const actual = await vi.importActual<typeof import('@/lib/trade-intel/marketValueService')>('@/lib/trade-intel/marketValueService')
-  return { ...actual, getMarketValues: h.values }
+  return { ...actual, getMarketValues: () => { throw new Error('the FAAB tool must price on the grader chart') } }
 })
+vi.mock('@/lib/decision-os/trade/leagueTradeGrader', () => ({
+  createLeagueTradeGrader: vi.fn(async () => {
+    const v = (await h.values()) as { bySleeperId: Record<string, { name: string; sleeperId: string; position: string; value: number }>; fetchedAt: string; mode: string; numQbs: number; numTeams: number; ppr: number } | null
+    if (!v) return null
+    return {
+      chart: {
+        fcPlayers: Object.values(v.bySleeperId).map((e) => ({ player: { name: e.name, sleeperId: e.sleeperId, position: e.position }, value: e.value, overallRank: NaN, trend30Day: NaN })),
+        fcSyncedAt: v.fetchedAt, chartIsDynasty: v.mode === 'dynasty', isSuperFlex: v.numQbs === 2, leagueSize: v.numTeams, pprNfl: v.ppr,
+      },
+    }
+  }),
+}))
 
 import { buildFaabBidContext, computeFaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
 import { executeChimmyTool, type ChimmyToolContext } from '@/lib/chimmy/tools/chimmyTools'
@@ -66,6 +84,17 @@ beforeEach(() => {
 })
 
 describe('get_faab_bid_plan', () => {
+  it('prices on THE grader’s league chart, for this league and viewer (2026-11-26)', async () => {
+    const { createLeagueTradeGrader } = await import('@/lib/decision-os/trade/leagueTradeGrader')
+    await buildFaabBidContext('L1', 'me')
+    expect(createLeagueTradeGrader).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'me' })
+    // Move ONE price on the grader's chart and the plan moves with it: the Free TE stops being an upgrade.
+    h.values.mockResolvedValue({ ...VALUES, bySleeperId: { ...VALUES.bySleeperId, 'fa-te': { ...VALUES.bySleeperId['fa-te']!, value: 500 } } })
+    const text = await buildFaabBidContext('L1', 'me')
+    expect(text).not.toContain('- Free TE (TE): bid up to')
+    expect(text).toContain("values from this league’s AllFantasy trade chart")
+  })
+
   it('in a Guilly league, splits the remaining budget across the real upgrades only', async () => {
     const text = await buildFaabBidContext('L1', 'me')
     expect(text).toContain('The user has $400 FAAB left of a $1000 season budget.')

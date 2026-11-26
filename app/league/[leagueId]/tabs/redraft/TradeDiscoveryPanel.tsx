@@ -143,7 +143,13 @@ export function TradeDiscoveryPanel({
                             {' → '}
                             {pkg.receiveAssets.map((a) => a.playerName).join(' + ')}
                           </span>
-                          <span className="ml-2 text-white/45">[{fairnessLabel(pkg.fairnessBand)}]</span>
+                          <span
+                            className="ml-2 text-white/45"
+                            data-testid="discovery-package-grade"
+                            title={pkg.leagueGrade && !pkg.leagueGrade.graded ? pkg.leagueGrade.reason : undefined}
+                          >
+                            [{pkg.leagueGrade?.graded ? `${pkg.leagueGrade.letter} · ` : ''}{fairnessLabel(pkg.fairnessBand)}]
+                          </span>
                           {pkg.warningFlags.length ? (
                             <span className="ml-1 text-amber-200/70">{pkg.warningFlags.map(flagLabel).join(', ')}</span>
                           ) : null}

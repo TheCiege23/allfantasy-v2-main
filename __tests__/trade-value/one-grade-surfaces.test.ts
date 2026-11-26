@@ -83,6 +83,13 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'app/api/trades/evaluate/route.ts', entry: /evaluateStoredTrade\(/, what: 'POST /api/trades/evaluate' },
   /* 2026-09-27: /trade-finder's candidates (see lib/trade-finder/candidateGrades.ts). */
   { file: 'app/api/trade-finder/route.ts', entry: /gradeDeal\(/, what: 'the /trade-finder page’s suggested trades' },
+  /* 2026-11-26: the other three trade finders — generation stays theirs, every verdict is the grade's. */
+  { file: 'app/api/trade-finder/matchmaking/route.ts', entry: /gradeDeal\(/, what: 'Partner Match (Find Best Partners) offers' },
+  { file: 'app/api/league/trade-finder/route.ts', entry: /gradeDeal\(/, what: 'the league trade finder (Trade Center panel, Decide tab)' },
+  { file: 'app/api/redraft/trades/package-finder/route.ts', entry: /gradeDeal\(/, what: 'the redraft package finder (Find a Trade)' },
+  /* 2026-11-26: Chimmy's "find me a trade" ideas and its league brief's latest-trade letter. */
+  { file: 'lib/chimmy/tradeFinderGrounding.ts', entry: /gradeDeal\(/, what: 'Chimmy trade ideas (find_trade)' },
+  { file: 'lib/intelligence/chimmy/leagueIntelligenceGrounding.ts', entry: /oneGradeForCompletedTrade\(/, what: 'Chimmy league brief, latest completed trade' },
   /* 2026-09-29: the /core Player Finder's "trade for him" card — it printed a second engine's verdict until then. */
   { file: 'lib/core-app/playerTradeVisual.ts', entry: /gradeDeal\(/, what: 'the /core Player Finder “trade for him” card' },
 ]

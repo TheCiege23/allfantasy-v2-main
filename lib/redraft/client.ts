@@ -277,10 +277,13 @@ export type TradePackageSuggestion = {
   packageId: string
   giveAssets: TradePackageAsset[]
   receiveAssets: TradePackageAsset[]
-  myTotalValue: number
-  partnerTotalValue: number
-  valueDelta: number
+  /** THE league trade grade's values (2026-11-26); null when the grade was withheld. */
+  myTotalValue: number | null
+  partnerTotalValue: number | null
+  valueDelta: number | null
+  /** Banded on THE grade; `low confidence` when it was withheld (reason on `leagueGrade`). */
   fairnessBand: string
+  leagueGrade?: { graded: true; letter: string; partnerLetter: string; label: string; giveValue: number; getValue: number } | { graded: false; reason: string }
   confidence: number
   reasons: string[]
   warningFlags: string[]

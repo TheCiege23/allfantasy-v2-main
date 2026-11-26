@@ -24,7 +24,7 @@ interface MatchmakingInput {
   maxResults?: number
 }
 
-interface OfferAsset {
+export interface OfferAsset {
   assetId: string
   name: string
   value: number
@@ -32,13 +32,13 @@ interface OfferAsset {
   isPick: boolean
 }
 
-interface OfferSkeleton {
+export interface OfferSkeleton {
   userGives: OfferAsset[]
   partnerGives: OfferAsset[]
   fairnessPct: number
 }
 
-interface PartnerMatch {
+export interface PartnerMatch {
   rosterId: number
   displayName: string
   avatar?: string
@@ -58,7 +58,7 @@ interface PartnerMatch {
   tendencyInsights: string[]
 }
 
-interface MatchmakingOutput {
+export interface MatchmakingOutput {
   goal: MatchmakingGoal
   goalDescription: string
   targetPlayer?: string
@@ -431,10 +431,17 @@ function buildTendencyInsights(tendency?: ManagerTendencyProfile): string[] {
   return insights.length > 0 ? insights : [`${tendency.sampleSize} trades analyzed`]
 }
 
-function estimateAcceptProbability(matchScore: number, fairnessPct: number): { prob: number; label: string } {
+/**
+ * How likely the partner is to accept: partner fit (`matchScore`) adjusted by how even the offer is.
+ * Exported so Partner Match can re-take it on THE grade's value gap (`lib/trade-finder/matchmakingGrades.ts`).
+ * `fairnessPct: null` means the offer could not be priced — no fairness adjustment either way, rather
+ * than the "perfectly even" bonus a 0 would earn.
+ */
+export function estimateAcceptProbability(matchScore: number, fairnessPct: number | null): { prob: number; label: string } {
   let base = matchScore / 100
 
-  if (Math.abs(fairnessPct) <= 5) base += 0.10
+  if (fairnessPct == null) base += 0
+  else if (Math.abs(fairnessPct) <= 5) base += 0.10
   else if (Math.abs(fairnessPct) <= 10) base += 0.05
   else if (Math.abs(fairnessPct) <= 20) base -= 0.05
   else base -= 0.15
