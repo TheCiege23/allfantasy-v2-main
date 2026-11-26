@@ -25,6 +25,7 @@ import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
 import { applyImmunity, immuneRosterIds, readAdvanced, scheduledChops } from './chopSchedule'
 import { applyTopScorerBonus } from './faabBonus'
+import { effectiveReleaseTiming, readFreeAgencyFromWeek } from './freeAgencyFromWeek'
 import { previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
 import { describeFaabPayout, movesChoppedFaab, readFaabOnChop, readFaabOnChopPercent } from './faabOnChop'
 import { redistributeChoppedFaab } from './faabOnChopApply'
@@ -611,7 +612,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
       choppedRosterIds,
       aliveRosterIds: evalResult.scores.map((s) => s.rosterId),
       displayNames: await getDisplayNamesForRosters(input.leagueId, choppedRosterIds),
-      rosterReleaseTiming: config.rosterReleaseTiming,
+      // From week N on, chopped players are free agents at once (./freeAgencyFromWeek.ts): the alert says so.
+      rosterReleaseTiming: effectiveReleaseTiming(config.rosterReleaseTiming, readFreeAgencyFromWeek(endgameLeague?.settings), input.weekOrPeriod),
       periodWeeks: readPeriodWeeks(endgameLeague?.settings),
     })
   } catch (e) {

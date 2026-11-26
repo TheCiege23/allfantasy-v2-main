@@ -11,6 +11,7 @@
  *   statCorrectionHours   nativeGuillotineWeek (how long to wait before a chop is final)
  *   dangerMarginPoints    GuillotineDangerEngine (who shows as "in danger")
  *   rosterReleaseTiming   GuillotineEliminationEngine → releaseChoppedRosters
+ *   freeAgencyFromWeek    lib/waiver-wire/dropped-player-waivers.ts (no waiver hold from week N; ./freeAgencyFromWeek.ts)
  *   faabOnChop            GuillotineEliminationEngine → redistributeChoppedFaab (./faabOnChop.ts)
  *   bestBall              scoringEngine.leagueIsBestBall → each team's best lineup (./guillotineBestBall.ts)
  *   periodWeeks           nativeGuillotineWeek → which weeks chop and how many weeks a score adds (./eliminationPeriods.ts)
@@ -25,6 +26,7 @@ import type { TiebreakStep } from './types'
 import { MAX_CHOPS_PER_WEEK } from './chopSchedule'
 import { DEFAULT_FAAB_ON_CHOP_PERCENT, FAAB_ON_CHOP_OPTIONS, isFaabOnChopPercent, type FaabOnChop } from './faabOnChop'
 import { isChopListOrder, type ChopListOrder } from './chopListOrder'
+import { isFreeAgencyFromWeek } from './freeAgencyFromWeek'
 
 export type GuillotineRules = {
   teamsPerChop: number
@@ -34,6 +36,11 @@ export type GuillotineRules = {
   statCorrectionHours: number
   dangerMarginPoints: number
   rosterReleaseTiming: 'immediate' | 'next_waiver_run'
+  /**
+   * From this week on, chopped players skip waivers and are free agents right after the chop
+   * (./freeAgencyFromWeek.ts). null = never. Stored in League.settings (FREE_AGENCY_FROM_WEEK_KEY).
+   */
+  freeAgencyFromWeek: number | null
   /** Chimmy writes the weekly recap after each chop (paid leagues; ./weeklyRecap.ts). Stored in League.settings. */
   aiRecapAuto: boolean
   /** What happens to a chopped team's unspent FAAB. Stored in League.settings (FAAB_ON_CHOP_KEY). */
@@ -225,6 +232,12 @@ export function normalizeGuillotineRulesPatch(
   if ('bestBall' in r) {
     if (typeof r.bestBall !== 'boolean') return { ok: false, error: { field: 'bestBall', message: 'Turn best ball lineups on or off.' } }
     out.bestBall = r.bestBall
+  }
+  if ('freeAgencyFromWeek' in r) {
+    if (r.freeAgencyFromWeek !== null && !isFreeAgencyFromWeek(r.freeAgencyFromWeek)) {
+      return { ok: false, error: { field: 'freeAgencyFromWeek', message: 'Pick the week chopped players start going straight to free agency, or never.' } }
+    }
+    out.freeAgencyFromWeek = r.freeAgencyFromWeek as number | null
   }
   if ('chopListOrder' in r) {
     if (!isChopListOrder(r.chopListOrder)) return { ok: false, error: { field: 'chopListOrder', message: 'Pick where the chop zone sits in the list.' } }

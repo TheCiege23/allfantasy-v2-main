@@ -42,6 +42,7 @@
  * The position is read from the player tables; a player whose position cannot be found takes the
  * league period. FCFS still has no hold for anyone.
  */
+import { choppedPlayersAreFreeAgents, readFreeAgencyFromWeek } from '@/lib/guillotine/freeAgencyFromWeek'
 import { prisma } from '@/lib/prisma'
 import { ourIdOrSleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { droppedPlayerHoldPolicy, holdHoursForPosition, maxHoldHours, type DroppedPlayerHoldPolicy } from './hold-by-position'
@@ -185,9 +186,16 @@ export async function loadChopReleaseDropRows(
    * keeps the hold, the fair default.
    */
   let immediate = false
+  // "Chopped players stop hitting waivers after week N" (lib/guillotine/freeAgencyFromWeek.ts): a chop in week N
+  // or later is not held, the same as a league set to "Right after the chop". Unreadable = no such rule.
+  let freeFrom: number | null = null
   try {
-    const config = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { rosterReleaseTiming: true } })
+    const [config, league] = await Promise.all([
+      prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { rosterReleaseTiming: true } }),
+      prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
+    ])
     immediate = config?.rosterReleaseTiming === 'immediate'
+    freeFrom = readFreeAgencyFromWeek(league?.settings)
   } catch {
     immediate = false
   }
@@ -195,9 +203,11 @@ export async function loadChopReleaseDropRows(
   try {
     const rows = (await prisma.guillotineWaiverRelease.findMany({
       where: { leagueId, availableAt: { gte: since }, ...(playerIds ? { playerId: { in: [...playerIds] } } : {}) },
-      select: { playerId: true, availableAt: true, eliminatedRosterId: true },
-    })) as Array<{ playerId: string; availableAt: Date; eliminatedRosterId: string }>
-    return rows.map((r) => ({ dropPlayerId: r.playerId, processedAt: r.availableAt, rosterId: r.eliminatedRosterId, source: 'chop_release' as const }))
+      select: { playerId: true, availableAt: true, eliminatedRosterId: true, scoringPeriod: true },
+    })) as Array<{ playerId: string; availableAt: Date; eliminatedRosterId: string; scoringPeriod: number }>
+    return rows
+      .filter((r) => !choppedPlayersAreFreeAgents(freeFrom, r.scoringPeriod))
+      .map((r) => ({ dropPlayerId: r.playerId, processedAt: r.availableAt, rosterId: r.eliminatedRosterId, source: 'chop_release' as const }))
   } catch (error) {
     console.warn('[waiver-wire] chop releases unreadable; no chop hold this read', { leagueId, error: error instanceof Error ? error.message : String(error) })
     return []

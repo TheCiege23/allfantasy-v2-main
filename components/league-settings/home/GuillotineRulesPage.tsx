@@ -598,6 +598,26 @@ export function GuillotineRulesPage({
           </select>
         </Field>
 
+        {/* lib/guillotine/freeAgencyFromWeek.ts: only matters while chops go to waivers. */}
+        {rules.rosterReleaseTiming !== 'immediate' ? (
+          <Field
+            label="Skip waivers late in the season"
+            help={rules.freeAgencyFromWeek != null ? `From week ${rules.freeAgencyFromWeek}, chopped players are free agents as soon as the chop is final.` : 'Every chop goes to the waiver run.'}
+          >
+            <select
+              className={inputClass}
+              value={rules.freeAgencyFromWeek ?? ''}
+              onChange={(e) => update({ freeAgencyFromWeek: e.target.value === '' ? null : Number(e.target.value) })}
+              data-testid="guillotine-rules-free-agency-from"
+            >
+              <option value="">Never</option>
+              {[...new Set([...weeks, ...(rules.freeAgencyFromWeek != null ? [rules.freeAgencyFromWeek] : [])])].sort((a, b) => a - b).map((w) => (
+                <option key={w} value={w}>From week {w}</option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+
         <Field label="A chopped team's unspent FAAB" help={faabHelp} paid={paidLocked('faabOnChop')}>
           <div className="grid items-end gap-2 sm:grid-cols-[2fr_1fr]">
             <select className={inputClass} value={rules.faabOnChop} onChange={(e) => update({ faabOnChop: e.target.value as FaabOnChop })} data-testid="guillotine-rules-faab-on-chop">

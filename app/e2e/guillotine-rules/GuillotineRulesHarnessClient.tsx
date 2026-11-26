@@ -30,6 +30,7 @@ const RULES: GuillotineRules = {
   bestBall: false,
   periodWeeks: 1,
   chopListOrder: 'chop_top',
+  freeAgencyFromWeek: null,
 }
 
 const LAYOUT = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 6, IR: 1 }
