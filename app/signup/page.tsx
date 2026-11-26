@@ -2,6 +2,7 @@ import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { ClientOnlyAuthPage } from "@/components/auth/ClientOnlyAuthPage";
 import { AuthV4 } from "@/components/core-app/screens/AuthV4";
 import { LaunchOfferStrip } from "@/components/launch/LaunchOfferStrip";
+import { HolidaySaleStrip } from "@/components/launch/HolidaySaleStrip";
 import { buildLaunchOfferView, foundingOfferBeforeLaunch } from "@/lib/monetization/foundingMember";
 
 
@@ -49,6 +50,10 @@ export default function SignupPage() {
             <LaunchOfferStrip offer={launchOffer} surface="signup" />
           </div>
         ) : null}
+        {/* Black Friday → Cyber Monday only; renders nothing otherwise. */}
+        <div className="af-core af-hs-signup-wrap">
+          <HolidaySaleStrip surface="signup" />
+        </div>
         <AuthV4 mode="signup" />
       </AuthPageShell>
     </ClientOnlyAuthPage>

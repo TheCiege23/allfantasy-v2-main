@@ -24,6 +24,7 @@ const anchorViews: Record<string, AdminView> = {
   "beta-invites": "audience",
   "pipeline-freshness": "data",
   "stat-reingest": "data",
+  "contract-capture": "data",
   providers: "data",
   "provider-health": "data",
   "production-readiness": "data",

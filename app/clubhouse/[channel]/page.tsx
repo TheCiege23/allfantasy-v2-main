@@ -66,7 +66,7 @@ export default async function ClubhouseChannelPage({ params, searchParams }: Pro
         sub={
           isLab ? (
             <>
-              Pitch a league format in three boxes, upvote the ones you would play, and watch them move from{' '}
+              Pitch a league format in three boxes (add photos or a PDF if it helps), upvote the ones you would play, and watch them move from{' '}
               <strong>Under review</strong> to <strong>Building</strong> to <strong>Shipped</strong>. Shipped ideas carry
               their creator&apos;s name. Whole rulebook written?{' '}
               <Link href="/submit-league" className="font-bold underline" style={{ color: 'var(--tone)' }}>
@@ -83,6 +83,7 @@ export default async function ClubhouseChannelPage({ params, searchParams }: Pro
             <>
               <PrimaryButtonLink href={pitchHref}>💡 Pitch an idea</PrimaryButtonLink>
               <GhostButtonLink href={newPostHref}>＋ Discussion post</GhostButtonLink>
+              {viewer.isModerator && <GhostButtonLink href="/clubhouse/ideas/plans">🛠️ Build plans</GhostButtonLink>}
             </>
           ) : (
             <PrimaryButtonLink href={newPostHref}>＋ New post</PrimaryButtonLink>

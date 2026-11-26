@@ -34,6 +34,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { reapOnce } from './cron-build-reaper.mjs'
 import { readCronSchedule, slowTierSchedules } from './cron-tier.mjs'
+import { catchupOnce } from './worker-release-catchup.mjs'
 
 /** A fast window that ends sooner than this (crash, config error) waits out the rest before respawning. */
 const MIN_FAST_WINDOW_MS = 60_000

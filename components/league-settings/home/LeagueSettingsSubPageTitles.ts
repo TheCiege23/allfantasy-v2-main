@@ -9,9 +9,10 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   draft: 'Draft settings',
   waivers: 'Waivers',
   trades: 'Trades',
-  'guillotine-first-chop': 'First chop week',
-  'guillotine-chop-rules': 'Chop rules',
-  'guillotine-rules': 'League rules',
+  // One page since 2026-11-25 (GuillotineRulesPage): the two older ids open it too.
+  'guillotine-first-chop': 'Guilly rules',
+  'guillotine-chop-rules': 'Guilly rules',
+  'guillotine-rules': 'Guilly rules',
   'pirate-rules': 'Pirate rules',
   'af-options': 'AllFantasy options',
   playoffs: 'Playoff settings',

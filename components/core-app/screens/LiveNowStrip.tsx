@@ -24,6 +24,7 @@ export function LiveNowStrip({
   now,
   sportLabel,
   hasRosterData,
+  startersInHeadline = false,
   liveOnly,
   onLiveOnly,
 }: {
@@ -32,6 +33,8 @@ export function LiveNowStrip({
   now: number | null
   sportLabel: string
   hasRosterData: boolean
+  /** The page headline already says how many of your starters are playing (2026-11-24: it was said twice). */
+  startersInHeadline?: boolean
   liveOnly: boolean
   onLiveOnly: (next: boolean) => void
 }) {
@@ -49,7 +52,7 @@ export function LiveNowStrip({
           {clock ? <span className="af-live-now-clock af-num">{clock}</span> : null}
           <span className="af-live-now-counts af-num">{m.nowCounts(strip.live, strip.final, strip.upcoming)}</span>
         </span>
-        {hasRosterData ? <span className="af-live-now-starters af-num">{m.nowStarters(strip.startersLive)}</span> : null}
+        {hasRosterData && !startersInHeadline ? <span className="af-live-now-starters af-num">{m.nowStarters(strip.startersLive)}</span> : null}
       </section>
 
       {strip.chips.length > 0 ? (

@@ -12,6 +12,10 @@ import 'server-only'
  *
  * Every pick goes through the same `submitPick` path the expired-timer autopick uses, with the
  * expected overall pinned, so a browser in the room and this loop can never double-draft a slot.
+ *
+ * A manager's queue comes first, as it does when a pick clock runs out: the queue is the only say
+ * a manager has in an auto draft, and until 2026-11-25 this loop never read it. A team with no
+ * queue (or whose queued players are gone or cannot fill an open starting spot) gets best available.
  */
 
 import { prisma } from '@/lib/prisma'
@@ -24,6 +28,7 @@ import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { submitBestAvailableAutopickForExpiredTimer } from '@/lib/live-draft-engine/autopickBestAvailableSubmit'
 import { appendPickToRosterDraftSnapshot } from '@/lib/live-draft-engine/RosterAssignmentService'
 import { completeDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
+import { draftQueueUserIdForRoster, tryQueueAutoPick } from '@/lib/live-draft-engine/slow-draft/SlowDraftRuntimeService'
 
 type SlotOrderEntry = { slot: number; rosterId: string; displayName: string }
 type TradedPickRecord = { round: number; originalRosterId: string; previousOwnerName: string; newRosterId: string; newOwnerName: string }
@@ -68,12 +73,14 @@ export async function fillAutoDraftBoard(leagueId: string, opts: FillAutoDraftBo
   const ui = await getDraftUISettingsForLeague(leagueId)
   if (ui.executionMode !== 'auto') return stop('not_auto')
   if (!(await isLeagueRosterDraftReady(leagueId))) return stop('roster_configuration_incomplete')
+  // Which queue belongs to which team, looked up once per team and only if anyone queued a player.
+  const queueUserIdByRoster = new Map<string, string | null>()
 
   while (picks < maxPicks) {
     const session = await prisma.draftSession.findFirst({
       where: { leagueId },
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
-      include: { picks: { orderBy: { overall: 'asc' } } },
+      include: { picks: { orderBy: { overall: 'asc' } }, queues: { select: { userId: true, order: true } } },
     })
     if (!session) return stop('no_session')
     if (session.sleeperDraftId) return stop('sleeper_mirrored')
@@ -109,6 +116,40 @@ export async function fillAutoDraftBoard(leagueId: string, opts: FillAutoDraftBo
 
     const owner = resolvePickOwner(current.round, current.slot, slotOrder, tradedPicks)
     const rosterId = owner?.rosterId ?? current.rosterId
+
+    const queuedUserIds = (session.queues ?? [])
+      .filter((queue) => Array.isArray(queue.order) && queue.order.length > 0)
+      .map((queue) => queue.userId)
+    if (queuedUserIds.length > 0) {
+      if (!queueUserIdByRoster.has(rosterId)) {
+        queueUserIdByRoster.set(rosterId, await draftQueueUserIdForRoster(rosterId).catch(() => null))
+      }
+      const queueUserId = queueUserIdByRoster.get(rosterId)
+      if (queueUserId && queuedUserIds.includes(queueUserId)) {
+        // A queue pick that fails for any reason falls through to best available below.
+        const queued = await tryQueueAutoPick(leagueId, rosterId).catch(() => ({ success: false as const }))
+        if (queued.success) {
+          picks += 1
+          const made = await prisma.draftPick
+            .findFirst({
+              where: { sessionId: session.id, overall: current.overall },
+              select: { playerName: true, position: true, team: true, playerId: true, byeWeek: true },
+            })
+            .catch(() => null)
+          if (made) {
+            await appendPickToRosterDraftSnapshot(leagueId, rosterId, {
+              playerName: made.playerName,
+              position: made.position,
+              team: made.team ?? null,
+              playerId: made.playerId ?? null,
+              byeWeek: made.byeWeek ?? null,
+            }).catch(() => {})
+          }
+          continue
+        }
+      }
+    }
+
     const result = await submitBestAvailableAutopickForExpiredTimer(leagueId, rosterId, current.overall)
     if (!result.ok) {
       invalidateLeagueDraftCaches(leagueId)

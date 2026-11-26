@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowRight, Axe, Bot, CheckCircle2, Lock, Megaphone, Sparkles, Trophy, Users } from 'lucide-react'
+import { ArrowRight, Axe, Bot, CheckCircle2, Megaphone, Sparkles, Trophy, Users } from 'lucide-react'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { GuillotineChopPreview } from './GuillotineChopPreview'
 
@@ -164,18 +164,12 @@ export function GuillotineAutopilotCard({
             <button type="button" className="nl-button" onClick={() => onOpenSettings('roster')}>
               Roster spots
             </button>
-            <button type="button" className="nl-button" onClick={() => onOpenSettings('guillotine-first-chop')}>
-              First chop week
-            </button>
+            {/* One page for every Guilly rule since 2026-11-25; it was three buttons to three pages. */}
             <button type="button" className="nl-button" onClick={() => onOpenSettings('guillotine-rules')}>
-              League rules
+              Guilly rules
             </button>
             <button type="button" className="nl-button" onClick={() => onOpenSettings('waivers')}>
               Waivers
-            </button>
-            <button type="button" className="nl-button" onClick={() => onOpenSettings('guillotine-chop-rules')}>
-              {hasAfCommissioner === false ? <Lock size={14} aria-hidden /> : null}
-              Chop rules{hasAfCommissioner === false ? ' · AF Commissioner' : ''}
             </button>
           </div>
           <p className="mt-2 text-[12px] opacity-60">

@@ -1,8 +1,8 @@
 /**
  * Guillotine after the 2026-11-23 audit: the War Room reads in light mode (no hard-coded hex colours in a
- * className) and in plain words; the phone hero's margin takes its tier's colour; a chopped manager is not
- * offered "Set lineup" on a phone either; the survival table fits a phone; the hub stops repeating its waiver
- * and Chimmy links; and the Chimmy card drops its engine wording.
+ * className) and in plain words; the survival table fits a phone; the hub stops repeating its waiver and Chimmy
+ * links; and the Chimmy card drops its engine wording. (The phone hero it also covered went with the hub on
+ * 2026-11-25; the Chop page's own tests are in guillotineChopPage.test.tsx.)
  */
 import React from 'react'
 import { readFileSync } from 'node:fs'
@@ -61,17 +61,6 @@ describe('the Guillotine War Room panel', () => {
   it('no hard-coded hex colour in a className (the panel was a dark box on a light page)', () => {
     expect(classHex(read('app/league/[leagueId]/tabs/guillotine/GuillotineWarRoomPanel.tsx'))).toEqual([])
     expect(read('app/league/[leagueId]/tabs/guillotine/GuillotineWarRoomPanel.tsx')).not.toMatch(/text-white|bg-white\/|border-white\//)
-  })
-})
-
-describe('the phone hero', () => {
-  const src = () => read('components/guillotine/GuillotineSpecialtyHome.tsx')
-  it('colours the margin by tier, not "safe" green for a manager in the danger tier', () => {
-    expect(src()).toMatch(/phoneMarginDanger/)
-    expect(read('components/guillotine/guillotine-specialty.module.css')).toMatch(/\.phoneMarginDanger\s*\{[^}]*--gl-danger-big/)
-  })
-  it('offers no "Set lineup" to a chopped manager on a phone either', () => {
-    expect(src()).toMatch(/myChopped \? null : \(\s*<Link className=\{`\$\{sp\.btn\}/)
   })
 })
 

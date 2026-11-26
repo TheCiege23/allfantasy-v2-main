@@ -73,7 +73,9 @@ export function buildSurvivorStatusCard(input: SurvivorStatusInput): SurvivorSta
   if (['active', 'immune'].includes(me.playerState)) facts.push({ label: 'Idols', value: idols ? `You hold ${idols}` : 'None' })
   if (me.playerState === 'exile' || (tokens != null && tokens > 0)) facts.push({ label: 'Tokens', value: String(tokens ?? 0) })
   if (voteBy) facts.push({ label: 'Votes close', value: when(voteBy) })
-  else if (votesIn && voteDeadline) facts.push({ label: 'Votes closed', value: format(voteDeadline) })
+  // After the deadline, only for a player whose tribe is NOT at council: the council's own card already says
+  // "Voting has closed", and the tile made it three times on one screen (2026-11-24 audit).
+  else if (votesIn && voteDeadline && council?.attendingTribeId && council.attendingTribeId !== me.tribeId) facts.push({ label: 'Votes closed', value: format(voteDeadline) })
   else if (challengeBy) facts.push({ label: 'Challenge locks', value: when(challengeBy) })
 
   const challengeAction = challenge && input.canSubmitChallenge ? [{ label: 'Make your challenge pick', href: `${base}/challenges` }] : []

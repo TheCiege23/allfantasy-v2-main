@@ -76,7 +76,7 @@ export function CoreDepthLock({
       {/* `from=lock_<depth>` (2026-11-15) is how a purchase is traced back to the lock that sold it —
           lib/monetization/upgradeEntrySource.ts. */}
       {/* …and `back=<this page>` (2026-11-17) is where the success panel returns them — lib/monetization/lockReturn.ts. */}
-      <CoreDepthLockCta href={access.upgradePath} source={source ?? `lock_${access.depth}`} requiredPlan={access.planName}>
+      <CoreDepthLockCta href={access.upgradePath} source={source ?? `lock_${access.depth}`} requiredPlan={access.planName} offerTrial lang={lang}>
         {c.cta(access.planName)}
       </CoreDepthLockCta>
       {children}

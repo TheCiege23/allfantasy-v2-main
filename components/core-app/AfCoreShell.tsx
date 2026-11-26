@@ -283,6 +283,7 @@ export type CoreNavKey =
   | 'live-scores'
   | 'brackets'
   | 'find-league'
+  | 'clubhouse'
   | 'settings'
   | 'plans'
   /*
@@ -653,6 +654,9 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
     // Top level rather than only in the Play sheet: finding a league to join is how a
     // new player starts, and the sheet is two taps deep.
     { key: 'find-league', label: 'Find a League', glyph: '⌕', href: '/find-league' },
+    // The community board. Until this entry it had no desktop link at all: only the phone's Play
+    // sheet reached it, so a desktop player could find it only by typing the address.
+    { key: 'clubhouse', label: 'Clubhouse', glyph: '☰', href: '/clubhouse' },
     /*
      * ⚠ MY TEAM AND WAIVERS ARE LEAGUE-ONLY IN THE NAV SINCE 2026-11-12 (owner's call). With no
      * league selected they were cross-league boards ("10 lineups need a look", "processing in the

@@ -80,15 +80,25 @@ function FirstPickView({ t, fp }: { t: Copy; fp: Extract<FirstPickExplainer, { s
   )
 }
 
-export function ChopExplainerBlock({ leagueId }: { leagueId: string }) {
+/**
+ * `weekOdds` false: the page above already shows each team's chance of surviving THIS week (the Chop page's
+ * list, lib/guillotine/survivalOutlook.ts), so this block leaves that number out and keeps what the list does
+ * not say: the score you need, and your chance of outlasting every remaining chop.
+ *
+ * 🛑 ONE PAGE, ONE NUMBER FOR ONE QUESTION. The list's number comes from this week's scores so far plus each
+ * team's projection for the games it has left. This block's weekly number comes from season averages, and
+ * does not know who has already played. They are two honest methods that answer the same question with
+ * different numbers on the same screen (owner's simplicity rule, 2026-11-25: say each number once).
+ */
+export function ChopExplainerBlock({ leagueId, weekOdds = true }: { leagueId: string; weekOdds?: boolean }) {
   const { language } = useOptionalLanguage()
   const t: Copy = (en, es) => (language === 'es' ? es : en)
   const { data } = useScenarios(leagueId)
   if (!data || data.kind !== 'guillotine' || !data.chop.supported) return null
-  return <ChopView t={t} chop={data.chop} />
+  return <ChopView t={t} chop={data.chop} weekOdds={weekOdds} />
 }
 
-function ChopView({ t, chop }: { t: Copy; chop: Extract<ChopExplainer, { supported: true }> }) {
+function ChopView({ t, chop, weekOdds }: { t: Copy; chop: Extract<ChopExplainer, { supported: true }>; weekOdds: boolean }) {
   const you = chop.you
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm" data-testid="chop-explainer">
@@ -97,11 +107,16 @@ function ChopView({ t, chop }: { t: Copy; chop: Extract<ChopExplainer, { support
         <p className="mt-1 text-white/70">{t(`${you.name} has already been chopped.`, `${you.name} ya fue eliminado.`)}</p>
       ) : you ? (
         <>
-          <p className="mt-1">
-            {t(
-              `${you.name}: ${pctText(you.surviveWeekPct)} to survive week ${chop.week}, ${pctText(you.surviveAllPct)} to outlast every remaining chop.`,
-              `${you.name}: ${pctText(you.surviveWeekPct)} de sobrevivir la semana ${chop.week} y ${pctText(you.surviveAllPct)} de superar todas las eliminaciones restantes.`,
-            )}
+          <p className="mt-1" data-testid="chop-explainer-you">
+            {weekOdds
+              ? t(
+                  `${you.name}: ${pctText(you.surviveWeekPct)} to survive week ${chop.week}, ${pctText(you.surviveAllPct)} to outlast every remaining chop.`,
+                  `${you.name}: ${pctText(you.surviveWeekPct)} de sobrevivir la semana ${chop.week} y ${pctText(you.surviveAllPct)} de superar todas las eliminaciones restantes.`,
+                )
+              : t(
+                  `${you.name}: ${pctText(you.surviveAllPct)} to outlast every remaining chop.`,
+                  `${you.name}: ${pctText(you.surviveAllPct)} de superar todas las eliminaciones restantes.`,
+                )}
           </p>
           {you.safeScore && (
             <p className="mt-1">
@@ -113,13 +128,15 @@ function ChopView({ t, chop }: { t: Copy; chop: Extract<ChopExplainer, { support
           )}
         </>
       ) : null}
-      <ul className="mt-2 space-y-1">
-        {chop.table.slice(0, 6).map((r) => (
-          <li key={r.name} style={{ fontWeight: r.isYou ? 600 : undefined }}>
-            {r.name}: {pctText(r.surviveWeekPct)} {t('to survive this week', 'de sobrevivir esta semana')}
-          </li>
-        ))}
-      </ul>
+      {weekOdds ? (
+        <ul className="mt-2 space-y-1" data-testid="chop-explainer-week-table">
+          {chop.table.slice(0, 6).map((r) => (
+            <li key={r.name} style={{ fontWeight: r.isYou ? 600 : undefined }}>
+              {r.name}: {pctText(r.surviveWeekPct)} {t('to survive this week', 'de sobrevivir esta semana')}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <p className="mt-2 text-xs text-white/50">
         {t(chop.basis, 'Simulamos las eliminaciones restantes: cada equipo puntúa alrededor de su media semanal de esta temporada y los peores se eliminan cada semana. No se modelan cambios de alineación, lesiones ni semanas libres.')}
       </p>

@@ -72,6 +72,8 @@ export async function sendMarketingEmail(params: {
   to: string
   subject: string
   bodyText: string
+  /** ISO instant to deliver at (Resend scheduling); omitted = send now. */
+  scheduledAt?: string
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   try {
     const { client, fromEmail } = getResendClient()
@@ -98,6 +100,7 @@ export async function sendMarketingEmail(params: {
       to: params.to,
       subject: params.subject,
       html,
+      ...(params.scheduledAt ? { scheduledAt: params.scheduledAt } : {}),
     })
     if ("error" in result && result.error) {
       return { ok: false, error: result.error.message || "Email provider error" }

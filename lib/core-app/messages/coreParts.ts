@@ -22,6 +22,7 @@ export const corePartsMessages = defineMessages({
     draftEdgeBasis: (seasonsRange: string | null, unattributedSeasons: string | null) =>
       `Counted from this league's Sleeper drafts${seasonsRange != null ? ` (${seasonsRange})` : ''}, matched to the manager who owned each team that season.${unattributedSeasons != null ? ` Picks from ${unattributedSeasons} aren't matched to a manager yet, so those drafts are left out.` : ''} It shows what they did, not what they'll take.`,
     scoreboardUnpriced: (reason: string) => `Nothing scored yet — no projections, because ${reason}`,
+    otherGames: (n: number) => `The other ${n} ${n === 1 ? 'game' : 'games'}`,
     lineupProjectionTitle: (provider: string, partial: boolean) =>
       'This week’s lineup projections: each side’s players summed over the lineup as set, under this league’s scoring. ' +
       `AF is AllFantasy’s own projection engine; ${provider} is ${provider}’s own projection. ` +
@@ -44,6 +45,7 @@ export const corePartsMessages = defineMessages({
     draftEdgeBasis: (seasonsRange: string | null, unattributedSeasons: string | null) =>
       `Datos de los drafts de Sleeper de esta liga${seasonsRange != null ? ` (${seasonsRange})` : ''}, asignados al mánager de cada equipo en esa temporada.${unattributedSeasons != null ? ` Las selecciones de ${unattributedSeasons} aún no se pueden asignar y quedan fuera.` : ''} Muestra lo que hicieron, no lo que elegirán.`,
     scoreboardUnpriced: (reason: string) => `Aún no hay puntos ni proyecciones porque ${reason}`,
+    otherGames: (n: number) => (n === 1 ? 'El otro partido' : `Los otros ${n} partidos`),
     lineupProjectionTitle: (provider: string, partial: boolean) =>
       `Proyecciones de las alineaciones de esta semana: suman a los jugadores titulares con la puntuación de esta liga. AF es la proyección de AllFantasy; ${provider} es la de ${provider}. Es una medida distinta de la probabilidad de ganar mostrada arriba.${partial ? ' Faltan proyecciones de algunos titulares, así que el total es parcial.' : ''}`,
     weekLineupsNote: (week: number | string, provider: string, caveat: string) =>

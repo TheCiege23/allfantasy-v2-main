@@ -10,10 +10,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { loadImportedGuillyTab } from '@/lib/guillotine/importedGuillyHealthLoad'
+import { prisma } from '@/lib/prisma'
+import { loadImportedSurvivalOutlook } from '@/lib/guillotine/survivalOutlookLoad'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -25,7 +27,17 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   try {
     const data = await loadImportedGuillyTab(leagueId)
     if (!data) return NextResponse.json({ error: 'Not an imported Guilly league' }, { status: 404 })
-    return NextResponse.json(data)
+    // The viewer's own team, in the provider's roster ids the view is keyed by, so the survival board
+    // (lib/guillotine/survivalBoardModel.ts) can say "you". Null for a member with no claimed team.
+    const mine = await Promise.resolve()
+      .then(() => prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } }))
+      .catch(() => null)
+    // `?outlook=1` (the Matchup tab's survival board only): players and games left and the projection for
+    // them, per team (lib/guillotine/survivalOutlookLoad.ts). Never fails the response.
+    const outlook = req.nextUrl.searchParams?.get('outlook') === '1'
+      ? { outlook: await loadImportedSurvivalOutlook(leagueId, data.view.week, data.view.standings.map((s) => s.rosterId)).catch(() => null) }
+      : {}
+    return NextResponse.json({ ...data, myRosterId: mine?.externalId != null ? String(mine.externalId) : null, ...outlook })
   } catch (e) {
     console.error('[guillotine/imported GET]', e instanceof Error ? e.message : 'unknown error')
     return NextResponse.json({ error: 'Could not load the Guilly standings' }, { status: 500 })

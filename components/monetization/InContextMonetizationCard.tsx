@@ -7,6 +7,7 @@ import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import { useMonetizationContext } from '@/hooks/useMonetizationContext'
 import { useLockUpgradeHref } from '@/hooks/useLockUpgradeHref'
 import { monthlyUpgradeHref } from '@/lib/monetization/upgradeDestination'
+import { useLockTrialOffer } from '@/lib/monetization/useLockTrialOffer'
 import { isTokenPurchasableRule } from '@/lib/tokens/tokenPurchasable'
 import {
   resolvePlanTierFromSku,
@@ -67,6 +68,9 @@ export function InContextMonetizationCard({
     showUpgradeCta && feature?.requiredPlan !== 'AF Supreme'
   )
   const currentPlanLabel = resolveCurrentPlan(entitlement?.plans ?? [])
+  // The AF Pro free trial on the upgrade button, for a viewer the server calls eligible
+  // (lib/monetization/lockTrialOffer.ts). Asked only once the card knows the feature is locked.
+  const trial = useLockTrialOffer(feature?.requiredPlan ?? null, 'en', showUpgradeCta)
   const didTrackPrompt = useRef(false)
   const didTrackInsufficient = useRef(false)
 
@@ -218,8 +222,18 @@ export function InContextMonetizationCard({
               className="rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-100 hover:bg-cyan-500/20"
               data-testid={`${testIdPrefix}-upgrade-cta`}
             >
-              {feature?.requiredPlan ? `Unlock with ${feature.requiredPlan}` : 'See upgrade options'}
+              {trial ? trial.cta : feature?.requiredPlan ? `Unlock with ${feature.requiredPlan}` : 'See upgrade options'}
             </Link>
+          ) : null}
+          {showUpgradeCta && trial?.then ? (
+            <span
+              className="self-center text-[11px] text-white/55"
+              data-ios-purchase
+              data-hide-in-ios-app
+              data-testid={`${testIdPrefix}-trial-then`}
+            >
+              {trial.then}
+            </span>
           ) : null}
           {showBuyTokensCta ? (
             <Link

@@ -455,8 +455,10 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
    * ── Queue & keepers ──────────────────────────────────────────────────────────────────────────
    * The queue shows before and during the draft even when empty: "you have not queued any players"
    * is the next thing to do, not a placeholder. Keepers show only when there are some.
+   * With no draft AllFantasy runs there is nothing to queue for, and the header already says so: the row
+   * only repeated it in other words (2026-11-24 audit).
    */
-  const queueSection = done ? null : (
+  const queueSection = done || (!data.queue.available && !data.session.available) ? null : (
     <section className="af-card af-dh-section">
       <h2 className="af-label">{copy('Prepared queue')}</h2>
       {data.queue.available ? (

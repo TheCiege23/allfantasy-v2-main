@@ -6,7 +6,9 @@
 import { prisma } from '@/lib/prisma'
 import { evaluateLegalityForProjectedRoster } from '@/lib/roster-legality/loadLegalityEvaluationContext'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
-import { computePerPlayerKickoffLocks } from '@/lib/roster-lineup-engine/lineupLockService'
+import { computePerPlayerKickoffLocks, resolveScheduleLockedPlayerIds } from '@/lib/roster-lineup-engine/lineupLockService'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
+import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import {
   addPlayerToRosterData,
   removePlayerFromRosterData,
@@ -132,6 +134,9 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
         leagueVariant: true,
         lockAllMoves: true,
         lifecycleState: true,
+        season: true,
+        name: true,
+        bestBallMode: true,
       },
     }),
     prisma.roster.findFirst({
@@ -225,17 +230,45 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
 
   const now = new Date()
   const kick = computePerPlayerKickoffLocks(roster.playerData, now)
-  if (dropId && kick.lockedPlayerIds.includes(dropId)) {
+  /*
+   * 🛑 A PLAYER WHOSE GAME HAD STARTED COULD BE DROPPED (2026-11-25). The only check here read the
+   * `gameTime` the CLIENT stored on its last lineup save — '—' when the screen had none, so it never
+   * locked. The lineup save locks from the schedule (`resolveFullLineupLockContext`); a drop is the same
+   * "moved out" under the owner's rule, so it locks from the same schedule. Best ball is exempt, as
+   * everywhere. A schedule read that fails keeps the old check rather than failing every claim.
+   */
+  const scheduleLocked =
+    dropId && !isBestBallLeagueRow(league)
+      ? await resolveScheduleLockedPlayerIds({
+          leagueId,
+          rosterId,
+          sport: String(league.sport ?? 'NFL'),
+          leagueVariant: league.leagueVariant,
+          settings: league.settings,
+          season: league.season ?? now.getFullYear(),
+          leagueWeek: leagueWeekFromSettings(league.settings) ?? 1,
+          now,
+        })
+      : null
+  const dropLocked = new Set([...kick.lockedPlayerIds, ...(scheduleLocked ?? [])])
+  if (dropId && dropLocked.has(dropId)) {
     const sec = sectionForPlayerId(roster.playerData, dropId)
     const canDropStarters = engineConfig.can_drop_starters_after_game_start === true
-    const canDropBench = engineConfig.can_drop_bench_after_lock !== false
+    /*
+     * Owner's call, 2026-11-25: a BENCH player whose game has started is locked too, by default — "can't
+     * be moved in or out" makes no exception for the bench. A commissioner can still allow it by setting
+     * `can_drop_bench_after_lock: true` (no league had set it either way: 861 of 861 rows blank).
+     * IR, taxi and devy keep the old default — those players are not in the lineup at all.
+     */
+    const canDropBench = engineConfig.can_drop_bench_after_lock === true
+    const canDropReserve = engineConfig.can_drop_bench_after_lock !== false
     if (sec === 'starters' && !canDropStarters) {
       throw new Error('This starter is locked because their game has started.')
     }
     if (sec === 'bench' && !canDropBench) {
-      throw new Error('This bench player is locked until the league allows drops after lock.')
+      throw new Error('This bench player is locked because their game has started.')
     }
-    if ((sec === 'ir' || sec === 'taxi' || sec === 'devy') && !canDropBench) {
+    if ((sec === 'ir' || sec === 'taxi' || sec === 'devy') && !canDropReserve) {
       throw new Error('You cannot drop this player while this slot is locked for the period.')
     }
   }

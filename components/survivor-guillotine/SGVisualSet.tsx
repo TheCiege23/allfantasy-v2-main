@@ -46,6 +46,7 @@ import {
 } from '@/lib/survivor-guillotine/visual-boards'
 import { SGChopCardView, SGLineupMeter, SGMultiRaceBoard, SGReversalCard, SGTribeDrawCard, SGTribeSetupCard, SGWaiversCard } from './SGBoards'
 import s from './survguil.module.css'
+import sp from '@/components/league/specialty/specialty.module.css'
 
 type SGVisualExtras = {
   ownPlayers?: SGOwnPlayer[]
@@ -54,6 +55,19 @@ type SGVisualExtras = {
   faabRemaining?: number | null
   /** Opens the private Chimmy power panel for this power (the existing control below the set). */
   onPlayPower?: (powerId: string) => void
+}
+
+/** "Wed, Oct 7, 6:00 AM" — it printed "10/7/2026, 6:00:00 AM". */
+export function fmtWhen(iso: string | null | undefined): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+const TRIBES_PENDING: Record<string, string> = {
+  manager_choice: 'Pick your starting tribe before period 1. Sizes stay balanced.',
+  captain_draft: 'Captains are drafting the tribes.',
+  commissioner: 'The commissioner sets the tribes before period 1.',
+  random: 'Tribes are drawn before period 1.',
 }
 
 function cx(...p: Array<string | false | null | undefined>) {
@@ -119,11 +133,22 @@ export function SGVisualSet({
   const state = season.periodState
   const lockAt = state?.immunityDeadlineAt ?? state?.ceremonyAt ?? null
   const myTribe = season.tribes.find((m) => m.rosterId === input.ownRosterId)?.tribeId ?? null
-  const headline = phase.phase === 'completed'
-    ? 'The last torch is still burning.'
-    : season.currentPeriod
-      ? `Period ${season.currentPeriod} · ${phase.label}${race.projectedImmuneTribeId && myTribe ? (race.projectedImmuneTribeId === myTribe ? ' · your tribe is ahead' : ' · your tribe is behind') : ''}`
-      : 'Tribes form after the draft.'
+  // 2026-11-24: a chopped manager was told nothing, and the finale never said who won.
+  const me = input.teams.find((t) => t.legacyRosterId === input.ownRosterId) ?? null
+  const meOut = Boolean(me?.eliminatedAt)
+  const myChopPeriod = meOut ? Number(Object.entries(season.periodHistory).find(([, r]) => r.choppedTeamIds.includes(input.ownRosterId ?? ''))?.[0]) || null : null
+  const placements = state?.placements ?? []
+  const over = phase.phase === 'completed' || placements.length > 0
+  const tribesPending = TRIBES_PENDING[season.config.tribeFormation] ?? 'Tribes form before period 1.'
+  const headline = over
+    ? placements[0] ? (placements[0] === input.ownRosterId ? 'You won the island.' : `${teamName(placements[0])} won the island.`) : 'The season is over.'
+    : meOut
+      ? `You were chopped${myChopPeriod ? ` in period ${myChopPeriod}` : ''}. You can still follow the island.`
+      : season.currentPeriod
+        ? `Period ${season.currentPeriod} · ${phase.label}${race.projectedImmuneTribeId && myTribe ? (race.projectedImmuneTribeId === myTribe ? ' · your tribe is ahead' : ' · your tribe is behind') : ''}`
+        : tribesPending
+  // A countdown only to something still ahead (it showed "Powers lock in —" all season once the date passed).
+  const lockAhead = !over && !meOut && lockAt != null && new Date(lockAt).getTime() > Date.now()
 
   const actions: SpecialtyAction[] = [
     { label: 'Tribe race', href: '#sg-race', primary: true },
@@ -146,15 +171,30 @@ export function SGVisualSet({
 
   const main = (
     <>
-      {meter ? <SGLineupMeter meter={meter} heldIdolId={heldImmunity?.id ?? null} idolLabel={heldImmunity?.label ?? null}
-        onPlayIdol={extras.onPlayPower} lockText={lockAt ? new Date(lockAt).toLocaleString() : null} /> : null}
+      {placements.length ? (
+        <SpecialtyCard label="Final standings" testId="sg-final">
+          <ol className={s.podium}>
+            {placements.map((id, i) => (
+              <li key={id} className={cx(id === input.ownRosterId && s.you)}>
+                <b>{['1st', '2nd', '3rd'][i] ?? `${i + 1}th`}</b>
+                <span>{teamName(id)}{id === input.ownRosterId ? ' (you)' : ''}</span>
+              </li>
+            ))}
+          </ol>
+        </SpecialtyCard>
+      ) : null}
+      {meter && !over ? <SGLineupMeter meter={meter} heldIdolId={heldImmunity?.id ?? null} idolLabel={heldImmunity?.label ?? null}
+        onPlayIdol={extras.onPlayPower} lockText={lockAt ? fmtWhen(lockAt) : null} /> : null}
       <SpecialtyCard id="sg-race" label={`Tribe race · ${season.currentPeriod ? `period ${season.currentPeriod}` : 'before period 1'}`} testId="sg-race">
-        <div className={s.scene}>
+        <div className={cx(s.scene, sp.stayDark)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className={s.sceneBg} src={`${SG_ART}/bg/beach-dusk.svg`} alt="" aria-hidden />
           <div className={s.sceneIn}>
             {race.tribes.length === 0 ? (
-              <p style={{ margin: 0 }}>Tribes have not been formed yet. They appear here once the commissioner or the draw sets them.</p>
+              <>
+                <p style={{ margin: 0 }}>{tribesPending}</p>
+                {season.config.tribeFormation === 'manager_choice' && input.ownRosterId ? <a className={s.textLink} href="#sg-choose">Choose your tribe</a> : null}
+              </>
             ) : two ? (
               <div className={s.raceTop}>
                 <Buff tribeId={two[0].tribeId} />
@@ -167,15 +207,15 @@ export function SGVisualSet({
                     <i style={{ width: `${((two[0].metric ?? two[0].totalPoints) / twoTotal) * 100}%`, background: two[0].color }} />
                     <i style={{ flex: 1, background: two[1].color }} />
                   </div>
-                  <div className={s.metricNote}>Deciding metric: {two[0].metricLabel.toLowerCase()} · tribe points {two[0].totalPoints.toFixed(1)} – {two[1].totalPoints.toFixed(1)}</div>
-                  <p className={s.raceSummary}>{race.summary}</p>
+                  <div className={s.metricNote}>Decided by {two[0].metricLabel.toLowerCase()} · tribe points {two[0].totalPoints.toFixed(1)} – {two[1].totalPoints.toFixed(1)}</div>
+                  {over ? null : <p className={s.raceSummary}>{race.summary}</p>}
                 </div>
                 <Buff tribeId={two[1].tribeId} />
               </div>
             ) : (
               <>
                 <SGMultiRaceBoard rows={multi} />
-                <p className={s.raceSummary}>{race.summary}</p>
+                {over ? null : <p className={s.raceSummary}>{race.summary}</p>}
               </>
             )}
           </div>
@@ -205,12 +245,12 @@ export function SGVisualSet({
         ) : null}
       </SpecialtyCard>
 
-      <SpecialtyCard label="Chop line" icon={`${SG_ART}/icon-zone.svg`} aside={<span style={{ fontSize: 12, color: '#9aa3b8' }}>Live points</span>} testId="sg-chopline">
-        {chopLine.groups.length === 0 ? <p style={{ margin: 0, color: '#b9c0d0' }}>{chopLine.note}</p> : chopLine.groups.map((g) => {
+      <SpecialtyCard label="Chop line" icon={`${SG_ART}/icon-zone.svg`} aside={<span style={{ fontSize: 12, color: 'var(--sp-t3, #9aa3b8)' }}>Live points</span>} testId="sg-chopline">
+        {chopLine.groups.length === 0 ? <p style={{ margin: 0, color: 'var(--sp-t2, #b9c0d0)' }}>{chopLine.note}</p> : chopLine.groups.map((g) => {
           const top = Math.max(1, ...g.rows.map((r) => r.points))
           return (
             <div key={g.label} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, letterSpacing: '.12em', color: '#9aa3b8', textTransform: 'uppercase' }}>{g.label}</div>
+              <div style={{ fontSize: 12, letterSpacing: '.12em', color: 'var(--sp-t3, #9aa3b8)', textTransform: 'uppercase' }}>{g.label}</div>
               {g.rows.map((r) => (
                 <div key={r.rosterId} className={cx(s.mrow, r.you && s.you, r.tier === 'chop_zone' && s.zone)} data-tier={r.tier}>
                   <Avatar id={r.rosterId} name={r.name} />
@@ -225,18 +265,18 @@ export function SGVisualSet({
             </div>
           )
         })}
-        {chopLine.groups.length ? <p style={{ margin: '8px 0 0', fontSize: 13, color: '#9aa3b8' }}>{chopLine.note}</p> : null}
+        {chopLine.groups.length ? <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--sp-t3, #9aa3b8)' }}>{chopLine.note}</p> : null}
       </SpecialtyCard>
 
       <SpecialtyCard id="sg-chop" label={latest ? `Chop night · period ${latest[0]}` : 'Chop night'} testId="sg-chopnight">
         {!latest ? (
-          <p style={{ margin: 0, color: '#b9c0d0' }}>The first ceremony plays here after the first chop.{state?.ceremonyAt ? ` Scheduled: ${new Date(state.ceremonyAt).toLocaleString()}.` : ''}</p>
+          <p style={{ margin: 0, color: 'var(--sp-t2, #b9c0d0)' }}>The first ceremony plays here after the first chop.{state?.ceremonyAt ? ` Scheduled: ${fmtWhen(state.ceremonyAt)}.` : ''}</p>
         ) : (
           <div className={s.stage}>
             <div className={s.stageHead}>
-              <span className={s.stageEyebrow}>Step {step + 1} of {steps.length}{latest[1].completedAt ? ` · ${new Date(latest[1].completedAt).toLocaleString()}` : ''}</span>
+              <span className={s.stageEyebrow}>Step {step + 1} of {steps.length}{latest[1].completedAt ? ` · ${fmtWhen(latest[1].completedAt)}` : ''}</span>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" style={{ minHeight: 44, minWidth: 64, borderRadius: 10, background: '#141826', color: '#fff', border: '1px solid rgba(255,255,255,.12)' }} onClick={() => setStep((v) => Math.max(0, v - 1))} disabled={step === 0}>Back</button>
+                <button type="button" style={{ minHeight: 44, minWidth: 64, borderRadius: 10, background: 'var(--sp-btn, #141826)', color: 'var(--sp-text, #fff)', border: '1px solid var(--sp-line-strong, rgba(255,255,255,.12))' }} onClick={() => setStep((v) => Math.max(0, v - 1))} disabled={step === 0}>Back</button>
                 <button type="button" style={{ minHeight: 44, minWidth: 64, borderRadius: 10, background: '#e2672a', color: '#1a0a04', fontWeight: 800, border: 0 }} onClick={() => setStep((v) => Math.min(steps.length - 1, v + 1))} disabled={step >= steps.length - 1}>Next</button>
               </div>
             </div>
@@ -246,7 +286,7 @@ export function SGVisualSet({
                 <img key={`${stepNow.key}-${step}`} src={stepNow.art} alt="" aria-hidden className={cx(s.stageArt, stepNow.key === 'chop' && s.fall, stepNow.key === 'idols' && s.knock, stepNow.key === 'torch' && s.snuff)} />
                 <div>
                   <h3 key={`t-${step}`} className={s.stageTitle}>{stepNow.title}</h3>
-                  <p style={{ margin: 0, color: '#d7dbe6' }}>{stepNow.detail}</p>
+                  <p style={{ margin: 0, color: 'var(--sp-t2, #d7dbe6)' }}>{stepNow.detail}</p>
                 </div>
               </div>
             ) : null}
@@ -266,18 +306,18 @@ export function SGVisualSet({
 
       {latest ? <SGChopCardView card={sgChopCardFromHistory(Number(latest[0]), latest[1], input.teams)} /> : null}
       <SGReversalCard rows={reversals} />
-      <SGWaiversCard players={extras.releasedPlayers ?? []} faab={extras.faabRemaining ?? null}
-        waiverHref={`/waiver-wire?leagueId=${encodeURIComponent(leagueId)}`} teamName={teamName} />
+      {over ? null : <SGWaiversCard players={extras.releasedPlayers ?? []} faab={meOut ? null : extras.faabRemaining ?? null} canBid={!meOut}
+        waiverHref={`/waiver-wire?leagueId=${encodeURIComponent(leagueId)}`} teamName={teamName} />}
 
       <SpecialtyCard label={`Torches · ${alive} of ${torches.length} still lit`} icon={`${SG_ART}/torch-lit.svg`} testId="sg-torches">
-        {torches.length === 0 ? <p style={{ margin: 0, color: '#b9c0d0' }}>Managers appear here once teams are claimed.</p> : (
+        {torches.length === 0 ? <p style={{ margin: 0, color: 'var(--sp-t2, #b9c0d0)' }}>Managers appear here once teams are claimed.</p> : (
           <div className={s.torches}>
             {torches.map((t) => (
               <div key={t.rosterId} className={cx(s.torch, !t.lit && s.out, t.you && s.you)}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`${SG_ART}/${t.lit ? 'torch-lit' : 'torch-out'}.svg`} alt="" aria-hidden />
                 <span>{t.name}{t.you ? ' (you)' : ''}</span>
-                <span style={{ color: t.lit ? (t.tribeId ? sgTribeArt(t.tribeId).color : '#9aa3b8') : '#9aa3b8' }}>{t.lit ? (t.tribeId ? sgTribeArt(t.tribeId).name : 'No tribe yet') : 'Chopped'}</span>
+                <span style={{ color: t.lit ? (t.tribeId ? sgTribeArt(t.tribeId).color : 'var(--sp-t3, #9aa3b8)') : 'var(--sp-t3, #9aa3b8)' }}>{t.lit ? (t.tribeId ? sgTribeArt(t.tribeId).name : 'No tribe yet') : 'Chopped'}</span>
               </div>
             ))}
           </div>
@@ -286,7 +326,7 @@ export function SGVisualSet({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`${SG_ART}/merge.svg`} alt="" aria-hidden style={{ width: 96, height: 'auto' }} />
-            <p style={{ margin: 0, fontSize: 14, color: '#d7dbe6' }}>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--sp-t2, #d7dbe6)' }}>
               {season.currentPeriod >= mergeAt ? 'The tribes have merged. All powers have expired; the lowest score in the field is chopped.' : `The tribes merge in period ${mergeAt}. Every power expires before then.`}
             </p>
           </div>
@@ -307,9 +347,9 @@ export function SGVisualSet({
 
   const rail = (
     <>
-      <SGTribeDrawCard draw={draw} />
+      <SGTribeDrawCard draw={draw} choppedInPeriod={meOut ? myChopPeriod ?? 0 : null} />
       <SpecialtyCard id="sg-vault" label="Your hidden powers" testId="sg-vault" borderColor="rgba(59,179,184,.45)">
-        {vault.mine.length === 0 ? <p style={{ margin: 0, color: '#b9c0d0' }}>No powers on your team. Hidden powers are visible only to their owner.</p> : vault.mine.map((p) => (
+        {vault.mine.length === 0 ? <p style={{ margin: 0, color: 'var(--sp-t2, #b9c0d0)' }}>No powers on your team. Hidden powers are visible only to their owner.</p> : vault.mine.map((p) => (
           <div key={p.id} className={s.idol}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={p.src} alt="" aria-hidden className={cx(p.status === 'held' && s.glow)} />
@@ -320,11 +360,12 @@ export function SGVisualSet({
             </div>
           </div>
         ))}
-        {vault.revealed.length ? <p style={{ marginTop: 10, fontSize: 13, color: '#9aa3b8' }}>Revealed this season: {vault.revealed.map((p) => p.label).join(', ')}.</p> : null}
-        <p style={{ marginTop: 10, fontSize: 13, color: '#9aa3b8' }}>Use a power privately with Chimmy from the powers panel below. Nobody else is told until the reveal.</p>
+        {vault.revealed.length ? <p style={{ marginTop: 10, fontSize: 13, color: 'var(--sp-t3, #9aa3b8)' }}>Revealed this season: {vault.revealed.map((p) => p.label).join(', ')}.</p> : null}
+        {vault.mine.some((p) => p.status === 'held') ? <p style={{ marginTop: 10, fontSize: 13, color: 'var(--sp-t3, #9aa3b8)' }}>Play it privately below. Nobody else is told until the reveal.</p> : null}
       </SpecialtyCard>
 
-      <SGTribeSetupCard view={setupView} rulesHref={isCommissioner ? `/survivor-guillotine/setup?leagueId=${encodeURIComponent(leagueId)}` : null} />
+      {/* Settings, so the commissioner's (it showed every manager a 2–8 tribe picker). */}
+      {isCommissioner ? <SGTribeSetupCard view={setupView} rulesHref={`/survivor-guillotine/setup?leagueId=${encodeURIComponent(leagueId)}`} /> : null}
       <SpecialtyCard label="How it works">
         <SpecialtyRules rules={[
           'Tribes race each period: Match Play counts matchup wins; Tribe Champion compares each tribe\'s champion.',
@@ -343,7 +384,7 @@ export function SGVisualSet({
         <SpecialtyCard label="Your story cards" testId="sg-share">
           <div className={s.share}>
             {shares.map((c) => (
-              <div key={c.key} className={s.card916}>
+              <div key={c.key} className={cx(s.card916, sp.stayDark)}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={c.art} alt="" aria-hidden />
                 <strong>{c.title}</strong>
@@ -354,7 +395,7 @@ export function SGVisualSet({
         </SpecialtyCard>
       ) : null}
 
-      <SpecialtyCard label="Notification defaults">
+      {isCommissioner ? <SpecialtyCard label="Notification defaults">
         <details>
           <summary style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>Show default channels</summary>
           <table className={s.channels}>
@@ -365,9 +406,9 @@ export function SGVisualSet({
               ))}
             </tbody>
           </table>
-          <p style={{ fontSize: 12, color: '#9aa3b8' }}>No message names an idol holder before the chop reveals it.</p>
+          <p style={{ fontSize: 12, color: 'var(--sp-t3, #9aa3b8)' }}>No message names an idol holder before the chop reveals it.</p>
         </details>
-      </SpecialtyCard>
+      </SpecialtyCard> : null}
     </>
   )
 
@@ -384,7 +425,7 @@ export function SGVisualSet({
           headline={headline}
           blurb="Survivor tribes, but nobody votes. The lowest score outside the immune tribe is chopped, unless an idol passes the blade on."
           actions={actions}
-          clock={<SpecialtyCountdown label="Powers lock in" target={lockAt} caption={state?.ceremonyAt ? `Chop: ${new Date(state.ceremonyAt).toLocaleString()}` : 'No chop scheduled yet'} />}
+          clock={lockAhead ? <SpecialtyCountdown label="Powers lock in" target={lockAt} caption={state?.ceremonyAt ? `Chop: ${fmtWhen(state.ceremonyAt)}` : ''} /> : undefined}
         />
         <SpecialtyGrid main={main} rail={rail} />
       </SpecialtyShell>

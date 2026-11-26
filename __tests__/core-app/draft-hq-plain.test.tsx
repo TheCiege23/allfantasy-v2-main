@@ -50,9 +50,20 @@ function board(rows: DraftHqAllRow[]) {
 }
 
 describe('Draft HQ, plain', () => {
-  it('says what the page is in one short line', () => {
+  it('the headline is the head: no intro line once there are drafts (2026-11-24)', () => {
     const c = board([row({ leagueId: 'Soon', phase: 'upcoming' })])
-    expect(c.querySelector('.af-bd-head')?.textContent).toContain('Every draft you’re in, the one that needs you first.')
+    expect(c.querySelector('.af-bd-head')?.textContent).not.toContain('Every draft you’re in, the one that needs you first.')
+    expect(c.querySelector('.af-bd-head .af-bd-blurb')).toBeNull()
+  })
+
+  it('your own pick card says it once: YOUR PICK on the tag, no "On the clock · You" tile (2026-11-24)', () => {
+    const c = board([row({ leagueId: 'Mine', phase: 'live', yoursOnClock: true, queuedCount: 1 }), row({ leagueId: 'Other', phase: 'live', onClockName: 'Riley' })])
+    const cards = [...c.querySelectorAll('.af-bd-sec')]
+    const mine = cards.find((el) => el.textContent?.includes('Mine'))!
+    expect(mine.textContent).not.toMatch(/On the clock/)
+    const other = cards.find((el) => el.textContent?.includes('Other'))!
+    expect(other.textContent).toMatch(/On the clock/)
+    expect(other.textContent).toContain('Riley')
   })
 
   it('folds each running draft’s last picks, with the count on the closed row; the queue stays open', () => {

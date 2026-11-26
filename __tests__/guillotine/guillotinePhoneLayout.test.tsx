@@ -4,22 +4,20 @@
  *  1. The league banner's title touched the card's top border. The guillotine phone rule set `padding:14px`, but
  *     the generic phone rule `.nl-workspace .nl-league-heading{padding-top:0}` has the same specificity and comes
  *     LATER, so it won — correct for the borderless headings it was written for, wrong for a bordered card.
- *  2. Chop-zone names truncated ("Two-Min…") with room to spare in the row: the name got 66px of a 306px row,
- *     because the tier tag (86px) and the points (64px) sat beside it. The tag now sits under the name.
- *  3. Five sub-tabs wrapped onto two rows (391px of buttons in ~338px). One of them, "My Team", only linked to the
- *     workspace's own My team view — which the Section picker directly above already offers — so it is gone, and
- *     the row stays one line (scrolling sideways on a very narrow phone rather than wrapping).
+ *  2. Chop-zone names truncated in the hub's phone-only list. That list is gone with the hub (2026-11-25): a phone
+ *     shows the same one list a desktop does (components/guillotine/GuillySurvivalBoard.tsx).
+ *  3. Five sub-tabs wrapped onto two rows. The row is gone too (2026-11-25, "too many tabs"): three of its four
+ *     buttons only scrolled the same page, and Waivers is the Team tab's own screen.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import React from 'react'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 
 vi.mock('@/components/guillotine/GuillotineHome', () => ({ GuillotineHome: () => <div data-testid="gl-home-stub" /> }))
 
 import { GuillotineTab } from '@/app/league/[leagueId]/tabs/GuillotineTab'
-import { GuillotineSpecialtyHome } from '@/components/guillotine/GuillotineSpecialtyHome'
 
 // ---------------------------------------------------------------------------------------------------------------
 // 1. The banner, by a small cascade over the real stylesheet.
@@ -107,69 +105,22 @@ describe('the guillotine banner on a phone', () => {
 })
 
 // ---------------------------------------------------------------------------------------------------------------
-// 2. Chop-zone names: the tier tag shares the name's column instead of taking width beside it.
+// 2 and 3. One page, no sub-tab row.
 // ---------------------------------------------------------------------------------------------------------------
 
-describe('the phone chop-zone list', () => {
-  const summary = {
-    leagueId: 'L',
-    weekOrPeriod: 4,
-    myRosterId: 'r07',
-    myEscapes: [],
-    dangerTiers: [
-      { rosterId: 'r01', displayName: 'Blitz Brigade', tier: 'safe', pointsFromChopZone: 22.2 },
-      { rosterId: 'r06', displayName: 'The Waiver Hawks', tier: 'danger', pointsFromChopZone: 8.7 },
-      { rosterId: 'r07', displayName: 'Gridiron Ghosts', tier: 'danger', pointsFromChopZone: 5.3 },
-      { rosterId: 'r09', displayName: 'Two-Minute Drill', tier: 'chop_zone', pointsFromChopZone: 0 },
-    ],
-  }
-
-  it('puts each tier tag in the same column as the team name, never as a row sibling', () => {
-    render(<GuillotineSpecialtyHome leagueId="L" sport="nfl" leagueName="Last Team Standing" summary={summary as never} />)
-    const phone = screen.getByTestId('guillotine-phone-home')
-    const rows = within(phone).getAllByTestId('guillotine-zone-row')
-    expect(rows.length).toBe(3)
-    for (const row of rows) {
-      const who = within(row).getByTestId('guillotine-zone-who')
-      expect(who.parentElement).toBe(row)
-      expect(who.textContent).toMatch(/Chop zone|Danger/i)
-      // Avatar, the name column, the points — the tag is not a fourth cell competing for width.
-      expect(row.children.length).toBe(3)
-    }
-    expect(within(rows[0]!).getByTestId('guillotine-zone-who').textContent).toContain('Two-Minute Drill')
-  })
-
-  it('stacks the tag only in a narrow panel; a tablet-width panel keeps name and tag on one line', () => {
-    const css = readFileSync(join(process.cwd(), 'components/guillotine/guillotine-specialty.module.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
-    const at = css.indexOf('@container (min-width: 420px)')
-    const topLevel = at < 0 ? css : css.slice(0, at)
-    expect(topLevel).toMatch(/\.who\s*\{[^}]*flex-direction:\s*column/)
-    // In a column, a flex-basis is a HEIGHT — the inherited `.name { flex: 0 1 190px }` must be neutralised.
-    expect(topLevel).toMatch(/\.who>\.name\s*\{[^}]*flex:\s*none/)
-    expect(at, 'no wide-panel container query').toBeGreaterThan(-1)
-    expect(css.slice(at)).toMatch(/\.who\s*\{[^}]*flex-direction:\s*row/)
-  })
-})
-
-// ---------------------------------------------------------------------------------------------------------------
-// 3. Sub-tabs: one row, no duplicate of the workspace's My team.
-// ---------------------------------------------------------------------------------------------------------------
-
-describe('the Guilly sub-tabs', () => {
-  it('drop "My Team", which only linked to the workspace view the Section picker already offers', () => {
+describe('the Chop tab', () => {
+  it('🛑 has no sub-tab row: it is the page, nothing else', () => {
     render(<GuillotineTab leagueId="L" sport="NFL" />)
-    expect(screen.queryByTestId('guillotine-sub-team')).toBeNull()
-    expect(screen.queryByRole('button', { name: /my team/i })).toBeNull()
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Hub', 'Waivers', 'History', 'Storylines'])
+    expect(screen.getByTestId('gl-home-stub')).toBeTruthy()
+    expect(screen.queryAllByRole('button')).toEqual([])
+    for (const id of ['board', 'waivers', 'history', 'storylines', 'team']) expect(screen.queryByTestId(`guillotine-sub-${id}`), id).toBeNull()
   })
 
-  it('stay on one line: no wrap, and they scroll sideways if a phone is too narrow', () => {
-    render(<GuillotineTab leagueId="L" sport="NFL" />)
-    const bar = screen.getByTestId('guillotine-sub-board').parentElement!
-    const cls = bar.className.split(/\s+/)
-    expect(cls).not.toContain('flex-wrap')
-    expect(cls).toContain('flex-nowrap')
-    expect(cls).toContain('overflow-x-auto')
-    for (const b of screen.getAllByRole('button')) expect(b.className.split(/\s+/)).toContain('shrink-0')
+  it('the board that replaced the phone list keeps one grid on a phone: rank, avatar, name, points', () => {
+    const css = readFileSync(join(process.cwd(), 'components/guillotine/guilly-survival-board.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    const phone = css.slice(css.indexOf('@media (max-width: 560px)'))
+    expect(phone).toMatch(/\.gsb-row\s*\{[^}]*grid-template-columns:\s*20px 30px minmax\(0, 1fr\) auto/)
+    // The name column can shrink, so a long team name truncates instead of pushing the points off the row.
+    expect(css).toMatch(/\.gsb-name\s*\{[^}]*min-width:\s*0/)
   })
 })

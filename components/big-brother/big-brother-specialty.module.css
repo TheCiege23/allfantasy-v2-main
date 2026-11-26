@@ -85,6 +85,26 @@
   .evictCard { transition: none; }
 }
 
+/*
+ * Phone (2026-11-24, the simplify pass). The houseguest wall is two across in compact rows (avatar beside name
+ * and tag): twelve 130px tiles were ~770px. The two nominees stand side by side, at a size that fits, instead of
+ * two ~300px cards one above the other. The Avatar sets its size inline, so the override is !important, scoped
+ * to these two places only.
+ */
+@media (max-width: 560px) {
+  .hgGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .hg { display: grid; grid-template-columns: 30px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; row-gap: 2px; align-items: center; justify-items: start; padding: 8px 10px; text-align: left; }
+  .hg > :first-child { grid-row: 1 / span 2; width: 30px !important; height: 30px !important; font-size: 11px; }
+  .hgName { justify-self: stretch; }
+  .evictStage { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .evictCard { gap: 6px; padding: 16px 8px; }
+  .evictCard > :first-child { width: 56px !important; height: 56px !important; }
+  .evictCard .spotName { font-size: 16px !important; }
+  .evictCount { font-size: 44px; }
+  .door { top: 56px; width: 52px; margin-left: -26px; }
+  .evictedWord { font-size: 20px; }
+}
+
 /* Room for the rail beside the grid: back to the shared single column. */
 @container (min-width: 1048px) {
   .railWide.railWide { flex: 0 1 380px; display: flex; flex-direction: column; align-items: stretch; }

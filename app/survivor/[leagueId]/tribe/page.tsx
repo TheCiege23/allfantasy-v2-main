@@ -96,6 +96,11 @@ export default function SurvivorTribePage() {
           <div className="h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: 'linear-gradient(90deg, var(--survivor-gold), var(--survivor-torch))' }} />
         </div>
       ) : null}
+      {share != null ? (
+        <p className="mt-1.5 text-[11px] text-[var(--survivor-text-dim)]" data-testid="survivor-tribe-share">
+          {tribe?.name ?? 'Your tribe'} has {Math.round(share * 100)}% of this week&apos;s points
+        </p>
+      ) : null}
 
       <section className="mt-6">
         <h2 className="sv-kicker mb-3 text-[12px]">Roster</h2>
@@ -117,7 +122,7 @@ export default function SurvivorTribePage() {
         The "Tribe challenge history" panel that sat here was a disclosure button that opened nothing over
         a promise ("Last three weeks will appear here"). Past results live on the Challenges page.
       */}
-      <Link href={`${base}/challenges`} className="sv-link mt-6 inline-block text-[13px]">Past challenge results →</Link>
+      <Link href={`${base}/challenges`} className="sv-link mt-6 block w-fit text-[13px]">Past challenge results →</Link>
 
       {/* In the page flow at the end, not floating: fixed, it sat over the last lines of the page on a phone. */}
       <Link

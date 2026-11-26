@@ -69,6 +69,13 @@ describe('the Zombie tab', () => {
     expect(src()).not.toMatch(/block truncate text-\[13px\] font-semibold/)
     expect(src()).toMatch(/line-clamp-2/)
   })
+  it('the home says the rules once, folded, and lays the outbreak out two across on a phone (2026-11-24)', () => {
+    const s = src().replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '')
+    expect(s).not.toContain('Whisperers lead the outbreak. Lose to')
+    expect(s).toMatch(/<details className="[^"]*" data-testid="zombie-rules-30s">\s*<summary className="[^"]*min-h-\[44px\][^"]*">/)
+    expect(s).toMatch(/className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-\[repeat\(auto-fill,minmax\(150px,1fr\)\)\]" data-testid="zombie-outbreak-grid"/)
+    expect(read('components/league/specialty/zombie/ZombieUniverseMap.tsx')).toMatch(/testId="zombie-universe-map"[\s\S]{0,400}?\n\s*fold\n/)
+  })
 })
 
 describe('the bash/maul meter', () => {
