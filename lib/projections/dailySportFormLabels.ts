@@ -15,3 +15,15 @@ export const AF_FORM_PROJECTION_EXPLAINER =
 
 /** Hover text for a position rank chip. */
 export const AF_POSITION_RANK_TITLE = "Position rank by season fantasy points in your league's scoring"
+
+/**
+ * "PG32" → "#32 PG": the server's compact position rank, read the way rankings are written
+ * everywhere else ("#2 QB"). A label already in that shape, or one this does not recognise, is
+ * returned as it is; empty → null.
+ */
+export function readablePositionRank(label: string | null | undefined): string | null {
+  const raw = String(label ?? '').trim()
+  if (!raw) return null
+  const m = raw.match(/^([A-Za-z][A-Za-z/]*?)(\d+)$/)
+  return m ? `#${Number(m[2])} ${m[1].toUpperCase()}` : raw
+}

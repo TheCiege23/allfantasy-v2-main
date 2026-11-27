@@ -56,6 +56,11 @@ export type DailySportOutlook = {
    */
   /** `unadjusted` holds the fields before the factors, restored for a viewer without AF Intelligence. */
   afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
+  /**
+   * Daily-lineup period only: when that game starts (ISO, UTC), for the lineup row's tip-off time.
+   * Null when there is no game that day or the schedule row carries no start time.
+   */
+  kickoffIso?: string | null
 }
 
 export type DailySportOutlookResult = {
@@ -157,7 +162,7 @@ export async function loadDailySportOutlook(
   const week = Number.isInteger(season) ? dailySportWeekForInstant(sport, season, periodInstant) : null
   const periodDay = pickedDay ?? easternDayKey(now)
   let gamesByTeam: Map<string, Set<string>> | null = null
-  const opponentByTeam = new Map<string, { opponent: string; home: boolean }>()
+  const opponentByTeam = new Map<string, { opponent: string; home: boolean; kickoffIso: string | null }>()
   if (week != null) {
     const kickoffs = await buildWeekKickoffMap(db, { sport, season, week }).catch(() => null)
     const byTeamDay = kickoffs?.byTeamDay
@@ -177,7 +182,8 @@ export async function loadDailySportOutlook(
         const code = teamCode(sport, team)
         const m = days.get(periodDay)
         if (!code || !m || opponentByTeam.has(code)) continue
-        opponentByTeam.set(code, { opponent: teamCode(sport, m.opponent) ?? m.opponent, home: m.home })
+        const start = kickoffs?.byTeamDay?.get(team)?.get(periodDay) ?? null
+        opponentByTeam.set(code, { opponent: teamCode(sport, m.opponent) ?? m.opponent, home: m.home, kickoffIso: realStartIso(start, periodDay) })
       }
     }
   }
@@ -254,7 +260,9 @@ export async function loadDailySportOutlook(
       recentGames: f.recentGames,
       seasonPoints: f.seasonPoints,
       positionRank: ranks.get(f.id) ?? null,
-      ...(daily ? { opponent: matchup?.opponent ?? null, homeAway: matchup ? (matchup.home ? 'home' : 'away') : null } : {}),
+      ...(daily
+        ? { opponent: matchup?.opponent ?? null, homeAway: matchup ? (matchup.home ? 'home' : 'away') : null, kickoffIso: matchup?.kickoffIso ?? null }
+        : {}),
     })
   }
 
@@ -268,6 +276,18 @@ export async function loadDailySportOutlook(
 }
 
 /** The wire fields a priced row carries; `positionRankLabel` is "C12". */
+/**
+ * A start time worth showing. `buildWeekKickoffMap` places a schedule row with no start time at
+ * `<day>T04:00Z` so the day still locks; that is a placeholder, not a tip-off. A REAL 04:00Z game
+ * (8 pm Pacific in winter) belongs to the Eastern day BEFORE its UTC date, so only an instant on the
+ * period day's own UTC date at exactly 04:00 is the placeholder.
+ */
+export function realStartIso(d: Date | null, day: string): string | null {
+  if (!d || Number.isNaN(d.getTime())) return null
+  const iso = d.toISOString()
+  return iso === `${day}T04:00:00.000Z` ? null : iso
+}
+
 export type DailySportWireFields = {
   positionRank?: PositionRank | null
   positionRankLabel?: string | null
@@ -276,6 +296,8 @@ export type DailySportWireFields = {
   periodHomeAway?: 'home' | 'away' | null
   /** The learned factors that moved `projectedPoints`; `unadjusted.projectedPoints` is the number before them. */
   afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
+  /** Daily-lineup period: when that game starts (ISO). */
+  periodKickoffIso?: string | null
 }
 
 /**
@@ -295,7 +317,7 @@ export function applyDailySportOutlook<T extends Pick<UnifiedPlayerWireDto, 'id'
       ...(o.projectedPoints != null ? { projectedPoints: o.projectedPoints, projectionsSource: AF_FORM_PROJECTION_SOURCE } : {}),
       positionRank: o.positionRank,
       positionRankLabel: formatPositionRank(o.positionRank),
-      ...(o.opponent !== undefined ? { periodOpponent: o.opponent, periodHomeAway: o.homeAway ?? null } : {}),
+      ...(o.opponent !== undefined ? { periodOpponent: o.opponent, periodHomeAway: o.homeAway ?? null, periodKickoffIso: o.kickoffIso ?? null } : {}),
       ...(o.projectedPoints != null && o.afFactors ? { afFactors: o.afFactors } : {}),
     }
   })
