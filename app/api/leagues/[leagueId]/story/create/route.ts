@@ -1,8 +1,14 @@
-import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 /**
  * POST /api/leagues/[leagueId]/story/create
  * Body: { storyType: StoryType, sport?: string, season?: number, style?: StoryStyle }
  * Returns created story (headline, sections, variants) and fact-guard warnings.
+ *
+ * 🛑 AF COMMISSIONER FOR THE WHOLE LEAGUE (owner, 2026-11-27). The story is written by models (DeepSeek, Grok,
+ * OpenAI), so it runs only when the league's COMMISSIONER holds AF Commissioner or AF Supreme — then every
+ * member may create one — and at most LEAGUE_STORY_AI_DAILY_LIMITS.league_story times a league a day
+ * (lib/league-story-ai/leagueStoryAiGate.ts). A locked league gets the standard 403 paywall body, a capped one
+ * a 429, both before any model call. This replaced the caller's own `storyline_creation` check with a token
+ * fallback: a free commissioner's league is locked, whatever the caller holds, and nothing is charged.
  */
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
@@ -10,8 +16,7 @@ import { authOptions } from "@/lib/auth"
 import { assertLeagueMember } from "@/lib/league-access"
 import { createLeagueStory, getStoryVariant, storyToMediaShape } from "@/lib/league-story-creator"
 import { normalizeToSupportedSport } from "@/lib/sport-scope"
-import { requireFeatureEntitlement } from "@/lib/subscription/entitlement-middleware"
-import { refundStorylineSpend } from "@/lib/tokens/storylineSpendRefund"
+import { checkLeagueStoryAiGate, leagueStoryAiRefusal } from "@/lib/league-story-ai/leagueStoryAiGate"
 import type { StoryStyle, StoryType } from "@/lib/league-story-creator/types"
 
 const STORY_TYPES: StoryType[] = [
@@ -29,7 +34,7 @@ const STORY_TYPES: StoryType[] = [
 export const dynamic = "force-dynamic"
 const STORY_STYLES: StoryStyle[] = ["announcer", "recap", "neutral"]
 
-async function paidToolPost(
+export async function POST(
   req: Request,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -50,13 +55,7 @@ async function paidToolPost(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    /*
-     * 🛑 THE REQUEST IS CHECKED BEFORE ANYTHING IS CHARGED (2026-09-29). The gate used to run first
-     * with `confirmTokenSpend: true` hardcoded: a click spent tokens with no question asked, and an
-     * invalid storyType was charged and then refused. Now a bad request costs nothing, tokens are
-     * spent only when the client says the person confirmed the cost (`lib/tokens/clientTokenConfirm.ts`),
-     * and a story that fails after the charge is refunded.
-     */
+    // A bad request costs nothing: validated before the gate counts a call against the league's cap.
     const body = await req.json().catch(() => ({}))
     const storyType = body.storyType as string
     if (!storyType || !STORY_TYPES.includes(storyType as StoryType)) {
@@ -66,27 +65,8 @@ async function paidToolPost(
       )
     }
 
-    const gate = await requireFeatureEntitlement({
-      userId: session.user.id,
-      userEmail: session.user.email,
-      featureId: "storyline_creation",
-      allowTokenFallback: true,
-      confirmTokenSpend: body.confirmTokenSpend === true,
-      tokenRuleCode: "ai_storyline_creation",
-      tokenSourceType: "league_story_create",
-      tokenSourceId: `${leagueId}:${Date.now()}`,
-      tokenDescription: "League story creation",
-      tokenMetadata: {
-        leagueId,
-        storyType,
-      },
-    })
-    if (!gate.ok) return gate.response
-    const userId = session.user.id
-    const spend = gate.tokenSpend
-    const refundIfCharged = async () => {
-      if (spend) await refundStorylineSpend({ userId, ledgerId: spend.id, surface: "league_story_create" })
-    }
+    const aiGate = await checkLeagueStoryAiGate({ leagueId, kind: "league_story", lang: body.lang })
+    if (!aiGate.ok) return leagueStoryAiRefusal(aiGate)
 
     const sport = normalizeToSupportedSport(body.sport ?? access.leagueSport ?? "NFL")
     const season = body.season != null ? Number(body.season) : null
@@ -100,20 +80,15 @@ async function paidToolPost(
       season,
       storyType: storyType as StoryType,
       style,
-    }).catch(async (e: unknown) => {
-      await refundIfCharged()
-      throw e
     })
 
     if (!result.ok) {
-      await refundIfCharged()
       return NextResponse.json(
         { error: result.error ?? "Failed to create story" },
         { status: 500 }
       )
     }
 
-    if (result.story?.source !== 'ai') paidToolNotDelivered()
     const variants = result.story
       ? {
           short: getStoryVariant(result.story, "short"),
@@ -148,14 +123,6 @@ async function paidToolPost(
         grok: "narrative_framing",
         openai: "final_user_story",
       },
-      tokenSpend: gate.tokenSpend
-        ? {
-            ruleCode: gate.tokenPreview?.ruleCode ?? "ai_storyline_creation",
-            tokenCost: gate.tokenPreview?.tokenCost ?? null,
-            balanceAfter: gate.tokenSpend.balanceAfter,
-            ledgerId: gate.tokenSpend.id,
-          }
-        : null,
       generatedAt: new Date().toISOString(),
     })
   } catch (e) {
@@ -166,5 +133,3 @@ async function paidToolPost(
     )
   }
 }
-
-export const POST = withPaidToolBilling(paidToolPost)

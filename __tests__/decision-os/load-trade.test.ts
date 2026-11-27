@@ -187,3 +187,45 @@ describe('loadTrade — the Sleeper ledger', () => {
     expect(r).toMatchObject({ ok: false, refusal: { code: 'not_party' } })
   })
 })
+
+describe('loadTrade — an ESPN ledger offer with a conditional DROP (2026-11-27)', () => {
+  const ESPN_LEAGUE = { ...LEAGUE, platform: 'espn', platformLeagueId: '123456', lastSyncedAt: new Date('2026-09-27T11:55:00Z'), name: 'ESPN League' }
+  const base = { pickSeason: null, pickRound: null, pickOriginalRosterId: null, faabAmount: null }
+  const offer = {
+    id: 'O2', leagueId: 'L1', provider: 'espn', providerTradeId: '54a04003-243c-4a89-a969-e89ef55dffad', status: 'pending', proposedByRosterId: '7',
+    rosterIds: ['7', '2'], proposedAt: new Date('2026-09-27T09:00:00Z'), respondedAt: null,
+    firstSeenAt: new Date('2026-09-27T09:30:00Z'), lastSeenAt: new Date('2026-09-27T11:40:00Z'),
+    assets: [
+      { assetType: 'player', playerId: '4360761', ...base, fromRosterId: '7', toRosterId: '2' },
+      { assetType: 'player', playerId: '4426515', ...base, fromRosterId: '2', toRosterId: '7' },
+      { assetType: 'drop', playerId: '4432708', ...base, fromRosterId: '7', toRosterId: null },
+    ],
+  }
+  const run = (externalTeamIds: string[]) =>
+    loadTrade(
+      { leagueId: 'L1', ref: { kind: 'provider', provider: 'espn', providerTradeId: offer.providerTradeId }, userId: 'u1' },
+      deps({
+        loadLeague: async () => ESPN_LEAGUE,
+        loadProviderOffer: async () => offer,
+        viewerIdentity: async () => ({ rosterId: 'r1', redraftRosterId: null, externalTeamIds }),
+        resolvePlayers: vi.fn(named({ '4360761': 'Michael Wilson', '4426515': 'Puka Nacua', '4432708': 'Marvin Harrison Jr.' })),
+      }),
+    )
+
+  it('keeps the drop on the proposer’s side, apart from what the other team receives', async () => {
+    const r = await run(['7'])
+    expect(r).toMatchObject({
+      ok: true,
+      viewer: { side: 'A' },
+      trade: {
+        sideA: { teamId: '7', gives: [{ kind: 'player', name: 'Michael Wilson' }], drops: [{ kind: 'player', name: 'Marvin Harrison Jr.' }] },
+        sideB: { teamId: '2', gives: [{ kind: 'player', name: 'Puka Nacua' }] },
+      },
+    })
+    expect(r.ok && r.trade.sideB.drops).toBeUndefined()
+  })
+
+  it('is private to its two teams', async () => {
+    expect(await run(['5'])).toMatchObject({ ok: false, refusal: { code: 'not_party' } })
+  })
+})

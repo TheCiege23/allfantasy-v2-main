@@ -42,7 +42,7 @@ describe('waiver row', () => {
       />,
     )
     expect(screen.getByTestId('waiver-player-projection-p1').textContent).toContain('165.4')
-    expect(screen.getByTestId('waiver-player-position-rank-p1').textContent).toContain('C1')
+    expect(screen.getByTestId('waiver-player-position-rank-p1').textContent).toContain('#1 C')
     expect(screen.getByText(AF_FORM_PROJECTION_LABEL)).toBeTruthy()
   })
 
@@ -79,8 +79,8 @@ describe('lineup screen', () => {
     const team = { id: 't', teamName: 'Mine', wins: 0, losses: 0, ties: 0, pointsFor: 0, currentRank: 1 } as never
     render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
     expect(await screen.findByText('Nikola Jokic')).toBeTruthy()
-    expect(screen.getByTestId('lineup-position-rank-907').textContent).toContain('C1')
-    expect(screen.getByTestId('lineup-position-rank-74').textContent).toContain('C34')
+    expect(screen.getByTestId('lineup-position-rank-907').textContent).toContain('#1 C')
+    expect(screen.getByTestId('lineup-position-rank-74').textContent).toContain('#34 C')
     expect(screen.getByText('165.4')).toBeTruthy()
     expect(screen.getByText('Proj 165.4')).toBeTruthy()
     expect(screen.getByTestId('lineup-af-projection-note').textContent).toMatch(/AF projection from recent form/)

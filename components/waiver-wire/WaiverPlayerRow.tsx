@@ -7,6 +7,7 @@ import { PlayerHeadshot } from "@/components/league/PlayerHeadshot"
 import { teamLogoUrl } from "@/lib/media-url"
 import { positionColor } from "@/lib/draft/positions"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { readablePositionRank } from "@/lib/projections/dailySportFormLabels"
 
 type Props = {
   player: {
@@ -223,7 +224,7 @@ export default function WaiverPlayerRow({
             <Metric label="AF ADP" value={player.aiAdp != null ? formatDecimal(player.aiAdp) : "Soon"} />
             <Metric label="Bye" value={player.byeWeek != null ? String(player.byeWeek) : "-"} />
             {player.positionRank ? (
-              <Metric label="Pos rank" value={player.positionRank} testId={`waiver-player-position-rank-${player.id}`} />
+              <Metric label="Pos rank" value={readablePositionRank(player.positionRank) ?? player.positionRank} testId={`waiver-player-position-rank-${player.id}`} />
             ) : (
               <Metric label="Rank" value={player.rank != null ? `#${Math.round(player.rank)}` : "-"} />
             )}

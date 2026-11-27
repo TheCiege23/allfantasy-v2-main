@@ -818,6 +818,16 @@ async function loadOnAnotherFantasyCalcChart(sleeperIds: readonly string[], wind
   return new Set(rows.map((r) => r.sleeperId))
 }
 
+/** PURE. A side's assets with its conditional drops added to what it gives up. */
+export function withDrops(give: GradeInputs, drops: GradeInputs): GradeInputs {
+  const valuationGap = give.valuationGap ?? drops.valuationGap
+  return {
+    assets: [...give.assets, ...drops.assets],
+    unpriceable: [...give.unpriceable, ...drops.unpriceable],
+    ...(valuationGap ? { valuationGap } : {}),
+  }
+}
+
 /**
  * Grade one deal from a surface's own asset shape (see `./tradeGradeInputs.ts`). A null grader —
  * the league could not be read — and an asset that cannot be priced both come back as a withheld
@@ -825,9 +835,25 @@ async function loadOnAnotherFantasyCalcChart(sleeperIds: readonly string[], wind
  */
 export async function gradeDeal(
   grader: LeagueTradeGrader | null,
-  args: { give: GradeInputs; get: GradeInputs; viewerSide: boolean; draftBoard?: LiveDraftBoard | null },
+  args: {
+    give: GradeInputs
+    get: GradeInputs
+    viewerSide: boolean
+    draftBoard?: LiveDraftBoard | null
+    /**
+     * Players the GIVE side releases when the deal executes — an ESPN conditional drop. They leave
+     * that roster for nothing, so they are priced as part of what it gives up; nobody receives them.
+     * Only the dropping side's own grade moves: a partner's drop arrives nowhere, so it is never added
+     * to `get` (that would credit the viewer with a player they do not receive).
+     */
+    giveDrops?: GradeInputs
+  },
 ): Promise<TradeGradeView> {
   if (!grader) return { graded: false, reason: 'This league’s values could not be loaded just now.', basis: null }
+  if (args.giveDrops && (args.giveDrops.assets.length || args.giveDrops.unpriceable.length)) {
+    const { giveDrops, ...rest } = args
+    return gradeDeal(grader, { ...rest, give: withDrops(args.give, giveDrops) })
+  }
   const why = unpriceableReason(args.give, args.get)
   if (why) {
     const valuationGap = args.give.valuationGap ?? args.get.valuationGap

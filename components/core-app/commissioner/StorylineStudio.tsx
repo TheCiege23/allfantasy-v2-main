@@ -322,7 +322,8 @@ function HookCard({
         return
       }
       setText(body.text ?? hook.text)
-      if (body.source !== 'ai') setNote(t('Chimmy rewrite did not hold to the facts, so the template is shown instead.'))
+      // A locked or capped league gets the template with the server's reason (already in the right language).
+      if (body.source !== 'ai') setNote(body.message || t('Chimmy rewrite did not hold to the facts, so the template is shown instead.'))
     } finally {
       setState('idle')
     }

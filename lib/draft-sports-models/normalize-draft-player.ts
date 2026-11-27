@@ -204,7 +204,10 @@ export function normalizeDraftPlayer(
       ? raw.nflDraftProjectionSplits.projectedPointsPerGame : fppg,
     ...((sportNorm === 'NBA' || sportNorm === 'NCAAB') && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
     ...((sportNorm === 'MLB' || sportNorm === 'NHL') && raw.seasonStatLine ? raw.seasonStatLine : {}),
-    ...((sportNorm === 'MLB' || sportNorm === 'NHL' || sportNorm === 'NCAAB') &&
+    // Every sport whose pool attaches an AF projection. Left out, a sport's projection never reaches the
+    // board's sort (adp-ordering `projectedRate`) and an ADP-less board lists by name: college football and
+    // soccer did until 2026-11-27.
+    ...((sportNorm === 'MLB' || sportNorm === 'NHL' || sportNorm === 'NCAAB' || sportNorm === 'NCAAF' || sportNorm === 'SOCCER') &&
     typeof raw.afProjectionPerGame === 'number' &&
     Number.isFinite(raw.afProjectionPerGame) &&
     raw.afProjectionPerGame > 0

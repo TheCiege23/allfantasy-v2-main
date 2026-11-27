@@ -242,6 +242,22 @@ function sheet(data: PlayerCardData | null, status: 'loading' | 'ready' | 'error
   )
 }
 
+/*
+ * 2026-11-26: the card's sections sit behind tabs. `everyTab` reads the card once per tab (Outlook,
+ * Schedule, History, News ...) so a test still sees every word the card can show, then leaves the last
+ * tab open. Sections the redesign dropped (the feed stamp, the slot tile, the loaders' "why there is
+ * nothing here" sentences, the market and board basis paragraphs) are pinned ABSENT below instead.
+ */
+function everyTab(container: HTMLElement, read: (c: HTMLElement) => string = ownText): string {
+  const parts = [read(container)]
+  for (const tab of [...container.querySelectorAll<HTMLElement>('[role="tab"]')]) {
+    fireEvent.click(tab)
+    parts.push(read(container))
+  }
+  return parts.join(' | ')
+}
+const plainText = (c: HTMLElement) => c.textContent ?? ''
+
 /** Expand the insight so its detail and basis are in the DOM, and wait for the value chart. */
 async function settle(container: HTMLElement, withChart = true) {
   const insight = container.querySelector('.af-pc-insight-h')
@@ -271,7 +287,8 @@ describe('player card — Spanish', () => {
   it('the universal card, every section full, reads Spanish throughout', async () => {
     const { container } = sheet(universal({ depth: freeAccess }))
     await settle(container)
-    const out = ownText(container)
+    const out = everyTab(container)
+    const all = everyTab(container, plainText)
     expectSpanish(out, 'universal')
     // The header and the follow star.
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Ficha de Jahmyr Gibbs')
@@ -285,9 +302,7 @@ describe('player card — Spanish', () => {
     expect(out).toContain('UNIVERSIDAD')
     // Availability: the designation is Player Finder's word, the stamp says when.
     expect(container.querySelector('.af-pc-injury-s')?.textContent).toBe('DUDOSO')
-    expect(container.querySelector('.af-pc-feed')?.textContent).toBe(
-      'fuente revisada hace 2 h · último error hace 29 min · 2 ejecuciones omitidas por presupuesto',
-    )
+    expect(container.querySelector('.af-pc-feed')).toBeNull()
     // The insight, built from its parts.
     expect(out).toContain('El precio de Gibbs subió 310 en 7 días.')
     expect(out).toContain('Ahora vale 5,400, un 6.1% más.')
@@ -295,9 +310,8 @@ describe('player card — Spanish', () => {
     // Tiles and the price basis.
     expect(out).toContain('PRECIO DE INTERCAMBIO')
     expect(out).toContain('+310 · 7 d')
-    expect(out).toContain('RANGO POS. · RB')
-    expect(out).toContain('de 50 ligas de AF · 44% titular')
-    expect(out).toContain('dinastía · superflex · fantasycalc')
+    expect(out).toContain('en plantilla')
+    expect(out).toContain('titular')
     // The schedule strip.
     expect(out).toContain('SEM 5 · vs CHI')
     expect(out).toContain('SEM 6 · DESCANSO')
@@ -316,8 +330,8 @@ describe('player card — Spanish', () => {
     // Value history chart (PlayerValueHistoryChart) inside the card.
     expect(out).toContain('Valor a lo largo del tiempo')
     // Provider text stays: names, the feed's headline and source.
-    expect(container.textContent).toContain('Gibbs limited at practice Wednesday')
-    expect(container.textContent).toContain('Saquon Barkley')
+    expect(all).toContain('Gibbs limited at practice Wednesday')
+    expect(all).toContain('Saquon Barkley')
   })
 
   it('every insight the card can derive, built in Spanish from its parts', async () => {
@@ -342,13 +356,12 @@ describe('player card — Spanish', () => {
   it('the league card, yours: slot, league price, playoff weeks, your roster, the trade-block button', async () => {
     const { container } = sheet(universal({ context: 'league', league: league() }))
     await settle(container)
-    const out = ownText(container)
+    const out = everyTab(container)
     expectSpanish(out, 'league, yours')
     expect(out).toContain('‹ Ice Kings')
     expect(out).toContain('EN TU PLANTILLA')
     expect(out).toContain('PRECIO EN LA LIGA')
     expect(out).toContain('dinastía · SF · 12 equipos')
-    expect(out).toContain('BANCA')
     expect(out).toContain('CALENDARIO DE PLAYOFFS · SEM 15-17')
     expect(out).toContain('TU PLANTILLA EN RB')
     expect(out).toContain('INTERCAMBIOS EN ESTA LIGA')
@@ -369,10 +382,9 @@ describe('player card — Spanish', () => {
     })
     const { container } = sheet(data)
     await settle(container)
-    const out = ownText(container)
+    const out = everyTab(container)
     expectSpanish(out, 'league, theirs')
     expect(out).toContain('LO TIENE OTRO MÁNAGER')
-    expect(out).toContain('TITULAR')
     expect(out).toContain('Proponer intercambio')
     expect(container.querySelector('.af-pc-block-tag')?.textContent).toBe('EN VENTA · Gibbs Galore · publicado hace 3 d')
     expect(container.querySelector('.af-pc-star')?.getAttribute('title')).toBe('Añadir a tu lista de seguimiento')
@@ -392,7 +404,8 @@ describe('player card — Spanish', () => {
       const out = ownText(container)
       expectSpanish(out, slot)
       if (slot === 'NOT ROSTERED') expect(out).toContain('AGENTE LIBRE')
-      else expect(out).toContain('Todavía no podemos emparejar los ids de jugadores de esta liga con los nuestros')
+      // 2026-11-26: a league whose ids we cannot match shows the card with what it has, and no warning.
+      else expect(out).not.toContain('Todavía no podemos emparejar')
       unmount()
     }
   })
@@ -413,12 +426,14 @@ describe('player card — Spanish', () => {
     const { container } = render(
       <PlayerCardSheet subject={{ sport: 'NFL', sleeperId: 'x9', name: 'Jahmyr Gibbs' }} data={data} status="ready" onClose={() => {}} onOpen={() => {}} />,
     )
-    const out = ownText(container)
+    const out = everyTab(container)
     expectSpanish(out, 'empty')
-    expect(out).toContain('No hay ningún registro de mercado de este jugador.')
-    expect(out).toContain('Ningún reporte de lesiones le asigna una designación ahora mismo.')
-    expect(out).toContain('la fuente todavía no completó una ejecución para este deporte')
-    expect(out).toContain('Ninguna noticia reciente menciona a este jugador.')
+    // 2026-11-26: an empty section is hidden, not explained. None of the loaders' reasons are printed.
+    expect(out).not.toContain('No hay ningún registro de mercado de este jugador.')
+    expect(out).not.toContain('Ningún reporte de lesiones le asigna una designación ahora mismo.')
+    expect(out).not.toContain('la fuente todavía no completó una ejecución para este deporte')
+    expect(out).not.toContain('Ninguna noticia reciente menciona a este jugador.')
+    expect(container.querySelectorAll('[role="tab"]')).toHaveLength(0)
 
     const leagueEmpty = universal({
       context: 'league',
@@ -432,11 +447,11 @@ describe('player card — Spanish', () => {
     cleanup()
     const second = sheet(leagueEmpty)
     await settle(second.container)
-    const out2 = ownText(second.container)
+    const out2 = everyTab(second.container)
     expectSpanish(out2, 'league empty')
-    expect(out2).toContain('sin precio')
-    expect(out2).toContain('Ningún intercambio de esta liga lo ha movido.')
-    expect(out2).toContain('No tienes a nadie más en esta posición en esta liga')
+    expect(out2).not.toContain('sin precio')
+    expect(out2).not.toContain('Ningún intercambio de esta liga lo ha movido.')
+    expect(out2).not.toContain('No tienes a nadie más en esta posición en esta liga')
   })
 
   it('loading and error', () => {
@@ -455,7 +470,7 @@ describe('player card — Spanish', () => {
       universal({ depth: lockedAccess, context: 'league', league: league({ trades: [] }), insight: null }),
     ]) {
       const { container, unmount } = sheet(data)
-      const out = ownText(container)
+      const out = everyTab(container)
       expectSpanish(out, 'locked')
       expect(out).toMatch(/(Historial de intercambios y jugadores similares|Intercambios en esta liga): parte de AF Pro/)
       unmount()
@@ -515,17 +530,17 @@ describe('player card — English is unchanged', () => {
   it('the same universal card reads as it always did', async () => {
     const { container } = sheet(universal())
     await settle(container)
-    const out = container.textContent ?? ''
+    const out = everyTab(container, plainText)
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Jahmyr Gibbs player card')
     expect(out).toContain('‹ Back')
     expect(out).toContain('ROOKIE')
     expect(container.querySelector('.af-pc-injury-s')?.textContent).toBe('QUESTIONABLE')
-    expect(container.querySelector('.af-pc-feed')?.textContent).toBe('feed checked 2h · last error 29m · 2 runs skipped for budget')
+    expect(container.querySelector('.af-pc-feed')).toBeNull()
     expect(out).toContain("Gibbs's price is up 310 over 7 days.")
     expect(out).toContain('Based on dynasty · superflex · fantasycalc snapshots 7 days apart.')
     expect(out).toContain('+310 · 7d')
-    expect(out).toContain('of 50 AF leagues · 44% start')
-    expect(out).toContain('dynasty · superflex · fantasycalc')
+    expect(out).toContain('rostered')
+    expect(out).toContain('started')
     expect(out).toContain('WK6 · BYE')
     expect(out).toContain("Sleeper's early PPR lines, as of Oct 1")
     expect(out).toContain('Cost Bijan Robinson + 2027 1st + 2028 2nd')
@@ -536,13 +551,13 @@ describe('player card — English is unchanged', () => {
 
   it('the league card and the lock', () => {
     const { container } = sheet(universal({ context: 'league', league: league({ isYours: false, owner: { teamName: 'Gibbs Galore', ownerName: 'TheCiege26' } }) }))
-    const out = container.textContent ?? ''
+    const out = everyTab(container, plainText)
     expect(out).toContain('OWNED BY THECIEGE26')
     expect(out).toContain('Propose Trade')
     expect(out).toContain('PLAYOFF SCHEDULE · WK 15-17')
     cleanup()
     const locked = sheet(universal({ depth: lockedAccess, insight: null }))
-    expect(locked.container.textContent).toContain('Trade history and similar players are part of AF Pro')
+    expect(everyTab(locked.container, plainText)).toContain('Trade history and similar players are part of AF Pro')
   })
 })
 
@@ -657,39 +672,34 @@ describe('player card — an NBA league value (2026-11-16, re-score item 12)', (
   it('English: the league value replaces the NFL price, with the per-game edge, games left, dynasty and its basis', async () => {
     const { container } = sheet(universal({ context: 'league', league: nbaLeague(), market: no('Market prices are published for NFL players only.') }))
     await settle(container)
-    const out = container.textContent ?? ''
+    const out = everyTab(container, plainText)
     expect(out).toContain('LEAGUE VALUE')
     expect(out).not.toContain('LEAGUE PRICE')
     expect(out).toContain('40.0 pts/g · 60 games left')
     expect(out).toContain('DYNASTY')
     expect(out).toContain('age 24 · model estimate')
-    expect(out).toContain(
-      "NBA value on this league's own board, the one its trade grades use: 40.0 fantasy points per game against 28.0 for the best free agent at his position (Wire Guard), over 60 games left. Rests on 26 games, leaning on the 2025-26 season.",
-    )
-    expect(out).toContain('Market prices are published for NFL players only.')
+    // 2026-11-26: the basis paragraph repeated the numbers above it, and the NFL-only market note is jargon.
+    expect(out).not.toContain("NBA value on this league's own board")
+    expect(out).not.toContain('Market prices are published for NFL players only.')
   })
 
   it('Spanish: every part of it', async () => {
     lang.language = 'es'
     const { container } = sheet(universal({ context: 'league', league: nbaLeague(), market: no('Market prices are published for NFL players only.') }))
     await settle(container)
-    const out = container.textContent ?? ''
+    const out = everyTab(container, plainText)
     expect(out).toContain('VALOR EN LA LIGA')
     expect(out).toContain('40.0 pts/p · quedan 60 partidos')
     expect(out).toContain('DINASTÍA')
     expect(out).toContain('24 años · estimación del modelo')
-    expect(out).toContain('Valor de NBA en la tabla propia de esta liga')
-    expect(out).toContain('Se apoya en 26 partidos, todavía con peso de la temporada 2025-26.')
-    expect(out).toContain('Los precios de mercado solo se publican para jugadores de la NFL.')
     expect(out).not.toContain('Market prices are published')
   })
 
-  it('a board that cannot price him: a dash, and the reason', async () => {
+  it('a board that cannot price him: no value, and no reason printed', async () => {
     const { container } = sheet(universal({ context: 'league', league: league({ boardValue: no('This league’s value board could not be read just now.') }) }))
     await settle(container)
-    const out = container.textContent ?? ''
-    expect(out).toContain('LEAGUE VALUE')
-    expect(out).toContain('This league’s value board could not be read just now.')
+    const out = everyTab(container, plainText)
+    expect(out).not.toContain('This league’s value board could not be read just now.')
   })
 })
 
@@ -704,18 +714,16 @@ describe('player card — an MLB league value (2026-11-16)', () => {
   it('English: at-bats, never games, and a full season not yet scheduled', async () => {
     const { container } = sheet(universal({ context: 'league', league: mlbLeague() }))
     await settle(container)
-    const out = container.textContent ?? ''
+    const out = everyTab(container, plainText)
     expect(out).toContain('4.1 pts/g · 162-game season')
-    expect(out).toContain('over a full 162-game season (the schedule is not posted yet). Rests on 541 at-bats.')
   })
 
   it('Spanish', async () => {
     lang.language = 'es'
     const { container } = sheet(universal({ context: 'league', league: mlbLeague() }))
     await settle(container)
-    const out = container.textContent ?? ''
+    const out = everyTab(container, plainText)
     expect(out).toContain('4.1 pts/p · temporada de 162 partidos')
-    expect(out).toContain('en una temporada completa de 162 partidos (el calendario todavía no se publicó). Se apoya en 541 turnos al bate.')
   })
 })
 

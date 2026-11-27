@@ -2,6 +2,7 @@
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Star, X } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
@@ -143,6 +144,25 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const [drawer, setDrawer] = useState<{ player: UnifiedPlayerWireDto; immediate: boolean } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [bidDrafts, setBidDrafts] = useState<Record<string, string>>({})
+  /*
+   * The player card's hand-off (lib/core-app/playerCardActions.ts): `?drop=<id>` names the player the
+   * manager chose to drop, `?add=<id>` a free agent to add, `?q=` his name for the search box. A drop
+   * is never made from here on its own — it rides along with the add or claim the manager picks next,
+   * through the same add/drop and claim routes and every rule they carry.
+   */
+  const params = useSearchParams()
+  const [handoffDrop, setHandoffDrop] = useState<string | null>(null)
+  const [handoffAdd, setHandoffAdd] = useState<string | null>(null)
+  const handoffKey = params?.toString() ?? ''
+  useEffect(() => {
+    const drop = params?.get('drop')?.trim() || null
+    const add = params?.get('add')?.trim() || null
+    const q0 = params?.get('q')?.trim() || ''
+    setHandoffDrop(drop)
+    setHandoffAdd(add)
+    if (q0) setQuery(q0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoffKey])
 
   const applyRoster = useCallback((r: Record<string, unknown>) => {
     const raw = r.roster as unknown
@@ -353,6 +373,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       }
       if (res.ok && j?.ok) {
         setDrawer(null)
+        if (dropPlayerId && dropPlayerId === handoffDrop) setHandoffDrop(null)
         toast.success(dropPlayerId ? `Added ${player.name} and dropped a player.` : `Added ${player.name}.`, { description: j?.writeAuthority?.copy?.detail || undefined })
         await refreshMine()
         setPlayers((ps) => ps.filter((p) => p.id !== player.id))
@@ -409,10 +430,25 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const onAdd = (player: UnifiedPlayerWireDto) => {
     // A player still on waivers after a drop needs a claim even when free agents are instant adds.
     if (!immediate || playerWaiverHoldUntil(player, settings)) return setDrawer({ player, immediate: false })
+    // A drop chosen on the player card: the sheet opens with it picked, so the manager sees the swap.
+    if (handoffDrop && roster.ids.includes(handoffDrop)) return setDrawer({ player, immediate: true })
     const open = roster.capacity == null ? true : roster.ids.length < roster.capacity
     if (open) void addDrop(player, null)
     else setDrawer({ player, immediate: true })
   }
+
+  /*
+   * `?add=<id>` from the player card: open the add sheet on him once the pool has loaded. Never the
+   * one-tap add — a link must not make a roster move, so the sheet's own button is the confirmation.
+   */
+  useEffect(() => {
+    if (!handoffAdd || loading) return
+    const player = players.find((p) => p.id === handoffAdd)
+    setHandoffAdd(null)
+    if (!player) return
+    setDrawer({ player, immediate: Boolean(immediate) && !playerWaiverHoldUntil(player, settings) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoffAdd, loading, players])
 
   const patchClaim = async (claimId: string, patch: Record<string, unknown>) => {
     const res = await fetch(`/api/waiver-wire/leagues/${id}/claims/${claimId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
@@ -465,6 +501,15 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
           priority={roster.priority}
           teamCount={league.teamCount}
         />
+      ) : null}
+
+      {handoffDrop && roster.ids.includes(handoffDrop) ? (
+        <p className="nls-handoff" role="status" data-testid="native-waivers-drop-handoff">
+          <span>
+            Dropping <b>{roster.names.find((n) => n.id === handoffDrop)?.name ?? 'your player'}</b>. Pick the player to add in his place.
+          </span>
+          <button type="button" className="nls-btn" onClick={() => setHandoffDrop(null)}>Cancel</button>
+        </p>
       ) : null}
 
       <div className="nls-toolbar">
@@ -726,6 +771,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         hasOpenRosterSpot={drawer?.immediate ? false : roster.capacity == null || roster.ids.length < roster.capacity}
         rosterPlayerIds={roster.ids}
         rosterPlayers={roster.names}
+        initialDropId={handoffDrop && roster.ids.includes(handoffDrop) ? handoffDrop : null}
         immediate={Boolean(drawer?.immediate)}
         conditionalClaims={conditionalClaims}
         bidHelpLeagueId={faabMode ? id : null}

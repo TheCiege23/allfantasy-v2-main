@@ -38,13 +38,14 @@ type Row = {
 
 type Group = { group: string; label: string; columns: GameLogColumn[]; rows: Row[] }
 
-type Payload = {
+export type PlayerGameLogPayload = {
   supported: boolean
   resolved?: boolean
   season: number | null
   seasons: number[]
   groups: Group[]
 }
+type Payload = PlayerGameLogPayload
 
 export type PlayerGameLogKey =
   | { identityId: string }
@@ -53,6 +54,47 @@ export type PlayerGameLogKey =
 
 export function gameLogSupported(sport: string | null | undefined): boolean {
   return isGameLogSport(String(sport ?? '').toUpperCase())
+}
+
+function gameLogQuery(sport: string, playerKey: PlayerGameLogKey, season: number | null): string {
+  const p = new URLSearchParams({ sport: sport.toUpperCase() })
+  if ('identityId' in playerKey) p.set('identityId', playerKey.identityId)
+  if ('externalId' in playerKey && playerKey.externalId) {
+    p.set('externalId', playerKey.externalId)
+    if (playerKey.source) p.set('source', playerKey.source)
+  }
+  if ('sleeperId' in playerKey && playerKey.sleeperId) p.set('sleeperId', playerKey.sleeperId)
+  if (season != null) p.set('season', String(season))
+  return p.toString()
+}
+
+/** A response is only trusted when it has the shape this table renders; anything else is "no log". */
+function asPayload(d: unknown): Payload | null {
+  if (!d || typeof d !== 'object') return null
+  const o = d as Partial<Payload>
+  if (!Array.isArray(o.groups)) return null
+  return {
+    supported: o.supported !== false,
+    resolved: o.resolved,
+    season: typeof o.season === 'number' ? o.season : null,
+    seasons: Array.isArray(o.seasons) ? o.seasons : [],
+    groups: o.groups.filter((g) => g && Array.isArray(g.rows) && Array.isArray(g.columns)),
+  }
+}
+
+/**
+ * Fetch a player's log once, for a caller that must know whether there is one before it shows a
+ * place for it (the player card hides an empty tab). Null on any failure. Hand the result to the
+ * table as `prefetched` so it is not requested twice.
+ */
+export async function fetchPlayerGameLog(sport: string, playerKey: PlayerGameLogKey): Promise<PlayerGameLogPayload | null> {
+  try {
+    const r = await fetch(`/api/players/game-log?${gameLogQuery(sport, playerKey, null)}`)
+    if (!r.ok) return null
+    return asPayload(await r.json())
+  } catch {
+    return null
+  }
 }
 
 function shortDate(iso: string | null): string {
@@ -73,40 +115,37 @@ export default function PlayerGameLogTable({
   playerKey,
   compact = false,
   playerName,
+  prefetched,
 }: {
   sport: string
   playerKey: PlayerGameLogKey
   /** Player-card mode: core columns only and the last ten games, with a toggle for the rest. */
   compact?: boolean
   playerName?: string
+  /** The current season's payload, already fetched by the caller (see `fetchPlayerGameLog`). */
+  prefetched?: PlayerGameLogPayload | null
 }) {
   const [season, setSeason] = useState<number | null>(null)
-  const [data, setData] = useState<Payload | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<Payload | null>(prefetched ?? null)
+  const [loading, setLoading] = useState(!prefetched)
   const [failed, setFailed] = useState(false)
   const [groupKey, setGroupKey] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
 
-  const query = useMemo(() => {
-    const p = new URLSearchParams({ sport: sport.toUpperCase() })
-    if ('identityId' in playerKey) p.set('identityId', playerKey.identityId)
-    if ('externalId' in playerKey && playerKey.externalId) {
-      p.set('externalId', playerKey.externalId)
-      if (playerKey.source) p.set('source', playerKey.source)
-    }
-    if ('sleeperId' in playerKey && playerKey.sleeperId) p.set('sleeperId', playerKey.sleeperId)
-    if (season != null) p.set('season', String(season))
-    return p.toString()
-  }, [sport, playerKey, season])
+  const query = useMemo(() => gameLogQuery(sport, playerKey, season), [sport, playerKey, season])
 
   useEffect(() => {
+    // The caller already holds the current season; only a season switch needs a request.
+    if (prefetched && season == null) return
     let alive = true
     setLoading(true)
     setFailed(false)
     fetch(`/api/players/game-log?${query}`)
-      .then((r) => (r.ok ? (r.json() as Promise<Payload>) : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((json) => {
         if (!alive) return
+        const d = asPayload(json)
+        if (!d) throw new Error('unexpected response')
         setData(d)
         setGroupKey((g) => (g && d.groups.some((x) => x.group === g) ? g : d.groups[0]?.group ?? null))
       })
@@ -115,6 +154,8 @@ export default function PlayerGameLogTable({
     return () => {
       alive = false
     }
+    // `prefetched` is read once, for the first season; it must not re-trigger the request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
   const group = data?.groups.find((g) => g.group === groupKey) ?? data?.groups[0] ?? null

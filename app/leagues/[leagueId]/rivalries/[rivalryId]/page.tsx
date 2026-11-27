@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useSearchParams } from "next/navigation"
+import { StoryAiLockNotice, type StoryAiLock } from "@/components/league-story-ai/StoryAiLockNotice"
 
 type RivalryDetail = {
   id: string
@@ -59,6 +60,7 @@ export default function RivalryDetailPage() {
   const [timeline, setTimeline] = useState<RivalryTimelineRow[]>([])
   const [headToHead, setHeadToHead] = useState<HeadToHeadRow[]>([])
   const [aiNarrative, setAiNarrative] = useState<string | null>(null)
+  const [aiLock, setAiLock] = useState<StoryAiLock>(null)
   const [loading, setLoading] = useState(true)
   const [tabLoading, setTabLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -140,6 +142,7 @@ export default function RivalryDetailPage() {
       })
       const data = await res.json().catch(() => ({}))
       setAiNarrative(data?.narrative ?? "No explanation available.")
+      setAiLock(data?.aiLocked ?? null)
     } catch {
       setAiNarrative("Could not load rivalry explanation.")
     } finally {
@@ -218,6 +221,7 @@ export default function RivalryDetailPage() {
                 {aiNarrative}
               </div>
             )}
+            <StoryAiLockNotice lock={aiLock} featureName="Chimmy rivalry write-ups" className="mt-3" />
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Link
                 href={`/app/league/${encodeURIComponent(leagueId)}/drama?sport=${encodeURIComponent(

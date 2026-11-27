@@ -1199,6 +1199,61 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    /*
+     * ── ESPN ─────────────────────────────────────────────────────────────
+     *
+     * Read from the ledger the scheduled ESPN offer sweep writes
+     * (`lib/provider-trades/syncEspnTradeOffers.ts`) — never from ESPN on this
+     * request. Only the viewer's own team's offers are stored (GAPS T-03).
+     * Graded on THE grader from the viewer's side, with their own conditional
+     * drop counted; a partner's drop is shown, and costs the viewer nothing.
+     */
+    if (platform === 'espn' && league.platformLeagueId && String(league.sport ?? 'NFL').toUpperCase() === 'NFL') {
+      const { loadEspnOfferViewsForViewer, gradeEspnOfferViews } = await import('@/lib/provider-trades/espnOfferView')
+      const read = await loadEspnOfferViewsForViewer({ leagueId, userId }).catch(() => ({
+        views: [],
+        scanned: false,
+        reason: 'ESPN offers could not be read just now' as string | null,
+        viewerTeamId: null,
+      }))
+      const trades = read.views.map((v) => v.trade)
+      const grades = await gradeEspnOfferViews(read.views, await grader()).catch(() => new Map<string, TradeGradeView>())
+      const dropLines = new Map(read.views.map((v) => [v.trade.transactionId, v.dropLine]))
+      const expiries = new Map(read.views.map((v) => [v.trade.transactionId, v.expiresAt]))
+      const espnUrl = `https://fantasy.espn.com/football/league?leagueId=${encodeURIComponent(league.platformLeagueId)}`
+      return NextResponse.json({
+        draft,
+        leagueType: leagueTypeInfo,
+        tradeBlock: [] as LeagueTradeBlockPanelItem[],
+        tradeBlockNote: tradeBlockSupport('espn').note,
+        activeTrades: [
+          ...activeTrades,
+          ...mapProviderTrades(trades, new Map(), grades).map((row) => {
+            const id = row.id.slice('espn:'.length)
+            return { ...row, dropNote: dropLines.get(id) ?? null, expiresAt: expiries.get(id) ?? null }
+          }),
+        ],
+        historyTrades,
+        activeCount: activeTrades.length + trades.length,
+        source: 'espn' as const,
+        leagueName: league.name ?? 'League',
+        providerPendingCount: trades.length,
+        providerLeagueUrl: espnUrl,
+        pending: {
+          scanned: read.scanned,
+          reason: read.reason,
+          platform: 'espn' as const,
+          leagueUrl: espnUrl,
+          weeksUnanswered: 0,
+        },
+        pendingOffers: builderOffers(trades, new Map(), grades).map((o) => ({
+          ...o,
+          dropNote: dropLines.get(o.transactionId) ?? null,
+          expiresAt: expiries.get(o.transactionId) ?? null,
+        })),
+      })
+    }
+
     const executedTrades =
       resolveWriteAuthority(league.platform) === 'NATIVE' ? await buildNativeExecutedTrades(leagueId, userId, league.sport ?? undefined) : []
 
@@ -1224,7 +1279,7 @@ export async function GET(req: NextRequest) {
        */
       pending: {
         scanned: false,
-        reason: `we do not read pending offers on ${platform} yet — Sleeper and Yahoo are the two we can`,
+        reason: `we do not read pending offers on ${platform} yet — Sleeper, Yahoo and ESPN are the ones we can`,
         platform,
         leagueUrl: null as string | null,
         weeksUnanswered: 0,

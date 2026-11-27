@@ -124,9 +124,9 @@ describe('player card — Propose Trade', () => {
       card({ league: { ...card().league!, platform: 'fleaflicker', slot: 'UNREADABLE', owner: null } })
     )
     expect(cta(container)).toBeNull()
-    expect(container.textContent).toContain("This league's player ids can't be matched to ours yet")
+    // 2026-11-26: the card shows what it has and no warning — no "can't be matched" line either.
+    expect(container.textContent).not.toContain("can't be matched")
     expect(container.textContent).not.toContain('FREE AGENT')
-    expect(container.textContent).not.toContain('You have nobody else at this position')
   })
 
   it('CONTROL: a genuinely unrostered player in a readable league is still a FREE AGENT', () => {
@@ -135,7 +135,6 @@ describe('player card — Propose Trade', () => {
     )
     expect(container.textContent).toContain('FREE AGENT')
     expect(container.textContent).not.toContain("can't be matched to ours yet")
-    expect(container.textContent).toContain('You have nobody else at this position')
   })
 
   /*

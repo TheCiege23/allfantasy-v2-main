@@ -226,7 +226,7 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
 
 ## Pending trade offers, 2026-11-23 — recorded without probing
 
-- `T-03` OPEN: no committed endpoint or fixture lists ESPN trade offers that are PROPOSED and not yet
+- `T-03` WAS OPEN (captured 2026-11-27, below): no committed endpoint or fixture lists ESPN trade offers that are PROPOSED and not yet
   accepted, so the provider-offer ledger (`lib/provider-trades/providerTradeOfferLedger.ts`) and Chimmy's
   pending-trade block stay Sleeper-only for ESPN. `fantasy-league.NFL.2026.json`'s `mTransactions2` held 8
   executed roster moves and no trade. `kona_league_communication` answers 401 without cookies even for a
@@ -248,6 +248,31 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
   `scripts/redact-fantasy.mjs`, same refuse-if-anything-survives rule) and downloaded; nothing is stored.
   Open until that file is reviewed and committed. ⚠ If it shows offers between two OTHER teams, that is a
   finding about ESPN's visibility — record it here and drop those entries before committing.
+- `T-03` CAPTURED 2026-11-27 — `fixtures/fantasy-pending.NFL.2026.json` (owner's admin capture, redacted
+  server-side, 29 synthetic values, 3 credential values verified absent; committed unmodified). Settled:
+  - `view=mPendingTransactions` is a REAL view (no longer a candidate): HTTP 200 and a top-level
+    `pendingTransactions` array, beside `draftDetail`/`status` only.
+  - Request 1 (`mTeam`+`mTransactions2`) carries the same offer in `teams[].pendingTransactions` of BOTH
+    teams involved (2 and 7, and no other team) and in the top-level `transactions` list as
+    `type: 'TRADE_PROPOSAL', status: 'PENDING'`.
+  - Offer: `{id (uuid), type, status, isPending, teamId (proposer team), memberId (proposer member),
+    proposedDate ms, expirationDate ms, teamActions {"<teamId>": "ACCEPTED"}, scoringPeriodId, items[]}`;
+    item `{type: 'TRADE' | 'DROP', playerId (ESPN id), fromTeamId, toTeamId, fromLineupSlotId,
+    toLineupSlotId}`. A `DROP` has `toTeamId: 0`: the proposing side's conditional drop.
+  - The real offer: team 7 gives 4360761 (Michael Wilson) to team 2, gets 4426515 (Puka Nacua), drops
+    4432708 (Marvin Harrison Jr.); team 7 has accepted; expires 2026-11-28 22:43:50 UTC.
+  - Wired: `lib/provider-trades/syncEspnTradeOffers.ts` (scheduled, cookies of the league's connected user
+    only, writes `provider_trade_offers` with `provider: 'espn'`, a `drop` asset type and `expiresAt`).
+- `T-03a` NOT OBSERVABLE: whether a member sees offers between two OTHER teams. The captured league had one
+  pending offer (teams 7 and 2), and the capture records no owner team (`ownerTeam: null`), so it cannot say
+  whether the reading account was a party to it. The owner rule stands regardless: the sweep keeps only
+  offers the connected user's team sent or received, and its test plants a third-party offer to prove it.
+- `T-03b` UNVERIFIED: whether ESPN omits `pendingTransactions` or sends `[]` when nothing is pending. Only a
+  body that carries the array counts as a complete read (an absent offer is then retired as `vanished`);
+  without it nothing is retired, and an offer still leaves "pending" at its stated `expirationDate`.
+- `T-03c` UNVERIFIED: statuses other than `PENDING` (accepted, declined, cancelled, countered) and whether
+  they ever appear in this list. Mapped to `unknown`, never guessed. A countered offer's shape is not known.
+- `T-03d` NOT CAPTURED, READ-ONLY: accept, decline and counter. AllFantasy shows the offer and links to ESPN.
 
 ## Per-player weekly fantasy points, 2026-11-23 — recorded without probing
 
