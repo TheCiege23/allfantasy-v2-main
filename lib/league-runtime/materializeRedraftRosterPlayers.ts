@@ -14,7 +14,8 @@ import {
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
-import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { platformOnlyAuthority, resolveWriteAuthority } from '@/lib/league/write-authority'
+import { loadTeamsRunOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer'
 import { reconcileRosterRedraftLinks } from './reconcileRosterRedraftLinks'
 // The projection rule, shared with the lineup engine's save-path sync so the two cannot disagree.
 import { idsOnAnyRosterList, slotTypeFor } from './redraftSlotType'
@@ -66,6 +67,11 @@ export interface MaterializeResult {
   rostersSkippedNoLink: number
   /** Linked, but `playerData` held no players. An empty roster is a real state. */
   rostersSkippedNoPlayers: number
+  /**
+   * Left alone because AllFantasy runs the team: a switched team in a league made official here
+   * (lib/league/switching). Its `playerData` is the old platform's last word, frozen since the switch.
+   */
+  rostersRunOnAllFantasy?: number
   /** Imported rows retired because the player is no longer on the platform's roster. */
   playersDropped: number
 }
@@ -130,7 +136,13 @@ export async function materializeRedraftRosterPlayersForLeague(
    * `playerData` can be the stale side, so nothing is ever dropped there. A league whose platform
    * could not be read resolves to NATIVE as well, which is the direction that drops nothing.
    */
-  const platformOwnsRoster = league != null && resolveWriteAuthority(league) !== 'NATIVE'
+  /*
+   * ⚠ PER TEAM ONCE THE LEAGUE IS OFFICIAL. Asked of the PLATFORM alone, because an imported league made
+   * official on AllFantasy is still mirrored for every team whose manager has not switched: the old
+   * platform stays their system of record. A switched team is skipped outright in the loop below.
+   */
+  const platformOwnsRoster = league != null && resolveWriteAuthority(platformOnlyAuthority(league.platform)) !== 'NATIVE'
+  const runOnAllFantasy = await loadTeamsRunOnAllFantasy(leagueId)
 
   /*
    * The bye is a property of the TEAM and this table has a real `Int?` column for it that
@@ -186,6 +198,15 @@ export async function materializeRedraftRosterPlayersForLeague(
     : {}
 
   for (const r of rosters) {
+    /*
+     * 🛑 A SWITCHED TEAM'S STORED COPY IS FROZEN AT THE SWITCH, SO READING IT WOULD UNDO ITS MANAGER.
+     * The re-sync stopped refreshing its `playerData`. Creating rows from it would bring back a player
+     * they dropped here, and dropping by it would remove one they added here.
+     */
+    if (runOnAllFantasy.externalIds.has(sourceTeamIdOf(r.playerData))) {
+      result.rostersRunOnAllFantasy = (result.rostersRunOnAllFantasy ?? 0) + 1
+      continue
+    }
     if (!r.redraftRosterId) {
       result.rostersSkippedNoLink += 1
       continue
@@ -343,4 +364,9 @@ export async function materializeRedraftRosterPlayersForLeague(
   }
 
   return result
+}
+
+function sourceTeamIdOf(playerData: unknown): string {
+  const r = playerData && typeof playerData === 'object' ? (playerData as Record<string, unknown>) : {}
+  return String(r.source_team_id ?? '')
 }
