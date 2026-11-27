@@ -63,7 +63,7 @@ describe('TradesTab — native trade builder wiring for nflRedraftCore leagues',
     const emptyStateTrigger = await screen.findByTestId('trades-tab-propose-trade')
     expect(emptyStateTrigger.tagName).toBe('BUTTON')
     fireEvent.click(emptyStateTrigger)
-    await waitFor(() => expect(screen.getByTestId('propose-trade-partner-select')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('propose-trade-step-partner')).toBeInTheDocument())
   })
 
   it('opens the league-aware builder for non-redraft formats too', async () => {
@@ -72,6 +72,6 @@ describe('TradesTab — native trade builder wiring for nflRedraftCore leagues',
     expect(trigger.tagName).toBe('BUTTON')
     expect(screen.getByTestId('trades-tab-propose-trade-header')).toBeInTheDocument()
     fireEvent.click(trigger)
-    await waitFor(() => expect(screen.getByTestId('propose-trade-partner-select')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('propose-trade-step-partner')).toBeInTheDocument())
   })
 })

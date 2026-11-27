@@ -1,0 +1,53 @@
+/*
+ * Trades tab (NativeTradesScreen): active trades on the left, the league's trade block on the right
+ * as tiles — the shape of Sleeper's Trades tab. The split answers to the screen's own width
+ * (a container query on `.nls-trades-wrap`), so it stacks on a phone and inside a narrow column alike.
+ */
+.nls-trades-wrap { container-type: inline-size; }
+.nls-trades-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 20px; align-items: start; }
+.nls-trades-active { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.nls-trades-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px; font-weight: 800; color: var(--text); }
+.nls-trades-count { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: var(--accent-ink, var(--bg)); font: 800 12px/1 var(--nl-mono, inherit); }
+
+.nls-trades-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; border-radius: 16px; border: 1px dashed var(--line2); text-align: center; }
+.nls-trades-empty p { margin: 0; color: var(--muted); font-size: 13px; }
+.nls-trades-empty-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 999px; background: var(--surface2); color: var(--muted); font-size: 24px; }
+.nls-trades-link { min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: var(--accent); font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
+.nls-trades-link:hover { text-decoration: underline; }
+
+.nls-trades-block { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding-left: 20px; border-left: 1px solid var(--line2); }
+.nls-trades-block-empty { margin: 0; color: var(--muted); font-size: 13px; }
+.nls-block-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.nls-block-tile {
+  --tile-tint: var(--line2);
+  display: flex; flex-direction: column; width: 100%; min-height: 76px; overflow: hidden; padding: 0;
+  border-radius: 12px; border: 1px solid color-mix(in srgb, var(--tile-tint) 65%, var(--line2));
+  background: var(--surface2); color: var(--text); text-align: left; cursor: pointer; transition: border-color 0.12s, transform 0.12s;
+}
+.nls-block-tile:hover { border-color: var(--accent); }
+.nls-block-tile:active { transform: scale(0.98); }
+.nls-block-tile[data-pos=qb] { --tile-tint: var(--nl-pos-qb, #f472b6); }
+.nls-block-tile[data-pos=rb] { --tile-tint: var(--nl-pos-rb, #34d399); }
+.nls-block-tile[data-pos=wr] { --tile-tint: var(--nl-pos-wr, #60a5fa); }
+.nls-block-tile[data-pos=te] { --tile-tint: var(--nl-pos-te, #fbbf24); }
+.nls-block-tile[data-pos=k] { --tile-tint: var(--nl-pos-k, #a78bfa); }
+/* Every other sport borrows the same four tints by role, so a tile is never untinted grey. */
+.nls-block-tile:is([data-pos=def], [data-pos=dst], [data-pos=flex], [data-pos=util]) { --tile-tint: var(--nl-pos-def, #94a3b8); }
+.nls-block-tile:is([data-pos=pg], [data-pos=sg], [data-pos=g], [data-pos=lw], [data-pos=rw], [data-pos=fwd], [data-pos=fw], [data-pos=of]) { --tile-tint: var(--nl-pos-wr, #60a5fa); }
+.nls-block-tile:is([data-pos=sf], [data-pos=pf], [data-pos=f], [data-pos=c], [data-pos=mid], [data-pos=mf], [data-pos='1b'], [data-pos='2b'], [data-pos='3b'], [data-pos=ss]) { --tile-tint: var(--nl-pos-te, #fbbf24); }
+.nls-block-tile:is([data-pos=d], [data-pos=df], [data-pos=sp], [data-pos=rp], [data-pos=p]) { --tile-tint: var(--nl-pos-rb, #34d399); }
+.nls-block-tile:is([data-pos=gk], [data-pos=gkp], [data-pos=dh]) { --tile-tint: var(--nl-pos-k, #a78bfa); }
+.nls-block-tile-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; padding: 8px 8px 6px 10px; }
+.nls-block-tile-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nls-block-tile-text small { color: var(--muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.nls-block-tile-text small b { color: var(--tile-tint); font-weight: 900; }
+.nls-block-tile-text strong { font-size: 13px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nls-block-tile .nls-pavatar { width: 34px; height: 34px; font-size: 11px; }
+.nls-block-tile .nls-pavatar-crest { width: 16px; height: 16px; right: -4px; bottom: -3px; }
+.nls-block-owner { margin-top: auto; padding: 4px 8px; background: color-mix(in srgb, var(--tile-tint) 22%, var(--surface)); color: var(--text); font-size: 11px; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@container (max-width: 720px) {
+  .nls-trades-split { grid-template-columns: minmax(0, 1fr); }
+  .nls-trades-block { position: static; padding-left: 0; padding-top: 16px; border-left: 0; border-top: 1px solid var(--line2); }
+  .nls-block-tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}

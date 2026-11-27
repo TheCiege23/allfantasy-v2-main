@@ -317,7 +317,7 @@ export function tradesResponse(sport: HarnessSport) {
   const asset = (p: Player) => ({ id: p.id, label: p.name, sublabel: `${p.position} · ${p.team}`, playerId: p.id, team: p.team, headshotUrl: null, teamLogoUrl: teamLogoUrl(sport, p.team) })
   const now = Date.now()
   return {
-    tradeBlock: [teamPlayers(sport, 5).bench[0], teamPlayers(sport, 6).starters[3], teamPlayers(sport, 8).bench[2]].map((p, i) => ({ id: `tb${i}`, ownerName: MANAGERS[5 + i], name: p.name, position: p.position, team: p.team })),
+    tradeBlock: [teamPlayers(sport, 5).bench[0], teamPlayers(sport, 6).starters[3], teamPlayers(sport, 8).bench[2]].map((p, i) => ({ id: `tb${i}`, playerId: p.id, ownerName: MANAGERS[5 + i], name: p.name, position: p.position, team: p.team })),
     activeTrades: [
       { id: 'tr1', direction: 'incoming', partnerName: MANAGERS[3], timestamp: new Date(now - 5 * 3_600_000).toISOString(), sent: [asset(mine.starters[1])], received: [asset(theirs.starters[3]), asset(theirs.bench[0])], status: 'pending', viewerIsReceiver: true, leagueGrade: { graded: true, letter: 'B+', partnerLetter: 'C+', percentDiff: 11, label: 'You win', recommendation: 'You get the better weekly starter and keep your depth. Accept unless you need the bench piece.' } },
       { id: 'tr2', direction: 'complete', partnerName: MANAGERS[6], proposerName: MANAGERS[6], receiverName: MANAGERS[9], timestamp: new Date(now - 26 * 3_600_000).toISOString(), sent: [asset(teamPlayers(sport, 6).starters[0])], received: [asset(teamPlayers(sport, 9).starters[2])], status: 'awaiting_commissioner', viewerIsCommissioner: true },
@@ -326,6 +326,59 @@ export function tradesResponse(sport: HarnessSport) {
     historyTrades: [
       { id: 'h1', direction: 'complete', partnerName: MANAGERS[2], proposerName: MANAGERS[1], receiverName: MANAGERS[2], timestamp: new Date(now - 6 * 86_400_000).toISOString(), sent: [asset(teamPlayers(sport, 1).starters[4])], received: [asset(teamPlayers(sport, 2).starters[5])], status: 'accepted' },
     ],
+  }
+}
+
+/**
+ * `/api/leagues/[id]/trades/rosters` — what the trade builder reads: every team's tradeable players,
+ * two future picks each, FAAB where the sport's waivers use it, and one Chimmy suggestion. The viewer
+ * holds roster `r-0`, the same team `tradesResponse` treats as "mine".
+ */
+export function tradeRostersResponse(sport: HarnessSport) {
+  const cfg = SPORTS[sport]
+  const season = 2027
+  const rosters = MANAGERS.map((ownerName, i) => {
+    const t = teamPlayers(sport, i)
+    return {
+      rosterId: `r-${i}`,
+      platformUserId: i === 0 ? 'harness-viewer' : `harness-${i}`,
+      teamExternalId: `r-${i}`,
+      ownerName,
+      ownerHandles: [],
+      avatarUrl: null,
+      wins: 8 - (i % 6),
+      losses: i % 6,
+      ties: 0,
+      playoffProbability: null,
+      faabRemaining: cfg.waiverType === 'faab' ? 100 - i * 7 : null,
+      canReceiveProposal: true,
+      players: [...t.starters, ...t.bench].map((p) => ({
+        id: p.id, name: p.name, position: p.position, team: p.team, imageUrl: null, byeWeek: null,
+        injuryStatus: p.injury, value: Math.round(p.projected * 100), weeklyProjection: p.projected,
+      })),
+      picks: [1, 2].map((round) => ({ pickId: `pk-${i}-${round}`, season, round, label: `${season} Round ${round}`, itemType: 'future_pick' as const, value: round === 1 ? 900 : 400 })),
+    }
+  })
+  const mine = rosters[0]!.players
+  const theirs = rosters[3]!.players
+  return {
+    rosters,
+    viewerRosterId: 'r-0',
+    viewerTeamRosterId: 'r-0',
+    suggestions: [3, 5, 7].map((r, k) => ({
+      rosterId: `r-${r}`,
+      fitScore: 78 - k * 9,
+      packages: [{
+        id: `sg-${r}`,
+        send: [{ kind: 'player', id: mine[5 + k]!.id, name: mine[5 + k]!.name, position: mine[5 + k]!.position, value: 1, amount: null, itemType: 'player' }],
+        receive: [{ kind: 'player', id: rosters[r]!.players[3]!.id, name: rosters[r]!.players[3]!.name, position: rosters[r]!.players[3]!.position, value: 1, amount: null, itemType: 'player' }],
+        sendValue: 1, receiveValue: 1, fairness: 92, acceptanceLikelihood: null,
+        reason: `${theirs[3]!.name.split(' ')[0]}'s team is thin where you are deep.`,
+        grade: { graded: true, letter: k === 0 ? 'B+' : 'B', partnerLetter: 'B', label: 'Fair for both', giveValue: 1200, getValue: 1300 },
+      }],
+    })),
+    multiTeamSuggestions: [],
+    tradeContext: { valueBook: 'league', managerStrategy: 'balanced', strategyConfirmed: true, missing: [] },
   }
 }
 

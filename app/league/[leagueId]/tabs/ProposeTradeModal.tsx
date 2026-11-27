@@ -2,6 +2,7 @@
 
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-transactions.css'
+import '@/components/league/trade-proposer.css'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
@@ -13,8 +14,7 @@ import {
   writeAuthorityCopy,
 } from '@/lib/league/write-authority'
 import { AppModal } from '@/components/ui/AppModal'
-import { PlayerImage } from '@/app/components/PlayerImage'
-import { TeamLogo } from '@/app/components/TeamLogo'
+import { PlayerAvatar } from '@/components/league/native/screens/NativeScreenParts'
 import type { LeagueTeamSlot } from '@/app/dashboard/types'
 import type { TradeableRoster, TradeableRosterPlayer } from '@/app/api/leagues/[leagueId]/trades/rosters/route'
 import type {
@@ -74,6 +74,16 @@ export type ProposeTradeModalProps = {
   initialGetPlayerId?: string | null
 }
 
+/** "Jahmyr Gibbs" → "J. Gibbs"; a one-word name (a team defense) stays whole. */
+export function tileName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return name.trim()
+  return `${parts[0]![0]}. ${parts.slice(1).join(' ')}`
+}
+
+/** The three steps, in order. A counteroffer opens on `assets`: its partner is fixed. */
+export type ProposeStep = 'partner' | 'assets' | 'review'
+
 /** Offer lifetimes the trade engine accepts (`expiresInHours`; it defaults to 48). */
 export const TRADE_EXPIRY_OPTIONS: ReadonlyArray<{ hours: number; label: string }> = [
   { hours: 24, label: '1 day' },
@@ -108,6 +118,7 @@ export function ProposeTradeModal({
   initialPartnerRosterId = null,
   initialGetPlayerId = null,
 }: ProposeTradeModalProps) {
+  const [step, setStep] = useState<ProposeStep>(counterTradeId ? 'assets' : 'partner')
   const [expiresInHours, setExpiresInHours] = useState(48)
   const [sendDirectMessage, setSendDirectMessage] = useState(true)
   const preselectApplied = useRef(false)
@@ -218,8 +229,14 @@ export function ProposeTradeModal({
       setExpiresInHours(48)
       setSendDirectMessage(true)
       preselectApplied.current = false
+      setStep(counterTradeId ? 'assets' : 'partner')
     }
-  }, [open])
+  }, [open, counterTradeId])
+
+  // A counter has its partner fixed, so it opens straight on the assets.
+  useEffect(() => {
+    if (open && counterTradeId) setStep('assets')
+  }, [open, counterTradeId])
 
   // Opened from the Propose grid: select the tapped manager and player once the rosters are in.
   useEffect(() => {
@@ -234,6 +251,7 @@ export function ProposeTradeModal({
     preselectApplied.current = true
     setPartnerRosterId(partner.rosterId)
     if (initialGetPlayerId && partner.players.some((p) => p.id === initialGetPlayerId)) setGetPlayerIds(new Set([initialGetPlayerId]))
+    setStep('assets')
   }, [open, counterTradeId, rosters, initialPartnerRosterId, initialGetPlayerId, viewerTeamRosterId, viewerRosterId])
 
   const myRoster = useMemo(
@@ -379,6 +397,7 @@ export function ProposeTradeModal({
     setGetPickIds(new Set(proposal.receive.filter((a) => a.kind === 'pick').map((a) => a.id)))
     setGiveFaab(String(proposal.send.find((a) => a.kind === 'faab')?.amount ?? ''))
     setGetFaab(String(proposal.receive.find((a) => a.kind === 'faab')?.amount ?? ''))
+    setStep('assets')
   }
 
   function applyMultiTeamSuggestion(suggestion: MultiTeamTradeSuggestion) {
@@ -396,6 +415,50 @@ export function ProposeTradeModal({
     setGivePickIds(new Set()); setGetPickIds(new Set()); setSecondGivePickIds(new Set()); setSecondGetPickIds(new Set())
     setGiveFaab(''); setGetFaab(''); setSecondGiveFaab(''); setSecondGetFaab('')
     setDirectPartnerLegs(suggestion.legs.filter((leg) => leg.fromRosterId !== viewerId && leg.toRosterId !== viewerId))
+    setStep('assets')
+  }
+
+  /** Step 1: tap a manager. With a third team on, the second tap fills the third seat; a tap on a chosen one frees it. */
+  function choosePartner(rosterId: string) {
+    markCustomChange()
+    if (rosterId === partnerRosterId) {
+      setPartnerRosterId(secondPartnerRosterId)
+      setSecondPartnerRosterId(null)
+      setGetPlayerIds(new Set(secondGetPlayerIds)); setGetPickIds(new Set(secondGetPickIds)); setGetFaab(secondGetFaab)
+      setSecondGetPlayerIds(new Set()); setSecondGetPickIds(new Set()); setSecondGetFaab('')
+      return
+    }
+    if (rosterId === secondPartnerRosterId) {
+      setSecondPartnerRosterId(null)
+      setSecondGetPlayerIds(new Set()); setSecondGetPickIds(new Set()); setSecondGetFaab('')
+      return
+    }
+    if (multiTeam && partnerRosterId) {
+      setSecondPartnerRosterId(rosterId)
+      setSecondGetPlayerIds(new Set()); setSecondGetPickIds(new Set()); setSecondGetFaab('')
+      return
+    }
+    setPartnerRosterId(rosterId)
+    setGetPlayerIds(new Set()); setGetPickIds(new Set()); setGetFaab('')
+  }
+
+  /**
+   * Step 2, a tile on YOUR roster. Two teams: in or out. Three teams: each tap moves it on —
+   * out → to the first partner → to the second → out — and the tile says where it is going.
+   */
+  function cycleMine(kind: 'player' | 'pick', id: string) {
+    markCustomChange()
+    const [first, setFirst, second, setSecond] = kind === 'player'
+      ? [givePlayerIds, setGivePlayerIds, secondGivePlayerIds, setSecondGivePlayerIds] as const
+      : [givePickIds, setGivePickIds, secondGivePickIds, setSecondGivePickIds] as const
+    const without = (s: Set<string>) => { const n = new Set(s); n.delete(id); return n }
+    if (first.has(id)) {
+      setFirst(without(first))
+      if (multiTeam && secondPartnerRoster) setSecond(new Set(second).add(id))
+      return
+    }
+    if (second.has(id)) { setSecond(without(second)); return }
+    setFirst(new Set(first).add(id))
   }
 
   async function handleSubmit() {
@@ -506,366 +569,491 @@ export function ProposeTradeModal({
     }
   }
 
+  const participants = [myRoster, partnerRoster, ...(multiTeam && secondPartnerRoster ? [secondPartnerRoster] : [])].filter(
+    (r): r is TradeableRoster => Boolean(r),
+  )
+  const nameOf = (id: string) => (id === myRoster?.rosterId ? 'You' : rosters?.find((r) => r.rosterId === id)?.ownerName ?? 'Manager')
+  const dealLine = `${participants.length}-way trade: ${participants.map((r) => nameOf(r.rosterId)).join(', ')}`
+
+  /** Every asset moving, one leg each, with the way to take it back out. Feeds the summary and the review. */
+  const legs: TradeLeg[] = []
+  if (myRoster && partnerRoster) {
+    const add = (
+      from: TradeableRoster,
+      to: TradeableRoster,
+      players: Set<string>,
+      setPlayers: (next: Set<string>) => void,
+      picks: Set<string>,
+      setPicks: (next: Set<string>) => void,
+      faab: string,
+      setFaab: (next: string) => void,
+    ) => {
+      const drop = (set: Set<string>, setSet: (next: Set<string>) => void, id: string) => () => {
+        markCustomChange()
+        const next = new Set(set)
+        next.delete(id)
+        setSet(next)
+      }
+      for (const id of players) {
+        const p = from.players.find((x) => x.id === id)
+        legs.push({ key: `p:${from.rosterId}:${to.rosterId}:${id}`, from: from.rosterId, to: to.rosterId, kind: 'player', label: p?.name ?? id, position: p?.position ?? null, team: p?.team ?? null, headshotUrl: p?.imageUrl ?? null, remove: drop(players, setPlayers, id) })
+      }
+      for (const id of picks) {
+        legs.push({ key: `k:${from.rosterId}:${to.rosterId}:${id}`, from: from.rosterId, to: to.rosterId, kind: 'pick', label: from.picks.find((x) => x.pickId === id)?.label ?? id, position: null, team: null, headshotUrl: null, remove: drop(picks, setPicks, id) })
+      }
+      const amount = Math.floor(Number(faab))
+      if (amount > 0) {
+        legs.push({ key: `f:${from.rosterId}:${to.rosterId}`, from: from.rosterId, to: to.rosterId, kind: 'faab', label: `$${amount} FAAB`, position: null, team: null, headshotUrl: null, remove: () => { markCustomChange(); setFaab('') } })
+      }
+    }
+    add(myRoster, partnerRoster, givePlayerIds, setGivePlayerIds, givePickIds, setGivePickIds, giveFaab, setGiveFaab)
+    add(partnerRoster, myRoster, getPlayerIds, setGetPlayerIds, getPickIds, setGetPickIds, getFaab, setGetFaab)
+    if (multiTeam && secondPartnerRoster) {
+      add(myRoster, secondPartnerRoster, secondGivePlayerIds, setSecondGivePlayerIds, secondGivePickIds, setSecondGivePickIds, secondGiveFaab, setSecondGiveFaab)
+      add(secondPartnerRoster, myRoster, secondGetPlayerIds, setSecondGetPlayerIds, secondGetPickIds, setSecondGetPickIds, secondGetFaab, setSecondGetFaab)
+    }
+    for (const leg of directPartnerLegs) {
+      const source = rosters?.find((r) => r.rosterId === leg.fromRosterId)
+      const p = leg.asset.kind === 'player' ? source?.players.find((x) => x.id === leg.asset.id) : null
+      legs.push({ key: `d:${leg.fromRosterId}:${leg.toRosterId}:${leg.asset.id}`, from: leg.fromRosterId, to: leg.toRosterId, kind: leg.asset.kind === 'player' ? 'player' : leg.asset.kind === 'faab' ? 'faab' : 'pick', label: leg.asset.name, position: leg.asset.position ?? null, team: p?.team ?? null, headshotUrl: p?.imageUrl ?? null, remove: null })
+    }
+  }
+
+  const partnersReady = Boolean(partnerRoster) && (!multiTeam || Boolean(secondPartnerRoster))
+  const assetsReady = Boolean(myRoster && partnerRoster && firstHasAssets && (!multiTeam || (secondPartnerRoster && secondHasAssets)))
+  const title = counterTradeId
+    ? 'Counter offer'
+    : step === 'partner'
+      ? (shadowNotice ? 'Build a shadow trade' : 'Propose a trade')
+      : step === 'assets'
+        ? 'Add trade assets'
+        : 'Review trade offer'
+  const stepNumber = step === 'partner' ? 1 : step === 'assets' ? 2 : 3
+
+  function teamBadge(roster: TradeableRoster | null | undefined) {
+    if (!roster) return null
+    const name = nameOf(roster.rosterId)
+    return roster.avatarUrl ? (
+      // Provider avatar hosts are dynamic and are intentionally not constrained to Next Image domains.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img className="af-tp-team-avatar" src={roster.avatarUrl} alt="" />
+    ) : (
+      <span className="af-tp-team-avatar" aria-hidden>{(roster.ownerName ?? name).slice(0, 1).toUpperCase()}</span>
+    )
+  }
+
+  function rosterColumn(roster: TradeableRoster, side: 'mine' | 'first' | 'second') {
+    const mine = side === 'mine'
+    const players = side === 'first' ? getPlayerIds : side === 'second' ? secondGetPlayerIds : null
+    const picks = side === 'first' ? getPickIds : side === 'second' ? secondGetPickIds : null
+    const destination = (id: string, kind: 'player' | 'pick'): string | null => {
+      const [a, b] = kind === 'player' ? [givePlayerIds, secondGivePlayerIds] : [givePickIds, secondGivePickIds]
+      if (a.has(id)) return partnerRoster ? nameOf(partnerRoster.rosterId) : null
+      if (b.has(id)) return secondPartnerRoster ? nameOf(secondPartnerRoster.rosterId) : null
+      return null
+    }
+    const faab = side === 'mine' ? giveFaab : side === 'first' ? getFaab : secondGetFaab
+    const setFaab = side === 'mine' ? setGiveFaab : side === 'first' ? setGetFaab : setSecondGetFaab
+    return (
+      <section key={roster.rosterId} className="af-tp-col" data-side={side} aria-label={mine ? 'Your roster' : `${nameOf(roster.rosterId)} roster`}>
+        <header className="af-tp-col-head">
+          {teamBadge(roster)}
+          <strong>{nameOf(roster.rosterId)}</strong>
+          <small>{roster.wins}-{roster.losses}{roster.ties ? `-${roster.ties}` : ''}</small>
+        </header>
+        {roster.players.length === 0 && roster.picks.length === 0 ? <p className="af-tp-empty">No tradeable players yet.</p> : null}
+        <div className="af-tp-tiles">
+          {roster.players.map((p) => {
+            const dest = mine ? destination(p.id, 'player') : null
+            const on = mine ? Boolean(dest) || givePlayerIds.has(p.id) || secondGivePlayerIds.has(p.id) : Boolean(players?.has(p.id))
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className="af-tp-tile"
+                data-pos={(p.position ?? '').toLowerCase() || undefined}
+                aria-pressed={on}
+                aria-label={`${p.name}${p.position ? `, ${p.position}` : ''}${p.team ? `, ${p.team}` : ''}${multiTeam && dest ? `, to ${dest}` : ''}`}
+                onClick={() => (mine ? cycleMine('player', p.id) : toggle(players!, side === 'first' ? setGetPlayerIds : setSecondGetPlayerIds, p.id))}
+              >
+                <PlayerAvatar name={p.name} headshotUrl={p.imageUrl} team={p.team} sport={sport} />
+                <span className="af-tp-tile-text">
+                  <span className="af-tp-tile-meta">{p.position ?? '—'}{p.team ? ` · ${p.team}` : ''}</span>
+                  <span className="af-tp-tile-name">{tileName(p.name)}</span>
+                  {multiTeam && dest ? <span className="af-tp-tile-to">To {dest}</span> : null}
+                </span>
+                <span className="af-tp-tile-check" aria-hidden />
+              </button>
+            )
+          })}
+          {roster.picks.map((p) => {
+            const dest = mine ? destination(p.pickId, 'pick') : null
+            const on = mine ? Boolean(dest) || givePickIds.has(p.pickId) || secondGivePickIds.has(p.pickId) : Boolean(picks?.has(p.pickId))
+            const locked = p.proposable === false
+            return (
+              <button
+                key={p.pickId}
+                type="button"
+                className="af-tp-tile"
+                data-kind="pick"
+                aria-pressed={on}
+                disabled={locked && !on}
+                title={locked ? 'This pick can only be traded on its own platform.' : undefined}
+                aria-label={`${p.label}${multiTeam && dest ? `, to ${dest}` : ''}`}
+                onClick={() => (mine ? cycleMine('pick', p.pickId) : toggle(picks!, side === 'first' ? setGetPickIds : setSecondGetPickIds, p.pickId))}
+              >
+                <span className="af-tp-pick-icon" aria-hidden>PICK</span>
+                <span className="af-tp-tile-text">
+                  <span className="af-tp-tile-meta">{p.fromTeam ? `From ${p.fromTeam}` : 'Draft pick'}</span>
+                  <span className="af-tp-tile-name">{p.label}</span>
+                  {multiTeam && dest ? <span className="af-tp-tile-to">To {dest}</span> : null}
+                </span>
+                <span className="af-tp-tile-check" aria-hidden />
+              </button>
+            )
+          })}
+        </div>
+        {roster.faabRemaining != null ? (
+          <label className="af-tp-faab">
+            <span>{mine ? 'FAAB you send' : 'FAAB you get'}</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              max={roster.faabRemaining}
+              value={faab}
+              placeholder="0"
+              aria-label={`FAAB — ${nameOf(roster.rosterId)}`}
+              onChange={(e) => { markCustomChange(); setFaab(e.target.value) }}
+            />
+            <small>of ${roster.faabRemaining}</small>
+          </label>
+        ) : null}
+        {mine && multiTeam && secondPartnerRoster && myRoster?.faabRemaining != null ? (
+          <label className="af-tp-faab">
+            <span>FAAB to {nameOf(secondPartnerRoster.rosterId)}</span>
+            <input type="number" inputMode="numeric" min="0" max={Math.max(0, myRoster.faabRemaining - Number(giveFaab || 0))} value={secondGiveFaab} placeholder="0" aria-label={`FAAB to ${nameOf(secondPartnerRoster.rosterId)}`} onChange={(e) => { markCustomChange(); setSecondGiveFaab(e.target.value) }} />
+          </label>
+        ) : null}
+      </section>
+    )
+  }
+
+  function summary(editable: boolean) {
+    return (
+      <div className="af-tp-summary" data-testid="propose-trade-summary">
+        {participants.map((r) => {
+          const receives = legs.filter((l) => l.to === r.rosterId)
+          const sends = legs.filter((l) => l.from === r.rosterId)
+          const item = (l: TradeLeg, dir: 'from' | 'to') => (
+            <li key={l.key} className="af-tp-sum-item">
+              {l.kind === 'player' ? (
+                <PlayerAvatar name={l.label} headshotUrl={l.headshotUrl} team={l.team} sport={sport} />
+              ) : (
+                <span className="af-tp-pick-icon" aria-hidden>{l.kind === 'faab' ? '$' : 'PICK'}</span>
+              )}
+              <span className="af-tp-sum-text">
+                <b>{l.label}</b>
+                <small>
+                  {l.position && l.kind === 'player' ? `${l.position}${l.team ? ` · ${l.team}` : ''} · ` : ''}
+                  {dir === 'from' ? `From ${nameOf(l.from)}` : `To ${nameOf(l.to)}`}
+                </small>
+              </span>
+              {editable && l.remove ? (
+                <button type="button" className="af-tp-x" aria-label={`Remove ${l.label}`} onClick={l.remove}>×</button>
+              ) : null}
+            </li>
+          )
+          return (
+            <section key={r.rosterId} className="af-tp-sum-team" data-testid="propose-trade-review-team">
+              <header>{teamBadge(r)}<strong>{nameOf(r.rosterId)}</strong></header>
+              <div className="af-tp-sum-cols">
+                <div>
+                  <p className="af-tp-sum-label" data-dir="in">Receives</p>
+                  {receives.length ? <ul>{receives.map((l) => item(l, 'from'))}</ul> : <p className="af-tp-empty">Nothing yet</p>}
+                </div>
+                <div>
+                  <p className="af-tp-sum-label" data-dir="out">Sends</p>
+                  {sends.length ? <ul>{sends.map((l) => item(l, 'to'))}</ul> : <p className="af-tp-empty">Nothing yet</p>}
+                </div>
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const footNote =
+    step === 'partner'
+      ? partnerRoster
+        ? multiTeam && !secondPartnerRoster
+          ? 'Pick the third team'
+          : dealLine
+        : 'Choose who you are trading with'
+      : step === 'assets'
+        ? !firstHasAssets
+          ? 'Tap players or picks to add them'
+          : multiTeam && secondPartnerRoster && !secondHasAssets
+            ? `${nameOf(secondPartnerRoster.rosterId)} isn’t in the deal yet`
+            : `You send ${legs.filter((l) => l.from === myRoster?.rosterId).length} · You get ${legs.filter((l) => l.to === myRoster?.rosterId).length}`
+        : dealLine
+
+  const footer = (
+    <div className="af-tp-foot">
+      <span className="af-tp-foot-note" data-testid="propose-trade-foot-note">{loading ? '' : footNote}</span>
+      <div className="af-tp-foot-btns">
+        {step === 'partner' || (step === 'assets' && counterTradeId) ? (
+          <button type="button" className="af-tp-btn" onClick={onClose}>Cancel</button>
+        ) : (
+          <button type="button" className="af-tp-btn" onClick={() => setStep(step === 'review' ? 'assets' : 'partner')}>Back</button>
+        )}
+        {step === 'review' ? (
+          <button
+            type="button"
+            className="af-tp-btn"
+            data-variant="primary"
+            onClick={() => void handleSubmit()}
+            disabled={!canSubmit}
+            data-testid="propose-trade-submit"
+          >
+            {submitting ? 'Sending…' : counterTradeId ? 'Send counteroffer' : submitLabel}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="af-tp-btn"
+            data-variant="primary"
+            disabled={step === 'partner' ? !partnersReady : !assetsReady || counterLoading}
+            onClick={() => setStep(step === 'partner' ? 'assets' : 'review')}
+            data-testid="propose-trade-next"
+          >
+            Next
+          </button>
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <AppModal
       open={open}
       onClose={onClose}
-      title={counterTradeId ? 'Counter offer' : shadowNotice ? 'Build a Shadow Trade' : 'Propose a Trade'}
-      size="lg"
+      title={title}
+      description={`Step ${stepNumber} of 3${step === 'assets' ? ' · tap a player or pick to add it' : ''}`}
+      size="xl"
       className="af-core af-league-transactions af-transaction-dialog"
+      footer={footer}
     >
-      <div className="space-y-4 text-[13px] text-[var(--muted)]">
+      <div className="af-tp" data-step={step} data-testid={`propose-trade-step-${step}`}>
         {/*
           Shown before any selection is made. A manager building a trade for an imported league
           needs to know up front that the offer stops at AllFantasy — discovering it in the
           success toast is too late to be honest about it.
         */}
-        {shadowNotice ? (
-          <p
-            data-testid="shadow-league-trade-notice"
-            className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-[11px] text-sky-100/90"
-          >
+        {shadowNotice && step === 'partner' ? (
+          <p data-testid="shadow-league-trade-notice" className="af-tp-notice">
             This proposal stays inside AllFantasy — {sourceLabel ?? 'your host platform'} is not notified.
             Use it as a plan, then send the offer in {sourceLabel ?? 'your host platform'}.
           </p>
         ) : null}
-        {loading ? (
-          <p className="text-[var(--muted)]">Loading rosters…</p>
-        ) : (
+        {error ? <p className="af-tp-error" role="alert">{error}</p> : null}
+        {loading || rosters === null ? (
+          <p className="af-tp-empty" role="status">Loading rosters…</p>
+        ) : step === 'partner' ? (
           <>
-            {tradeContext ? (
-              <div className="space-y-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-[11px] text-[var(--badge-text-cyan)]">
-                <p>
-                  Suggestions use this league&apos;s {tradeContext.valueBook} values, {tradeContext.proposalModel ?? 'league'} rules and your {tradeContext.managerStrategy ?? 'balanced'} strategy, plus roster construction, records, picks and FAAB.{tradeContext.missing.length ? ` Full contextual grading remains pending for ${tradeContext.missing.join(' and ')}.` : ' The required strategy and paired outcome simulation are available.'}
-                </p>
-                <label className="flex flex-wrap items-center gap-2 text-cyan-50">
-                  <span className="font-semibold">My goal in this league</span>
-                  <select
-                    aria-label="My trade strategy"
-                    value={tradeContext.strategyConfirmed ? (tradeContext.managerStrategy ?? 'balanced') : ''}
-                    disabled={savingStrategy}
-                    onChange={(event) => void updateManagerStrategy(event.target.value as 'win-now' | 'balanced' | 'rebuild')}
-                    className="rounded-md border border-cyan-300/25 bg-[#111728] px-2 py-1 text-[var(--text)]"
-                  >
-                    <option value="" disabled>Confirm your goal</option>
-                    <option value="win-now">Win now</option>
-                    <option value="balanced">Balanced</option>
-                    <option value="rebuild">Rebuild</option>
-                  </select>
-                  {savingStrategy ? <span className="text-cyan-200/60">Saving…</span> : null}
-                </label>
-              </div>
-            ) : null}
             {!counterTradeId && visibleSuggestions.length > 0 ? (
-              <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Suggested trade partners</p>
-                <div className="grid gap-2 sm:grid-cols-3">
+              <section aria-label="Chimmy's suggested partners">
+                <div className="af-tp-section-head">
+                  <h3>Chimmy&apos;s suggested partners</h3>
+                  {tradeContext ? (
+                    <label className="af-tp-goal">
+                      Your goal
+                      <select
+                        aria-label="My trade strategy"
+                        value={tradeContext.strategyConfirmed ? (tradeContext.managerStrategy ?? 'balanced') : ''}
+                        disabled={savingStrategy}
+                        onChange={(event) => void updateManagerStrategy(event.target.value as 'win-now' | 'balanced' | 'rebuild')}
+                      >
+                        <option value="" disabled>Choose</option>
+                        <option value="win-now">Win now</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="rebuild">Rebuild</option>
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+                <div className="af-tp-suggest">
                   {visibleSuggestions.slice(0, 3).map((suggestion) => {
                     const roster = rosters?.find((r) => r.rosterId === suggestion.rosterId)
                     const best = suggestion.packages[0]
                     return (
-                      <button key={suggestion.rosterId} type="button" onClick={() => best && applySuggestion(suggestion.rosterId, best)} className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-2.5 text-left hover:border-[var(--line2)]" data-testid={`suggested-trade-partner-${suggestion.rosterId}`}>
-                        <span className="flex items-center gap-2">
-                          {roster?.avatarUrl ? (
-                            // Provider avatar hosts are dynamic and are intentionally not constrained to Next Image domains.
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={roster.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" />
-                          ) : null}
-                          <span className="font-bold text-[var(--text)]">{roster?.ownerName ?? 'Manager'}</span>
-                          <span className="ml-auto font-mono text-[11px] text-emerald-300">{suggestion.fitScore}% fit</span>
+                      <button key={suggestion.rosterId} type="button" className="af-tp-card" onClick={() => (best ? applySuggestion(suggestion.rosterId, best) : choosePartner(suggestion.rosterId))} data-testid={`suggested-trade-partner-${suggestion.rosterId}`}>
+                        <span className="af-tp-card-head">
+                          {teamBadge(roster)}
+                          <b>{roster?.ownerName ?? 'Manager'}</b>
+                          <span className="af-tp-fit">{suggestion.fitScore}% fit</span>
                         </span>
-                        {best ? <span className="mt-1.5 block text-[11px] leading-snug text-[var(--muted)]">Send {best.send.map((a) => a.name).join(' + ')} for {best.receive.map((a) => a.name).join(' + ')}</span> : null}
+                        {best ? <span className="af-tp-card-line">Send {best.send.map((a) => a.name).join(' + ')} for {best.receive.map((a) => a.name).join(' + ')}</span> : null}
                         {best ? <ComposerGradeLine compact grade={best.grade} partnerName={roster?.ownerName} testId="composer-partner-grade" /> : null}
                       </button>
                     )
                   })}
                 </div>
-              </div>
+              </section>
             ) : null}
             {!counterTradeId && visibleMultiTeamSuggestions.length > 0 ? (
-              <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Suggested three-team trades</p>
-                <div className="grid gap-2 sm:grid-cols-2">
+              <section aria-label="Three-team ideas">
+                <div className="af-tp-section-head"><h3>Three-team ideas</h3></div>
+                <div className="af-tp-suggest">
                   {visibleMultiTeamSuggestions.map((suggestion) => (
-                    <button key={suggestion.id} type="button" onClick={() => applyMultiTeamSuggestion(suggestion)} className="rounded-xl border border-violet-400/20 bg-violet-400/[0.04] p-2.5 text-left hover:border-violet-300/50">
-                      <span className="font-semibold text-violet-100">Circular three-team deal · {suggestion.fairness}% minimum match</span>
-                      <span className="mt-1 block text-[11px] leading-snug text-[var(--muted)]">{suggestion.reason}</span>
-                      {suggestion.simulation?.available ? <span className={`mt-1 block text-[11px] ${(suggestion.simulation.deltaPct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{suggestion.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability impact: {(suggestion.simulation.deltaPct ?? 0) >= 0 ? '+' : ''}{suggestion.simulation.deltaPct?.toFixed(1)}%</span> : null}
+                    <button key={suggestion.id} type="button" className="af-tp-card" data-tone="violet" onClick={() => applyMultiTeamSuggestion(suggestion)}>
+                      <b>{suggestion.rosterIds.slice(1).map((id) => nameOf(id)).join(' + ')}</b>
+                      <span className="af-tp-card-line">{suggestion.reason}</span>
+                      {suggestion.simulation?.available ? <span className="af-tp-card-line" data-tone={(suggestion.simulation.deltaPct ?? 0) >= 0 ? 'good' : 'bad'}>{suggestion.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} odds {(suggestion.simulation.deltaPct ?? 0) >= 0 ? '+' : ''}{suggestion.simulation.deltaPct?.toFixed(1)}%</span> : null}
                     </button>
                   ))}
                 </div>
-              </div>
+              </section>
             ) : null}
-            <label className="block text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">
-              Trade partner
-              <select
-                value={partnerRosterId ?? ''}
-                disabled={Boolean(counterTradeId)}
-                onChange={(e) => {
-                  setSelectedSuggestionId(null)
-                  setDirectPartnerLegs([])
-                  setPartnerRosterId(e.target.value || null)
-                  setGetPlayerIds(new Set())
-                }}
-                className="mt-1.5 w-full rounded-xl border border-[var(--line2)] bg-[#0a1220] px-3 py-2 text-[13px] text-[var(--muted)]"
-                data-testid="propose-trade-partner-select"
-              >
-                <option value="">Select a manager…</option>
-                {partnerRosters.map((t) => (
-                  <option key={t.rosterId} value={t.rosterId}>
-                    {t.ownerName ?? 'Manager'} · {t.wins}-{t.losses}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {!counterTradeId && activeSuggestion?.packages.length ? (
-              <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.04] p-3">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-200">Recommended packages for this manager</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {activeSuggestion.packages.map((proposal, index) => (
+            <section aria-label="Managers">
+              <div className="af-tp-section-head">
+                <h3>{multiTeam ? 'Pick two managers' : 'Pick a manager'}</h3>
+                {partnerRosters.length >= 2 ? (
+                  <label className="af-tp-switch">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={multiTeam}
+                      onChange={(e) => {
+                        markCustomChange()
+                        setMultiTeam(e.target.checked)
+                        if (!e.target.checked) setSecondPartnerRosterId(null)
+                      }}
+                      data-testid="propose-trade-third-team"
+                    />
+                    Add a third team
+                  </label>
+                ) : null}
+              </div>
+              {partnerRosters.length === 0 ? <p className="af-tp-empty">No other manager can receive an offer yet.</p> : null}
+              <div className="af-tp-managers">
+                {partnerRosters.map((r) => {
+                  const seat = r.rosterId === partnerRosterId ? 1 : r.rosterId === secondPartnerRosterId ? 2 : 0
+                  return (
                     <button
-                      key={`${activeSuggestion.rosterId}-${index}`}
+                      key={r.rosterId}
                       type="button"
-                      onClick={() => applySuggestion(activeSuggestion.rosterId, proposal)}
-                      className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] p-2 text-left hover:border-emerald-300/40"
+                      className="af-tp-manager"
+                      aria-pressed={seat > 0}
+                      onClick={() => choosePartner(r.rosterId)}
+                      data-testid={`propose-trade-partner-${r.rosterId}`}
                     >
-                      <span className="block text-[11px] font-semibold text-[var(--text)]">
-                        Send {proposal.send.map((asset) => asset.name).join(' + ')}
+                      {teamBadge(r)}
+                      <span className="af-tp-manager-text">
+                        <b>{r.ownerName ?? 'Manager'}</b>
+                        <small>{r.wins}-{r.losses}{r.ties ? `-${r.ties}` : ''} · {r.players.length} players</small>
                       </span>
-                      <span className="block text-[11px] text-[var(--muted)]">
-                        Receive {proposal.receive.map((asset) => asset.name).join(' + ')}
-                      </span>
+                      <span className="af-tp-tile-check" aria-hidden />
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          </>
+        ) : step === 'assets' ? (
+          <>
+            {counterLoading ? <p className="af-tp-empty" role="status">Loading the offer…</p> : null}
+            {!counterTradeId && activeSuggestion?.packages.length ? (
+              <details className="af-tp-ideas">
+                <summary>Chimmy&apos;s package ideas for {partnerRoster ? nameOf(partnerRoster.rosterId) : 'this manager'} · {activeSuggestion.packages.length}</summary>
+                <div className="af-tp-suggest">
+                  {activeSuggestion.packages.map((proposal, index) => (
+                    <button key={`${activeSuggestion.rosterId}-${index}`} type="button" className="af-tp-card" onClick={() => applySuggestion(activeSuggestion.rosterId, proposal)}>
+                      <span className="af-tp-card-line"><b>Send</b> {proposal.send.map((asset) => asset.name).join(' + ')}</span>
+                      <span className="af-tp-card-line"><b>Get</b> {proposal.receive.map((asset) => asset.name).join(' + ')}</span>
                       {/*
                         🛑 THE GRADE, NOT "N% VALUE MATCH" (2026-09-28). `fairness` is the suggester's own
                         value gap; when the package is graded it is not shown, and the reason's clause that
                         quotes it is cut — it could read against the letter beside it.
                       */}
                       <ComposerGradeLine compact grade={proposal.grade} partnerName={partnerRoster?.ownerName} testId="composer-package-grade" />
-                      <span className="mt-1 block text-[11px] text-emerald-100/60">
+                      <span className="af-tp-card-line">
                         {proposal.grade ? reasonWithoutValueGap(proposal.reason) : `${proposal.fairness}% value match · ${proposal.reason}`}
                       </span>
-                      {proposal.acceptanceLikelihood != null ? <span className="mt-1 block text-[11px] text-cyan-200/70">{proposal.acceptanceLikelihood}% learned acceptance likelihood</span> : null}
-                      {proposal.simulation?.available ? <span className={`mt-1 block text-[11px] ${(proposal.simulation.deltaPct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{proposal.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability {proposal.simulation.beforePct?.toFixed(1)}% → {proposal.simulation.afterPct?.toFixed(1)}% ({(proposal.simulation.deltaPct ?? 0) >= 0 ? '+' : ''}{proposal.simulation.deltaPct?.toFixed(1)}%)</span> : proposal.simulation ? <span className="mt-1 block text-[11px] text-amber-200/60">Simulation withheld: {proposal.simulation.reason}</span> : null}
+                      {proposal.simulation?.available ? <span className="af-tp-card-line" data-tone={(proposal.simulation.deltaPct ?? 0) >= 0 ? 'good' : 'bad'}>{proposal.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} odds {proposal.simulation.beforePct?.toFixed(1)}% → {proposal.simulation.afterPct?.toFixed(1)}%</span> : null}
                     </button>
                   ))}
                 </div>
-              </div>
+              </details>
             ) : null}
-
-            <label className="flex items-center gap-2 rounded-xl border border-[var(--line2)] bg-[var(--surface2)] px-3 py-2 text-[12px] font-semibold text-[var(--muted)]">
-              <input type="checkbox" disabled={Boolean(counterTradeId)} checked={multiTeam} onChange={(e) => { setSelectedSuggestionId(null); setDirectPartnerLegs([]); setMultiTeam(e.target.checked); if (!e.target.checked) setSecondPartnerRosterId(null) }} />
-              Add a third team
-            </label>
-            {multiTeam ? (
-              <label className="block text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">
-                Third manager
-                <select value={secondPartnerRosterId ?? ''} onChange={(e) => { setSelectedSuggestionId(null); setDirectPartnerLegs([]); setSecondPartnerRosterId(e.target.value || null) }} className="mt-1.5 w-full rounded-xl border border-[var(--line2)] bg-[#0a1220] px-3 py-2 text-[13px] text-[var(--muted)]" data-testid="propose-trade-third-team-select">
-                  <option value="">Select another manager…</option>
-                  {partnerRosters.filter((r) => r.rosterId !== partnerRosterId).map((r) => <option key={r.rosterId} value={r.rosterId}>{r.ownerName ?? 'Manager'} · {r.wins}-{r.losses}</option>)}
-                </select>
-              </label>
-            ) : null}
-
-            {error ? <p className="text-[12px] text-rose-300">{error}</p> : null}
-
             {myRoster && partnerRoster ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">You send</p>
-                  <ul className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-2">
-                    {myRoster.players.map((p) => (
-                      <li key={p.id}>
-                        <label className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-[var(--surface2)]">
-                          <input
-                            type="checkbox"
-                            checked={givePlayerIds.has(p.id)}
-                            onChange={() => toggle(givePlayerIds, setGivePlayerIds, p.id)}
-                          />
-                          <PlayerImage sleeperId={p.id} sport={sport ?? 'NFL'} name={p.name} position={p.position ?? undefined} headshotUrl={p.imageUrl} size={26} />
-                          <span className="truncate">{p.name}</span>
-                          {p.position ? <span className="text-[var(--muted)]">{p.position}</span> : null}
-                          {p.team ? <TeamLogo teamAbbr={p.team} sport={sport ?? 'NFL'} size={18} /> : null}
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                  {myRoster.picks.length > 0 ? <div className="mt-2 space-y-1 rounded-xl border border-[var(--line2)] p-2">{myRoster.picks.map((p) => <label key={p.pickId} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={givePickIds.has(p.pickId)} onChange={() => toggle(givePickIds, setGivePickIds, p.pickId)} /><span>{p.label}</span><span className="ml-auto text-[var(--muted)]">{p.value?.toLocaleString() ?? '—'}</span></label>)}</div> : null}
-                  {myRoster.faabRemaining != null ? <label className="mt-2 flex items-center gap-2 text-[11px] text-[var(--muted)]">FAAB sent<input type="number" min="0" max={myRoster.faabRemaining} value={giveFaab} onChange={(e) => { markCustomChange(); setGiveFaab(e.target.value) }} className="ml-auto w-20 rounded border border-[var(--line2)] bg-[#0a1220] px-2 py-1 text-[var(--text)]" /><span>of ${myRoster.faabRemaining}</span></label> : null}
+              <div className="af-tp-assets">
+                <div className="af-tp-board" data-teams={participants.length}>
+                  {rosterColumn(myRoster, 'mine')}
+                  {rosterColumn(partnerRoster, 'first')}
+                  {multiTeam && secondPartnerRoster ? rosterColumn(secondPartnerRoster, 'second') : null}
                 </div>
-                <div>
-                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">You receive</p>
-                  <ul className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-2">
-                    {partnerRoster.players.map((p) => (
-                      <li key={p.id}>
-                        <label className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-[var(--surface2)]">
-                          <input
-                            type="checkbox"
-                            checked={getPlayerIds.has(p.id)}
-                            onChange={() => toggle(getPlayerIds, setGetPlayerIds, p.id)}
-                          />
-                          <PlayerImage sleeperId={p.id} sport={sport ?? 'NFL'} name={p.name} position={p.position ?? undefined} headshotUrl={p.imageUrl} size={26} />
-                          <span className="truncate">{p.name}</span>
-                          {p.position ? <span className="text-[var(--muted)]">{p.position}</span> : null}
-                          {p.team ? <TeamLogo teamAbbr={p.team} sport={sport ?? 'NFL'} size={18} /> : null}
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                  {partnerRoster.picks.length > 0 ? <div className="mt-2 space-y-1 rounded-xl border border-[var(--line2)] p-2">{partnerRoster.picks.map((p) => <label key={p.pickId} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={getPickIds.has(p.pickId)} onChange={() => toggle(getPickIds, setGetPickIds, p.pickId)} /><span>{p.label}</span><span className="ml-auto text-[var(--muted)]">{p.value?.toLocaleString() ?? '—'}</span></label>)}</div> : null}
-                  {partnerRoster.faabRemaining != null ? <label className="mt-2 flex items-center gap-2 text-[11px] text-[var(--muted)]">FAAB received<input type="number" min="0" max={partnerRoster.faabRemaining} value={getFaab} onChange={(e) => { markCustomChange(); setGetFaab(e.target.value) }} className="ml-auto w-20 rounded border border-[var(--line2)] bg-[#0a1220] px-2 py-1 text-[var(--text)]" /><span>of ${partnerRoster.faabRemaining}</span></label> : null}
-                </div>
+                <aside className="af-tp-aside" aria-label="Trade summary">
+                  <h3>Trade summary</h3>
+                  {multiTeam ? <p className="af-tp-hint">Tap your player again to send him to the other team.</p> : null}
+                  {summary(true)}
+                </aside>
               </div>
             ) : partnerRosterId ? (
-              <p className="text-[var(--muted)]">This manager has no tradeable roster yet.</p>
-            ) : null}
-
-            {multiTeam && myRoster && secondPartnerRoster ? (
-              <div className="rounded-2xl border border-violet-400/25 bg-violet-400/[0.04] p-3">
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-violet-200">Third-team leg · {secondPartnerRoster.ownerName ?? 'Manager'}</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="mb-1 text-[11px] font-bold uppercase text-[var(--muted)]">You send to them</p>
-                    <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-[var(--line2)] p-2">
-                      {myRoster.players.map((p) => <label key={p.id} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={secondGivePlayerIds.has(p.id)} disabled={givePlayerIds.has(p.id)} onChange={() => toggle(secondGivePlayerIds, setSecondGivePlayerIds, p.id)} /><span className="truncate">{p.name}</span><span className="ml-auto text-[var(--muted)]">{p.position}</span></label>)}
-                      {myRoster.picks.map((p) => <label key={p.pickId} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={secondGivePickIds.has(p.pickId)} disabled={givePickIds.has(p.pickId)} onChange={() => toggle(secondGivePickIds, setSecondGivePickIds, p.pickId)} /><span>{p.label}</span></label>)}
-                    </div>
-                    {myRoster.faabRemaining != null ? <label className="mt-2 flex items-center gap-2 text-[11px] text-[var(--muted)]">FAAB<input type="number" min="0" max={Math.max(0, myRoster.faabRemaining - Number(giveFaab || 0))} value={secondGiveFaab} onChange={(e) => { markCustomChange(); setSecondGiveFaab(e.target.value) }} className="ml-auto w-20 rounded border border-[var(--line2)] bg-[#0a1220] px-2 py-1 text-[var(--text)]" /></label> : null}
-                  </div>
-                  <div>
-                    <p className="mb-1 text-[11px] font-bold uppercase text-[var(--muted)]">You receive from them</p>
-                    <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-[var(--line2)] p-2">
-                      {secondPartnerRoster.players.map((p) => <label key={p.id} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={secondGetPlayerIds.has(p.id)} onChange={() => toggle(secondGetPlayerIds, setSecondGetPlayerIds, p.id)} /><span className="truncate">{p.name}</span><span className="ml-auto text-[var(--muted)]">{p.position}</span></label>)}
-                      {secondPartnerRoster.picks.map((p) => <label key={p.pickId} className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={secondGetPickIds.has(p.pickId)} onChange={() => toggle(secondGetPickIds, setSecondGetPickIds, p.pickId)} /><span>{p.label}</span></label>)}
-                    </div>
-                    {secondPartnerRoster.faabRemaining != null ? <label className="mt-2 flex items-center gap-2 text-[11px] text-[var(--muted)]">FAAB<input type="number" min="0" max={secondPartnerRoster.faabRemaining} value={secondGetFaab} onChange={(e) => { markCustomChange(); setSecondGetFaab(e.target.value) }} className="ml-auto w-20 rounded border border-[var(--line2)] bg-[#0a1220] px-2 py-1 text-[var(--text)]" /></label> : null}
-                  </div>
-                </div>
-                <p className="mt-2 text-[11px] text-violet-100/55">Every participating manager must accept before league review or processing begins.</p>
-                {directPartnerLegs.length > 0 ? (
-                  <div className="mt-2 rounded-xl border border-violet-300/15 bg-[var(--surface2)] p-2 text-[11px] text-violet-100/70">
-                    {directPartnerLegs.map((leg) => {
-                      const from = rosters?.find((roster) => roster.rosterId === leg.fromRosterId)?.ownerName ?? 'Manager'
-                      const to = rosters?.find((roster) => roster.rosterId === leg.toRosterId)?.ownerName ?? 'Manager'
-                      return <p key={`${leg.fromRosterId}:${leg.toRosterId}:${leg.asset.id}`}>{from} sends {leg.asset.name} to {to}</p>
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {/* THE grade for the deal as composed, before it is sent (2026-09-28). */}
-            {myRoster && partnerRoster && firstHasAssets ? (
-              <div className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] px-3 py-2" data-testid="composer-deal-grade-box">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">League grade for this offer</p>
-                {multiTeam ? (
-                  <span className="mt-1 block text-[11px] text-[var(--muted)]">Three-team trades aren&apos;t graded.</span>
-                ) : composedGradeLoading && !composedGrade ? (
-                  <span className="mt-1 block text-[11px] text-[var(--muted)]">Grading…</span>
-                ) : (
-                  <ComposerGradeLine grade={composedGrade} partnerName={partnerRoster.ownerName} testId="composer-deal-grade" />
-                )}
-              </div>
-            ) : null}
-
-            {/* Review (owner's page review #9): what each team receives and sends, how long the offer
-                stays open, and whether it lands in the managers' DM. */}
-            {myRoster && partnerRoster && firstHasAssets ? (() => {
-              const participants = [myRoster, partnerRoster, ...(multiTeam && secondPartnerRoster ? [secondPartnerRoster] : [])]
-              const nameOf = (id: string) => (id === myRoster.rosterId ? 'You' : rosters?.find((r) => r.rosterId === id)?.ownerName ?? 'Manager')
-              const legs: Array<{ from: string; to: string; label: string; pos: string | null }> = []
-              const addLegs = (from: typeof myRoster, to: typeof myRoster, players: ReadonlySet<string>, picks: ReadonlySet<string>, faab: string) => {
-                for (const id of players) {
-                  const p = from.players.find((x) => x.id === id)
-                  legs.push({ from: from.rosterId, to: to.rosterId, label: p?.name ?? id, pos: p?.position ?? null })
-                }
-                for (const id of picks) legs.push({ from: from.rosterId, to: to.rosterId, label: from.picks.find((x) => x.pickId === id)?.label ?? id, pos: 'PICK' })
-                const amount = Math.floor(Number(faab))
-                if (amount > 0) legs.push({ from: from.rosterId, to: to.rosterId, label: `$${amount} FAAB`, pos: 'FAAB' })
-              }
-              addLegs(myRoster, partnerRoster, givePlayerIds, givePickIds, giveFaab)
-              addLegs(partnerRoster, myRoster, getPlayerIds, getPickIds, getFaab)
-              if (multiTeam && secondPartnerRoster) {
-                addLegs(myRoster, secondPartnerRoster, secondGivePlayerIds, secondGivePickIds, secondGiveFaab)
-                addLegs(secondPartnerRoster, myRoster, secondGetPlayerIds, secondGetPickIds, secondGetFaab)
-              }
-              for (const leg of directPartnerLegs) legs.push({ from: leg.fromRosterId, to: leg.toRosterId, label: leg.asset.name, pos: leg.asset.position ?? null })
-              return (
-                <div className="flex flex-col gap-3 rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-3" data-testid="propose-trade-review">
-                  <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--muted)]">
-                    Review trade offer · {participants.length === 3 ? '3-way trade: ' : ''}{participants.map((r) => nameOf(r.rosterId)).join(' · ')}
-                  </p>
-                  <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-                    {participants.map((r) => (
-                      <div key={r.rosterId} className="rounded-lg border border-[var(--line2)] bg-[var(--surface)] p-2.5" data-testid="propose-trade-review-team">
-                        <p className="text-[13px] font-bold text-[var(--text)]">{nameOf(r.rosterId)}</p>
-                        <div className="mt-1.5 grid grid-cols-2 gap-2 text-[12px]">
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-extrabold tracking-wider text-emerald-300">RECEIVES</p>
-                            {legs.filter((l) => l.to === r.rosterId).map((l, i) => <p key={i} className="truncate text-[var(--text)]">{l.label}<span className="block text-[11px] text-[var(--muted)]">from {nameOf(l.from)}</span></p>)}
-                            {legs.every((l) => l.to !== r.rosterId) ? <p className="text-[var(--muted)]">—</p> : null}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-extrabold tracking-wider text-rose-300">SENDS</p>
-                            {legs.filter((l) => l.from === r.rosterId).map((l, i) => <p key={i} className="truncate text-[var(--text)]">{l.label}<span className="block text-[11px] text-[var(--muted)]">to {nameOf(l.to)}</span></p>)}
-                            {legs.every((l) => l.from !== r.rosterId) ? <p className="text-[var(--muted)]">—</p> : null}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <label className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text)]">
-                      Offer expires in
-                      <select
-                        value={expiresInHours}
-                        onChange={(e) => setExpiresInHours(Number(e.target.value))}
-                        className="min-h-[36px] rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-2 text-[13px] text-[var(--text)]"
-                        data-testid="propose-trade-expiry"
-                      >
-                        {TRADE_EXPIRY_OPTIONS.map((o) => <option key={o.hours} value={o.hours}>{o.label}</option>)}
-                      </select>
-                    </label>
-                    <label className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text)]">
-                      <input
-                        type="checkbox"
-                        role="switch"
-                        checked={sendDirectMessage}
-                        onChange={(e) => setSendDirectMessage(e.target.checked)}
-                        className="h-4 w-4 accent-[var(--accent)]"
-                        data-testid="propose-trade-send-dm"
-                      />
-                      Send a direct message
-                    </label>
-                  </div>
-                  <p className="text-[11px] text-[var(--muted)]">
-                    Every team must send or receive at least one asset.{multiTeam ? ' Direct messages go to two-team offers only.' : ''}
-                  </p>
-                </div>
-              )
-            })() : null}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-[var(--line2)] px-3 py-2 text-[12px] font-semibold text-[var(--muted)]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSubmit()}
-                disabled={!canSubmit}
-                className="rounded-lg bg-[var(--accent)] px-3 py-2 text-[12px] font-semibold text-[var(--bg)] disabled:opacity-50"
-                data-testid="propose-trade-submit"
-              >
-                {submitting ? 'Saving…' : counterTradeId ? 'Send counteroffer' : submitLabel}
-              </button>
-            </div>
+              <p className="af-tp-empty">This manager has no tradeable roster yet.</p>
+            ) : (
+              <p className="af-tp-empty">Pick a manager first.</p>
+            )}
           </>
+        ) : (
+          <div className="af-tp-review" data-testid="propose-trade-review">
+            <label className="af-tp-row">
+              <span>Trade expires in</span>
+              <select value={expiresInHours} onChange={(e) => setExpiresInHours(Number(e.target.value))} data-testid="propose-trade-expiry">
+                {TRADE_EXPIRY_OPTIONS.map((o) => <option key={o.hours} value={o.hours}>{o.label}</option>)}
+              </select>
+            </label>
+            {summary(false)}
+            {/* THE grade for the deal as composed, before it is sent (2026-09-28). */}
+            <div className="af-tp-grade" data-testid="composer-deal-grade-box">
+              <p className="af-tp-sum-label">How this trade grades</p>
+              {multiTeam ? (
+                <span className="af-tp-hint">Three-team trades aren&apos;t graded.</span>
+              ) : composedGradeLoading && !composedGrade ? (
+                <span className="af-tp-hint">Grading…</span>
+              ) : (
+                <ComposerGradeLine grade={composedGrade} partnerName={partnerRoster?.ownerName} testId="composer-deal-grade" />
+              )}
+            </div>
+            <label className="af-tp-row">
+              <span>Send direct message</span>
+              <input
+                type="checkbox"
+                role="switch"
+                className="af-tp-toggle"
+                checked={sendDirectMessage}
+                onChange={(e) => setSendDirectMessage(e.target.checked)}
+                data-testid="propose-trade-send-dm"
+              />
+            </label>
+            {multiTeam ? <p className="af-tp-hint">Every manager must accept before the league reviews it. Direct messages go to two-team offers only.</p> : null}
+          </div>
         )}
       </div>
     </AppModal>
   )
+}
+
+/** One asset moving between two teams, as the summary draws it. `remove` is null for a leg the viewer is not party to. */
+type TradeLeg = {
+  key: string
+  from: string
+  to: string
+  kind: 'player' | 'pick' | 'faab'
+  label: string
+  position: string | null
+  team: string | null
+  headshotUrl: string | null
+  remove: (() => void) | null
 }

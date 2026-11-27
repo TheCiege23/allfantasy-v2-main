@@ -160,7 +160,10 @@ describe('NativeTradesScreen', () => {
     expect(await screen.findByText('AF grade for you · C+')).toBeTruthy()
     expect(screen.getByText('Jahmyr Gibbs')).toBeTruthy()
     expect(screen.getByText('Drake London')).toBeTruthy()
-    expect(screen.getByText(/shopping Trey McBride/)).toBeTruthy()
+    // The block is tiles: position and team, a short name, and whose block it is.
+    const tile = screen.getByRole('button', { name: /Trey McBride, TE ARI, listed by Open Team 9/ })
+    expect(tile.textContent).toContain('T. McBride')
+    expect(tile.textContent).toContain('Open Team 9')
     fireEvent.click(screen.getByRole('button', { name: 'Counter' }))
     expect(screen.getByTestId('builder').textContent).toBe('t1')
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
@@ -170,9 +173,14 @@ describe('NativeTradesScreen', () => {
   it('opens the builder from one place: "Propose a trade", with no "Build a trade" card repeating it (2026-11-24)', async () => {
     stubFetch({ '/api/league/trades-panel': { activeTrades: [], historyTrades: [], tradeBlock: [] } })
     render(<NativeTradesScreen league={league} teams={[]} />)
-    expect(await screen.findByText('Your open offers')).toBeTruthy()
+    // No trades: the left column says so and offers the builder; the header button is the other way in.
+    expect(await screen.findByText('No active trades yet.')).toBeTruthy()
     expect(screen.queryByText('Build a trade')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open trade builder' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Propose a trade' })).toBeTruthy()
+    const proposes = screen.getAllByRole('button', { name: 'Propose a trade' })
+    expect(proposes).toHaveLength(2)
+    fireEvent.click(proposes[1]!)
+    expect(screen.getByTestId('builder').textContent).toBe('new')
+    expect(screen.getByText('Nobody has listed a player yet.')).toBeTruthy()
   })
 })
