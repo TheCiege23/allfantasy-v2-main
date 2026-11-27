@@ -146,7 +146,7 @@ export interface DevySessionSnapshot {
 
 export interface KeeperSessionSnapshot {
   config: { maxKeepers: number; deadline?: string | null; maxKeepersPerPosition?: Record<string, number> }
-  selections: Array<{ rosterId: string; roundCost: number; playerName: string; position: string; team: string | null; playerId: string | null; commissionerOverride?: boolean; placementNote?: string; autoPlaced?: true }>
+  selections: Array<{ rosterId: string; roundCost: number; playerName: string; position: string; team: string | null; playerId: string | null; commissionerOverride?: boolean; placementNote?: string; autoPlaced?: true; pickSlot?: number }>
   locks: Array<{ round: number; slot: number; overall: number; rosterId: string; displayName: string | null; playerName: string; position: string; team: string | null; playerId: string | null; isKeeper: true; placementNote?: string }>
   /** Set when AF placed the locked keepers (lib/keeper/keeperAutoBoard.ts): when, and who it could not place. */
   autoPlacement?: KeeperAutoPlacementSummary

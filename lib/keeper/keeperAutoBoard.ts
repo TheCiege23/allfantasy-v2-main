@@ -25,7 +25,7 @@ import { draftRosterIdForOwner } from '@/lib/live-draft-engine/createNextLeagueD
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import type { KeeperAutoPlacementSummary, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { resolveKeeperRules } from './keeperRules'
-import { placeKeepersOnBoard, type KeeperForBoard } from './keeperBoardPlacement'
+import { pickKey, placeKeepersOnBoard, type KeeperForBoard } from './keeperBoardPlacement'
 import { readKeeperAutoBoard } from './keeperAutoBoardSetting'
 
 export { commissionerHasKeeperAutomation }
@@ -102,11 +102,15 @@ export async function placeLockedKeepersOnDraftBoard(
   const existing = (Array.isArray(draft.keeperSelections) ? (draft.keeperSelections as unknown as KeeperSelection[]) : [])
   const autoNames = new Set(keepers.map((k) => `${k.rosterId}|${norm(k.playerName)}`))
   const manual = existing.filter((s) => !s.autoPlaced && !autoNames.has(`${s.rosterId}|${norm(s.playerName)}`))
-  const reserved = new Map<string, Set<number>>()
-  for (const s of manual) reserved.set(s.rosterId, (reserved.get(s.rosterId) ?? new Set()).add(s.roundCost))
+  const slotOrder = (draft.slotOrder as unknown as SlotOrderEntry[]) ?? []
+  const reserved = new Map<string, Set<string>>()
+  for (const s of manual) {
+    const slot = s.pickSlot ?? slotOrder.find((e) => e.rosterId === s.rosterId)?.slot
+    if (slot != null) reserved.set(s.rosterId, (reserved.get(s.rosterId) ?? new Set()).add(pickKey(s.roundCost, slot)))
+  }
 
   const placement = placeKeepersOnBoard(resolveKeeperRules(league), keepers, {
-    slotOrder: (draft.slotOrder as unknown as SlotOrderEntry[]) ?? [],
+    slotOrder,
     tradedPicks: Array.isArray(draft.tradedPicks) ? (draft.tradedPicks as unknown as TradedPickRecord[]) : [],
     rounds: draft.rounds,
   }, reserved)

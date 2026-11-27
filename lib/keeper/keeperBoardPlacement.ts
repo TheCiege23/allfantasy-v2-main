@@ -11,9 +11,11 @@
  *                 same-round rule is `lose_round_after`. On the board a keeper is already locked,
  *                 so the refusing rules (`player_chooses` / `reject_both`) never drop one here —
  *                 they were applied when the manager saved (./selectionEngine).
- *   traded pick   a round whose pick this team traded away is not the team's to fill: the keeper
- *                 moves in the same direction to the nearest round the team still owns, then the
- *                 other direction, and the board says so (`placementNote`).
+ *   traded pick   a round whose pick this team traded away is not the team's to fill. A pick the
+ *                 team ACQUIRED counts as its own: in the cost round it takes that pick ("placed on
+ *                 pick acquired from …"); otherwise the keeper moves in the same direction to the
+ *                 nearest round the team holds any pick in, then the other direction, and the board
+ *                 says so (`placementNote`). Two picks in one round (own + acquired) hold two keepers.
  *   no pick left  the keeper is FLAGGED for the commissioner — never silently dropped.
  *
  * 🛑 WHY "THE TEAM'S OWN PICK" MATTERS: `buildKeeperLocks` resolves a lock's owner through
@@ -24,7 +26,7 @@
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import type { SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
-import { placeTeamKeepers, placedKeeperLabel, roundLabel, type KeeperRules } from './keeperRules'
+import { roundLabel, type KeeperRules } from './keeperRules'
 
 export type KeeperForBoard = {
   rosterId: string
@@ -42,8 +44,8 @@ export type KeeperBoardShape = {
   rounds: number
 }
 
-/** Rounds a team already fills by hand (a commissioner override) — never taken by an auto keeper. */
-type ReservedRounds = ReadonlyMap<string, ReadonlySet<number>>
+/** Picks a team already fills by hand (a commissioner override), as `pickKey` — never taken by an auto keeper. */
+type ReservedPicks = ReadonlyMap<string, ReadonlySet<string>>
 
 export type BoardKeeperSelection = KeeperSelection & {
   /** Set when the keeper does not sit in the round he costs, and why ("Round 4 (moved from Round 5: …)"). */
@@ -84,61 +86,65 @@ export function ownedOwnRounds(rosterId: string, shape: KeeperBoardShape): numbe
   return out
 }
 
+/** One pick a team holds: its own, or one it acquired (`from` = the team whose pick it was). */
+export type OwnedPick = { round: number; slot: number; own: boolean; from: string | null }
+
+/** `round:slot` — how a pick is named in `reserved`. */
+export const pickKey = (round: number, slot: number) => `${round}:${slot}`
+
+/**
+ * Every pick this team holds, own AND acquired, per `resolvePickOwner` (the latest trade of a pick
+ * wins, exactly as the board resolves it). Own first within a round, then by slot.
+ */
+export function ownedPicks(rosterId: string, shape: KeeperBoardShape): OwnedPick[] {
+  const out: OwnedPick[] = []
+  for (let r = 1; r <= Math.max(1, shape.rounds); r++) {
+    for (const entry of shape.slotOrder) {
+      const owner = resolvePickOwner(r, entry.slot, shape.slotOrder, shape.tradedPicks)
+      if (owner?.rosterId !== rosterId) continue
+      const own = entry.rosterId === rosterId
+      out.push({ round: r, slot: entry.slot, own, from: own ? null : entry.displayName || 'another team' })
+    }
+  }
+  return out.sort((a, b) => a.round - b.round || Number(b.own) - Number(a.own) || a.slot - b.slot)
+}
+
 export function placeKeepersOnBoard(
   rules: KeeperRules,
   keepers: readonly KeeperForBoard[],
   shape: KeeperBoardShape,
-  reserved: ReservedRounds = new Map(),
+  /** Picks a team already fills by hand, as `pickKey(round, slot)`. */
+  reserved: ReservedPicks = new Map(),
 ): KeeperBoardPlacement {
   const rounds = Math.max(1, shape.rounds)
   const direction = keeperBoardDirection(rules)
-  const boardRules: KeeperRules = { ...rules, sameRoundRule: direction === 'later' ? 'lose_round_after' : 'lose_round_before' }
+  const step = direction === 'later' ? 1 : -1
 
-  const byTeam = new Map<string, { k: KeeperForBoard; key: string }[]>()
-  keepers.forEach((k, i) => {
-    const list = byTeam.get(k.rosterId) ?? []
-    list.push({ k, key: `k${i}` })
-    byTeam.set(k.rosterId, list)
-  })
+  const byTeam = new Map<string, KeeperForBoard[]>()
+  for (const k of keepers) byTeam.set(k.rosterId, [...(byTeam.get(k.rosterId) ?? []), k])
 
   const selections: BoardKeeperSelection[] = []
   const flagged: FlaggedKeeper[] = []
   for (const [rosterId, list] of byTeam) {
-    const held = reserved.get(rosterId) ?? new Set<number>()
+    const held = reserved.get(rosterId) ?? new Set<string>()
     const seated = shape.slotOrder.some((e) => e.rosterId === rosterId)
-    const owned = seated ? ownedOwnRounds(rosterId, { ...shape, rounds }).filter((r) => !held.has(r)) : []
-    const placement = placeTeamKeepers(
-      boardRules,
-      list.map(({ k, key }) => ({ playerId: key, costRound: k.costRound })),
-      { totalRounds: rounds, ownedRounds: owned },
-    )
-    const byKey = new Map(list.map((x) => [x.key, x.k]))
-    const used = new Set(placement.placed.map((p) => p.round))
-    const toSelection = (k: KeeperForBoard, round: number, note: string | undefined): BoardKeeperSelection => ({
-      rosterId,
-      roundCost: round,
-      playerName: k.playerName,
-      position: k.position,
-      team: k.team,
-      playerId: k.playerId,
-      costRound: k.costRound,
-      autoPlaced: true,
-      ...(note ? { placementNote: note } : {}),
-    })
-    for (const p of placement.placed) {
-      const k = byKey.get(p.playerId)!
-      selections.push(toSelection(k, p.round, p.round !== p.costRound ? placedKeeperLabel(p) : undefined))
-    }
-    // Nothing left in the rule's direction: the nearest open owned round the OTHER way, else flag.
-    for (const r of placement.refused) {
-      const k = byKey.get(r.playerId)!
+    const picks = seated ? ownedPicks(rosterId, { ...shape, rounds }).filter((p) => !held.has(pickKey(p.round, p.slot))) : []
+    const used = new Set<string>()
+    const freeIn = (round: number) => picks.find((p) => p.round === round && !used.has(pickKey(p.round, p.slot))) ?? null
+    const ownedRound = (round: number) => picks.some((p) => p.round === round)
+
+    // Cheapest-pick-last, as ./keeperRules placeTeamKeepers: walking earlier, the earliest cost goes
+    // first; walking later, the latest. Ties keep the order given.
+    const order = list.map((k, i) => ({ k, i })).sort((a, b) =>
+      (step === -1 ? a.k.costRound - b.k.costRound : b.k.costRound - a.k.costRound) || a.i - b.i)
+
+    for (const { k } of order) {
       const want = Math.min(Math.max(1, k.costRound), rounds)
-      const step = direction === 'later' ? -1 : 1
-      let round: number | null = null
-      for (let x = want + step; x >= 1 && x <= rounds; x += step) {
-        if (owned.includes(x) && !used.has(x)) { round = x; break }
-      }
-      if (round == null) {
+      let pick = freeIn(want)
+      // The rule's direction first, then the other way.
+      for (let r = want + step; !pick && r >= 1 && r <= rounds; r += step) pick = freeIn(r)
+      for (let r = want - step; !pick && r >= 1 && r <= rounds; r -= step) pick = freeIn(r)
+      if (!pick) {
         flagged.push({
           rosterId,
           playerId: k.playerId,
@@ -151,9 +157,29 @@ export function placeKeepersOnBoard(
         })
         continue
       }
-      used.add(round)
-      const why = owned.includes(want) ? `the rounds ${direction === 'later' ? 'after' : 'before'} it were full` : `${roundLabel(k.costRound)} pick was traded`
-      selections.push(toSelection(k, round, `${roundLabel(round)} (moved from ${roundLabel(k.costRound)}: ${why})`))
+      used.add(pickKey(pick.round, pick.slot))
+      const acquired = pick.own ? null : `pick acquired from ${pick.from}`
+      let note: string | undefined
+      if (pick.round === want) {
+        if (acquired) note = `${roundLabel(pick.round)} (placed on ${acquired})`
+      } else {
+        const why = ownedRound(want)
+          ? `two keepers cost ${roundLabel(k.costRound)}`
+          : `${roundLabel(k.costRound)} pick was traded`
+        note = `${roundLabel(pick.round)} (moved from ${roundLabel(k.costRound)}: ${why}${acquired ? `; ${acquired}` : ''})`
+      }
+      selections.push({
+        rosterId,
+        roundCost: pick.round,
+        playerName: k.playerName,
+        position: k.position,
+        team: k.team,
+        playerId: k.playerId,
+        costRound: k.costRound,
+        autoPlaced: true,
+        ...(pick.own ? {} : { pickSlot: pick.slot }),
+        ...(note ? { placementNote: note } : {}),
+      })
     }
   }
   selections.sort((a, b) => a.roundCost - b.roundCost || a.rosterId.localeCompare(b.rosterId))

@@ -48,8 +48,12 @@ export function buildKeeperLocks(
 ): KeeperLock[] {
   const locks: KeeperLock[] = []
   for (const sel of keeperSelections) {
+    // An acquired pick (lib/keeper/keeperBoardPlacement.ts): the column of the team it came from.
+    const pickRosterId = sel.pickSlot != null
+      ? slotOrder.find((e) => e.slot === sel.pickSlot)?.rosterId ?? sel.rosterId
+      : sel.rosterId
     const roundSlot = getRoundSlotForRoster(
-      sel.rosterId,
+      pickRosterId,
       sel.roundCost,
       teamCount,
       draftType,

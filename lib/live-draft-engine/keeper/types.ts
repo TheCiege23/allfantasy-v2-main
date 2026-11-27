@@ -40,6 +40,11 @@ export interface KeeperSelection {
   autoPlaced?: true
   /** Why he is not in the round he cost — shown on the board. */
   placementNote?: string
+  /**
+   * The board slot (column) of the pick he occupies when it is NOT his team's own — a pick the team
+   * acquired by trade. Absent = his team's own pick in `roundCost`.
+   */
+  pickSlot?: number
 }
 
 export interface KeeperLock {

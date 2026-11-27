@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { isWaiverCostLabel, keeperCostRound, readWaiverStack, stackWaiverKeeperCosts, type KeeperRules } from '@/lib/keeper/keeperRules'
-import { keeperBoardDirection, ownedOwnRounds, placeKeepersOnBoard, type KeeperForBoard } from '@/lib/keeper/keeperBoardPlacement'
+import { keeperBoardDirection, ownedOwnRounds, ownedPicks, placeKeepersOnBoard, type KeeperForBoard } from '@/lib/keeper/keeperBoardPlacement'
+import { validateRosterKeeperSelections } from '@/lib/live-draft-engine/keeper/KeeperRuleEngine'
 import { buildKeeperLocks } from '@/lib/live-draft-engine/keeper/KeeperDraftOrder'
 
 const rules = (over: Partial<KeeperRules> = {}): KeeperRules => ({
@@ -105,7 +106,7 @@ describe('automatic keeper placement on the draft board', () => {
   })
 
   it('a round the commissioner already filled by hand is not taken', () => {
-    const out = placeKeepersOnBoard(rules(), [k('A', 'Ace', 3)], shape(), new Map([['A', new Set([3])]]))
+    const out = placeKeepersOnBoard(rules(), [k('A', 'Ace', 3)], shape(), new Map([['A', new Set(['3:1'])]]))
     expect(out.selections[0]).toMatchObject({ roundCost: 2 })
   })
 
@@ -143,5 +144,40 @@ describe('undrafted (waiver / FA) keepers stack from the last round — owner, 2
     expect(rounds(stackWaiverKeeperCosts([w('fa1', 10), w('fa2', 10)], { totalRounds: 15 }))).toEqual([['fa1', 10], ['fa2', 9]])
     expect(readWaiverStack({})).toBe(true)
     expect(readWaiverStack({ keeper_waiver_stack: false })).toBe(false)
+  })
+})
+
+describe('automatic placement uses picks a team ACQUIRED, not only its own', () => {
+  it('lists own and acquired picks; the latest trade of a pick wins', () => {
+    const traded = shape([{ round: 4, originalRosterId: 'A', newRosterId: 'B' }, { round: 4, originalRosterId: 'C', newRosterId: 'A' }])
+    expect(ownedPicks('A', traded).filter((p) => p.round === 4)).toEqual([{ round: 4, slot: 3, own: false, from: 'Charlie' }])
+  })
+
+  it('cost round traded away but held via trade: he takes the acquired pick, and the board says whose it was', () => {
+    const traded = shape([{ round: 4, originalRosterId: 'A', newRosterId: 'B' }, { round: 4, originalRosterId: 'C', newRosterId: 'A' }])
+    const out = placeKeepersOnBoard(rules(), [k('A', 'Ace', 4)], traded)
+    expect(out.selections[0]).toMatchObject({ roundCost: 4, pickSlot: 3, placementNote: 'Round 4 (placed on pick acquired from Charlie)' })
+    // snake round 4 runs 3→1: Charlie's slot-3 pick is the 10th overall, and the lock is TEAM A's
+    expect(buildKeeperLocks(out.selections, slotOrder, traded.tradedPicks, 3, 6, 'snake', false)[0])
+      .toMatchObject({ round: 4, slot: 3, overall: 10, rosterId: 'A', playerName: 'Ace' })
+  })
+
+  it('the nearest round counts acquired picks as owned', () => {
+    const traded = shape([
+      { round: 4, originalRosterId: 'A', newRosterId: 'C' },
+      { round: 3, originalRosterId: 'A', newRosterId: 'C' },
+      { round: 3, originalRosterId: 'B', newRosterId: 'A' },
+    ])
+    const out = placeKeepersOnBoard(rules(), [k('A', 'Ace', 4)], traded)
+    expect(out.selections[0]).toMatchObject({ roundCost: 3, pickSlot: 2, placementNote: 'Round 3 (moved from Round 4: Round 4 pick was traded; pick acquired from Bravo)' })
+  })
+
+  it('own + acquired pick in one round hold two keepers there, and the board accepts both', () => {
+    const traded = shape([{ round: 5, originalRosterId: 'B', newRosterId: 'A' }])
+    const out = placeKeepersOnBoard(rules(), [k('A', 'Ace', 5), k('A', 'Ash', 5)], traded)
+    expect(out.selections.map((s) => [s.playerName, s.roundCost, s.pickSlot ?? null])).toEqual([['Ace', 5, null], ['Ash', 5, 2]])
+    expect(validateRosterKeeperSelections({ maxKeepers: 3 }, out.selections, 6)).toEqual({ valid: true })
+    const locks = buildKeeperLocks(out.selections, slotOrder, traded.tradedPicks, 3, 6, 'snake', false)
+    expect(locks.map((l) => [l.playerName, l.slot, l.rosterId])).toEqual([['Ace', 1, 'A'], ['Ash', 2, 'A']])
   })
 })
