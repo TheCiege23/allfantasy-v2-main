@@ -141,3 +141,46 @@ describe('getPlayerCard — the league half never reads a foreign roster as Slee
     expect(card!.league!.slot).toBe('NOT ROSTERED')
   })
 })
+
+describe('getPlayerCard — a pasted Yahoo league reads its DECLARED Sleeper ids', () => {
+  /* A pasted Yahoo roster: matched players stored `sleeper:<id>`, the unmatched as `yahoo-paste:`. */
+  const yahooRosters = (them: unknown[], me: unknown[]) => ({
+    findMany: async () => [
+      { id: 'r-them', leagueId: 'L1', platformUserId: 'them', playerData: { players: them, starters: them } },
+      { id: 'r-me', leagueId: 'L1', platformUserId: 'me', playerData: { players: me, starters: [] } },
+    ],
+  })
+
+  it('names his holder, his slot and your depth when he is a declared `sleeper:` id', async () => {
+    leagueOn('yahoo')
+    overrides.roster = yahooRosters([`sleeper:${HIM}`], ['sleeper:111'])
+    const card = await getPlayerCard(REQ)
+    expect(card!.league!.slot).toBe('STARTER')
+    expect(card!.league!.owner?.teamName).toBe('Stranger FC')
+    expect(card!.league!.yourRoster.map((p) => p.name)).toEqual(['Wrong Player'])
+  })
+
+  it('🛑 a BARE id on a Yahoo roster is still never read as a Sleeper id', async () => {
+    leagueOn('yahoo')
+    overrides.roster = yahooRosters([HIM], ['111'])
+    const card = await getPlayerCard(REQ)
+    expect(card!.league!.slot).toBe('UNREADABLE')
+    expect(card!.league!.owner).toBeNull()
+    expect(card!.league!.yourRoster).toEqual([])
+  })
+
+  it('🛑 an unmatched pasted player leaves him UNREADABLE, never NOT ROSTERED', async () => {
+    leagueOn('yahoo')
+    overrides.roster = yahooRosters(['yahoo-paste:real man|wr|kc'], ['sleeper:111'])
+    const card = await getPlayerCard(REQ)
+    expect(card!.league!.slot).toBe('UNREADABLE')
+    expect(card!.league!.owner).toBeNull()
+  })
+
+  it('a fully-resolved Yahoo league where nobody holds him reports NOT ROSTERED', async () => {
+    leagueOn('yahoo')
+    overrides.roster = yahooRosters(['sleeper:999'], ['sleeper:111'])
+    const card = await getPlayerCard(REQ)
+    expect(card!.league!.slot).toBe('NOT ROSTERED')
+  })
+})

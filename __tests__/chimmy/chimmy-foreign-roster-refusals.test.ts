@@ -158,10 +158,21 @@ describe('NFL lineup optimizer', () => {
     expect(r.detail).toBe('1 of 3 active players on your roster could not be identified, so a best lineup could leave one of them out.')
   })
 
-  it('Fantrax / Yahoo have no bridge, so they still refuse even with ids present', async () => {
-    const r = refusal(await optimizeMine('yahoo', ['nfl.p.1']))
+  it('Fantrax has no bridge, so it still refuses even with ids present', async () => {
+    const r = refusal(await optimizeMine('fantrax', ['nfl.p.1']))
     expect(r.reason).toBe('roster_ids_unreadable')
     expect(r.detail).toContain(FOREIGN_IDS_UNREADABLE)
+  })
+
+  /*
+   * A pasted Yahoo league bridges by its DECLARED ids (`sleeper:<id>`, bridgedRosterIds.ts). The world
+   * port bridges it with slots kept, so an unmatched pasted player reaches here as `unbridged:<id>` —
+   * and one unidentified active player still refuses, with the count, exactly as Fleaflicker does.
+   */
+  it('a pasted Yahoo roster with an unmatched player refuses, with the count', async () => {
+    const r = refusal(await optimizeMine('yahoo', ['s9999', 'unbridged:yahoo-paste:some guy|wr|kc']))
+    expect(r.reason).toBe('roster_ids_unreadable')
+    expect(r.detail).toBe('1 of 2 active players on your roster could not be identified, so a best lineup could leave one of them out.')
   })
 })
 

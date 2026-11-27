@@ -35,6 +35,7 @@ import { lineupSeatsFromSettings } from './slotEligibility'
 import { lineupGainCalculator } from '@/lib/trade-intel/faabLineupGain'
 import { FOREIGN_IDS_UNREADABLE } from './foreignIdSpaceCopy'
 import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
+import { isDeclaredReadableLeague } from './bridgedRosterIds'
 /*
  * Moved to `lib/trade-intel/marketContext.ts` (2026-09-24) so the trade analysis engine can use the
  * same rule without importing this module's whole graph. Re-exported so every importer — and every
@@ -683,8 +684,9 @@ export async function getPlayerTradeVisual(
   if (!myRoster) return { available: false, reason: 'you need a claimed team in this league to build a trade' }
 
   // A foreign league's rosters are stripped (readLeagueTradeRows), so "no holder" there means we cannot
-  // read them — not that he is free to claim.
-  if (isForeignIdSpace(league.platform, league.sport)) {
+  // read them — not that he is free to claim. EXCEPT a pasted Yahoo league most of whose players were
+  // resolved to DECLARED Sleeper ids (kept by the strip): there a miss is trusted, as the Finder trusts it.
+  if (isForeignIdSpace(league.platform, league.sport) && !(await isDeclaredReadableLeague({ id: leagueId, platform: league.platform }))) {
     return { available: false, reason: `${FOREIGN_IDS_UNREADABLE.toLowerCase()}, so we can't tell who holds him` }
   }
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, targetSleeperId)) ?? null

@@ -19,6 +19,7 @@ import { getRosteredMarket } from './rosteredMarket'
 import { boardPlayerValue, isBoardValueSport, loadLeagueValueBoard, type BoardPlayerValue } from '@/lib/sport-values/leagueValueBoard'
 import { loadLeaguePlayerMetrics, type LeaguePlayerMetric, type LeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
+import { isDeclaredReadableLeague } from './bridgedRosterIds'
 import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
 import { MIN_PLAUSIBLE_SLATE } from './byeWeeks'
@@ -1499,8 +1500,15 @@ async function loadLeague(
    * states. `LeagueTeam` is the import's list of managers; `Roster.playerData`
    * is who actually holds whom.
    */
-  /* A foreign league's rosters were stripped above, so "not found" there is "not read". */
-  let slot = isForeignIdSpace(league.platform, league.sport) ? 'UNREADABLE' : 'NOT ROSTERED'
+  /*
+   * A foreign league's rosters were stripped above, so "not found" there is "not read" — EXCEPT a
+   * pasted Yahoo league whose players were resolved at import (declared `sleeper:<id>`, kept by the
+   * strip): once most of its ids are declared, the identity-bridge coverage rule (bridgedRosterIds.ts)
+   * says a miss can be trusted, exactly as for a bridged Fleaflicker league.
+   */
+  const foreign = isForeignIdSpace(league.platform, league.sport)
+  const declaredReadable = foreign && (await isDeclaredReadableLeague(league))
+  let slot = foreign && !declaredReadable ? 'UNREADABLE' : 'NOT ROSTERED'
   let holder: (typeof rosters)[number] | null = null
   /*
    * ⚠ A FOREIGN LEAGUE IS READ IN ITS OWN ID SPACE (2026-11-06). The stripped rosters above can never

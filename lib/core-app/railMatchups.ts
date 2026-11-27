@@ -13,6 +13,7 @@ import { eliminationFormat, resolveRailMatchupMode } from './railMatchupMode'
 import { WEEKLY_FORMAT_SETTINGS_BLOCKS, WEEKLY_FORMAT_SETTINGS_KEYS, weeklyFormat } from './weeklyCapabilities'
 import { loadUnavailableBySport } from './unavailableStarters'
 import { isForeignIdSpace } from './rosterIdSpace'
+import { declaredLineupIds } from './declaredSleeperId'
 import type { RailGuillotineLine } from './railGuillotineLine'
 import { getNativeRailMatchups } from './nativeRailMatchups'
 import { mostHavePlayed } from './liveRailScores'
@@ -1022,7 +1023,11 @@ export async function loadRailProjections(args: {
   const foreignLeagues = new Set(leagueMeta.filter((m) => isForeignIdSpace(m.platform, m.sport)).map((m) => m.id))
   for (const r of starterRows) {
     if (!r.platformUserId) continue
-    startersByKey.set(`${r.leagueId}:${r.platformUserId}`, !args.sharedAf && foreignLeagues.has(r.leagueId) ? [] : startersOf(r.starters))
+    /* EXCEPT a pasted Yahoo lineup's DECLARED ids (`sleeper:<id>`): Sleeper ids by their own spelling. */
+    startersByKey.set(
+      `${r.leagueId}:${r.platformUserId}`,
+      !args.sharedAf && foreignLeagues.has(r.leagueId) ? declaredLineupIds(startersOf(r.starters)) : startersOf(r.starters),
+    )
   }
 
   /* Which lineup belongs to which side, resolved once so it is not re-derived per pass. */

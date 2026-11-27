@@ -123,6 +123,33 @@ describe('canonical world — a Fleaflicker league the identity bridge can read'
   })
 })
 
+/*
+ * A PASTED Yahoo league (2026-11-26): resolved players are stored `sleeper:<id>`, unmatched ones
+ * `yahoo-paste:…` (declaredSleeperId.ts). The declared ids are the bridge, read with no registry query.
+ * Unlike a thin Fleaflicker league it is bridged even below the coverage bar, because the strip would
+ * keep its declared ids and silently DROP the rest; bridged, every unmatched player stays countable.
+ */
+describe('canonical world — a pasted Yahoo league', () => {
+  it('declared ids become bare Sleeper ids; an unmatched player stays in his slot, prefixed', async () => {
+    state.platform = 'yahoo'
+    state.playerData = { players: ['sleeper:6038', 'yahoo-paste:some guy|wr|kc'], starters: ['yahoo-paste:some guy|wr|kc', 'sleeper:6038'] }
+    const world = await resolveCanonicalWorld('L1')
+    const roster = world!.rosters[0]!
+    expect(roster.playerIds).toEqual(['6038', 'unbridged:yahoo-paste:some guy|wr|kc'])
+    expect(roster.starterIds).toEqual(['unbridged:yahoo-paste:some guy|wr|kc', '6038'])
+    const rows = await loadPlayerMetadataRows('NFL', roster.playerIds)
+    expect(rows.map((r) => r.name)).toEqual(['Wrong Player'])
+  })
+
+  it('🛑 a bare Yahoo id is never read as a Sleeper id', async () => {
+    state.platform = 'yahoo'
+    state.playerData = { players: ['6038'], starters: ['6038'] }
+    const world = await resolveCanonicalWorld('L1')
+    expect(world!.rosters.flatMap((r) => r.playerIds)).toEqual(['unbridged:6038'])
+    expect((await namesFor('yahoo')).names).not.toContain('Wrong Player')
+  })
+})
+
 describe('canonical world — a foreign league’s roster ids', () => {
   it('🛑 a Fleaflicker roster id that equals a Sleeper id never reaches the metadata read', async () => {
     const { ids, names } = await namesFor('fleaflicker')

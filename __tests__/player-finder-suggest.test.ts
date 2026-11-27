@@ -324,4 +324,18 @@ describe('suggestions — a foreign-id league', () => {
     const counts = await getGlobalRosterCounts(0)
     expect(counts.get('NFL:10236')).toBe(2)
   })
+
+  /* A PASTED Yahoo roster's resolved players are stored `sleeper:<id>` (declaredSleeperId.ts). */
+  it('counts a pasted Yahoo roster’s DECLARED ids, and never its bare or unmatched ones', async () => {
+    mockRosterFindMany.mockResolvedValue([
+      ...ROSTERS,
+      fleaRoster,
+      { leagueId: 'L-yp', platformUserId: 'y', playerData: { players: ['sleeper:10236', '9', 'yahoo-paste:nobody|wr|kc'] }, league: { platform: 'yahoo', sport: 'NFL' } },
+    ])
+    const counts = await getGlobalRosterCounts(0)
+    expect(counts.get('NFL:10236')).toBe(3)
+    expect(counts.has('NFL:sleeper:10236')).toBe(false)
+    expect([...counts.keys()].some((k) => k.includes('yahoo-paste'))).toBe(false)
+    expect(counts.get('NFL:9') ?? 0).toBe(ROSTERS.filter((r) => (r.playerData as { players?: string[] }).players?.includes('9')).length)
+  })
 })

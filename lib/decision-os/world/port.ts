@@ -36,7 +36,7 @@ import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayer
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import { sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
-import { applyBridgeKeepingSlots, bridgeColumnFor, loadBridgedLeagues } from '@/lib/core-app/bridgedRosterIds'
+import { applyBridgeKeepingSlots, bridgeColumnFor, isDeclaredBridge, loadBridgedLeagues } from '@/lib/core-app/bridgedRosterIds'
 import { nonSleeperExternalIdWhere } from '@/lib/player-identity/externalIdNamespace'
 
 export interface CanonicalWorldPort {
@@ -199,7 +199,13 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
     if (bridgeColumnFor(platformOfLeague)) {
       const bridged = await loadBridgedLeagues([{ id: leagueId, platform: platformOfLeague }]).catch(() => null)
       const verdict = bridged?.get(leagueId)
-      if (verdict?.readable) bridgedMap = verdict.map
+      /*
+       * A pasted Yahoo league (declared `sleeper:<id>` ids) is bridged even BELOW the coverage bar. The
+       * strip it would otherwise get keeps its declared ids and silently drops the unmatched ones, so a
+       * lineup reader would see a short roster; bridged, each unmatched player stays in his slot as
+       * `unbridged:<id>`, which every reader can count and none can read as a Sleeper id.
+       */
+      if (verdict?.readable || (verdict && isDeclaredBridge(verdict.column))) bridgedMap = verdict.map
     }
     const prepared: Array<Omit<(typeof rawRows)[number], 'playerData'> & { playerData: unknown }> = bridgedMap
       ? rawRows.map((r) => ({ ...r, playerData: applyBridgeKeepingSlots(r.playerData, bridgedMap!) }))
