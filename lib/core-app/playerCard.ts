@@ -18,7 +18,8 @@ import { resolveFantraxCollegeTeam } from '@/lib/sport-teams/fantraxCollegeTeam'
 import { getRosteredMarket } from './rosteredMarket'
 import { boardPlayerValue, isBoardValueSport, loadLeagueValueBoard, type BoardPlayerValue } from '@/lib/sport-values/leagueValueBoard'
 import { loadLeaguePlayerMetrics, type LeaguePlayerMetric, type LeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
-import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
+import { isForeignIdSpace, isKnownNonNflSport, sleeperReadableRosters } from './rosterIdSpace'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { isDeclaredReadableLeague } from './bridgedRosterIds'
 import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
@@ -1541,6 +1542,13 @@ async function loadLeague(
         break
       }
     }
+    /*
+     * A native NBA/MLB/NHL league's rosters hold this exact id space, read whole here — so a miss on
+     * a successful read is a free agent, not "unknown". A Fantrax league keeps UNREADABLE on a miss.
+     */
+    if (holder == null && raw.length > 0 && isNativePlatform(league.platform) && isKnownNonNflSport(league.sport)) {
+      slot = 'NOT ROSTERED'
+    }
   }
   if (sleeperId && holder == null) {
     for (const r of rosters) {
@@ -1818,7 +1826,26 @@ export type PlayerCardAnchorLookup =
 export async function anchorLookupFor(
   req: Pick<PlayerCardRequest, 'sport' | 'externalId' | 'sleeperId' | 'leagueId'>,
 ): Promise<PlayerCardAnchorLookup | null> {
-  if (req.externalId) return { externalId: req.externalId }
+  if (req.externalId) {
+    /*
+     * 🛑 A NATIVE LEAGUE OUTSIDE THE NFL HOLDS THE PROVIDER'S OWN IDS (2026-11-27). Its rosters are
+     * seeded from `SportsPlayer` — Rolling Insights' bare ids, TheSportsDB's `tsdb_…` — and its lineup
+     * opens the card with exactly that id as `externalId` (useNativePlayerCard). `rosterIdSpaceOf`
+     * calls such a league foreign (its ids are not Sleeper ids), so without `rosterId` the loader never
+     * read its rosters and every NBA/MLB/NHL card in a native league said UNREADABLE: no owner, no Drop,
+     * no Add, no Trade — measured on the owner's native NBA league after #4330. The id matched against
+     * the league's raw rosters is the league's own namespace, so no Sleeper-id collision can occur.
+     */
+    if (req.leagueId) {
+      const league = await prisma.league
+        .findUnique({ where: { id: req.leagueId }, select: { platform: true, sport: true } })
+        .catch(() => null)
+      if (league && isNativePlatform(league.platform) && isKnownNonNflSport(league.sport)) {
+        return { externalId: req.externalId, rosterId: req.externalId }
+      }
+    }
+    return { externalId: req.externalId }
+  }
   const id = String(req.sleeperId ?? '').trim()
   if (!id) return null
   if (!req.leagueId) return { sleeperId: id }
