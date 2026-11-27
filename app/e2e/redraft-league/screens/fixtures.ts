@@ -419,7 +419,7 @@ export function weekCardsResponse(sport: HarnessSport) {
     const home = team(i)
     const away = team(i + 1)
     const p = home.projected / (home.projected + away.projected)
-    return { id: `g-${n}`, label: null, status: n === 5 ? 'upcoming' : 'live', mine: n === 0, homeWinProbability: Math.round(p * 100) / 100,
+    return { id: `g-${n}`, label: null, status: n === 5 ? 'upcoming' : 'live', mine: n === 0, games: n === 1 ? 3 : 1, homeWinProbability: Math.round(p * 100) / 100,
       home: n === 5 ? { ...home, points: null } : home, away: n === 5 ? { ...away, points: null } : away }
   })
   return { season: 2026, week: cfg.week, cards }

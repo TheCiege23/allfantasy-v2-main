@@ -208,6 +208,12 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
    */
   const onePage = nativeOverview.length > 0 && standingsItem.length > 0
   if (onePage) for (const id of ['legacy', 'history', 'activity', 'league_chat', 'native_home', 'home']) used.add(id)
+  /*
+   * The older redraft screens a hosted redraft league still carries (LeagueTabs: Redraft hub, My Team, League)
+   * repeat the Team and League tabs, and fell into League as leftover sub-tabs — the row the owner asked to
+   * remove (live check, 2026-11-27). They still open by id. Finance (dues tracking) is real: it moves to Settings.
+   */
+  if (onePage) for (const id of ['redraft', 'team', 'league']) used.add(id)
   const leagueChildren = onePage
     ? standingsItem
     : [
@@ -229,6 +235,7 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   const settings = top('league.nav.tab.settings', 'Settings', 'settings', [
     ...item('league.nav.leagueSettings', 'League settings', 'settings', 'settings'),
     ...(commissioner ? item('league.nav.commissionerTools', 'Commissioner tools', 'settings', 'commissioner') : []),
+    ...(onePage ? item('league.nav.finance', 'Finance', 'capHome', 'finance') : []),
   ])
   /*
    * Dynasty / Taxi / Picks used to fall into "More tools" with the generic icon. The tabs only exist when

@@ -43,7 +43,7 @@ describe('NativeLeaguePageScreen', () => {
       cards: [
         { id: 'g1', label: null, status: 'upcoming', mine: true, homeWinProbability: 0.7,
           home: team('r1', 'Gridiron Ghosts', { isYou: true, projected: 120.4 }), away: team('r2', 'Night Owls', { projected: 98.1 }) },
-        { id: 'g2', label: null, status: 'final', mine: false, homeWinProbability: null,
+        { id: 'g2', label: null, status: 'final', mine: false, homeWinProbability: null, games: 3,
           home: team('r3', 'Bench Mob', { points: 101.5 }), away: team('r4', 'Tank Commanders', { points: 88 }) },
       ],
     })
@@ -57,6 +57,8 @@ describe('NativeLeaguePageScreen', () => {
     expect(screen.getByTestId('league-page-win-r2').textContent).toBe('30% win')
     expect(screen.queryByTestId('league-page-win-r3')).toBeNull()
     expect(screen.getByTestId('league-page-score-r3').textContent).toBe('101.5')
+    expect(screen.getByTestId('league-page-games-g2').textContent).toBe('3 games')
+    expect(screen.queryByTestId('league-page-games-g1')).toBeNull()
     // An unplayed game shows no score, only its projection.
     expect(screen.getByTestId('league-page-score-r1').textContent).toBe('—')
     expect(screen.getByText('proj 120.4')).toBeTruthy()
@@ -93,6 +95,16 @@ describe('League nav: one page for a hosted league', () => {
     expect(leagueTab.children.map((c) => c.id)).toEqual(['standings'])
     const leaves = nativeNavLeafIds(groups)
     for (const id of ['legacy', 'activity', 'league_chat', 'native_home']) expect(leaves).not.toContain(id)
+  })
+
+  it("a hosted redraft league's older screens leave League; Finance moves to Settings (live check, 2026-11-27)", () => {
+    const withRedraft = [...tabs, ...['redraft', 'team', 'league', 'finance'].map((id) => ({ id, label: id }))]
+    const groups = buildNativeLeagueNavigation(withRedraft, false)
+    const top = (label: string) => groups[0].items.find((t) => t.label === label)!
+    expect(top('League').children.map((c) => c.id)).toEqual(['standings'])
+    expect(top('Settings').children.map((c) => c.id)).toEqual(['settings', 'finance'])
+    const leaves = nativeNavLeafIds(groups)
+    for (const id of ['redraft', 'team', 'league']) expect(leaves).not.toContain(id)
   })
 
   it('an imported league (no League home) keeps its League sub-tabs', () => {

@@ -133,7 +133,10 @@ function MatchupCard({ card }: { card: LeagueWeekCard }) {
       {card.label ? <div className="nls-lp-label">{card.label}</div> : null}
       <div className="nls-lp-row">
         <Side team={card.home} pct={homePct} status={card.status} won={homeWon} align="left" />
-        <span className="nls-lp-vs" aria-hidden>{final ? 'Final' : card.status === 'live' ? 'Live' : 'vs'}</span>
+        <span className="nls-lp-vs">
+          <span aria-hidden>{final ? 'Final' : card.status === 'live' ? 'Live' : 'vs'}</span>
+          {card.games > 1 ? <small data-testid={`league-page-games-${card.id}`}>{card.games} games</small> : null}
+        </span>
         {card.away ? (
           <Side team={card.away} pct={homePct == null ? null : 100 - homePct} status={card.status} won={homeWon == null ? null : !homeWon} align="right" />
         ) : (
