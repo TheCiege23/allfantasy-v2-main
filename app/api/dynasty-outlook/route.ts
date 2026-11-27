@@ -3,6 +3,7 @@ import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware';
 import { z } from 'zod';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import { getDynastyProjectionsForLeague } from '@/lib/dynasty-engine/DynastyQueryService';
@@ -18,12 +19,20 @@ const bodySchema = z.object({
 export async function POST(req: Request) {
   try {
     const session = (await getServerSession(authOptions as any)) as {
-      user?: { id?: string };
+      user?: { id?: string; email?: string | null };
     } | null;
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
+
+    /*
+     * 🛑 AF LEGACY (`war_room_dynasty_projections`) — the same key as /api/dynasty-intelligence's AI insight
+     * (owner's decision 2026-11-27; gating audit H5). DynastyProjectionPanel's outlook ran OpenAI for any
+     * signed-in user. Refused before the body, the league read and the model.
+     */
+    const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: session.user.email ?? null, featureId: 'war_room_dynasty_projections' });
+    if (!plan.ok) return plan.response;
 
     const json = await req.json();
     const { leagueId, teamId } = bodySchema.parse(json);

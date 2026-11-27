@@ -72,7 +72,9 @@ const listInjuryFactsMock = vi.hoisted(() =>
 )
 
 const requireAuthMock = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/auth-guard', () => ({ requireAuth: () => requireAuthMock() }))
+// summarize=true: sign-in AND AF Legacy (`legacy_community_insights`) since 2026-11-27, through the
+// legacy plan gate. The mock keeps the old name: `{ ok: false, response }` is still "refused".
+vi.mock('@/lib/legacy/legacyPlanGate', () => ({ requireLegacyPlan: () => requireAuthMock() }))
 
 const openaiCreateMock = vi.hoisted(() => vi.fn())
 
@@ -110,7 +112,7 @@ describe('community-insights API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Signed in by default, so the summarize happy paths run as an authenticated caller.
-    requireAuthMock.mockResolvedValue({ ok: true, userId: 'appuser-1', session: null })
+    requireAuthMock.mockResolvedValue({ ok: true, user: { userId: 'appuser-1', email: null } })
     openaiCreateMock.mockResolvedValue(OPENAI_REPLY)
   })
 
@@ -307,6 +309,18 @@ describe('community-insights API', () => {
       const response = await legacyGet(new NextRequest(url, { method: 'GET' }))
 
       expect(response.status).toBe(401)
+      expect(openaiCreateMock).not.toHaveBeenCalled()
+    })
+
+    it('refuses summarize=true to a signed-in user without AF Legacy, and never calls the model', async () => {
+      requireAuthMock.mockResolvedValueOnce({
+        ok: false,
+        response: NextResponse.json({ error: 'Premium feature', code: 'feature_not_entitled' }, { status: 403 }),
+      })
+      const url = new URL('http://localhost:3000/api/legacy/community-insights')
+      url.searchParams.set('summarize', 'true')
+      const response = await legacyGet(new NextRequest(url, { method: 'GET' }))
+      expect(response.status).toBe(403)
       expect(openaiCreateMock).not.toHaveBeenCalled()
     })
 

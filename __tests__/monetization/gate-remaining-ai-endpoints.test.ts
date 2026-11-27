@@ -65,11 +65,12 @@ describe('League Settings AI panels with no server check', () => {
     expect(spend).not.toHaveBeenCalled()
   })
 
-  it('trash talk needs pro_start_sit (the key its panel already prompts for)', async () => {
+  it('trash talk is free and capped since 2026-11-27 — no plan key (it borrowed pro_start_sit by accident)', async () => {
     const res = await (await import('@/app/api/ai/trash-talk/route')).POST(post({ leagueId: 'L1' }))
-    expect(res.status).toBe(403)
-    expect(gateCalls).toEqual(['pro_start_sit'])
-    expect(spend).not.toHaveBeenCalled()
+    expect(res.status).not.toBe(403) // never a plan refusal (this file's daily-cap mock reads as "cap reached")
+    expect(gateCalls).toEqual([])
+    expect(spend).toHaveBeenCalledWith('daily') // the durable daily cap ran
+    expect(spend).not.toHaveBeenCalledWith('claude')
   })
 
   it('signed-out callers still get 401 before the gate', async () => {

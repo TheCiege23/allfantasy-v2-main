@@ -94,6 +94,12 @@ export type SubscriptionFeatureId =
   | 'legacy_trade_hub'
   /** /af-legacy "Chimmy Analysis" career report (POST /api/legacy/ai/run). AF Legacy, 2026-11-17. */
   | 'legacy_ai_report'
+  /** /af-legacy trade history: Chimmy's write-up on a graded trade ("grade") and "What could I have done instead?" (trade-alternatives). AF Legacy, 2026-11-27. */
+  | 'legacy_trade_lookback'
+  /** /af-legacy Transfer tab: Chimmy's storylines and rivalry narratives on the league preview (POST /api/legacy/transfer). AF Legacy, 2026-11-27. */
+  | 'legacy_league_transfer'
+  /** /af-legacy community insights: Chimmy's news summary (GET /api/legacy/community-insights?summarize=true). AF Legacy, 2026-11-27. */
+  | 'legacy_community_insights'
 
 /** Plan slugs returned by entitlements API; used for hasAccess. */
 export type SubscriptionPlanId =

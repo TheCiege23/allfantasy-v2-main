@@ -11,7 +11,7 @@ import {
 import { getCanonicalPlayerMapForSport } from '@/lib/canonical/getCanonicalPlayer'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
 import { isUserParty } from '@/lib/user-matching'
-import { legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
+import { hasLegacyPlan, legacySignedInUser, legacySignInResponse } from '@/lib/legacy/legacyPlanGate'
 import { gradeLegacyCompletedTrades } from '@/lib/legacy/legacyCompletedTradeGrades'
 import { proseNamesAGrade } from '@/lib/legacy/legacyPackageGrade'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
@@ -100,8 +100,17 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-history", tool: 
     }
 
     if (action === 'grade' && trade) {
-      const gradedTrade = await gradeTrade(normalizedLeagueId, String(userId), trade)
-      return NextResponse.json({ gradedTrade })
+      /*
+       * 🛑 SIGN-IN, AND AF LEGACY FOR THE PROSE (owner's decision 2026-11-27; gating audit H1). This ran
+       * an OpenAI call for anyone, with `userId` from the body. Now the caller must be signed in; the
+       * letter grade stays free to them, and Chimmy's two lines are written only on `legacy_trade_lookback`
+       * (AF Legacy, or AF Supreme which includes it). Without the plan no model call is made at all.
+       */
+      const viewer = await legacySignedInUser()
+      if (!viewer) return legacySignInResponse('trade grades')
+      const writeUp = await hasLegacyPlan(viewer, 'legacy_trade_lookback')
+      const gradedTrade = await gradeTrade(normalizedLeagueId, String(userId), trade, viewer.userId, writeUp)
+      return NextResponse.json({ gradedTrade, writeUpLocked: !writeUp })
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
@@ -486,15 +495,16 @@ export function viewerMatcher(trade: ProcessedTrade, requestedUser: string) {
     byRoster ? p.rosterId === trade.userRosterId : isUserParty(p, requestedUser, requestedUser)
 }
 
-async function gradeTrade(leagueId: string, requestedUser: string, trade: ProcessedTrade) {
+async function gradeTrade(leagueId: string, requestedUser: string, trade: ProcessedTrade, sessionUserId: string, writeUp: boolean) {
   const isViewer = viewerMatcher(trade, requestedUser)
   const [view] = await gradeLegacyCompletedTrades({
     suppliedLeagueId: leagueId,
-    userId: await legacySessionUserId(),
+    userId: sessionUserId,
     trades: [trade],
     isViewer,
   })
-  return describeGradedTrade(trade, view!, isViewer)
+  // No plan → no model call: the card reads the grade's own label and recommendation.
+  return describeGradedTrade(trade, view!, isViewer, writeUp ? narrativeFor : async () => null)
 }
 
 /** A trade card's grade fields, read off one canonical view. Nothing is recomputed. */

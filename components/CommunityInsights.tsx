@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Newspaper, TrendingUp, AlertTriangle, Sparkles, RefreshCw } from 'lucide-react'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
 interface TrendingTopic {
   topic: string
@@ -32,11 +33,14 @@ export default function CommunityInsights() {
   const [loading, setLoading] = useState(true)
   const [summarizing, setSummarizing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The summary is AF Legacy since 2026-11-27 (`legacy_community_insights`); the lists stay free.
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
 
   const fetchData = async (withSummary = false) => {
     if (!withSummary) setLoading(true)
     if (withSummary) setSummarizing(true)
     setError(null)
+    setRefusal(null)
     try {
       const url = `/api/ai/community-insights${withSummary ? '?summarize=true' : ''}`
       const res = await fetch(url)
@@ -50,7 +54,9 @@ export default function CommunityInsights() {
           setError('Not enough recent news to generate a summary — try again later.')
         }
       } else {
-        setError(data?.error || `Request failed (${res.status})`)
+        const r = readPlanRefusal(res.status, data, { returnTo: currentPathForReturn() })
+        setRefusal(r)
+        setError(r?.message || data?.error || `Request failed (${res.status})`)
       }
     } catch (err) {
       setError('Failed to connect — please try again')
@@ -91,7 +97,15 @@ export default function CommunityInsights() {
 
       {error && (
         <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-          <div className="text-xs text-red-300">{error}</div>
+          <div className="text-xs text-red-300">
+            {error}
+            {refusal?.actionHref && refusal.actionLabel ? (
+              <>
+                {' '}
+                <a href={refusal.actionHref} className="underline text-purple-300" data-testid="community-insights-upgrade">{refusal.actionLabel}</a>
+              </>
+            ) : null}
+          </div>
         </div>
       )}
 

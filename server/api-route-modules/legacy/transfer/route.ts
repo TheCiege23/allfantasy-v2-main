@@ -13,6 +13,7 @@ import {
 } from '@/lib/sleeper-client'
 import { computeRivalryWeek } from '@/lib/rivalry-engine'
 import { legacyPromptSeason } from '@/lib/legacy/promptSeason'
+import { hasLegacyPlan, legacySignedInUser, legacySignInResponse } from '@/lib/legacy/legacyPlanGate'
 
 const openai = getOpenAIRouteClient()
 
@@ -78,7 +79,19 @@ interface SleeperDraftPick {
   }
 }
 
+/** Thrown past the storyline model call when the viewer has no plan: lands on the data-built storylines. */
+const AI_LOCKED = new Error('legacy_league_transfer: no plan')
+
 export const POST = withApiUsage({ endpoint: "/api/legacy/transfer", tool: "LegacyTransfer" })(async (req: NextRequest) => {
+  /*
+   * 🛑 SIGN-IN, AND AF LEGACY FOR THE MODEL (owner's decision 2026-11-27; gating audit H2). Two gpt-4o calls
+   * ran for anyone. Bringing a league over stays free to a signed-in user — the preview, managers, trades,
+   * draft and rivalry cards are data. Chimmy's storylines and rivalry narratives are `legacy_league_transfer`;
+   * without it no model call is made and the data-built storylines below are returned.
+   */
+  const viewer = await legacySignedInUser()
+  if (!viewer) return legacySignInResponse('league transfer')
+  const aiAllowed = await hasLegacyPlan(viewer, 'legacy_league_transfer')
   try {
     const { leagueId } = await req.json()
     
@@ -350,6 +363,7 @@ Return JSON: {"storylines": [...]}
 Example:
 {"storylines": [{"title": "The Points Machine", "description": "Despite sitting at 5-4, Jordan leads the league with 1,247 points—32 more than the next closest manager.", "type": "contender", "confidence": 88, "evidence": [{"type": "record", "label": "5-4 Record", "detail": "Jordan: 1247.32 pts, 2nd most wins but highest scorer"}, {"type": "trend", "label": "Scoring Trend", "detail": "32 pts above next closest"}], "nextTrigger": "If Jordan wins 2 of next 3, playoff lock becomes near-certain"}]}`
 
+      if (!aiAllowed) throw AI_LOCKED
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [{ role: 'user', content: storylinePrompt }],
@@ -375,7 +389,7 @@ Example:
         }))
       }
     } catch (err) {
-      console.error('Storyline generation error:', err)
+      if (err !== AI_LOCKED) console.error('Storyline generation error:', err)
       storylines = [
         {
           title: 'The Championship Chase',
@@ -432,7 +446,7 @@ Example:
         rivalryParts.push(`TRADE TENSION: ${t.pair.team1.displayName} and ${t.pair.team2.displayName} have completed ${t.tradeCount} trades between them. Tension score: ${t.tensionScore}/100.`)
       }
 
-      if (rivalryParts.length > 0) {
+      if (rivalryParts.length > 0 && aiAllowed) {
         const narrativePrompt = `You are a fantasy sports hype narrator. Write short, punchy narrative cards for these league rivalries.
 
 League: "${league.name}" (${leagueType})
@@ -553,6 +567,8 @@ Only include keys for cards that have data above. Keep each narrative under 50 w
       storylines,
       rivalryWeek,
       rivalryNarratives,
+      /** True when the storylines are the data-built ones because the viewer has no AF Legacy. */
+      aiLocked: !aiAllowed,
     }
 
     return NextResponse.json({

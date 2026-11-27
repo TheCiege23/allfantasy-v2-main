@@ -89,6 +89,11 @@ const { prismaMock, store, getServerSessionMock, chatCompletionsCreateMock } = v
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+// AF Pro (`ai_waivers`) since 2026-11-27 — the plan holder's view; the other tiers are pinned in
+// __tests__/monetization/gating-holes-2026-11-27.test.ts.
+vi.mock('@/lib/subscription/entitlement-middleware', () => ({
+  requireFeatureEntitlement: async () => ({ ok: true, decision: {}, tokenSpend: null, tokenPreview: null }),
+}))
 vi.mock('@/lib/rate-limit', () => ({
   rateLimit: vi.fn(() => ({ success: true, remaining: 9 })),
   getClientIp: vi.fn(() => '127.0.0.1'),

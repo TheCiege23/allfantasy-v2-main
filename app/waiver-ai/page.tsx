@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -1174,7 +1175,8 @@ export default function WaiverAIPage() {
 
         const payload = (await response.json().catch(() => ({}))) as { suggestions?: unknown[]; error?: string }
         if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load waiver suggestions.')
+          // AF Pro since 2026-11-27 (`ai_waivers`): say the plan, not "Premium feature".
+          throw new Error(readPlanRefusal(response.status, payload)?.message ?? payload.error ?? 'Failed to load waiver suggestions.')
         }
 
         const mapped = arrayFromUnknown(payload.suggestions).map(normalizeWireSuggestion).filter((entry): entry is WirePlayer => entry != null)

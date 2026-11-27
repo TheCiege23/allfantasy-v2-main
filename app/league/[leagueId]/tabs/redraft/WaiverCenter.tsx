@@ -7,6 +7,8 @@ import { ProjectionChip } from '@/components/sports/ProjectionCard'
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import { playerProfileHref } from '@/lib/player-links/playerProfileHref'
 import { fetchRedraftWaiverRuntime, type RedraftWaiverRuntimeClient } from '@/lib/redraft/client'
+import { FeatureGate } from '@/components/subscription/FeatureGate'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type WaiverTarget = {
   name: string
@@ -64,7 +66,7 @@ export function WaiverCenter({
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        setError(err.error ?? 'Failed to load suggestions')
+        setError(readPlanRefusal(res.status, err)?.message ?? err.error ?? 'Failed to load suggestions')
         return
       }
       const data = await res.json()
@@ -95,6 +97,8 @@ export function WaiverCenter({
           <TrendingUp className="h-4 w-4 text-[#ff3d81]" />
           <h3 className="text-[14px] font-bold text-white">Waiver Center</h3>
         </div>
+        {/* AF Pro (`ai_waivers`), the key /api/waiver-ai-suggest now enforces (2026-11-27). */}
+        <FeatureGate featureId="ai_waivers" featureNameOverride="Waiver Chimmy">
         <button
           type="button"
           onClick={fetchSuggestions}
@@ -104,6 +108,7 @@ export function WaiverCenter({
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
           {loading ? 'Loading...' : 'Find targets'}
         </button>
+        </FeatureGate>
       </div>
 
       {!leagueId && (

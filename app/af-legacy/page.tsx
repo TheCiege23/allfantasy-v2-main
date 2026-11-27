@@ -1055,6 +1055,8 @@ function AFLegacyContent() {
   const [reportCardLoading, setReportCardLoading] = useState(false)
   const [reportCardTradesByYear, setReportCardTradesByYear] = useState<Record<string, any[]>>({})
   const [reportCardSummary, setReportCardSummary] = useState<any>(null)
+  // 2026-11-27: Chimmy's write-up on each graded trade is AF Legacy (`legacy_trade_lookback`); the letter stays free.
+  const [reportCardWriteUpLocked, setReportCardWriteUpLocked] = useState(false)
   const [tradeAnalytics, setTradeAnalytics] = useState<any>(null)
   const [, setAnalyticsLoading] = useState(false)
   const [valuationMode, setValuationMode] = useState<'atTime' | 'hindsight'>('atTime')
@@ -2193,6 +2195,7 @@ function AFLegacyContent() {
     setReportCardLoading(true)
     setReportCardTradesByYear({})
     setReportCardSummary(null)
+    setReportCardWriteUpLocked(false)
     setTradeAnalytics(null)
     
     try {
@@ -2279,6 +2282,7 @@ function AFLegacyContent() {
             })
             
             const gradeData = await gradeRes.json()
+            if (gradeData?.writeUpLocked === true) setReportCardWriteUpLocked(true)
             // THE one completed-trade grade, from your side (see the trade-history route). A withheld
             // grade carries `graded: false`, a null letter and the grader's reason.
             const g = gradeData.gradedTrade
@@ -2436,7 +2440,7 @@ function AFLegacyContent() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setTransferError(data.error || 'Failed to fetch league')
+        setTransferError(readPlanRefusal(res.status, data)?.message ?? (data.error || 'Failed to fetch league'))
         return
       }
       setTransferPreview(data.preview)
@@ -3834,7 +3838,8 @@ function AFLegacyContent() {
       
       const data = await res.json()
       if (!res.ok) {
-        setDevyBoardError(data.error || 'Failed to generate devy board')
+        // Sign-in + AF Legacy since 2026-11-27 (`war_room_devy_rankings`): the server's plan sentence.
+        setDevyBoardError(readPlanRefusal(res.status, data)?.message ?? (data.error || 'Failed to generate devy board'))
         return
       }
       setDevyBoardData(data)
@@ -7862,6 +7867,13 @@ function AFLegacyContent() {
                           {/* Report Card Summary - Enhanced Visuals */}
                           {reportCardSummary && !reportCardSummary.noTrades && !reportCardLoading && (
                             <div className="space-y-8">
+                              {reportCardWriteUpLocked && (
+                                <div data-testid="report-card-writeup-locked">
+                                  <FeatureGate featureId="legacy_trade_lookback" featureNameOverride="Chimmy's read on each trade">
+                                    <span />
+                                  </FeatureGate>
+                                </div>
+                              )}
                               
                               {/* SECTION 1: Grade Card with Animated Cloud Background */}
                               {(() => {
@@ -14989,6 +15001,16 @@ function AFLegacyContent() {
                     {transferPreview && (
                       <div className="mb-8">
                         <MigrationProof preview={transferPreview} />
+                      </div>
+                    )}
+
+                    {/* 2026-11-27: Chimmy's storylines and rivalry write-ups are AF Legacy (`legacy_league_transfer`);
+                        without it the server sends the data-built storylines and says so (`aiLocked`). */}
+                    {transferPreview?.aiLocked === true && (
+                      <div className="mb-8" data-testid="transfer-ai-locked">
+                        <FeatureGate featureId="legacy_league_transfer" featureNameOverride="Chimmy storylines">
+                          <span />
+                        </FeatureGate>
                       </div>
                     )}
 

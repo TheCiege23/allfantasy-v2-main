@@ -396,7 +396,8 @@ export const LEAGUE_SETTINGS_AI_PANEL_FEATURE: Record<string, SubscriptionFeatur
   'ai-recap': 'commissioner_ai_recap',
   'ai-draft-help': 'pro_draft_ai',
   'ai-matchup': 'pro_matchup_analysis',
-  'ai-trash': 'pro_start_sit',
+  // 'ai-trash' is not here on purpose: trash talk is free and capped since 2026-11-27 (it borrowed
+  // `pro_start_sit` by accident). It never answers 402/403, so it needs no upgrade key.
 }
 
 /** Maps `?highlight=` query keys to plan cards on pricing surfaces (scroll + ring). */

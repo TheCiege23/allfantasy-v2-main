@@ -13,6 +13,7 @@ import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type Suppor
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 import { previewTokenSpend, type TokenSpendClientPreview } from '@/lib/tokens/client-confirm'
 import { InContextMonetizationCard } from '@/components/monetization/InContextMonetizationCard'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import { TokenSpendPreflightModal } from '@/components/monetization/TokenSpendPreflightModal'
 
 type AlertSeverity = 'low' | 'medium' | 'high' | 'critical'
@@ -443,7 +444,8 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
           body: JSON.stringify({ alertId }),
         })
         const data = (await res.json().catch(() => ({}))) as { error?: string; narrative?: string }
-        if (!res.ok) throw new Error(data.error || 'Failed to explain alert')
+        // AF Commissioner since 2026-11-27 (`commissioner_automation`): the server's plan sentence, not "Premium feature".
+        if (!res.ok) throw new Error(readPlanRefusal(res.status, data)?.message || data.error || 'Failed to explain alert')
         const narrative = String(data.narrative ?? '').trim()
         if (narrative) {
           setExplanations((prev) => ({ ...prev, [alertId]: narrative }))
@@ -468,7 +470,8 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
           body: JSON.stringify({ tradeId }),
         })
         const data = (await res.json().catch(() => ({}))) as { error?: string; narrative?: string }
-        if (!res.ok) throw new Error(data.error || 'Failed to explain trade fairness')
+        // AF Commissioner since 2026-11-27 (`commissioner_automation`): the server's plan sentence, not "Premium feature".
+        if (!res.ok) throw new Error(readPlanRefusal(res.status, data)?.message || data.error || 'Failed to explain trade fairness')
         const narrative = String(data.narrative ?? '').trim()
         if (narrative) {
           setExplanations((prev) => ({ ...prev, [key]: narrative }))

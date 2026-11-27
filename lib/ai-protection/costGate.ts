@@ -97,6 +97,12 @@ export const AI_COST_GATES = {
   mock_trade_ai: { label: 'mock draft trade analysis', paidFromLaunch: false, perMinute: 10, dailyFree: 40, dailyPaid: 40 },
   mock_needs_ai: { label: 'mock draft needs analysis', paidFromLaunch: false, perMinute: 10, dailyFree: 60, dailyPaid: 60 },
   mock_weekly_ai: { label: 'mock draft weekly updates', paidFromLaunch: false, perMinute: 5, dailyFree: 10, dailyPaid: 10 },
+  /*
+   * League banter (`/api/ai/trash-talk`) is engagement content every member sees, so it is free and only
+   * capped (owner's decision 2026-11-27, following the gating audit). It sat on `pro_start_sit` by accident:
+   * the League Settings panel borrowed that key for its upgrade prompt.
+   */
+  trash_talk: { label: 'trash talk', paidFromLaunch: false, perMinute: 5, dailyFree: 10, dailyPaid: 10 },
 } as const satisfies Record<string, AiCostGateConfig>
 
 export type AiCostGateKey = keyof typeof AI_COST_GATES
