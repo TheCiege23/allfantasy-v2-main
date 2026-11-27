@@ -42,7 +42,7 @@ import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 import { WelcomeBackCard } from '@/components/league/WelcomeBackCard'
 import { SLEEPER_PROJECTION_SOURCE, SLEEPER_PROJECTION_TITLE } from '@/lib/redraft/nflRosterOutlookModel'
-import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
+import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE, readablePositionRank } from '@/lib/projections/dailySportFormLabels'
 import { buildOfflineLineupSnapshot, readOfflineLineupSnapshot, saveOfflineLineupSnapshot, snapshotAgeLabel, type OfflineLineupSnapshot } from '@/lib/pwa/offlineLineupSnapshots'
 import {
   OFFLINE_LINEUP_SYNC_EVENT,
@@ -211,9 +211,14 @@ function gameLine(p: DisplayPlayerRecord | undefined): string {
   else if (p.gameClock) bits.push(p.gameClock)
   else {
     const k = kickoff(p)
-    if (k) bits.push(k.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))
+    if (k) bits.push(kickoffLabel(k))
   }
   return bits.join(' · ')
+}
+
+/** "Fri 7:30 PM EST": the start in the reader's own time zone, named so it is never read in another. */
+function kickoffLabel(k: Date): string {
+  return k.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 }
 
 /** The game line, with the player's own club hidden on a phone when its crest is already on his picture. */
@@ -228,10 +233,12 @@ function dayLabel(day: string): string {
   return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
-/** NBA / NHL / MLB: "C12" beside the name — rank within position by season points in this league's scoring. */
+/** NBA / NHL / MLB: "#12 C" beside the name — rank within position by season points in this league's scoring. */
 function RankTag({ p }: { p: DisplayPlayerRecord | undefined }) {
-  if (!p?.positionRankLabel) return null
-  return <span className="nls-player-pos" title={AF_POSITION_RANK_TITLE} data-testid={`lineup-position-rank-${p.id}`}> {p.positionRankLabel}</span>
+  const label = readablePositionRank(p?.positionRankLabel)
+  if (!p || !label) return null
+  // One unit: "#18" and "PG" never split across lines on a phone.
+  return <span className="nls-player-pos" style={{ whiteSpace: 'nowrap' }} title={AF_POSITION_RANK_TITLE} data-testid={`lineup-position-rank-${p.id}`}> {label}</span>
 }
 
 /** "Bye 7": the club's bye week, left off in the bye week itself (the game line already says so). */
@@ -401,8 +408,19 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     [data?.leagueWeek, league.sport, now, daily],
   )
   // Daily leagues: the day being looked at. Only today is edited; a save applies to today and every later day.
-  const viewDay: DailyLineupDay | null = daily ? daily.days.find((d) => d.day === (pickedDay ?? daily.today)) ?? daily.days.find((d) => d.status === 'today') ?? null : null
-  const viewingOtherDay = Boolean(viewDay && viewDay.status !== 'today')
+  // A week that has not started yet (a league drafted mid-season starts at the next week) opens on its
+  // first day, which is edited: a save made before the week decides every day of it from the first.
+  const weekNotStarted = Boolean(daily && daily.days.length && daily.days.every((d) => d.status === 'future'))
+  const fallbackDay = daily ? (daily.days.find((d) => d.status === 'today') ?? (weekNotStarted ? daily.days[0] : daily.days[daily.days.length - 1]) ?? null) : null
+  const viewDay: DailyLineupDay | null = daily ? daily.days.find((d) => d.day === (pickedDay ?? daily.today)) ?? fallbackDay : null
+  const editsFirstDay = weekNotStarted && Boolean(viewDay && viewDay.day === daily?.days[0]?.day)
+  const viewingOtherDay = Boolean(viewDay && viewDay.status !== 'today' && !editsFirstDay)
+  // Today outside the week: ask for the shown day's games and projections, not today's (often none).
+  const fallbackDayKey = fallbackDay?.day ?? null
+  const todayInWeek = Boolean(daily?.days.some((d) => d.status === 'today'))
+  useEffect(() => {
+    if (!pickedDay && fallbackDayKey && !todayInWeek) setPickedDay(fallbackDayKey)
+  }, [pickedDay, fallbackDayKey, todayInWeek])
   // The server's lock (resolveFullLineupLockContext) is the rule: per player, from the schedule, in every
   // sport. The time-of-day guess below is only for a payload without one — re-applying it locked every
   // player from Sunday 1 PM ET, so a Sunday-night starter could not be swapped before his game.
@@ -675,7 +693,9 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const lastDay = daily?.days[daily.days.length - 1]?.day
   const lockText = !data
     ? null
-    : viewDay && viewDay.status === 'past'
+    : editsFirstDay && viewDay
+      ? `Your season starts ${dayLabel(viewDay.day)}. Set your lineup now: it carries to every day until you change it. ${TAP_HELP}`
+      : viewDay && viewDay.status === 'past'
       ? `${dayLabel(viewDay.day)} is over. This is the lineup that scored that day.`
       : viewDay && viewDay.status === 'future'
         ? `Your lineup carries forward to ${dayLabel(viewDay.day)}. Changes you make today apply to every remaining day this week.`

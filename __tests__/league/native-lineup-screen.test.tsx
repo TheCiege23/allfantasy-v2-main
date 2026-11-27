@@ -152,6 +152,32 @@ describe('NativeLineupScreen', () => {
     expect(calls.some((c) => c.url === '/api/leagues/roster/save')).toBe(false)
   })
 
+  it('a week that has not started opens on its first day: editable, its games asked for, and the start said', async () => {
+    // A league drafted mid-season starts at the sport's next week, so "today" is in no day of it.
+    const day = (d: string) => ({ day: d, status: 'future', slots: { qb1: 'QB', rb1: 'RB', rb2: 'bench' }, points: {}, starterPoints: 0 })
+    const calls = stubFetch({
+      '/api/league/roster': {
+        ...roster([
+          { ...wire('qb1', 'Jalen Hurts', 'QB', 22.4), positionRankLabel: 'QB4', periodOpponent: 'NYG', periodHomeAway: 'away', periodKickoffIso: '2026-12-02T00:30:00.000Z' },
+          wire('rb1', 'Tyjae Spears', 'RB', 8.8),
+          wire('rb2', 'Bijan Robinson', 'RB', 19.2),
+        ]),
+        dailyLineups: { week: 7, today: '2026-11-26', weekPoints: 0, startedPoints: {}, days: [day('2026-12-01'), day('2026-12-02')] },
+      },
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Jalen Hurts')
+    expect(await screen.findByText(/Your season starts/)).toBeTruthy()
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/api/league/roster') && c.url.includes('day=2026-12-01'))).toBe(true))
+    expect(screen.getAllByRole('button', { name: 'Move' }).length).toBeGreaterThan(0)
+    // The rank reads as a rank, and the row carries the opponent, the venue and a start time with its zone.
+    expect(screen.getByTestId('lineup-position-rank-qb1').textContent).toContain('#4 QB')
+    expect(screen.getByText(/@ NYG · \w{3},? \d{1,2}:\d{2} [AP]M \S+$/)).toBeTruthy()
+  })
+
   it('a weekly league shows no day picker', async () => {
     stubFetch({
       '/api/league/roster': roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)]),
