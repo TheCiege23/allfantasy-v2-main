@@ -35,6 +35,39 @@ const normName = (v: string | null | undefined) =>
     .toLowerCase()
     .replace(/[^a-z]/g, '')
 
+/** One `SportsPlayer` row's reading of a Sleeper id (any source). */
+export type PlayerRow = { sleeperId: string | null; sport: string; source?: string | null; name: string | null; position: string | null; team: string | null }
+
+/**
+ * Group rows into per-id readings for `rightSport`, the Sleeper-sourced row first within a sport.
+ *
+ * ⚠ SPORTS COMPARE CASE-INSENSITIVELY. `LeagueTrade.sport` is stored lowercase (`'nfl'`) while
+ * `SportsPlayer.sport` is `'NFL'`; compared as written, every NFL row would read as "another sport"
+ * and the right reading would be missing — so nothing would ever be found, or worse, everything.
+ */
+export function buildReadings(rows: readonly PlayerRow[], rightSport: string): Map<string, IdReadings> {
+  const right = String(rightSport ?? '').trim().toUpperCase()
+  const bySport = new Map<string, Map<string, PlayerRow>>()
+  for (const r of rows) {
+    if (!r.sleeperId) continue
+    const sport = String(r.sport ?? '').trim().toUpperCase()
+    const m = bySport.get(r.sleeperId) ?? new Map<string, PlayerRow>()
+    const prev = m.get(sport)
+    if (!prev || (prev.source !== 'sleeper' && r.source === 'sleeper')) m.set(sport, r)
+    bySport.set(r.sleeperId, m)
+  }
+  const reading = (sport: string, r: PlayerRow): SportReading => ({ sport, name: r.name, position: r.position, team: r.team })
+  const out = new Map<string, IdReadings>()
+  for (const [id, m] of bySport) {
+    const rightRow = m.get(right)
+    out.set(id, {
+      right: rightRow ? reading(right, rightRow) : null,
+      others: [...m].filter(([s]) => s !== right).map(([s, r]) => reading(s, r)),
+    })
+  }
+  return out
+}
+
 /**
  * Is a stored POSITION the other sport's? Disagrees with the right sport's row and equals another
  * sport's. Unknown right reading → not provable → false (reported separately as unverifiable).
@@ -127,7 +160,21 @@ export function applySnapshotCorrections<T>(snapshot: T, corrections: readonly S
 
 // ─── LeagueChatMessage.metadata.tradeCard ───────────────────────────────────────────────────────
 
-type CardAsset = { kind?: unknown; sleeperId?: unknown; name?: unknown; position?: unknown; team?: unknown; [k: string]: unknown }
+type CardAsset = { kind?: unknown; id?: unknown; sleeperId?: unknown; name?: unknown; position?: unknown; team?: unknown; [k: string]: unknown }
+
+/**
+ * A card asset's player id, or null when it is not a player.
+ *
+ * ⚠ THE STORED SHAPE IS `{ id, name, team, position }` — no `kind`, no `sleeperId` (measured on the
+ * production card, 2026-11-27). The writer's current type says `{ kind: 'player', sleeperId }`, so
+ * both are accepted: `id` first, `sleeperId` as the fallback, and `kind` honoured only when present.
+ */
+export function cardAssetPlayerId(a: CardAsset | null | undefined): string | null {
+  if (!a || typeof a !== 'object') return null
+  if (a.kind !== undefined && a.kind !== 'player') return null
+  const id = typeof a.id === 'string' || typeof a.id === 'number' ? String(a.id) : typeof a.sleeperId === 'string' ? a.sleeperId : ''
+  return id.trim() ? id.trim() : null
+}
 
 export type CardCorrection = {
   list: 'gave' | 'got'
@@ -151,7 +198,10 @@ export function cardPlayerIds(metadata: unknown): string[] {
   const ids = new Set<string>()
   for (const list of [card.gave, card.got]) {
     if (!Array.isArray(list)) continue
-    for (const a of list as CardAsset[]) if (a?.kind === 'player' && typeof a.sleeperId === 'string' && a.sleeperId) ids.add(a.sleeperId)
+    for (const a of list as CardAsset[]) {
+      const id = cardAssetPlayerId(a)
+      if (id) ids.add(id)
+    }
   }
   return [...ids]
 }
@@ -165,8 +215,9 @@ export function findCardMislabels(metadata: unknown, readingsById: Map<string, I
     const assets = card[list]
     if (!Array.isArray(assets)) continue
     ;(assets as CardAsset[]).forEach((a, index) => {
-      if (a?.kind !== 'player' || typeof a.sleeperId !== 'string') return
-      const readings = readingsById.get(a.sleeperId)
+      const id = cardAssetPlayerId(a)
+      if (!id) return
+      const readings = readingsById.get(id)
       if (!readings?.right) return
       const name = typeof a.name === 'string' ? a.name : null
       if (!isCrossSportName(name, readings)) return
@@ -174,7 +225,7 @@ export function findCardMislabels(metadata: unknown, readingsById: Map<string, I
       out.push({
         list,
         index,
-        playerId: a.sleeperId,
+        playerId: id,
         stored: { name, position: typeof a.position === 'string' ? a.position : null },
         correct: { name: readings.right.name, position: readings.right.position, team: readings.right.team },
         wrongSport: wrong.sport,

@@ -10,6 +10,9 @@ import { describe, expect, it } from 'vitest'
 import {
   applyCardCorrections,
   applySnapshotCorrections,
+  buildReadings,
+  cardAssetPlayerId,
+  cardPlayerIds,
   findCardMislabels,
   findSnapshotMislabels,
   isCrossSportPosition,
@@ -114,6 +117,56 @@ describe('league-chat trade cards', () => {
     const twice = applyCardCorrections(metadata, 'JaVale McGee, JaVale McGee', fixes)
     expect(twice.text).toBe('JaVale McGee, JaVale McGee')
     expect(twice.textUnfixed).toEqual(['JaVale McGee'])
+  })
+})
+
+describe('league-chat trade cards — the shape production actually stores', () => {
+  // Measured 2026-11-27 on the one stored card: `{ id, name, team, position }`, no `kind`, no `sleeperId`.
+  const stored = {
+    chimmy: true,
+    tradeCard: {
+      gave: [{ id: '1529', name: 'J.C. Tretter', team: 'CLE', position: 'C' }],
+      got: [{ id: '1466', name: 'JaVale McGee', team: null, position: 'C' }],
+    },
+  }
+  const readings = new Map<string, IdReadings>([
+    ['1529', { right: { sport: 'NFL', name: 'J.C. Tretter', position: 'C', team: 'CLE' }, others: [] }],
+    ['1466', nflReadings.get('1466')!],
+  ])
+
+  it('🛑 reads `id` with no `kind`: finds the impostor and leaves the correct asset alone', () => {
+    expect(cardPlayerIds(stored).sort()).toEqual(['1466', '1529'])
+    const fixes = findCardMislabels(stored, readings)
+    expect(fixes.map((f) => [f.list, f.playerId, f.correct.name])).toEqual([['got', '1466', 'Travis Kelce']])
+  })
+
+  it('still reads the writer’s typed shape, and never a pick', () => {
+    const typed = { tradeCard: { gave: [{ kind: 'player', sleeperId: '1466', name: 'JaVale McGee' }, { kind: 'pick', season: 2027, round: 1 }], got: [] } }
+    expect(cardPlayerIds(typed)).toEqual(['1466'])
+    expect(cardAssetPlayerId({ kind: 'pick', id: '7' })).toBeNull()
+  })
+})
+
+describe('sport names compare case-insensitively', () => {
+  // `LeagueTrade.sport` is 'nfl'; `SportsPlayer.sport` is 'NFL'.
+  const rows = [
+    { sleeperId: '1466', sport: 'NFL', source: 'sleeper', name: 'Travis Kelce', position: 'TE', team: 'KC' },
+    { sleeperId: '1466', sport: 'NBA', source: 'sleeper', name: 'JaVale McGee', position: 'C', team: null },
+  ]
+
+  it('🛑 a lowercase trade sport still finds its own sport’s row as the right one', () => {
+    const r = buildReadings(rows, 'nfl').get('1466')!
+    expect(r.right?.name).toBe('Travis Kelce')
+    expect(r.others.map((o) => o.sport)).toEqual(['NBA'])
+    expect(buildReadings(rows, 'NFL').get('1466')).toEqual(r)
+  })
+
+  it('…so a lowercase-sport snapshot holding McGee’s C under 1466 is found, and a correct one is not', () => {
+    const readings = buildReadings(rows, 'nfl')
+    const wrong = { sides: [{ rosterBefore: [player('1466', 'C')] }] }
+    const right = { sides: [{ rosterBefore: [player('1466', 'TE')] }] }
+    expect(findSnapshotMislabels(wrong, readings).map((f) => [f.playerId, f.correct.position, f.wrongSport])).toEqual([['1466', 'TE', 'NBA']])
+    expect(findSnapshotMislabels(right, readings)).toEqual([])
   })
 })
 

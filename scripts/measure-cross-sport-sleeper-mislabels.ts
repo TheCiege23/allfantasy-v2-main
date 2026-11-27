@@ -36,6 +36,7 @@ import { endpointFromDatabaseUrl, endpointMatches } from '../lib/db/databaseEndp
 import {
   applyCardCorrections,
   applySnapshotCorrections,
+  buildReadings,
   cardPlayerIds,
   findCardMislabels,
   findSnapshotMislabels,
@@ -46,7 +47,6 @@ import {
   writeRefusal,
   type IdReadings,
   type ResolvedPick,
-  type SportReading,
 } from '../lib/data-repair/crossSportSleeperMislabels'
 
 const prisma = new PrismaClient()
@@ -58,10 +58,9 @@ const sampleN = Math.max(0, Number(arg('sample') || 10))
 const allSql = process.argv.includes('--sql')
 const write = process.argv.includes('--write')
 
-/** Every sport's reading of these Sleeper ids from `SportsPlayer`, the Sleeper-sourced row first. */
+/** Every sport's reading of these Sleeper ids from `SportsPlayer` (grouped by `buildReadings`, case-insensitively). */
 async function readingsFor(ids: string[], rightSport: string): Promise<Map<string, IdReadings>> {
   const out = new Map<string, IdReadings>()
-  const right = rightSport.toUpperCase()
   for (let i = 0; i < ids.length; i += 1000) {
     const rows = await prisma.sportsPlayer.findMany({
       // Deliberately EVERY sport: the other sports' rows are what a mislabel is recognised by
@@ -69,20 +68,7 @@ async function readingsFor(ids: string[], rightSport: string): Promise<Map<strin
       where: { sleeperId: { in: ids.slice(i, i + 1000) } },
       select: { sleeperId: true, sport: true, source: true, name: true, position: true, team: true },
     })
-    const bySport = new Map<string, Map<string, (typeof rows)[number]>>()
-    for (const r of rows) {
-      if (!r.sleeperId) continue
-      const sport = String(r.sport).toUpperCase()
-      const m = bySport.get(r.sleeperId) ?? new Map()
-      const prev = m.get(sport)
-      if (!prev || (prev.source !== 'sleeper' && r.source === 'sleeper')) m.set(sport, r)
-      bySport.set(r.sleeperId, m)
-    }
-    for (const [id, m] of bySport) {
-      const reading = (r: (typeof rows)[number]): SportReading => ({ sport: String(r.sport).toUpperCase(), name: r.name, position: r.position, team: r.team })
-      const rightRow = m.get(right)
-      out.set(id, { right: rightRow ? reading(rightRow) : null, others: [...m].filter(([s]) => s !== right).map(([, r]) => reading(r)) })
-    }
+    for (const [id, r] of buildReadings(rows.map((r) => ({ ...r, sport: String(r.sport) })), rightSport)) out.set(id, r)
   }
   return out
 }
