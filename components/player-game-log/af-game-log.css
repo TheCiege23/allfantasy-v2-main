@@ -73,7 +73,7 @@
   border-bottom: 1px solid var(--gl-line);
 }
 .af-gl-table thead th {
-  font: 800 10.5px/1 system-ui, sans-serif;
+  font: 800 11px/1 system-ui, sans-serif;
   letter-spacing: 0.04em;
   color: var(--gl-faint);
   text-transform: uppercase;
@@ -119,7 +119,7 @@
 .af-gl-sub {
   color: var(--gl-faint);
   font-weight: 600;
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .af-gl-summary td,
