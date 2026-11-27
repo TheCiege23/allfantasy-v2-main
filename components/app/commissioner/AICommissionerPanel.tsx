@@ -625,7 +625,6 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
         tokenRuleCodes={[
           'commissioner_ai_cycle_run',
           'commissioner_ai_chat_question',
-          'ai_storyline_creation',
           'commissioner_ai_collusion_detection_scan',
           'commissioner_ai_tanking_detection_scan',
         ]}
