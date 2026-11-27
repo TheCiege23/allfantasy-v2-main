@@ -4,7 +4,7 @@ import { withKeeperSessionLock } from './keeperSessionLock'
 import { computeKeeperEligibility } from './eligibilityEngine'
 import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
-import { placeTeamKeepers, placedKeeperLabel, resolveKeeperRules } from './keeperRules'
+import { isWaiverCostLabel, placeTeamKeepers, placedKeeperLabel, readWaiverStack, resolveKeeperRules, stackWaiverKeeperCosts } from './keeperRules'
 import { KEEPER_SUBMITTED_NONE, applyMissedDeadlineRule } from './missedDeadlineService'
 import { resolveKeeperSourceRoster } from './keeperSourceRoster'
 
@@ -155,10 +155,15 @@ async function submitKeeperSelectionsLocked(
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     select: { rounds: true },
   })
+  const totalRounds = latestDraft?.rounds ?? Math.max(15, ...candidates.map((c) => c.e.projectedCostRound ?? 1))
+  // Several undrafted pickups stack: last round, the round before, … in the order the manager listed them.
+  const priced = candidates.flatMap(({ pid, e }) =>
+    e.projectedCostRound != null ? [{ playerId: pid, costRound: e.projectedCostRound, waiver: isWaiverCostLabel(e.projectedCost) }] : [])
+  const stacked = readWaiverStack(league.settings) ? stackWaiverKeeperCosts(priced, { totalRounds }) : priced
   const placement = placeTeamKeepers(
     rules,
-    candidates.flatMap(({ pid, e }) => (e.projectedCostRound != null ? [{ playerId: pid, costRound: e.projectedCostRound }] : [])),
-    { totalRounds: latestDraft?.rounds ?? Math.max(15, ...candidates.map((c) => c.e.projectedCostRound ?? 1)) },
+    stacked.map(({ playerId, costRound }) => ({ playerId, costRound })),
+    { totalRounds },
   )
   const placedById = new Map(placement.placed.map((p) => [p.playerId, p]))
   const refusedById = new Map(placement.refused.map((r) => [r.playerId, r]))
@@ -363,6 +368,11 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
       console.error('[keeper] executeSeasonCarryover failed after lock', { leagueId, sessionId, incomingSeasonId: session.seasonId, outgoingSeasonId: outgoing.id, error })
     }
   }
+
+  // AF Commissioner: the locked keepers go straight onto a draft board that is already waiting
+  // (./keeperAutoBoard). Off, unentitled or no pre-draft board → nothing happens; never throws.
+  const { autoPlaceKeepersIfEnabled } = await import('./keeperAutoBoard')
+  await autoPlaceKeepersIfEnabled(leagueId)
 }
 
 /** Cron: lock sessions past deadline */

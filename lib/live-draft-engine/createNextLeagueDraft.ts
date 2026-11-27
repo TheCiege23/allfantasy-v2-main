@@ -560,6 +560,16 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       afterState: { lifecycleState: 'pre_draft', kind, season: incoming.season, rounds, orderSource },
     }).catch(() => null)
 
+    // AF Commissioner leagues with automatic keeper placement re-place the locked keepers on the new
+    // board under the league's own rules (same-round direction, traded picks, flags) —
+    // lib/keeper/keeperAutoBoard.ts. Otherwise the placement above stands.
+    let keepersPlaced = keeperSelections.length
+    if (kind === 'standard' && keeperSelections.length > 0) {
+      const { autoPlaceKeepersIfEnabled } = await import('@/lib/keeper/keeperAutoBoard')
+      const auto = await autoPlaceKeepersIfEnabled(leagueId)
+      if (auto?.ok) keepersPlaced = auto.summary.placed
+    }
+
     return {
       ok: true,
       sessionId: created.id,
@@ -568,7 +578,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       season: incoming.season,
       rounds,
       orderSource,
-      keepersPlaced: keeperSelections.length,
+      keepersPlaced,
       playersCarried,
       tradedPicksApplied: created.tradedPicksApplied,
     }

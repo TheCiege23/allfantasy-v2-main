@@ -59,6 +59,8 @@ export type DraftBoardCellPick = {
   slotSalary?: { salary: number; years: number } | null
   /** Keeper league: this kept player's year as a keeper (2+), from the league's keeper history. */
   keeperYear?: number | null
+  /** AF placed this keeper away from the round he cost — why ("Round 4 (moved from Round 5: …)"). */
+  keeperPlacementNote?: string | null
 }
 
 function TinyHeadshot({
@@ -647,6 +649,15 @@ function DraftBoardCellInner({
                   </span>
                 </>
               ) : pick.isViewerKeeper ? `Costs your Rd ${pick.round}` : `Costs Rd ${pick.round}`}
+              {pick.keeperPlacementNote ? (
+                <span
+                  title={pick.keeperPlacementNote}
+                  aria-label={pick.keeperPlacementNote}
+                  data-testid={`draft-board-cell-keeper-moved-${pick.overall}`}
+                >
+                  {' · moved'}
+                </span>
+              ) : null}
             </span>
           ) : null}
           </div>

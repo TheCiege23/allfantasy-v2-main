@@ -396,6 +396,7 @@ function DraftBoardInner({
         signatureChip: existing?.playerName ? signatureByOverall?.[overall] ?? null : null,
         // A kept player is not a draft-slot contract; every other tile shows its slot's salary.
         slotSalary: useLock ? null : slotSalaryByOverall?.[overall] ?? null,
+        keeperPlacementNote: useLock ? lock?.placementNote ?? null : null,
         keeperYear: useLock && lock && keeperYearsByPlayer
           ? keeperPlayerKeys(lock).map((key) => keeperYearsByPlayer[key]).find((n) => typeof n === 'number') ?? null
           : null,

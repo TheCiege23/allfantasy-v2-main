@@ -6,6 +6,7 @@ import { positionTintHex } from '@/lib/draft-room/positionTint'
 import type { KeeperSessionSnapshot } from '@/lib/live-draft-engine/types'
 
 type KeeperLock = KeeperSessionSnapshot['locks'][number]
+type AutoPlacement = NonNullable<KeeperSessionSnapshot['autoPlacement']>
 
 const COLLAPSE_PREF_KEY = 'af:draft-keeper-rollcall'
 
@@ -38,11 +39,14 @@ export function KeeperRollCall({
   teamCount,
   currentUserRosterId,
   teamNameByRosterId,
+  autoPlacement,
 }: {
   locks: KeeperLock[]
   teamCount: number
   currentUserRosterId: string | null
   teamNameByRosterId?: Record<string, string | null | undefined> | null
+  /** AF placed the locked keepers (lib/keeper/keeperAutoBoard.ts): flags the commissioner must resolve. */
+  autoPlacement?: AutoPlacement | null
 }) {
   const listId = useId()
   const [collapsed, setCollapsed] = useState(false)
@@ -55,7 +59,8 @@ export function KeeperRollCall({
     }
   }, [])
 
-  if (!locks.length) return null
+  const flagged = autoPlacement?.flagged ?? []
+  if (!locks.length && !flagged.length) return null
 
   const ordered = orderKeeperRollCall(locks, currentUserRosterId)
   const mine = ordered.filter((lock) => currentUserRosterId != null && lock.rosterId === currentUserRosterId)
@@ -81,7 +86,9 @@ export function KeeperRollCall({
           <Lock className="h-3 w-3" strokeWidth={2.5} aria-hidden />
           Keepers · {locks.length}
         </span>
-        <span className="text-xs text-white/55 max-sm:hidden">Locked in before the draft</span>
+        <span className="text-xs text-white/55 max-sm:hidden">
+          {autoPlacement ? 'Placed by AF from the league’s keeper rules' : 'Locked in before the draft'}
+        </span>
         {mine.length === 1 ? (
           <span className="text-xs text-white/80" data-testid="draft-keeper-rollcall-summary">
             Your <b className="font-bold text-cyan-300">{keeperPickLabel(mine[0], teamCount)}</b> pick goes to{' '}
@@ -105,6 +112,15 @@ export function KeeperRollCall({
           {collapsed ? <ChevronDown className="h-3.5 w-3.5" aria-hidden /> : <ChevronUp className="h-3.5 w-3.5" aria-hidden />}
         </button>
       </div>
+      {flagged.length ? (
+        <ul className="mt-2 space-y-1" data-testid="draft-keeper-rollcall-flagged" aria-label="Keepers AF could not place">
+          {flagged.map((f) => (
+            <li key={`${f.rosterId}-${f.playerName}`} role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs text-amber-200">
+              {f.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {!collapsed ? (
         <ul id={listId} className="mt-2 flex gap-2 overflow-x-auto overscroll-x-contain pb-1" data-testid="draft-keeper-rollcall-list">
           {ordered.map((lock) => {
@@ -126,6 +142,11 @@ export function KeeperRollCall({
                   <span className="truncate text-[11px] text-white/70">
                     {[lock.position, lock.team].filter(Boolean).join(' · ')} · costs Rd {lock.round}
                   </span>
+                  {lock.placementNote ? (
+                    <span className="truncate text-[11px] text-amber-300" title={lock.placementNote} data-testid={`draft-keeper-rollcall-moved-${lock.overall}`}>
+                      {lock.placementNote.replace(/^Round \d+ \((.*)\)$/, '$1')}
+                    </span>
+                  ) : null}
                 </span>
               </li>
             )

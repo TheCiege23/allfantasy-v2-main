@@ -71,6 +71,7 @@ export function buildKeeperLocks(
       team: sel.team,
       playerId: sel.playerId,
       isKeeper: true,
+      ...(sel.placementNote ? { placementNote: sel.placementNote } : {}),
     })
   }
   return locks
