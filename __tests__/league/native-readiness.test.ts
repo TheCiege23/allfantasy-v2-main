@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+// The registry loads each sport with a CommonJS require vitest cannot resolve; this is the same registry over ESM imports.
+vi.mock('@/lib/roster-engine/RosterEngineRegistry', async () => (await import('../dynasty-sim/rosterRegistryEsm')).buildEsmRosterRegistryModule())
 import { checkNativeReadiness } from '@/lib/league/nativeReadiness'
 import { planImportedPlayerIdentity } from '@/lib/league-creation/canonical/importedIdentityPlan'
 
@@ -16,6 +18,14 @@ type Opts = {
   otherCopies?: number
   liveDraft?: boolean
   futurePicks?: Array<{ originalRosterId: string; currentOwnerId: string }>
+  settings?: Record<string, unknown>
+}
+
+/** A plain Sleeper redraft layout, and scoring the commissioner already saved in AllFantasy (so it wins and is not re-checked). */
+const SLEEPER_SETTINGS = {
+  roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DEF', 'BN', 'BN', 'BN', 'BN', 'BN', 'BN'],
+  reserve_slots: 1,
+  nfl_scoring_config: { presetKey: 'custom', source: 'CUSTOM', rules: {}, lastUpdatedBy: 'commish' },
 }
 
 const team = (n: number) => ({ id: `t${n}`, externalId: `seat-${n}`, platformUserId: `m${n}`, claimedByUserId: null, teamName: `Team ${n}`, ownerName: `Owner ${n}`, avatarUrl: null, isCommissioner: n === 1, isCoCommissioner: false })
@@ -29,7 +39,7 @@ function db(o: Opts = {}) {
   const platform = o.platform ?? 'sleeper'
   const sport = o.sport ?? 'NFL'
   const league = {
-    id: 'L', platform, platformLeagueId: 'p-1', season: 2026, sport, settings: {},
+    id: 'L', platform, platformLeagueId: 'p-1', season: 2026, sport, settings: o.settings ?? SLEEPER_SETTINGS, leagueType: 'redraft', taxiSlots: 0, irSlots: 0,
     status: o.status === undefined ? 'complete' : o.status, lifecycleState: o.lifecycleState ?? null,
     lastSyncedAt: o.lastSyncedAt === undefined ? new Date('2027-02-01T08:00:00Z') : o.lastSyncedAt,
   }
@@ -122,5 +132,25 @@ describe('the planner refuses on exactly what readiness lists', () => {
       sport: 'NFL', platform: 'espn', teams: [team(1)] as never, rosters: [roster(1, ['e1'])] as never,
     })).rejects.toThrow('Ambiguous imported player identity e1.')
     expect(tx.player.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('the native settings a switch would write', () => {
+  it('blocks when the roster layout cannot be read, and says how to fix it', async () => {
+    const report = await checkNativeReadiness(db({ settings: { nfl_scoring_config: SLEEPER_SETTINGS.nfl_scoring_config } }) as never, 'L', NOW)
+    expect(report?.status).toBe('blocked')
+    expect(report?.items).toEqual([expect.objectContaining({ code: 'roster_unreadable', severity: 'blocker', action: expect.stringMatching(/Settings → Roster/) })])
+  })
+
+  it('is unblocked by a roster layout the commissioner saved in AllFantasy', async () => {
+    const settings = { nfl_scoring_config: SLEEPER_SETTINGS.nfl_scoring_config, roster: { updatedBy: 'commish', auditLog: [{ action: 'updated' }] } }
+    expect(await checkNativeReadiness(db({ settings }) as never, 'L', NOW)).toMatchObject({ status: 'ready', items: [] })
+  })
+
+  it("warns, without blocking, when the provider's scoring will not carry over", async () => {
+    const { nfl_scoring_config: _saved, ...settings } = SLEEPER_SETTINGS
+    const report = await checkNativeReadiness(db({ settings }) as never, 'L', NOW)
+    expect(report?.status).toBe('ready')
+    expect(report?.items).toEqual([expect.objectContaining({ code: 'scoring_not_carried', severity: 'heads_up' })])
   })
 })

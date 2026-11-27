@@ -12,7 +12,9 @@
  * Runs only when RUN_NATIVE_CONVERSION_DB=1 and DATABASE_URL names the disposable local `nativeconv` database
  * (.github/workflows/native-conversion-db.yml); skipped everywhere else.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+// The roster registry loads each sport with a CommonJS require vitest cannot resolve; the same registry over ESM imports.
+vi.mock('@/lib/roster-engine/RosterEngineRegistry', async () => (await import('../dynasty-sim/rosterRegistryEsm')).buildEsmRosterRegistryModule())
 import { randomUUID } from 'node:crypto'
 
 const enabled = process.env.RUN_NATIVE_CONVERSION_DB === '1'
@@ -41,6 +43,12 @@ async function seedImportedLeague() {
     data: {
       userId: commish!.id, platform: 'sleeper', platformLeagueId, name: `Dynasty ${tag}`, season: 2026, sport: 'NFL',
       leagueType: 'dynasty', isDynasty: true, status: 'complete', lastSyncedAt: new Date(), syncStatus: 'synced',
+      // What a Sleeper import stores: its lineup and its scoring rules in Sleeper's own keys.
+      settings: {
+        roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF', 'BN', 'BN', 'BN', 'BN', 'BN'],
+        reserve_slots: 1,
+        scoringSettings: { rules: { rec: 0.5, pass_td: 4, pass_yd: 0.04, rush_yd: 0.1, rush_td: 6, rec_yd: 0.1, rec_td: 6 } },
+      },
     },
   })
   created.leagueIds.push(league.id)
@@ -115,11 +123,18 @@ describe.runIf(enabled)('switching an imported league to native in place, agains
     expect(nativeWeeklyLeague(league)).toBe(false)
 
     const result = await convertImportedLeagueInPlace(prisma, { leagueId: league.id, userId: commish.id })
-    expect(result).toMatchObject({ kind: 'converted', seats: 3 })
+    expect(result).toMatchObject({ kind: 'converted', seats: 3, scoring: 'converted', roster: 'mapped' })
 
     const after = await prisma.league.findUniqueOrThrow({ where: { id: league.id } })
     expect(after.platform).toBe('manual')
     expect(after.platformLeagueId).toMatch(/^manual-/)
+    // Native settings (step 4b-1): without them the league would score standard PPR on a default roster.
+    const afterSettings = after.settings as Record<string, any>
+    expect(afterSettings.nfl_scoring_config).toMatchObject({ source: 'IMPORTED_MAPPED', presetKey: 'custom' })
+    expect(afterSettings.roster.config.sections[0].slots).toMatchObject({ QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, SUPERFLEX: 1, K: 1, DEF: 1, BN: 5, IR: 1 })
+    expect(await prisma.leagueWaiverSettings.count({ where: { leagueId: league.id } })).toBe(1)
+    expect(await prisma.leagueSettings.count({ where: { leagueId: league.id } })).toBe(1)
+    expect(await prisma.leagueInvite.count({ where: { leagueId: league.id, isActive: true } })).toBe(1)
     expect(isNativePlatform(after.platform)).toBe(true)
     expect(nativeWeeklyLeague(after)).toBe(true)
 

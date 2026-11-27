@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { importedPlatformLabel, isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readImportedPlayerMetadata } from '@/lib/league-import/importedPlayerMetadata'
+import { planImportedRosterLayout, savedInAllFantasy, sportScoringStore } from '@/lib/league/nativeScaffolding'
 import {
   asRecord,
   checkImportedSource,
@@ -45,6 +46,9 @@ export type NativeReadinessCode =
   | 'ambiguous_players'
   | 'unmapped_future_picks'
   | 'stale_sync'
+  | 'roster_unreadable'
+  | 'scoring_not_carried'
+  | 'scoring_inexact'
 
 export type NativeReadinessItem = {
   code: NativeReadinessCode
@@ -108,7 +112,7 @@ function refusalMessage(error: unknown): string | null {
 export async function checkNativeReadiness(db: Db, leagueId: string, now: Date = new Date()): Promise<NativeReadinessReport | null> {
   const league = await db.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, platform: true, platformLeagueId: true, season: true, sport: true, status: true, lifecycleState: true, lastSyncedAt: true },
+    select: { id: true, platform: true, platformLeagueId: true, season: true, sport: true, status: true, lifecycleState: true, lastSyncedAt: true, leagueType: true, settings: true, taxiSlots: true, irSlots: true },
   })
   if (!league) return null
   const checkedAt = now.toISOString()
@@ -160,14 +164,44 @@ export async function checkNativeReadiness(db: Db, leagueId: string, now: Date =
     })
   }
 
+  let sourceCheck: ReturnType<typeof checkImportedSource> | null = null
   try {
-    checkImportedSource(read.source, { sport, acceptWeeklyLineups: true })
+    sourceCheck = checkImportedSource(read.source, { sport, acceptWeeklyLineups: true })
   } catch (error) {
     const message = refusalMessage(error)
     if (!message) throw error
     items.push(/sport must match/.test(message)
       ? { code: 'source_unsupported', severity: 'blocker', title: `${label} ${sport} leagues can't switch yet`, action: 'Nothing to do yet. AllFantasy has to add support for this league type first.' }
       : { code: 'scoring_unconvertible', severity: 'blocker', title: "Your scoring rules can't be copied exactly", action: message })
+  }
+
+  // Native settings the switch writes (nativeScaffolding.ts). A roster layout AllFantasy cannot place would leave the
+  // league on default slots the moment it switches, so it blocks — and saving a layout in AllFantasy unblocks it.
+  const roster = planImportedRosterLayout({ sport, platform, leagueType: league.leagueType, settings: league.settings, taxiSlots: league.taxiSlots, irSlots: league.irSlots })
+  if (roster.kind === 'unreadable') {
+    items.push({
+      code: 'roster_unreadable', severity: 'blocker',
+      title: `We can't read your roster spots from ${label}`,
+      action: `Set your roster spots in Settings → Roster, then check again. ${roster.reason}`,
+    })
+  }
+  if (sourceCheck && !savedInAllFantasy(sportScoringStore(league.settings, sport))) {
+    const carried = sport === 'NFL' ? sourceCheck.nflScoring : sport === 'MLB' ? sourceCheck.mlbScoring : null
+    if (!carried) {
+      items.push({
+        code: 'scoring_not_carried', severity: 'heads_up',
+        title: `Your ${label} scoring rules won't carry over`,
+        action: `The league will use AllFantasy's standard ${sport} scoring. Set your own in Settings → Scoring, before or after switching.`,
+      })
+    } else if (sport === 'NFL' && sourceCheck.nflScoring && (sourceCheck.nflScoring.notScored.length || sourceCheck.nflScoring.approximated.length)) {
+      const nfl = sourceCheck.nflScoring
+      items.push({
+        code: 'scoring_inexact', severity: 'heads_up',
+        title: `${plural(nfl.notScored.length + nfl.approximated.length, 'scoring rule')} won't match ${label} exactly`,
+        action: 'Review them in Settings → Scoring after switching.',
+        ...capped([...nfl.notScored, ...nfl.approximated].map(String)),
+      })
+    }
   }
 
   // Rosters, one team at a time, so every team that fails is named rather than only the first.

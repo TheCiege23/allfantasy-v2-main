@@ -554,7 +554,11 @@ so, because the build follows the answer.
    - **4a** — `lib/league/convertImportedLeagueInPlace.ts` and `POST /api/leagues/[leagueId]/convert-to-native`:
      the one-transaction switch (lock, re-check, snapshot, two-phase id rewrites, flip last), admin-gated as a
      supervised pilot, with a real-Postgres suite in `.github/workflows/native-conversion-db.yml`.
-   - **4b** — native settings and scoring scaffolding (§7 step 3.10, AF edits win per Q8), the past-weekly-score
+   - **4b-1** — native settings (`lib/league/nativeScaffolding.ts`): the provider's scoring (NFL/MLB) and roster layout
+     carried unless the commissioner saved their own in AF (Q8), fill-only waiver and draft-settings rows, and the
+     league invite. ⚠ `mapImportedRosterToAF` was found to map nothing for ESPN/Sleeper and `validateRosterConfig` to
+     skip unknown keys, so the layout comes from `importedLineupTemplateSlots` with a known-key check.
+   - **4b (rest)** — native settings and scoring scaffolding (§7 step 3.10, AF edits win per Q8), the past-weekly-score
      copy (Q4: `RedraftMatchup` rows plus `LeaguePlayerWeeklyScore` re-keyed to `League.id`, `source='allfantasy'`),
      and per-seat invite links (Q7, which needs new plumbing: `LeagueInvite` has no seat). The admin gate comes off
      with 4b, not before.
