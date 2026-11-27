@@ -73,7 +73,8 @@ export function supremeValue(
  * The plan-card bullet that `supremeValue` now says with numbers. Shared with other purchase surfaces
  * (lib/monetization/planIncludes.ts), so it is dropped here rather than edited there.
  */
-export const SUPREME_VALUE_BULLET = 'Cheaper than the two subscriptions bought separately'
+// Spelled as planIncludes spells it: AF Legacy joined Supreme on 2026-11-27, so "three", not "two".
+export const SUPREME_VALUE_BULLET = 'Cheaper than the three subscriptions bought separately'
 
 type Cell = { kind: string }
 type Row = { id: string; label: string; cells: Record<string, Cell> }

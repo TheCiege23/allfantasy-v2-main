@@ -65,7 +65,9 @@ export const AI_COST_GATES = {
   // use working until launch, after which it needs an account and the plan like its siblings.
   // The plan key is `legacy_trade_finder`, the same key the Trade Finder's buttons are locked to in the
   // browser. It names AF Pro since 2026-11-16 (owner: "Trade Finder = AF Pro everywhere"); it was AF Legacy.
-  trade_finder: { label: 'Trade Finder', featureId: 'legacy_trade_finder', paidFromLaunch: true, perMinute: 5, dailyFree: 10, dailyPaid: 100, dailyAnonymous: 3 },
+  // Since 2026-11-27 `legacy_tab_trade_finder`: this route is the /af-legacy finder tab, so AF Legacy opens it
+  // too (owner) — the Trade Finder rule (AF Pro, AF Supreme) plus Legacy.
+  trade_finder: { label: 'Trade Finder', featureId: 'legacy_tab_trade_finder', paidFromLaunch: true, perMinute: 5, dailyFree: 10, dailyPaid: 100, dailyAnonymous: 3 },
   draft_ai: { label: 'draft help', featureId: 'pro_draft_ai', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 300 },
   /**
    * The Trade Center's written "why". SOFT: callers use evaluateAiCostGate and fall back to the

@@ -325,6 +325,22 @@ export const ENTITLEMENTS = {
     upgradeLabel: 'Get AF Pro',
     highlightParam: 'autocoach',
   },
+  /*
+   * The finder tab INSIDE /af-legacy (owner's decision 2026-11-27, gating audit I3). A Legacy buyer hit an
+   * AF Pro lock (`legacy_trade_finder`) in their own product. This key is that rule plus AF Legacy, and is
+   * read ONLY by the /af-legacy finder (TradeFinderV2 → /api/trade-finder, /api/trade-finder/matchmaking).
+   * The /core and redraft finders keep `legacy_trade_finder` (AF Pro, AF Supreme). Not in the plan matrix
+   * on purpose — the matrix accepts exactly one plan.
+   */
+  legacy_tab_trade_finder: {
+    key: 'legacy_tab_trade_finder',
+    label: 'Trade Finder',
+    description:
+      'Real trade opportunities and the best partners for your roster, inside AF Legacy. Included with AF Pro, AF Legacy and AF Supreme.',
+    requiredPlan: ['af_pro', 'af_war_room', 'af_supreme'],
+    upgradeUrl: '/pro',
+    upgradeLabel: 'Get AF Pro',
+  },
   war_room_dynasty_projections: {
     key: 'war_room_dynasty_projections',
     label: 'Dynasty Projections',

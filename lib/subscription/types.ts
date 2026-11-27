@@ -86,6 +86,8 @@ export type SubscriptionFeatureId =
   // tab stays open to everyone; only the actual analysis-trigger button requires this.
   | 'legacy_trade_proposals'
   | 'legacy_trade_finder'
+  /** The Trade Finder + Partner Match INSIDE /af-legacy (TradeFinderV2, /api/trade-finder, /matchmaking): the Trade Finder rule (AF Pro, AF Supreme) plus AF Legacy, so a Legacy buyer is not shown an AF Pro lock in their own product. 2026-11-27. */
+  | 'legacy_tab_trade_finder'
   | 'legacy_waiver_analysis'
   | 'legacy_manager_compare'
   | 'legacy_rankings_analysis'
@@ -106,7 +108,7 @@ export type SubscriptionPlanId =
   | 'pro'
   | 'commissioner'
   | 'war_room'
-  /** AF Supreme — bundles AF Pro + AF Commissioner (SUPREME_INCLUDED_PLAN_IDS). Does NOT include AF Legacy. */
+  /** AF Supreme — bundles AF Pro + AF Commissioner + AF Legacy (SUPREME_INCLUDED_PLAN_IDS; Legacy again since 2026-11-27). */
   | 'supreme'
   /** Enterprise workspace tier — grants the Fantasy OS executive workspace (`fantasy_os_workspace` feature). */
   | 'enterprise'

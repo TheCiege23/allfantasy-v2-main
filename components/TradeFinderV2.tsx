@@ -1228,7 +1228,7 @@ export default function TradeFinderV2({
             </div>
 
             {selectedLeague && (
-              <FeatureGate featureId="legacy_trade_finder" featureNameOverride="Trade Review">
+              <FeatureGate featureId="legacy_tab_trade_finder" featureNameOverride="Trade Finder">
                 <Button
                   onClick={runFinder}
                   loading={loading}
@@ -1276,7 +1276,7 @@ export default function TradeFinderV2({
             )}
 
             {selectedLeague && (
-              <FeatureGate featureId="legacy_trade_finder" featureNameOverride="Trade Review">
+              <FeatureGate featureId="legacy_tab_trade_finder" featureNameOverride="Trade Finder">
                 <Button
                   onClick={runMatchmaking}
                   loading={mmLoading}

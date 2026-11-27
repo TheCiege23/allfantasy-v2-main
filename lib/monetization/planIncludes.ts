@@ -33,13 +33,12 @@ export const PLAN_FAMILY_SHORT_TAGLINE: Record<PlanFamilyKey, string> = {
   af_war_room:
     "Draft-room intelligence plus dynasty & long-term planning for deep, year-round fantasy managers.",
   /*
-   * ⚠ NO LONGER "Pro + Commissioner + AF Legacy". SUPREME_INCLUDED_PLAN_IDS is
-   * now [pro, commissioner]; Legacy stands on its own at $9.99 beside them. And
-   * "maximum token discounts" described a subscriber discount that no longer
-   * exists — it was dropped with the token grants.
+   * Pro + Commissioner + AF Legacy AGAIN (owner's decision 2026-11-27): SUPREME_INCLUDED_PLAN_IDS is
+   * [pro, commissioner, war_room]. "maximum token discounts" stays gone — that subscriber discount was
+   * dropped with the token grants.
    */
   af_supreme:
-    "AF Pro and AF Commissioner in one tier, at less than buying both.",
+    "AF Pro, AF Commissioner and AF Legacy in one tier, at less than buying them separately.",
 }
 
 /** Bullets for pricing cards (short lines for narrow columns). */
@@ -73,8 +72,8 @@ export const PLAN_FAMILY_INCLUDES: Record<PlanFamilyKey, readonly string[]> = {
     "Priority access to new draft tooling",
   ],
   af_supreme: [
-    "Everything in AF Pro and AF Commissioner",
-    "Cheaper than the two subscriptions bought separately",
+    "Everything in AF Pro, AF Commissioner and AF Legacy",
+    "Cheaper than the three subscriptions bought separately",
     "Best for commissioners who also manage their own teams",
   ],
 }

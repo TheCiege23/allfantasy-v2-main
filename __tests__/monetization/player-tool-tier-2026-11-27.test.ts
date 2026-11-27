@@ -80,10 +80,16 @@ describe('every player-tool key opens for AF Pro and AF Supreme only', () => {
 
   it('the paid cost gates for player tools name such a key', async () => {
     const { AI_COST_GATES } = await import('@/lib/ai-protection/costGate')
-    for (const k of ['start_sit_ai', 'trade_ai', 'trade_center_ai', 'trade_finder', 'draft_ai', 'chimmy_voice', 'legacy_chat'] as const) {
+    for (const k of ['start_sit_ai', 'trade_ai', 'trade_center_ai', 'draft_ai', 'chimmy_voice', 'legacy_chat'] as const) {
       const featureId = (AI_COST_GATES[k] as { featureId?: SubscriptionFeatureId }).featureId
       expect([k, featureId && (await tiersFor(featureId))]).toEqual([k, PRO_SUPREME])
     }
+  })
+
+  it('the /af-legacy finder tab (cost gate trade_finder) is the same rule plus AF Legacy (owner, 2026-11-27)', async () => {
+    const { AI_COST_GATES } = await import('@/lib/ai-protection/costGate')
+    expect(AI_COST_GATES.trade_finder.featureId).toBe('legacy_tab_trade_finder')
+    expect(await tiersFor('legacy_tab_trade_finder')).toEqual(['pro', 'legacy', 'supreme'])
   })
 
   it('the /core trade finder depth reads the Trade Finder key, not af_intelligence', async () => {

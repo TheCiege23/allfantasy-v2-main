@@ -104,9 +104,9 @@ describe('1. Trade Finder is AF Pro (was AF Legacy until 2026-11-16)', () => {
     expect(getAcceptedPlansForFeature('legacy_trade_finder')).toEqual(['pro'])
   })
 
-  it('the /api/trade-finder cost gate asks for legacy_trade_finder', async () => {
+  it('the /api/trade-finder cost gate asks for legacy_tab_trade_finder (the /af-legacy tab: Pro, Legacy, Supreme since 2026-11-27)', async () => {
     const { AI_COST_GATES } = await import('@/lib/ai-protection/costGate')
-    expect(AI_COST_GATES.trade_finder.featureId).toBe('legacy_trade_finder')
+    expect(AI_COST_GATES.trade_finder.featureId).toBe('legacy_tab_trade_finder')
     expect(AI_COST_GATES.trade_finder.paidFromLaunch).toBe(true)
   })
 
@@ -114,7 +114,7 @@ describe('1. Trade Finder is AF Pro (was AF Legacy until 2026-11-16)', () => {
     const { POST } = await import('@/app/api/trade-finder/matchmaking/route')
     const res = await (POST as (r: Request) => Promise<Response>)(new Request('http://x/api', json({ leagueId: 'L1' })))
     expect(res.status).toBe(403)
-    expect(gateCalls).toEqual(['legacy_trade_finder'])
+    expect(gateCalls).toEqual(['legacy_tab_trade_finder'])
     expect(spend).not.toHaveBeenCalled()
   })
 })

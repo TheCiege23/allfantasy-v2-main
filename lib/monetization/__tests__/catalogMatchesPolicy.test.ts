@@ -123,10 +123,10 @@ describe('tier descriptions vs entitlement inheritance', () => {
     expect(SUPREME_INCLUDED_PLAN_IDS.length).toBeGreaterThan(0)
   })
 
-  it('Supreme no longer claims to include Legacy', () => {
-    // Legacy now stands alone at $9.99 beside Pro and Commissioner. If war_room
-    // reappears here, the pricing page's four-lane story is wrong again.
-    expect(SUPREME_INCLUDED_PLAN_IDS).not.toContain('war_room')
+  it('Supreme includes Legacy again (owner, 2026-11-27)', () => {
+    // From 2026-10-25 to 2026-11-27 Legacy stood alone; Supreme now includes all three paid plans
+    // (Legacy is still sold on its own as well).
+    expect(SUPREME_INCLUDED_PLAN_IDS).toContain('war_room')
   })
 
   it.each(subscriptions.map((s) => [s.sku, s] as const))(

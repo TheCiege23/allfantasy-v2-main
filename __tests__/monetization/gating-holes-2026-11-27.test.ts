@@ -100,7 +100,8 @@ type Row = {
   allowed: Tier[]
 }
 
-const LEGACY_ONLY: Tier[] = ['legacy']
+// AF Supreme includes AF Legacy since 2026-11-27 (commit 3 of that day); before it, this row read ['legacy'].
+const LEGACY_ONLY: Tier[] = ['legacy', 'supreme']
 const PRO_SUPREME: Tier[] = ['pro', 'supreme']
 const COMMISSIONER_SUPREME: Tier[] = ['commissioner', 'supreme']
 

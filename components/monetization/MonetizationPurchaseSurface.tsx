@@ -452,8 +452,8 @@ export default function MonetizationPurchaseSurface({
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
-                    {/* ⚠ NOT "Pro + Commissioner + AF Legacy": SUPREME_INCLUDED_PLAN_IDS is [pro, commissioner]. */}
-                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> AF Pro and AF Commissioner in one subscription, for less than buying both. AF Legacy is sold separately.</span>
+                    {/* SUPREME_INCLUDED_PLAN_IDS is [pro, commissioner, war_room] — AF Legacy again since 2026-11-27. */}
+                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> AF Pro, AF Commissioner and AF Legacy in one subscription, for less than buying them separately.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>

@@ -7,8 +7,9 @@ import type { FreePlan } from './meters'
 
 /**
  * Owner's rule (2026-11-23): when a commissioner unlocks a free plan, stop charging them for any
- * paid plan it already covers. AF Supreme includes AF Pro and AF Commissioner (SUPREME_INCLUDES in
- * lib/monetization/stripeCustomerForUser.ts); AF Legacy is NOT included and is never touched.
+ * paid plan it already covers. AF Supreme includes AF Pro, AF Commissioner and — since 2026-11-27 — AF
+ * Legacy (SUPREME_INCLUDES in lib/monetization/stripeCustomerForUser.ts), so a free Supreme plan stops
+ * a Legacy renewal too.
  *
  *  - Stripe: renewal is turned off (`cancel_at_period_end`). They keep what they paid for until the
  *    period ends, then the free plan carries on. No refund, no proration, nothing taken away early.
@@ -18,7 +19,7 @@ import type { FreePlan } from './meters'
  * day (which also catches a plan they buy again later while the free plan is on).
  */
 export const COVERED_BY: Record<Exclude<FreePlan, 'none'>, ReadonlySet<string>> = {
-  supreme: new Set(['af_supreme', 'af_commissioner', 'af_pro']),
+  supreme: new Set(['af_supreme', 'af_commissioner', 'af_pro', 'af_war_room']),
   commissioner: new Set(['af_commissioner']),
 }
 
