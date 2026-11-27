@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import { DraftPlayerFace } from './DraftPlayerFace'
 import {
   LayoutGrid,
   Users,
@@ -231,6 +232,11 @@ export function PostDraftView({
   currentUserRosterId,
   slotOrder,
 }: PostDraftViewProps) {
+  // The recap's rows are pick-log entries with no photo; the session's own picks carry it, by overall.
+  const photoByOverall = useMemo(
+    () => new Map((session.picks ?? []).map((p) => [p.overall, p.playerImageUrl ?? null] as const)),
+    [session.picks],
+  )
   const [tab, setTab] = useState<PostDraftTab>('summary')
   const [recap, setRecap] = useState<string | null>(null)
   const [recapLoading, setRecapLoading] = useState(false)
@@ -690,6 +696,8 @@ export function PostDraftView({
                   displayName={entry.displayName}
                   picks={entry.picks}
                   slot={entry.slot}
+                  sport={sport}
+                  photoByOverall={photoByOverall}
                 />
               )
             })}
@@ -708,7 +716,8 @@ export function PostDraftView({
                     key={p.id}
                     className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2"
                   >
-                    <span className="font-medium text-white/90">
+                    <span className="flex min-w-0 items-center gap-2 font-medium text-white/90">
+                      <DraftPlayerFace name={p.playerName} headshotUrl={photoByOverall.get(p.overall)} team={p.team} position={p.position} sport={sport} size={28} testIdBase="post-draft-my-face" />
                       {p.playerName}
                       {c2cCollegeRounds.length > 0 && c2cCollegeRounds.includes(p.round) ? (
                         <span className="ml-1 rounded bg-violet-500/20 px-1 py-0.5 text-[11px] font-medium text-violet-100">College</span>
@@ -818,6 +827,7 @@ export function PostDraftView({
                   data-testid={`post-draft-replay-item-${idx}`}
                 >
                   <span className="tabular-nums text-white/50 w-8">#{p.overall}</span>
+                  <DraftPlayerFace name={p.playerName} headshotUrl={photoByOverall.get(p.overall)} team={p.team} position={p.position} sport={sport} size={24} testIdBase="post-draft-replay-face" />
                   <span className="flex-1 font-medium text-white/90 truncate">{p.playerName}</span>
                   <span className="text-xs text-white/50 shrink-0">{p.position}</span>
                   <span className="text-xs text-white/40 max-w-[80px] truncate">{p.displayName ?? ''}</span>
@@ -1014,10 +1024,14 @@ function TeamResultsCard({
   displayName,
   slot,
   picks,
+  sport,
+  photoByOverall,
 }: {
   displayName: string
   slot: number
   picks: PickLogEntry[]
+  sport?: string
+  photoByOverall?: ReadonlyMap<number, string | null>
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -1038,6 +1052,7 @@ function TeamResultsCard({
           {picks.map((p) => (
             <li key={p.id} className="flex items-center gap-2 text-sm">
               <span className="tabular-nums text-white/50 w-6">#{p.overall}</span>
+              <DraftPlayerFace name={p.playerName} headshotUrl={photoByOverall?.get(p.overall)} team={p.team} position={p.position} sport={sport} size={24} testIdBase="post-draft-team-face" />
               <span className="text-white/90">{p.playerName}</span>
               <span className="text-xs text-white/50">{p.position}</span>
             </li>

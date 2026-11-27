@@ -106,21 +106,21 @@ function PickAsset({ a }: { a: TradeAsset }) {
   )
 }
 
-function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
+function Asset({ a, leagueId, sport }: { a: TradeAsset; leagueId: string; sport: string }) {
   if (a.kind === 'pick') return <PickAsset a={a} />
   return (
     <span className="af-bd-asset">
       <PlayerFace
         imageUrl={a.imageUrl}
         name={a.name}
-        teamLogoUrl={teamLogoUrl('NFL', a.team)}
+        teamLogoUrl={teamLogoUrl(sport, a.team)}
         team={a.team}
         size="sm"
       />
       <span className="af-bd-asset-name">
         {/* Opens the player card in THIS league's context. */}
         <PlayerName
-          sport="NFL"
+          sport={sport}
           sleeperId={a.id}
           name={a.name}
           position={a.position}
@@ -153,6 +153,7 @@ function TradeSide({
   assets,
   letter,
   leagueId,
+  sport,
   copy,
   testId,
 }: {
@@ -160,6 +161,7 @@ function TradeSide({
   assets: TradeAsset[]
   letter: Letter | null
   leagueId: string
+  sport: string
   copy: TeamGradeCopy
   testId: string
 }) {
@@ -179,7 +181,7 @@ function TradeSide({
         ) : null}
       </span>
       {assets.length > 0 ? (
-        assets.map((a) => <Asset key={`${testId}-${a.id}`} a={a} leagueId={leagueId} />)
+        assets.map((a) => <Asset key={`${testId}-${a.id}`} a={a} leagueId={leagueId} sport={sport} />)
       ) : (
         <span className="af-bd-asset">
           {/*
@@ -213,8 +215,8 @@ function TradeBody({ t, leagueId, copy }: { t: BoardTrade; leagueId: string; cop
         </p>
       ) : null}
       <div className="af-bd-card-body">
-        <TradeSide team={t.fromName} assets={t.received} letter={grades?.first ?? null} leagueId={leagueId} copy={copy} testId="trade-side-first" />
-        <TradeSide team={t.toName} assets={t.sent} letter={grades?.second ?? null} leagueId={leagueId} copy={copy} testId="trade-side-second" />
+        <TradeSide team={t.fromName} assets={t.received} letter={grades?.first ?? null} leagueId={leagueId} sport={t.sport ?? 'NFL'} copy={copy} testId="trade-side-first" />
+        <TradeSide team={t.toName} assets={t.sent} letter={grades?.second ?? null} leagueId={leagueId} sport={t.sport ?? 'NFL'} copy={copy} testId="trade-side-second" />
       </div>
     </>
   )

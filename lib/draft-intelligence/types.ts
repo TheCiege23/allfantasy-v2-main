@@ -38,6 +38,9 @@ export interface DraftIntelQueueEntry {
   availabilityLabel: 'high' | 'medium' | 'low'
   reason: string
   isTaken?: boolean
+  /** Set by the draft room from its player pool, for the face beside each suggestion. Never from the server. */
+  headshotUrl?: string | null
+  teamLogoUrl?: string | null
 }
 
 export interface DraftIntelDMPreview {

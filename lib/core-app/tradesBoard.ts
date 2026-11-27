@@ -85,6 +85,11 @@ export type { TradeAsset }
 
 export type BoardTrade = {
   transactionId: string
+  /**
+   * The trade's sport (upper-case), so the board draws each player's crest and opens his card from
+   * that sport's pool. Optional for older payloads: absent reads as NFL, as the board always assumed.
+   */
+  sport?: string
   season: number | null
   week: number | null
   at: string | null
@@ -1048,6 +1053,7 @@ export async function getTradesBoard(
 
     const card: BoardTrade = {
       transactionId: t.transactionId,
+      sport: tradeSport(t),
       season: t.season ?? null,
       week: t.week ?? null,
       at: t.tradeDate ? t.tradeDate.toISOString() : null,

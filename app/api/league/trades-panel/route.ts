@@ -1295,14 +1295,23 @@ export async function GET(req: NextRequest) {
    * him — harmless while the table was empty, which it was until managers could list players.
    */
   const blockRead = await readTradeBlock(league.id)
-  const tradeBlock: LeagueTradeBlockPanelItem[] = (blockRead?.listings ?? []).slice(0, 48).map((l) => ({
-    id: `${l.rosterId}:${l.sleeperId}`,
-    playerId: l.sleeperId,
-    name: l.playerName,
-    position: (l.position ?? 'FLEX').trim() || 'FLEX',
-    team: l.nflTeam?.trim() || null,
-    ownerName: l.teamName?.trim() || l.ownerName?.trim() || 'Manager',
-  }))
+  // The block's face and crest, by the same rules as a trade asset (`assetLabel`): the Sleeper photo is
+  // NFL-only, and the crest is the stored club logo for the league's sport, else the registry's.
+  const blockSport = String(league.sport ?? 'NFL').trim().toUpperCase() || 'NFL'
+  const blockLogo = (blockRead?.listings.length ?? 0) > 0 ? await storedLogoFor(blockSport) : null
+  const tradeBlock: LeagueTradeBlockPanelItem[] = (blockRead?.listings ?? []).slice(0, 48).map((l) => {
+    const team = l.nflTeam?.trim() || null
+    return {
+      id: `${l.rosterId}:${l.sleeperId}`,
+      playerId: l.sleeperId,
+      name: l.playerName,
+      position: (l.position ?? 'FLEX').trim() || 'FLEX',
+      team,
+      ownerName: l.teamName?.trim() || l.ownerName?.trim() || 'Manager',
+      headshotUrl: blockSport === 'NFL' ? sleeperPlayerHeadshot(l.sleeperId) : null,
+      teamLogoUrl: blockLogo?.(team) ?? teamLogoUrl(blockSport, team),
+    }
+  })
   /*
    * ⚠ "COULD NOT READ" IS NOT "NOBODY LISTED ANYONE", and the tab can only tell them apart if the
    * envelope does. With the note alone the empty state read "No players marked on the trade block in

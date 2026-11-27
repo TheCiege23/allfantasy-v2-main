@@ -12,6 +12,7 @@ import { auctionBidLadderMessages } from '@/lib/core-app/messages/auctionBidLadd
 import { auctionBidPlayerKey, ladderFor } from '@/lib/draft-room/auctionBidLadder'
 import { AuctionBidLadder, useAuctionBidHistory } from './AuctionBidLadder'
 import { PlayerAvatar } from './PlayerAvatar'
+import { DraftPlayerFace } from './DraftPlayerFace'
 
 export type AuctionQueuePick = { playerName: string; position: string; team?: string | null; playerId?: string | null; byeWeek?: number | null }
 
@@ -53,6 +54,8 @@ export type AuctionSpotlightPanelProps = {
    * back to initials and the team abbreviation.
    */
   nominationMedia?: { headshotUrl: string | null; teamLogoUrl: string | null } | null
+  /** The draft's sport, for the crest beside each recent win (registry crest, else the abbreviation). */
+  sport?: string | null
 }
 
 export type AuctionTeamLine = {
@@ -517,7 +520,8 @@ export function AuctionTeamsPanel(props: AuctionSpotlightPanelProps) {
             return (
               <div key={pick.id} className="af-dr-won">
                 <div className="af-dr-row">
-                  <span style={{ minWidth: 0 }}>
+                  <DraftPlayerFace name={pick.playerName} headshotUrl={pick.playerImageUrl} team={pick.team} position={pick.position} sport={props.sport} size={28} testIdBase="auction-win-face" />
+                  <span style={{ minWidth: 0, flex: '1 1 auto' }}>
                     <span className="af-dr-row-name" style={{ display: 'block' }}>
                       {pick.playerName}
                     </span>
