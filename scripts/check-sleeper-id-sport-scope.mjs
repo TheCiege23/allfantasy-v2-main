@@ -57,6 +57,12 @@ export const ALLOWLIST = {
    * so NFL 1466 and NBA 1466 stay two URLs. Adding a sport would drop a sport from the sitemap.
    */
   'app/sitemap.xml/route.ts': { count: 1, reason: 'enumerates all sports; distinct is (sport, sleeperId)' },
+  /*
+   * A measurement, not a lookup: it reads EVERY sport's row under each id on purpose, because a
+   * mislabel is recognised by the other sport's row (`lib/data-repair/crossSportSleeperMislabels.ts`),
+   * and it reproduces the pre-fix unscoped read to measure what that read wrote.
+   */
+  'scripts/measure-cross-sport-sleeper-mislabels.ts': { count: 2, reason: 'audit: reads every sport to recognise cross-sport mislabels' },
 }
 
 /** `PlayerIdentityMap` sites allowed a Sleeper-column filter with no sport. Same rules as above. */
@@ -67,6 +73,7 @@ export const IDENTITY_MAP_ALLOWLIST = {
    */
   'server/api-route-modules/legacy/identity-sync/route.ts': { count: 2, reason: 'coverage counts; names nobody' },
   'lib/sports-data-gateway/runtime/espnIdentityPopulation.ts': { count: 1, reason: 'coverage count; names nobody' },
+  'scripts/measure-cross-sport-sleeper-mislabels.ts': { count: 1, reason: 'audit: reproduces the pre-fix unscoped read to measure it' },
 }
 
 /** Per table: the Sleeper-id columns, the helpers that scope them, and the allowlist. */
