@@ -25,7 +25,7 @@ import { cooperativeMap } from '@/lib/async-cooperative-map'
 import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { entryRookieVerdict, hasRookieVerdicts, resolveRookieFilterState, type RookieFilterState } from '@/lib/draft-room/rookieFilterState'
 import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
-import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
+import { applySoccerClubNames, applyStoredTeamLogos, loadDraftPoolTeamLogoResolver, loadSoccerClubNames } from '@/lib/draft-room/draftPoolTeamLogos'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { poolTypeForStartupDraftLabel } from '@/lib/draft-defaults/startupCollegeDraft'
 import { isDevyLeague } from '@/lib/devy'
@@ -2259,8 +2259,9 @@ async function buildResolvedDraftPoolForLeague(
       return null
     })
   }
-  if ((sport === 'MLB' || sport === 'NHL') && poolRows.length > 0) {
-    const perfAfProj = perfStart('11c. AF projections (MLB/NHL)')
+  // Soccer too: its 1,965 season projections all reach a pool row through the Rolling Insights id (2026-11-27).
+  if ((sport === 'MLB' || sport === 'NHL' || sport === 'SOCCER') && poolRows.length > 0) {
+    const perfAfProj = perfStart('11c. AF projections (MLB/NHL/SOCCER)')
     afProjectionsByRiId = await loadAfBaselineProjectionsByRollingInsightsIds({
       sport,
       rollingInsightsIds: poolRows.flatMap((p) => {
@@ -2994,6 +2995,8 @@ async function buildResolvedDraftPoolForLeague(
   }
   // Stored crests over the static registry's guesses (see draftPoolTeamLogos.ts).
   entries = applyStoredTeamLogos(entries, await loadDraftPoolTeamLogoResolver(sport))
+  // Soccer shows the club, not Rolling Insights' numeric club id ("17" → Tottenham Hotspur). Display only.
+  if (sport === 'SOCCER') entries = applySoccerClubNames(entries, await loadSoccerClubNames().catch(() => new Map()))
   entries = filterExcludedDraftEntries(
     entries,
     options.excludeDraftedNames,
