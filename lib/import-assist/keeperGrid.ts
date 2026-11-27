@@ -116,7 +116,7 @@ export function buildKeeperGrid(args: {
       if (!byRound) return { ...base, costRound: null, label: '—', basis: last ? 'drafted' : 'waiver', blocked: null }
       const cost = keeperCostRound(rules, { lastRound: last?.round ?? null, yearsKept, totalRounds: h.totalRounds })
       if (!cost.ok) return { ...base, costRound: null, label: '—', basis: last ? 'drafted' : 'waiver', blocked: `Would cost ${roundLabel(cost.costRound)}, earlier than this league allows` }
-      return { ...base, costRound: cost.costRound, label: cost.label, basis: cost.basis, blocked: null }
+      return { ...base, costRound: cost.costRound, label: roundLabel(cost.costRound), basis: cost.basis, blocked: null }
     })
     // Best value first: the latest (cheapest) round at the top, unkeepable players last.
     players.sort((a, b) => (b.costRound ?? -1) - (a.costRound ?? -1) || a.name.localeCompare(b.name))
