@@ -3,7 +3,7 @@
  * is refused BEFORE anything is written or anyone is notified. A team that answers offers (the
  * default) lets a two-team offer through for Chimmy to answer on the hourly run.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMockNextRequest } from '../helpers/createMockNextRequest'
 
@@ -107,8 +107,17 @@ beforeEach(() => {
   )
 })
 
+/*
+ * The route is loaded ONCE, before any test, with its own allowance. Loaded inside a test, compiling its
+ * module graph counted against that test's 30s limit: on a loaded machine the compile alone took ~80s,
+ * so every test here timed out without ever reaching the code under test (2026-11-26).
+ */
+let POST: typeof import('@/app/api/redraft/trade-proposals/route').POST
+beforeAll(async () => {
+  POST = (await import('@/app/api/redraft/trade-proposals/route')).POST
+}, 240_000)
+
 async function proposeRedraft() {
-  const { POST } = await import('@/app/api/redraft/trade-proposals/route')
   return POST(
     createMockNextRequest('http://localhost/api/redraft/trade-proposals', {
       method: 'POST',
