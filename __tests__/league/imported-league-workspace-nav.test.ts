@@ -29,10 +29,11 @@ describe('workspace navigation for an imported league', () => {
 })
 
 describe('workspace navigation for a native league is unchanged', () => {
-  it('keeps League home as Overview and Decision OS under Trade', () => {
+  it('League is one page (no Overview sub-tab, owner 2026-11-27) and Decision OS stays under Trade', () => {
     const native = ids('native_home', 'decide', 'roster', 'matchups', 'standings', 'trades', 'settings')
     const groups = buildNativeLeagueNavigation(native, false, false, undefined, { draftDone: true })
-    expect(nativeNavTabFor(groups, 'native_home')?.children.find((c) => c.id === 'native_home')).toMatchObject({ id: 'native_home', label: 'Overview' })
+    expect(nativeNavTabFor(groups, 'standings')?.children.map((c) => c.id)).toEqual(['standings'])
+    expect(nativeNavTabFor(groups, 'native_home')).toBeNull()
     const trade = nativeNavTabFor(groups, 'decide')
     expect(trade?.label).toBe('Trade')
     expect(trade?.children.find((c) => c.id === 'decide')?.label).toBe('Decision OS')

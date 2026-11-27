@@ -119,7 +119,7 @@ import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMa
 import { NativeLineupScreen } from '@/components/league/native/screens/NativeLineupScreen'
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
 import { NativeTradesScreen } from '@/components/league/native/screens/NativeTradesScreen'
-import { NativeStandingsScreen } from '@/components/league/native/screens/NativeStandingsScreen'
+import { NativeLeaguePageScreen } from '@/components/league/native/screens/NativeLeaguePageScreen'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
@@ -2707,7 +2707,8 @@ function LeagueTabRouter({
       case 'trades':
         return otherHalf('trades', <NativeTradesScreen league={selectedLeague} teams={teamSlots} />)
       case 'standings':
-        return oneLeagueStandings(<NativeStandingsScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />)
+        // The League page: this week's matchups, the standings, the activity (Sleeper's League tab).
+        return oneLeagueStandings(<NativeLeaguePageScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />)
     }
   }
 

@@ -217,8 +217,21 @@ export function NativeLeagueWorkspace({ native, sourceLeagueId = null, importAct
   const firstTopTabId = primary[0]?.id ?? null
   /** Every screen the sidebar reaches, sub-tabs included. */
   const leaves = groups.flatMap(group => group.items.flatMap(item => item.children))
-  /** The phone bar's League slot: League home, else an imported league's first page (see buildNativeLeagueNavigation's Overview). */
-  const homeLeafId = ['native_home', 'home', 'decide'].find(id => leaves.some(row => row.id === id)) ?? 'native_home'
+  /**
+   * The phone bar's League slot: the League page (a hosted league, 2026-11-27: its League tab is one page,
+   * matchups + standings + activity, on the `standings` id), else an imported league's first page.
+   */
+  const homeLeafId = ['native_home', 'home', 'decide', 'standings'].find(id => leaves.some(row => row.id === id)) ?? 'native_home'
+  /**
+   * A bottom-bar screen the sidebar no longer lists (League chat, folded out of League's sub-tabs) is still
+   * a tab of this league: the bar finds it in the league's own tab list so its Chat button stays.
+   */
+  const bottomLeaf = (id: string) => {
+    const leaf = leaves.find(row => row.id === id)
+    if (leaf) return leaf
+    const tab = id === 'league_chat' ? tabs.find(row => row.id === id) : undefined
+    return tab ? { id: tab.id, label: tab.label, icon: 'chat' } : undefined
+  }
   /** The top tab holding the open screen, and the last sub-tab opened under each top tab this visit. */
   const activeTop = nativeNavTabFor(groups, activeTab)
   const lastSubTab = useRef<Record<string, string>>({})
@@ -493,7 +506,7 @@ export function NativeLeagueWorkspace({ native, sourceLeagueId = null, importAct
       Draft HQ instead, which says what is missing and carries the explicit "Enter" button.
     */}
     {!shell.embedCenterOnly && <nav className="nl-bottom-nav" aria-label={tNl('nativeLeague.bottom.aria')}>{[homeLeafId, draftSlot ? 'draft' : 'matchups', 'roster', 'waivers', 'league_chat'].map((id, index) => {
-      const item = leaves.find(row => row.id === id) ?? (index === 3 ? leaves.find(row => row.id === 'players') : undefined)
+      const item = bottomLeaf(id) ?? (index === 3 ? leaves.find(row => row.id === 'players') : undefined)
       if (!item) return null
       const Icon = icons[item.icon as keyof typeof icons] ?? Home
       const label = id === 'draft' ? tNl('nativeLeague.bottom.draft') : tNl(`nativeLeague.bottom.${BOTTOM_NAV_KEYS[index]}`)
