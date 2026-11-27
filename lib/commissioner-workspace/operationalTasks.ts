@@ -24,7 +24,7 @@ export function detectOperationalConditions(input:{leagueId:string;inSeason:bool
 export async function readOperationalTasks(leagueId:string,now:Date):Promise<WorkspaceTaskCandidate[]>{
   const league=await prisma.league.findUnique({where:{id:leagueId}})
   if(!league)return []
-  const native=resolveWriteAuthority(league.platform)==='NATIVE'
+  const native=resolveWriteAuthority(league)==='NATIVE'
   const inSeason=['active','in_season'].includes(String(league.status??league.lifecycleState).toLowerCase())
   const fresh=native||!!league.lastSyncedAt&&now.getTime()-league.lastSyncedAt.getTime()<48*3600_000
   // Failed reads throw: reconciliation must not close old findings on an unreadable snapshot.

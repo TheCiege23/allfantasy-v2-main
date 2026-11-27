@@ -37,10 +37,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, name: true, platform: true, sport: true, season: true, status: true, lastSyncedAt: true },
+    select: { id: true, name: true, platform: true, settings: true, sport: true, season: true, status: true, lastSyncedAt: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') {
+  if (resolveWriteAuthority(league) !== 'NATIVE') {
     const body: CommishHealthSummary = { score: { available: false, reason: 'Shown for leagues AllFantasy runs.' }, managers: [], managersRead: false }
     return NextResponse.json(body)
   }

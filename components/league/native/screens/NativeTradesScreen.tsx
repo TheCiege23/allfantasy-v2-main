@@ -323,7 +323,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
         </div></div>
       ) : null}
 
-      <ProposeTradeModal open={builderOpen} counterTradeId={counterTradeId} initialGetPlayerId={blockPlayerId} onClose={() => setBuilderOpen(false)} leagueId={league.id} teams={teams} platform={league.platform} sport={league.sport} onSubmitted={() => { setBuilderOpen(false); void load() }} />
+      <ProposeTradeModal open={builderOpen} counterTradeId={counterTradeId} initialGetPlayerId={blockPlayerId} onClose={() => setBuilderOpen(false)} leagueId={league.id} teams={teams} platform={league.platform} leagueSettings={league.settings} sport={league.sport} onSubmitted={() => { setBuilderOpen(false); void load() }} />
     </div>
     </RedraftScreen>
   )

@@ -140,10 +140,10 @@ export async function buildLeagueChatContext(args: {
   }
 
   const league = await prisma.league
-    .findUnique({ where: { id: args.leagueId }, select: { name: true, platform: true } })
+    .findUnique({ where: { id: args.leagueId }, select: { name: true, platform: true, settings: true } })
     .catch(() => null)
   if (!league) return 'League chat could not be read just now. Say so; do not describe any conversation.'
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') {
+  if (resolveWriteAuthority(league) !== 'NATIVE') {
     const label = sourcePlatformLabel(league.platform) ?? 'the platform it was imported from'
     return `League chat was NOT read: "${league.name ?? 'this league'}" is imported from ${label}, and Chimmy only reads chat in AllFantasy-hosted leagues. Its chat lives on ${label}. Say so; do not guess what anyone said.`
   }

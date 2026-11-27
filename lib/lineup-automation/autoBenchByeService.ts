@@ -45,7 +45,7 @@ export function autoBenchByeLeagueBlock(league: {
   leagueType?: string | null
   bestBallMode?: boolean | null
 }): string | null {
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return 'not_native'
+  if (resolveWriteAuthority(league) !== 'NATIVE') return 'not_native'
   if (league.bestBallMode || automaticLineup(league.leagueType ?? null, league.settings)) return 'automatic_lineups'
   if (isDailyLineupScoringEnabled(league.settings, league.sport)) return 'daily_lineups'
   return null

@@ -1,5 +1,6 @@
 'use client'
 
+import { platformOnlyAuthority } from '@/lib/league/write-authority'
 import Link from 'next/link'
 import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -568,7 +569,7 @@ export function LeagueSettingsTab({
         description="Control how the draft handles timers, pauses, and auto-picks."
       >
         {/* Native redraft drafts start at their time whatever this says, so it is hidden for them. */}
-        {startsAtScheduledTimeRegardlessOfAutostart(league) ? (
+        {startsAtScheduledTimeRegardlessOfAutostart({ ...league, ...platformOnlyAuthority(league.platform) }) ? (
           <p className="border-b border-white/[0.04] py-2 text-[12px] text-white/60" data-testid="draft-autostart-scheduled-note">
             {t('draft.autostartScheduledNote')}
           </p>

@@ -120,13 +120,13 @@ type RosterPlayerDb = Pick<PrismaClient, 'redraftRosterPlayer'>
  */
 export async function loadBestBallWeekRosterRows(
   db: RosterPlayerDb,
-  args: { rosterIds: readonly string[]; sport: string; season: number; week: number; platform: string | null | undefined; kickoffs?: WeekKickoffs | null },
+  args: { rosterIds: readonly string[]; sport: string; season: number; week: number; platform: string | null | undefined; settings: unknown; kickoffs?: WeekKickoffs | null },
 ): Promise<Awaited<ReturnType<RosterPlayerDb['redraftRosterPlayer']['findMany']>>> {
   if (args.rosterIds.length === 0) return []
   // One roster reads by id, exactly the query the scorer always made; several read with `in`.
   const rosterId = args.rosterIds.length === 1 ? args.rosterIds[0]! : { in: [...args.rosterIds] }
   const current = () => db.redraftRosterPlayer.findMany({ where: { rosterId, droppedAt: null } })
-  if (resolveWriteAuthority(args.platform) !== 'NATIVE') return current()
+  if (resolveWriteAuthority(args) !== 'NATIVE') return current()
   const kickoffs =
     args.kickoffs !== undefined
       ? args.kickoffs

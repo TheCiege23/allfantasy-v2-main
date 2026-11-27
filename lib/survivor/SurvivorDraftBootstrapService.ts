@@ -43,7 +43,7 @@ export async function runSurvivorPostDraftBootstrap(
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
   const snapshot = league?.settings as Record<string, unknown> | null
-  if (league && resolveWriteAuthority(league.platform) === 'NATIVE' && snapshot?.survivorFoundationSettingsVersion === 1) {
+  if (league && resolveWriteAuthority(league) === 'NATIVE' && snapshot?.survivorFoundationSettingsVersion === 1) {
     const session = await prisma.draftSession.findFirst({
       where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, status: true, sessionKind: true, sleeperDraftId: true },

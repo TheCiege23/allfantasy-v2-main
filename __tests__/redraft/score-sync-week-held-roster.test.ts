@@ -74,6 +74,7 @@ describe('score sync — the best ball week as held', () => {
       season: 2026,
       week: 5,
       platform: null,
+      settings: {},
     })
     expect([...f.mock.calls[0]![0].playerIds].sort()).toEqual(['1001', '2002', '3003'])
     expect(upsertedIds()).toEqual(['1001', '2002', '3003'])

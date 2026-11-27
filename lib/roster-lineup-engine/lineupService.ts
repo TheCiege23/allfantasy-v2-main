@@ -250,7 +250,7 @@ async function runRosterLineupWithEngine(
 
   // The taxi move rules the commissioner switched on (lib/taxi/taxiMoveRules.ts). Native only; a
   // commissioner override or an import is never refused.
-  const taxiRosterId = resolveWriteAuthority(league.platform) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
+  const taxiRosterId = resolveWriteAuthority(league) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
   let taxiCheck: TaxiSaveCheck | null = null
   if (taxiRosterId && (input.source === 'user_save' || input.source === 'system')) {
     taxiCheck = await checkTaxiSave({
@@ -335,7 +335,7 @@ async function runRosterLineupWithEngine(
    * `RedraftRoster` has no scoring projection to keep.
    */
   const redraftRosterId =
-    resolveWriteAuthority(league.platform) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
+    resolveWriteAuthority(league) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
 
   let campusSnapshot: import('@/lib/c2c/nbaCampusWeekSnapshot').NbaCampusWeekSnapshot | null = null
   const nbaCampusRoster = Boolean(redraftRosterId && sport === 'NBA' && ['c2c', 'merged_devy_c2c'].includes(String(league.leagueVariant ?? '').toLowerCase()))

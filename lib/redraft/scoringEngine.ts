@@ -288,6 +288,8 @@ type BestBallScoringContext = {
   sport: string
   slots: LineupSlotSpec[]
   platform?: string | null
+  /** `League.settings`: an imported league made official on AllFantasy scores as-of-week like a native one. */
+  settings?: unknown
   asOfWeek?: boolean
   /** Daily best ball (lib/bestball/scoringPeriod.ts). Absent for every weekly league. */
   daily?: boolean
@@ -817,6 +819,7 @@ async function scoreRosterBestBall(args: {
         season: args.seasonYear,
         week: args.week,
         platform: args.bestBall.platform,
+        settings: args.bestBall.settings ?? null,
       })
     : await prisma.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, droppedAt: null } })
   // Best ball still excludes whoever was on IR / taxi / devy in THIS week's saved lineup.
@@ -927,6 +930,7 @@ async function scoreRosterBestBallDaily(args: {
     season: args.seasonYear,
     week: args.week,
     platform: args.bestBall.platform,
+    settings: args.bestBall.settings ?? null,
   })
   const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: [args.rosterId], season: args.seasonYear, week: args.week })
   const candidates = players.filter((p: (typeof players)[number]) => isBestBallCandidateSlot(weekSlotType(p, weekLineups)))
@@ -1015,7 +1019,7 @@ async function loadBestBallContext(leagueId: string): Promise<BestBallScoringCon
   const sport = String(league.sport ?? 'NFL')
   // A weekly league gets exactly the context it always did; only a daily league carries the flag.
   const daily = resolveBestBallScoringPeriod({ sport, settings: league.settings }) === 'daily'
-  return { sport, slots: buildBestBallSlots(sport, league.settings), platform: league.platform ?? null, asOfWeek: true, ...(daily ? { daily: true } : {}) }
+  return { sport, slots: buildBestBallSlots(sport, league.settings), platform: league.platform ?? null, settings: league.settings ?? null, asOfWeek: true, ...(daily ? { daily: true } : {}) }
 }
 
 /**

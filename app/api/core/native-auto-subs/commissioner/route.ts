@@ -11,7 +11,7 @@ async function handle(req:Request){
   const leagueId=new URL(req.url).searchParams.get('league')??''
   let league
   try{league=(await assertCommissionerAccess(leagueId,userId,req.method==='GET'?'view':'league')).league}catch{return NextResponse.json({error:'Commissioner only'},{status:403})}
-  if(resolveWriteAuthority(league.platform)!=='NATIVE')return NextResponse.json({error:'Native leagues only'},{status:409})
+  if(resolveWriteAuthority(league)!=='NATIVE')return NextResponse.json({error:'Native leagues only'},{status:409})
   const enabled=(league.settings as Record<string,unknown>|null)?.nativeAutoSubsEnabled===true
   if(req.method==='GET')return NextResponse.json({enabled},{headers:{'Cache-Control':'private, no-store'}})
   let body:Record<string,unknown>

@@ -299,7 +299,7 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
   if (!league) return []
 
   // Native automation uses explicit owner backups and the transactional lineup engine.
-  if (resolveWriteAuthority(league.platform) === 'NATIVE') {
+  if (resolveWriteAuthority(league) === 'NATIVE') {
     await (await import('@/lib/core-app/nativeAutoSubs')).runNativeAutoSubsForLeague(leagueId)
     return []
   }

@@ -28,11 +28,11 @@ export async function resolveActionLeagueWrite(
   try {
     const league = await prisma.league.findUnique({
       where: { id },
-      select: { platform: true, platformLeagueId: true, name: true, season: true },
+      select: { platform: true, settings: true, platformLeagueId: true, name: true, season: true },
     })
     if (!league) return null
     const sourceLink =
-      resolveWriteAuthority(league.platform) === 'SHADOW'
+      resolveWriteAuthority(league) === 'SHADOW'
         ? resolveSourceLink({
             platform: league.platform,
             sourceLeagueId: linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league])),
@@ -41,7 +41,7 @@ export async function resolveActionLeagueWrite(
             action: sourceLinkActionForScope(scope),
           })
         : null
-    return { platform: league.platform ?? null, sourceLink }
+    return { platform: league.platform ?? null, settings: league.settings ?? null, sourceLink }
   } catch {
     return null
   }

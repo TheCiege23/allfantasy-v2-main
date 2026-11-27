@@ -22,7 +22,7 @@ async function handle(req:Request){
   const roster=await prisma.roster.findFirst({where:{leagueId,id:acting.rosterId}})
   if(!roster)return NextResponse.json({error:'Roster owner only'},{status:403})
   const league=await prisma.league.findUnique({where:{id:leagueId}})
-  if(!league || resolveWriteAuthority(league.platform)!=='NATIVE')return NextResponse.json({error:'Native leagues only'},{status:409})
+  if(!league || resolveWriteAuthority(league)!=='NATIVE')return NextResponse.json({error:'Native leagues only'},{status:409})
   const data=await getMyTeamData(leagueId,userId),native=data?.nativeLineup
   if(!data?.workspaceScope || !native || native.rosterId!==roster.id || !native.week || leagueWeekFromSettings(league.settings)!==native.week || data.bestBall || data.preDraft || data.completed || data.eliminated || data.league.lineupMode==='automatic')return NextResponse.json({error:'Active manual native lineup required'},{status:409})
   const settings=league.settings as Record<string,unknown>|null,enabled=settings?.nativeAutoSubsEnabled===true

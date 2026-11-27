@@ -100,7 +100,7 @@ describe('the tab and the handler use it only for an imported league with nothin
   const handler = readFileSync(join(process.cwd(), 'app/api/leagues/[leagueId]/bestball/handler.ts'), 'utf8')
   const tab = readFileSync(join(process.cwd(), 'app/league/[leagueId]/tabs/BestBallTab.tsx'), 'utf8')
   it('the handler gates on no legacy weeks and a non-native platform', () => {
-    expect(handler).toMatch(/^\s*if \(weeksAvailable\.length === 0 && resolveWriteAuthority\(league\.platform\) !== 'NATIVE'\) \{$/m)
+    expect(handler).toMatch(/^\s*if \(weeksAvailable\.length === 0 && resolveWriteAuthority\(league\) !== 'NATIVE'\) \{$/m)
     expect(handler).toMatch(/^\s*source: 'imported',$/m)
     // The store the regular sync keeps current is read first; the slower one only when it is empty.
     expect(handler.indexOf('prisma.weeklyMatchup.findMany')).toBeGreaterThan(0)

@@ -113,7 +113,7 @@ export function classifyLeagueFormat(league: ClassifiableLeague): LeagueFormatFa
     concept,
     family: FAMILY[concept] ?? 'other',
     // Classic Best Ball or best ball Guilly, so the best ball filter finds both (lib/bestball/bestBallLeagueState.ts).
-    bestBall: bestBallLineupSetsItself(league),
+    bestBall: bestBallLineupSetsItself({ ...league, settings: league.settings ?? null }),
     idp: hasIdpScoring(rulebook) || isIdpLeagueVariant(league.leagueVariant ?? null) || aliasIdp,
     superflex: leagueVariantFor(league.settings, league.leagueType ?? null).superflex,
     scoring: scoringFormatFromRec(rec) ?? null,

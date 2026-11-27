@@ -363,7 +363,7 @@ export async function runAutopilotTradeOffers(opts?: { now?: Date; deadline?: nu
     const formatTradesOff = (league.bestBallMode || league.guillotineMode)
       ? !(await import('@/lib/league-trade-engine/tradeSettingsResolver')).resolveLeagueTradeSettings(league).tradesAllowed
       : false
-    const blocked = resolveWriteAuthority(league.platform) !== 'NATIVE' ? 'not_native' : !['active', 'in_season'].includes(status) ? 'not_in_season' : league.lockAllMoves ? 'moves_locked' : formatTradesOff ? 'trades_disabled' : null
+    const blocked = resolveWriteAuthority(league) !== 'NATIVE' ? 'not_native' : !['active', 'in_season'].includes(status) ? 'not_in_season' : league.lockAllMoves ? 'moves_locked' : formatTradesOff ? 'trades_disabled' : null
     if (blocked) {
       for (const _ of senders) skip(blocked)
       continue

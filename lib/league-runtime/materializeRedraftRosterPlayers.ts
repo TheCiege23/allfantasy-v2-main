@@ -112,7 +112,7 @@ export async function materializeRedraftRosterPlayersForLeague(
 
   const result: MaterializeResult = { ...EMPTY, rostersConsidered: rosters.length }
   const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { sport: true, platform: true, season: true, platformLeagueId: true } })
+    .findUnique({ where: { id: leagueId }, select: { sport: true, platform: true, settings: true, season: true, platformLeagueId: true } })
     .catch(() => null)
   const sport = String(opts?.sport ?? league?.sport ?? 'NFL')
   const platform = String(league?.platform ?? '').toLowerCase()
@@ -130,7 +130,7 @@ export async function materializeRedraftRosterPlayersForLeague(
    * `playerData` can be the stale side, so nothing is ever dropped there. A league whose platform
    * could not be read resolves to NATIVE as well, which is the direction that drops nothing.
    */
-  const platformOwnsRoster = league != null && resolveWriteAuthority(league.platform) !== 'NATIVE'
+  const platformOwnsRoster = league != null && resolveWriteAuthority(league) !== 'NATIVE'
 
   /*
    * The bye is a property of the TEAM and this table has a real `Int?` column for it that

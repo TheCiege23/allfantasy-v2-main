@@ -50,7 +50,7 @@ export function scheduledDraftAutoStarts(
 ): boolean {
   if (startsAtScheduledTimeRegardlessOfAutostart(league)) return true
   if (!autostartEnabled || !league) return false
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return false
+  if (resolveWriteAuthority(league) !== 'NATIVE') return false
   if (league.survivorMode === true || league.guillotineMode === true || league.leagueVariant === 'guillotine') return true
   const type = String(league.leagueType ?? '').toLowerCase()
   return league.isDynasty === true || type === 'dynasty' || type === 'devy' || type === 'c2c'

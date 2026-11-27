@@ -85,7 +85,7 @@ function loadLeague(leagueId: string) {
 }
 
 function refusal(league: LeagueRow): Exclude<EliminatedLineupView, { supported: true }>['reason'] | null {
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return 'not_native'
+  if (resolveWriteAuthority(league) !== 'NATIVE') return 'not_native'
   if (league.bestBallMode || automaticLineup(league.leagueType, league.settings)) return 'automatic_lineups'
   if (league.guillotineMode || String(league.leagueVariant ?? '').toLowerCase() === 'guillotine') return 'guillotine'
   return null

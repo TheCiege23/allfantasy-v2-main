@@ -39,7 +39,7 @@ export async function readOffseasonCalendar(leagueId: string, userId: string, no
     isElevatedCommissioner(leagueId, userId),
   ])
   if (!member && !commissioner) return { ok: false, status: 403 }
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE' || !isDynastyFamilyLeague(league)) return { ok: true, view: null }
+  if (resolveWriteAuthority(league) !== 'NATIVE' || !isDynastyFamilyLeague(league)) return { ok: true, view: null }
 
   const next = await prisma.redraftSeason.findFirst({
     where: { leagueId, status: 'setup' },

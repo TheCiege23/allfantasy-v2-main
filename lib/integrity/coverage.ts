@@ -10,12 +10,14 @@ export type IntegrityCoverage = {
 /** A scan timestamp proves that a scan ran, not that every event was covered. */
 export function buildIntegrityCoverage(input: {
   platform: string | null
+  /** `League.settings`: an imported league made official on AllFantasy is scanned like a native one. */
+  settings: unknown
   hasNativeRedraftSeason: boolean
   tankingEnabled: boolean
   lastCollusionScanAt: Date | null
   lastTankingScanAt: Date | null
 }): IntegrityCoverage {
-  const native = resolveWriteAuthority(input.platform) === 'NATIVE' && input.hasNativeRedraftSeason
+  const native = resolveWriteAuthority(input) === 'NATIVE' && input.hasNativeRedraftSeason
   // Completed trades in an imported Sleeper league are scanned from the trade ledger
   // (lib/integrity/scanImportedTrades.ts), and its finished weeks' lineups from the lineup audit
   // (lib/integrity/scanImportedTanking.ts).

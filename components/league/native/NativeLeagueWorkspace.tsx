@@ -348,7 +348,7 @@ export function NativeLeagueWorkspace({ native, sourceLeagueId = null, importAct
    * strip used (components/league/LeagueWorkspaceNavigation.tsx), so the wording and the link do not drift.
    */
   const hostLabel = native ? null : importedPlatformLabel(league.platform) ?? 'another platform'
-  const hostMode = native ? null : leagueWorkspaceMode(league.platform, hostLanguage)
+  const hostMode = native ? null : leagueWorkspaceMode({ platform: league.platform, settings: league.settings ?? null }, hostLanguage)
   const hostSource = native || hostMode?.authority === 'NATIVE' ? null : resolveSourceLink({ platform: league.platform, sourceLeagueId, leagueName: league.name, season: league.season ?? null })
   const choose = (id: string) => { onSelectTab(id); setMenuOpen(false) }
   const openSwitcher = () => { setQuery(''); setSwitcherOpen(true) }

@@ -45,7 +45,7 @@ export const SIDEBAR_LEAGUE_FIELDS = [
  * (`lib/dashboard/league-list-destination.ts`: `tournamentId`, `league_type`). Censused 2026-11-23 across
  * every consumer of the list — rail, switcher, league list panel, Chimmy dock and chat bar.
  */
-export const SIDEBAR_SETTINGS_KEYS = ['currentWeek', 'current_week', 'week', 'tournamentId', 'league_type'] as const
+export const SIDEBAR_SETTINGS_KEYS = ['currentWeek', 'current_week', 'week', 'tournamentId', 'league_type', 'switching'] as const
 
 export type SidebarLeague<T> = Pick<T, Extract<keyof T, (typeof SIDEBAR_LEAGUE_FIELDS)[number] | 'settings'>>
 

@@ -161,7 +161,7 @@ export async function checkStatCorrectionsForSeason(
   if (!season || !league) return 'not_supported'
   const sport = String(season.sport ?? league.sport ?? '').toUpperCase()
   if (!STAT_CORRECTION_SPORTS.has(sport)) return 'not_supported'
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return 'not_supported'
+  if (resolveWriteAuthority(league) !== 'NATIVE') return 'not_supported'
   if (leagueIsBestBall(league) || gamesCountActive(league.settings, sport)) return 'not_supported'
   // A daily-lineup league is compared day by day (below). Games limits cap which started days count,
   // so a day's line alone does not say what it scored: not covered.

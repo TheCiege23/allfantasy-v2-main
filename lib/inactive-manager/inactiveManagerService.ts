@@ -128,7 +128,7 @@ export async function readInactiveManagerView(
   leagueId: string,
 ): Promise<{ native: boolean; autopilotEntitled: boolean; draftAsMe: boolean; autoHandover: AutoHandoverRule | null; chimmyLimit: number; chimmyFreeTeams: number; chimmyReports: ChimmyReportEntry[]; chimmyPersonalities: ReadonlyArray<{ id: string; label: string }>; teams: InactiveManagerTeam[] }> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, userId: true } })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return { native: false, autopilotEntitled: false, draftAsMe: false, autoHandover: null, chimmyLimit: CHIMMY_MANAGER_LIMIT, chimmyFreeTeams: CHIMMY_FREE_TEAMS, chimmyReports: [], chimmyPersonalities: [], teams: [] }
+  if (!league || resolveWriteAuthority(league) !== 'NATIVE') return { native: false, autopilotEntitled: false, draftAsMe: false, autoHandover: null, chimmyLimit: CHIMMY_MANAGER_LIMIT, chimmyFreeTeams: CHIMMY_FREE_TEAMS, chimmyReports: [], chimmyPersonalities: [], teams: [] }
   const managed = readManagedLineups(league.settings)
   const health = await getLeagueManagerHealth(leagueId)
   const owners = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
@@ -187,9 +187,9 @@ export type SwitchResult = { ok: true; managed: boolean } | { ok: false; status:
 export async function setInactiveManagerMode(leagueId: string, userId: string, rosterId: unknown, on: unknown): Promise<SwitchResult> {
   if (!(await isElevatedCommissioner(leagueId, userId))) return { ok: false, status: 403, error: 'Forbidden' }
   if (typeof rosterId !== 'string' || !rosterId || typeof on !== 'boolean') return { ok: false, status: 400, error: 'Name a team and whether to turn it on.' }
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, name: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, name: true } })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only set lineups in leagues it runs.' }
+  if (resolveWriteAuthority(league) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only set lineups in leagues it runs.' }
   const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
   if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
 
@@ -256,9 +256,9 @@ export async function applyChimmyAutopilot(
   if (typeof rosterId !== 'string' || !rosterId) return { ok: false, status: 400, error: 'Name a team.' }
   const nextStyle = style === null ? null : isAutopilotStyle(style) ? style : style === undefined ? DEFAULT_AUTOPILOT_STYLE : undefined
   if (nextStyle === undefined) return { ok: false, status: 400, error: 'Choose a style: dynasty_owner, win_now or rebuild.' }
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, userId: true } })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'Chimmy can only run teams in leagues AllFantasy runs.' }
+  if (resolveWriteAuthority(league) !== 'NATIVE') return { ok: false, status: 409, error: 'Chimmy can only run teams in leagues AllFantasy runs.' }
   // Without the plan Chimmy still runs one team for free (CHIMMY_FREE_TEAMS); the plan raises it to the
   // league limit. Which one is free is decided under the league lock below, with the limit.
   const teamLimit = await chimmyTeamLimitFor(league.userId)
@@ -321,9 +321,9 @@ export async function setAutoHandover(leagueId: string, userId: string, input: u
   if (!(await isElevatedCommissioner(leagueId, userId))) return { ok: false, status: 403, error: 'Forbidden' }
   const parsed = parseAutoHandover(input, userId)
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error }
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, userId: true } })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only run teams in leagues it runs.' }
+  if (resolveWriteAuthority(league) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only run teams in leagues it runs.' }
   if (parsed.value?.to === 'autopilot' && !(await autopilotEntitled(league.userId))) {
     return { ok: false, status: 402, error: 'Handing teams to Chimmy autopilot is part of AF Pro and AF Supreme. Lineup management is free.' }
   }
@@ -357,7 +357,7 @@ export async function runAutoHandovers(opts?: { now?: Date; limit?: number; dead
     try {
       const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, userId: true, name: true } })
       const rule = readAutoHandover(league?.settings)
-      if (!league || !rule || resolveWriteAuthority(league.platform) !== 'NATIVE') continue
+      if (!league || !rule || resolveWriteAuthority(league) !== 'NATIVE') continue
       result.leagues += 1
       const rosters = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, managerUserId: true, redraftRosterId: true } })
       /*
@@ -725,7 +725,7 @@ export async function runInactiveManagerLineups(opts?: { limit?: number; deadlin
       const week = leagueWeekFromSettings(league.settings)
       const season = league.season
       const reason =
-        resolveWriteAuthority(league.platform) !== 'NATIVE'
+        resolveWriteAuthority(league) !== 'NATIVE'
           ? 'not_native'
           : league.bestBallMode || automaticLineup(league.leagueType, league.settings)
             ? 'automatic_lineups'
@@ -905,7 +905,7 @@ export async function runAutopilotWaivers(opts?: { limit?: number; deadline?: nu
       result.leagues += 1
       const status = String(league.status ?? league.lifecycleState ?? '').toLowerCase()
       const reason =
-        resolveWriteAuthority(league.platform) !== 'NATIVE'
+        resolveWriteAuthority(league) !== 'NATIVE'
           ? 'not_native'
           : !['active', 'in_season'].includes(status)
             ? 'not_in_season'

@@ -63,6 +63,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   const coverage = buildIntegrityCoverage({
     platform: league.platform,
+    settings: league.settings,
     hasNativeRedraftSeason: Boolean(nativeSeason),
     tankingEnabled: settings.tankingMonitorEnabled,
     lastCollusionScanAt: settings.lastCollusionScanAt,
@@ -81,10 +82,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
       holdFlaggedTrades: readHoldFlaggedTradesMode(league.settings) !== "off",
       holdFlaggedTradesMode: readHoldFlaggedTradesMode(league.settings),
       // Holding needs the trade to execute in AllFantasy; an imported league's trades go through on its host.
-      holdFlaggedTradesSupported: resolveWriteAuthority(league.platform) === "NATIVE",
+      holdFlaggedTradesSupported: resolveWriteAuthority(league) === "NATIVE",
       // Penalties take an AllFantasy draft pick; an imported league's picks live on its host, so the
       // control is not offered there (lib/integrity/tankingPenaltyService.ts refuses it too).
-      ...(resolveWriteAuthority(league.platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(league.settings) } : {}),
+      ...(resolveWriteAuthority(league) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(league.settings) } : {}),
       // Losing a draft pick and worse rookie-lottery odds take from a dynasty league's future picks; a
       // redraft league has none, so only the FAAB penalty is offered there.
       tankingPickPenaltiesSupported: isNativeFuturePickLeague(league),
@@ -219,11 +220,12 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     leagueSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
   }
 
-  const leagueRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, leagueType: true, isDynasty: true } })
+  const leagueRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true, leagueType: true, isDynasty: true } })
   const platform = leagueRow?.platform ?? null
+  const authoritySource = { platform, settings: leagueRow?.settings ?? null }
 
   // A tanking-penalty edit is a rule members read in a dynasty league's rules popup: say what changed.
-  if (penaltyPatch && settingsBefore && resolveWriteAuthority(platform) === "NATIVE") {
+  if (penaltyPatch && settingsBefore && resolveWriteAuthority(authoritySource) === "NATIVE") {
     await publishRuleChangesEvent({
       leagueId,
       actorUserId: userId,
@@ -238,8 +240,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
       tradeAlertsEnabled: readTradeAlertsEnabled(leagueSettings),
       holdFlaggedTrades: readHoldFlaggedTradesMode(leagueSettings) !== "off",
       holdFlaggedTradesMode: readHoldFlaggedTradesMode(leagueSettings),
-      holdFlaggedTradesSupported: resolveWriteAuthority(platform) === "NATIVE",
-      ...(resolveWriteAuthority(platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(leagueSettings) } : {}),
+      holdFlaggedTradesSupported: resolveWriteAuthority(authoritySource) === "NATIVE",
+      ...(resolveWriteAuthority(authoritySource) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(leagueSettings) } : {}),
       tankingPickPenaltiesSupported: leagueRow ? isNativeFuturePickLeague(leagueRow) : false,
     },
   })

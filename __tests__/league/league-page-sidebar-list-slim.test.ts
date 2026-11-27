@@ -44,7 +44,7 @@ describe('toSidebarLeague', () => {
   })
 
   it('pins the settings keys, so a new sidebar read is a deliberate edit', () => {
-    expect([...SIDEBAR_SETTINGS_KEYS]).toEqual(['currentWeek', 'current_week', 'week', 'tournamentId', 'league_type'])
+    expect([...SIDEBAR_SETTINGS_KEYS]).toEqual(['currentWeek', 'current_week', 'week', 'tournamentId', 'league_type', 'switching'])
   })
 
   it('never changes the row it was given', () => {

@@ -73,13 +73,13 @@ function pickLabel(item: AfItem): string {
 
 export async function buildAfTradeHistoryOutcome(
   leagueId: string,
-  league: { platform: string; sport: string; season: number | null },
+  league: { platform: string; settings: unknown; sport: string; season: number | null },
   query: AfHistoryQuery,
   deps: Partial<AfHistoryDeps> = {},
 ): Promise<AfHistoryResult> {
   const d: AfHistoryDeps = { ...defaultHistoryDeps, ...deps }
   // Native leagues, and providers whose writes AllFantasy makes for real, hold real trades here.
-  const real = !isShadowLeague(league.platform)
+  const real = !isShadowLeague(league)
   const platformLabel = sourcePlatformLabel(league.platform) ?? 'the source platform'
 
   let trades: Array<{ id: string; processedAt: Date | null; proposerRosterId: string; receiverRosterId: string; items: AfItem[] }>

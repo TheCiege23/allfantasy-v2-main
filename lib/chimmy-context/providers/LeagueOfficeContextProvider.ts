@@ -53,7 +53,7 @@ export class LeagueOfficeContextProvider implements ChimmyContextProvider<League
         where: { id: leagueId },
         select: { platform: true, settings: true, leagueVariant: true, isDynasty: true },
       })
-      if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return done(null)
+      if (!league || resolveWriteAuthority(league) !== 'NATIVE') return done(null)
       const role = await getLeagueRole(leagueId, request.userId)
       const commissioner = role === 'commissioner' || role === 'co_commissioner'
 

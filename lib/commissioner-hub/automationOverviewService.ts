@@ -19,7 +19,7 @@ export type AutomationOverviewView = { supported: true; rows: AutomationRow[]; c
 export async function readAutomationFacts(leagueId: string) {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true, settings: true, leagueType: true, isDynasty: true, season: true } })
   if (!league) return null
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { league, native: false as const }
+  if (resolveWriteAuthority(league) !== 'NATIVE') return { league, native: false as const }
   const [commissionerPlan, autopilotPlan, integrity] = await Promise.all([
     ownerHasAfCommissionerPlan(league.userId),
     autopilotEntitled(league.userId),

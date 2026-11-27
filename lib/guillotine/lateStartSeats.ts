@@ -103,7 +103,7 @@ export async function loadGuillotineSeatState(leagueId: string): Promise<Guillot
   if (!league) return null
   const guillotine = league.guillotineMode === true || league.leagueVariant === 'guillotine'
   if (!guillotine || league.survivorMode === true) return null
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return null
+  if (resolveWriteAuthority(league) !== 'NATIVE') return null
   const config = await getGuillotineConfig(leagueId)
   if (!config) return null
   const [settings, claimed, rosterCount] = await Promise.all([

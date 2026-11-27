@@ -80,7 +80,7 @@ export async function initializeSurvivorPhase2(
     if (!sessionId) {
       const league = await db.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
       const snapshot = league?.settings as Record<string, unknown> | null
-      if (league && resolveWriteAuthority(league.platform) === 'NATIVE' && snapshot?.survivorFoundationSettingsVersion === 1) {
+      if (league && resolveWriteAuthority(league) === 'NATIVE' && snapshot?.survivorFoundationSettingsVersion === 1) {
         const current = await db.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, status: true, sessionKind: true } })
         if (!current || current.status !== 'completed' || current.sessionKind === 'mock') {
           return setupStatus(false, 'Complete the current native league draft before starting Survivor.', ['draft_not_ready'])

@@ -41,6 +41,7 @@ const SELECT = {
   sport: true,
   season: true,
   platform: true,
+  settings: true,
   lifecycleState: true,
   leagueSize: true,
   waiverType: true,
@@ -89,7 +90,7 @@ export async function proposeSettingsChange(args: { leagueId: string; userId: st
   }
   const row = await readLeague(args.leagueId)
   if (!row) return { ok: false, text: 'That league could not be found, so nothing was prepared.' }
-  if (resolveWriteAuthority(row.platform) !== 'NATIVE') {
+  if (resolveWriteAuthority(row) !== 'NATIVE') {
     return { ok: false, text: `This league is imported from ${row.platform}, so its settings are changed there, not on AllFantasy. Nothing was prepared. Tell the commissioner to change it on ${row.platform}.` }
   }
 
@@ -188,7 +189,7 @@ export async function executeSettingsAction(payload: ChimmyActionTokenPayload, u
   if (!(await isElevatedCommissioner(leagueId, userId))) return { ok: false, message: 'Only the commissioner can change league settings, so nothing was saved.' }
   const row = await readLeague(leagueId)
   if (!row) return { ok: false, message: 'That league could not be found, so nothing was saved.' }
-  if (resolveWriteAuthority(row.platform) !== 'NATIVE') return { ok: false, message: 'Nothing was saved: this league is not run by AllFantasy.' }
+  if (resolveWriteAuthority(row) !== 'NATIVE') return { ok: false, message: 'Nothing was saved: this league is not run by AllFantasy.' }
   if (spec.changes.length === 0 || spec.changes.some((c) => !isSettingKey(c.key) || SETTINGS_CATALOG[c.key].section !== spec.section)) {
     return { ok: false, message: 'This card could not be applied.' }
   }
