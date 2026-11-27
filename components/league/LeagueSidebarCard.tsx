@@ -68,8 +68,9 @@ export function LeagueSidebarCard({
   const status = buildStatusConfig(league.status)
   const sportLabel = (league.sport || 'NFL').toString().toUpperCase()
   const platformLabel = getPlatformLabel(league.platform)
-  const isShadow = isShadowLeague(league.platform)
-  const shadowTitle = shadowDisclosure(league.platform)
+  const authoritySource = { platform: league.platform, settings: league.settings ?? null }
+  const isShadow = isShadowLeague(authoritySource)
+  const shadowTitle = shadowDisclosure(authoritySource)
   const destinationHref = getLeagueListDestinationHref(league)
   const tournamentHubNav = destinationHref.startsWith('/tournament/')
   const inlineSelectActive = Boolean(inlineDashboardSelect && onSelect && !tournamentHubNav)

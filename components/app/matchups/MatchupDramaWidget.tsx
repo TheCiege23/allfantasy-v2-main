@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { BookOpen, ExternalLink, Zap } from 'lucide-react'
 import { postWithTokenConfirm, responseErrorMessage } from '@/lib/tokens/clientTokenConfirm'
+import { StoryAiLockNotice, type StoryAiLock } from '@/components/league-story-ai/StoryAiLockNotice'
 
 type DramaEventRow = {
   id: string
@@ -33,6 +34,7 @@ export function MatchupDramaWidget({
   const [error, setError] = useState<string | null>(null)
   const [storyByEvent, setStoryByEvent] = useState<Record<string, string>>({})
   const [storyLoadingId, setStoryLoadingId] = useState<string | null>(null)
+  const [storyLockByEvent, setStoryLockByEvent] = useState<Record<string, StoryAiLock>>({})
 
   const load = useCallback(async () => {
     if (!leagueId) return
@@ -85,15 +87,17 @@ export function MatchupDramaWidget({
       }
       setStoryLoadingId(eventId)
       try {
-        // Asks before any token is spent; a decline spends nothing and shows nothing.
+        // No longer token-billed (2026-11-27): the commissioner's plan unlocks it. A 409 would still ask first.
         const { response: res, declined } = await postWithTokenConfirm(
           `/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`,
           { eventId },
         )
         if (declined) return
-        const text = res.ok
-          ? ((await res.json().catch(() => ({})))?.narrative ?? 'No story available.')
+        const data = res.ok ? await res.json().catch(() => ({})) : null
+        const text = data
+          ? (data?.narrative ?? 'No story available.')
           : await responseErrorMessage(res, 'Could not load story.')
+        setStoryLockByEvent((prev) => ({ ...prev, [eventId]: data?.aiLocked ?? null }))
         setStoryByEvent((prev) => ({
           ...prev,
           [eventId]: text,
@@ -164,6 +168,9 @@ export function MatchupDramaWidget({
               <p className="mt-1.5 border-t border-white/10 pt-1.5 text-[11px] text-white/70">
                 {storyByEvent[e.id]}
               </p>
+            )}
+            {storyByEvent[e.id] && (
+              <StoryAiLockNotice lock={storyLockByEvent[e.id]} featureName="Chimmy drama stories" className="mt-1.5" />
             )}
           </li>
         ))}

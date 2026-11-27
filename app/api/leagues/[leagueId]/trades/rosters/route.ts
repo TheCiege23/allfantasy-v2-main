@@ -742,7 +742,7 @@ export async function GET(
         loadLeagueTradeHistory({
           leagueId,
           viewerRosterId: viewerTeamRosterId,
-          isNative: resolveWriteAuthority(league?.platform) === 'NATIVE',
+          isNative: resolveWriteAuthority({ platform: league?.platform, settings: league?.settings ?? null }) === 'NATIVE',
           teams: result.flatMap((r) =>
             r.teamExternalId ? [{ externalId: r.teamExternalId, rosterId: r.rosterId }] : [],
           ),

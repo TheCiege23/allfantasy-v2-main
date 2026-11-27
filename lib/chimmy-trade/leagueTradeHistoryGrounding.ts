@@ -338,11 +338,11 @@ export async function buildLeagueTradeHistoryOutcome(
   const playerFilter = query.player?.trim() ? query.player.trim().toLowerCase() : null
   const seasonFilter = typeof query.season === 'number' && Number.isFinite(query.season) ? query.season : null
 
-  let league: { platform: string; platformLeagueId: string; sport: string; season: number } | null
+  let league: { platform: string; settings: unknown; platformLeagueId: string; sport: string; season: number } | null
   try {
     league = await prisma.league.findUnique({
       where: { id: leagueId },
-      select: { platform: true, platformLeagueId: true, sport: true, season: true },
+      select: { platform: true, settings: true, platformLeagueId: true, sport: true, season: true },
     })
   } catch {
     return { kind: 'league-lookup-failed' }

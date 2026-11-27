@@ -109,7 +109,7 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
   const requiredStarters = readRequiredStarterCount(league)
 
   const sport = String(league.sport ?? 'NFL')
-  const native = resolveWriteAuthority(league.platform) === 'NATIVE'
+  const native = resolveWriteAuthority(league) === 'NATIVE'
   const [teams, rosters, managerHealth, importedManagers, importedWindow, polls, kickoffs, eliminated] = await Promise.all([
     prisma.leagueTeam.findMany({
       where: { leagueId },

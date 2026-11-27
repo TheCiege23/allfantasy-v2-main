@@ -23,13 +23,14 @@ export async function keeperValueReport(
 ): Promise<KeeperValueReport> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { userId: true, sport: true, leagueSize: true, scoringPresetId: true, settings: true },
+    select: { id: true, userId: true, sport: true, leagueSize: true, scoringPresetId: true, settings: true },
   })
   if (!league) return { available: false, reason: 'not_entitled' }
   const access = await new FeatureGateService().evaluateUserFeatureAccess(league.userId, 'commissioner_automation').catch(() => null)
   if (!access?.allowed) return { available: false, reason: 'not_entitled' }
   const rosterCount = new Set(rows.map((r) => r.rosterId)).size
-  const rankOf = await loadKeeperMarketRanks(league, rosterCount)
+  // The card's keeper line reads this same rank (./keeperCardCost), board sports included.
+  const rankOf = await loadKeeperMarketRanks(league, rosterCount, { includeBoardSports: true })
   if (!rankOf) return { available: false, reason: 'no_market_values' }
 
   const players = await prisma.redraftRosterPlayer.findMany({

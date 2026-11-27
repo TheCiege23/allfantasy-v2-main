@@ -582,12 +582,12 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
   {
     key: "storyline_creation",
     title: "Storyline Creation",
-    accessType: "subscription_or_tokens",
+    accessType: "subscription_only",
     requiredPlanId: "commissioner",
-    tokenRuleCode: "ai_storyline_creation",
+    tokenRuleCode: null,
     lockedReason: "Storyline creation is part of AF Commissioner.",
-    backendEnforcement: "requireFeatureEntitlement(storyline_creation) with allowTokenFallback.",
-    frontendGateBehavior: "InContextMonetizationCard + upgrade/token CTA.",
+    backendEnforcement: "League commissioner's plan via lib/league-story-ai/leagueStoryAiGate.ts (storyline_creation), plus per-league daily caps; tokens do not unlock it.",
+    frontendGateBehavior: "StoryAiLockNotice (LockedFeatureCard) + upgrade CTA.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
       routes: ["/app/league/[leagueId]"],

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { ALL_LEAGUES_DASHBOARD_HREF, leagueWorkspaceMode } from '@/lib/league/league-workspace-navigation'
+import { platformOnlyAuthority } from '@/lib/league/write-authority'
 import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 
 export function LeagueWorkspaceNavigation({ leagueId, platform, sourceLeagueId, leagueName, season, variant = 'panel', trailing }: {
@@ -22,7 +23,7 @@ export function LeagueWorkspaceNavigation({ leagueId, platform, sourceLeagueId, 
   trailing?: ReactNode
 }) {
   const { language, t } = useOptionalLanguage()
-  const mode = leagueWorkspaceMode(platform, language)
+  const mode = leagueWorkspaceMode(platformOnlyAuthority(platform), language)
   const source = mode.authority === 'NATIVE' ? null : resolveSourceLink({ platform, sourceLeagueId, leagueName, season })
 
   if (variant === 'strip') {

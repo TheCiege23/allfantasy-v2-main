@@ -195,9 +195,17 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
      * on any failure, the roster is stripped exactly as before.
      */
     const platformOfLeague = rawRows[0]?.league?.platform ?? null
+    /*
+     * 🛑 THE BRIDGE IS NFL, SO THE SPORT IS CHECKED HERE TOO (2026-11-27). It reads NFL
+     * `PlayerIdentityMap` rows only; a Fleaflicker / MFL league of another sport put through it would
+     * read its ids as NFL players, and only the coverage rule happened to stop that. `bridgeColumnFor`
+     * and `loadBridgedLeagues` both refuse a known non-NFL sport, so such a league is stripped below
+     * (unreadable), never bridged — `espnSportOf` is the same rule for ESPN.
+     */
+    const sportOfLeague = rawRows[0]?.league?.sport ?? null
     let bridgedMap: ReadonlyMap<string, string> | null = null
-    if (bridgeColumnFor(platformOfLeague)) {
-      const bridged = await loadBridgedLeagues([{ id: leagueId, platform: platformOfLeague }]).catch(() => null)
+    if (bridgeColumnFor(platformOfLeague, sportOfLeague)) {
+      const bridged = await loadBridgedLeagues([{ id: leagueId, platform: platformOfLeague, sport: sportOfLeague }]).catch(() => null)
       const verdict = bridged?.get(leagueId)
       /*
        * A pasted Yahoo league (declared `sleeper:<id>` ids) is bridged even BELOW the coverage bar. The

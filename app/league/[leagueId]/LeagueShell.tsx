@@ -119,7 +119,7 @@ import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMa
 import { NativeLineupScreen } from '@/components/league/native/screens/NativeLineupScreen'
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
 import { NativeTradesScreen } from '@/components/league/native/screens/NativeTradesScreen'
-import { NativeStandingsScreen } from '@/components/league/native/screens/NativeStandingsScreen'
+import { NativeLeaguePageScreen } from '@/components/league/native/screens/NativeLeaguePageScreen'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
@@ -2028,7 +2028,7 @@ export function LeagueShell({
               Embedded views have no workspace navigation, so keep their hosting disclosure.
             */}
             <div className="px-4 pt-3 empty:hidden">
-              {embedMode ? <ShadowLeagueBanner platform={league.platform} /> : null}
+              {embedMode ? <ShadowLeagueBanner platform={league.platform} settings={league.settings} /> : null}
             </div>
 
             {/* Renew League banner - shown to commissioner when season ends */}
@@ -2707,7 +2707,8 @@ function LeagueTabRouter({
       case 'trades':
         return otherHalf('trades', <NativeTradesScreen league={selectedLeague} teams={teamSlots} />)
       case 'standings':
-        return oneLeagueStandings(<NativeStandingsScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />)
+        // The League page: this week's matchups, the standings, the activity (Sleeper's League tab).
+        return oneLeagueStandings(<NativeLeaguePageScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />)
     }
   }
 

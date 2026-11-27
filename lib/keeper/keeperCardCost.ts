@@ -13,8 +13,10 @@ import 'server-only'
  * Native leagues: the eligibility engine's own derivation (./eligibilityEngine) — the round he last
  * cost (his keeper round if he was kept, else where he was drafted, else a pickup) through
  * `keeperCostRound`. Imported leagues: the imported keeper grid's pricing of the draft history the
- * import stored (`importedCost` below) — no provider call, and no line when that history is missing. The value is the Keepers tab's own measure (./keeperValueReport): his FantasyCalc
- * market rank, read DB-first (./keeperMarketValues), against the pick his round uses. NFL only.
+ * import stored (`importedCost` below) — no provider call, and no line when that history is missing. The value is the Keepers tab's own measure (./keeperValueReport): his
+ * market rank, read DB-first (./keeperMarketValues — FantasyCalc in the NFL; the league's own value board in
+ * NBA, MLB, NHL, NCAAB and soccer), against the pick his round uses. A sport with no board, or a player with
+ * no rank on it, gets the cost line alone.
  *
  * Never throws: a keeper line that cannot be read is absent, not an error on the card.
  */
@@ -65,7 +67,7 @@ export async function loadPlayerKeeperCardCost(subject: Subject): Promise<Player
     const teams = league.leagueSize && league.leagueSize >= 2 ? league.leagueSize : null
     let valuation: Parameters<typeof describeKeeperCardCost>[0]['valuation'] = null
     if (cost.ok && teams) {
-      const rankOf = await loadKeeperMarketRanks(league, teams).catch(() => null)
+      const rankOf = await loadKeeperMarketRanks({ ...league, id: subject.leagueId }, teams, { includeBoardSports: true }).catch(() => null)
       if (rankOf) valuation = { marketRank: rankOf({ playerId: subject.sleeperId ?? subject.externalId ?? '', name: subject.name, position: subject.position }), teams }
     }
     const line = describeKeeperCardCost({ rules, cost, basis, lastRound, valuation })

@@ -34,6 +34,7 @@
  * re-run plan it a second time under a fresh key.
  */
 
+import { platformOnlyAuthority } from '@/lib/league/write-authority'
 import type { AutomationTrigger, PlannedEvent } from '@/lib/specialty-automation/types'
 import { getRuleEffect, type RuleEffectType } from '@/lib/commissioner-os/ruleEffects'
 import { resolveActionAuthority, type ActionAuthority } from '@/lib/commissioner-os/authority'
@@ -197,7 +198,7 @@ export function planTemplateActions(input: PlanTemplateActionsInput): TemplatePl
        * on an imported league would be arithmetic on a balance AllFantasy cannot see.
        */
       const authority = resolveActionAuthority({
-        platform: profile.platform,
+        ...platformOnlyAuthority(profile.platform),
         scope: definition.scope,
         verifiableFromImport: definition.verifiableFromImport,
         preparable: !unsupported,

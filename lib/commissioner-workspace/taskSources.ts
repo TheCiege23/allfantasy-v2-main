@@ -310,13 +310,14 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
    * but has never sent any data" — false, and filed on every scan once the daily refresh began
    * discovering native leagues. Orphan seats and the operational checks still apply to it.
    */
-  let platform: string | null | undefined
+  let authoritySource: { platform: string | null; settings: unknown } | null | undefined
   try {
-    platform = (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform
+    authoritySource = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
   } catch {
-    platform = undefined // unknown: fall through to the feed checks, as before
+    authoritySource = undefined // unknown: fall through to the feed checks, as before
   }
-  if (platform !== undefined && resolveWriteAuthority(platform) === 'NATIVE') {
+  // A missing row is not a native league: it falls through to the feed checks, as before.
+  if (authoritySource != null && resolveWriteAuthority(authoritySource) === 'NATIVE') {
     const roster = await readOrphanTeamCounts(leagueId)
     const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
     const { readLineupIntegrityTasks } = await import('@/lib/lineup-integrity/lineupIntegrityService')

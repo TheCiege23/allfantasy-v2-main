@@ -105,7 +105,7 @@ const readMarketCached = unstable_cache(
       // A foreign league's ids collide with real Sleeper ids — counted, they own strangers. Unreadable, so uncounted.
       // So do a native NHL/NBA/MLB league's Rolling Insights ids: Sleeper ids exist only for NFL.
       // ⚠ EXCEPT A PASTED YAHOO LEAGUE, decided below from its own rosters (declaredAvailability.ts).
-      .then((ls) => ls.filter((l) => !isForeignIdSpace(l.platform, l.sport) || isDeclaredBridge(bridgeColumnFor(l.platform))))
+      .then((ls) => ls.filter((l) => !isForeignIdSpace(l.platform, l.sport) || isDeclaredBridge(bridgeColumnFor(l.platform, l.sport))))
 
     if (leagues.length === 0) return { rows: [] as Array<[string, RosteredMarket]>, leagues: 0, unverified: 0 }
 

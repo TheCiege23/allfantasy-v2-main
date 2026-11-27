@@ -56,7 +56,6 @@ export const TOKEN_PURCHASABLE_RULES: readonly TokenPurchasableRule[] = [
   },
   { code: 'ai_trade_analyzer_full_review', label: 'Full trade review', who: 'anyone', where: 'Trade Evaluator' },
   { code: 'ai_waiver_engine_run', label: 'Waiver Wire Chimmy run', who: 'anyone', where: 'Waiver Wire' },
-  { code: 'ai_storyline_creation', label: 'League storyline', who: 'league_member', where: 'league drama and story' },
   {
     code: 'commissioner_ai_chat_question',
     label: 'Chimmy Commissioner question',

@@ -1,11 +1,19 @@
 /**
  * AI-generated forecast summary (OpenAI: readable narrative from simulation outputs).
+ *
+ * 🛑 AF COMMISSIONER FOR THE WHOLE LEAGUE (owner, 2026-11-27). The summary is a model call, so it runs only
+ * when the league's COMMISSIONER holds AF Commissioner or AF Supreme — then every member gets it — and at
+ * most LEAGUE_STORY_AI_DAILY_LIMITS.forecast_summary times a league a day
+ * (lib/league-story-ai/leagueStoryAiGate.ts). This route has no fact-built summary (the forecast numbers
+ * themselves are the season-forecast route's), so a locked league gets the standard 403 paywall body and a
+ * capped one a 429 with Retry-After, both before any model call. A bad request (no teamForecasts) costs no cap.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { openaiChatText } from '@/lib/openai-client'
 import { getInsightBundle } from '@/lib/ai-simulation-integration'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
+import { checkLeagueStoryAiGate, leagueStoryAiRefusal } from '@/lib/league-story-ai/leagueStoryAiGate'
 
 type TeamForecast = {
   teamId: string
@@ -29,7 +37,7 @@ export async function POST(
   // dispatcher, and was open to anyone holding a league id.
   const gate = await requireLeagueApiAccess(leagueId)
   if (!gate.ok) return gate.response
-  let body: { season?: number; week?: number; teamForecasts?: TeamForecast[] } = {}
+  let body: { season?: number; week?: number; teamForecasts?: TeamForecast[]; lang?: unknown } = {}
   try {
     body = await req.json().catch(() => ({}))
   } catch {}
@@ -38,6 +46,9 @@ export async function POST(
   if (!forecasts.length) {
     return NextResponse.json({ error: 'teamForecasts required' }, { status: 400 })
   }
+
+  const aiGate = await checkLeagueStoryAiGate({ leagueId: gate.leagueId, kind: 'forecast_summary', lang: body.lang })
+  if (!aiGate.ok) return leagueStoryAiRefusal(aiGate)
 
   const sorted = [...forecasts].sort(
     (a, b) => b.championshipProbability - a.championshipProbability

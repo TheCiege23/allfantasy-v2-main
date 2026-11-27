@@ -63,6 +63,8 @@ export type ProposeTradeModalProps = {
    * ESPN/Yahoo/Sleeper, will never receive it. Omitted/native leagues send a real offer.
    */
   platform?: string | null
+  /** `League.settings`: an imported league made official on AllFantasy sends real offers. Absent reads as not official. */
+  leagueSettings?: unknown
   sport?: string | null
   /** Pending native offer being answered, when composing a counter. */
   counterTradeId?: string | null
@@ -113,6 +115,7 @@ export function ProposeTradeModal({
   leagueId,
   onSubmitted,
   platform,
+  leagueSettings,
   sport,
   counterTradeId = null,
   initialPartnerRosterId = null,
@@ -124,9 +127,10 @@ export function ProposeTradeModal({
   const preselectApplied = useRef(false)
   const { data: session } = useSession()
   const myUserId = session?.user?.id ?? null
-  const tradeCopy = useMemo(() => writeAuthorityCopy('trade', platform), [platform])
-  const submitLabel = useMemo(() => saveActionLabel('trade', platform), [platform])
-  const shadowNotice = useMemo(() => shadowDisclosure(platform), [platform])
+  const authoritySource = useMemo(() => ({ platform, settings: leagueSettings ?? null }), [platform, leagueSettings])
+  const tradeCopy = useMemo(() => writeAuthorityCopy('trade', authoritySource), [authoritySource])
+  const submitLabel = useMemo(() => saveActionLabel('trade', authoritySource), [authoritySource])
+  const shadowNotice = useMemo(() => shadowDisclosure(authoritySource), [authoritySource])
   const sourceLabel = useMemo(() => sourcePlatformLabel(platform), [platform])
 
   const [rosters, setRosters] = useState<TradeableRoster[] | null>(null)

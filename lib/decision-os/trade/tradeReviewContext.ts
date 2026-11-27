@@ -352,7 +352,7 @@ export const defaultTradeReviewDeps: TradeReviewDeps = {
  * imported Sleeper NFL leagues, so in every native league the elimination check never ran.
  */
 export async function defaultNativeStandings(league: League): Promise<Known<Map<string, ReviewStanding>>> {
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, reason: 'Standings are read from the season forecast in an imported league.' }
+  if (resolveWriteAuthority(league) !== 'NATIVE') return { ok: false, reason: 'Standings are read from the season forecast in an imported league.' }
   const season =
     (await prisma.redraftSeason.findFirst({ where: { leagueId: league.id, season: league.season ?? undefined }, select: { id: true, currentWeek: true, playoffStartWeek: true } })) ??
     (await prisma.redraftSeason.findFirst({ where: { leagueId: league.id }, orderBy: { season: 'desc' }, select: { id: true, currentWeek: true, playoffStartWeek: true } }))

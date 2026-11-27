@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { BrainCircuit, Link2, RefreshCw } from 'lucide-react'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
+import { StoryAiLockNotice, type StoryAiLock } from '@/components/league-story-ai/StoryAiLockNotice'
 
 type StorylineRow = {
   id: string
@@ -51,6 +52,9 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
   const [payload, setPayload] = useState<InsightsPayload | null>(null)
   const [explainByRow, setExplainByRow] = useState<Record<string, string>>({})
   const [explainLoadingId, setExplainLoadingId] = useState<string | null>(null)
+  // Why Chimmy did not write it (commissioner lacks AF Commissioner, or today's cap is used): the fact-built
+  // explanation is still shown, with this notice under it.
+  const [explainLockByRow, setExplainLockByRow] = useState<Record<string, StoryAiLock>>({})
 
   const load = useCallback(async () => {
     if (!leagueId) return
@@ -138,6 +142,7 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
           ...prev,
           [row.id]: data?.narrative ?? 'No relationship explanation available.',
         }))
+        setExplainLockByRow((prev) => ({ ...prev, [row.id]: data?.aiLocked ?? null }))
       } catch {
         setExplainByRow((prev) => ({
           ...prev,
@@ -319,6 +324,13 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
                   <p className="mt-2 border-t border-white/10 pt-2 text-xs text-white/80">
                     {explainByRow[row.id]}
                   </p>
+                )}
+                {explainByRow[row.id] && (
+                  <StoryAiLockNotice
+                    lock={explainLockByRow[row.id]}
+                    featureName="Chimmy relationship explainers"
+                    className="mt-2"
+                  />
                 )}
               </article>
             ))}

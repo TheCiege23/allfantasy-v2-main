@@ -191,9 +191,10 @@ describe('league card shadow badge', () => {
     expect(src).not.toMatch(/league\.importedAt\s*&&\s*!league\.lifecycleState/)
   })
 
-  it('derives the badge from platform, which the list payload always sets', () => {
+  it('derives the badge from platform and settings (a league made official on AllFantasy is not a shadow)', () => {
     const src = read(CARD)
-    expect(src).toMatch(/isShadowLeague\(league\.platform\)/)
+    expect(src).toMatch(/platform: league\.platform, settings: league\.settings \?\? null/)
+    expect(src).toMatch(/isShadowLeague\(authoritySource\)/)
     expect(src).toMatch(/SHADOW/)
   })
 })

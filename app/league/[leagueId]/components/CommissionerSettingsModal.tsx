@@ -529,7 +529,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'draft' ? (
             <DraftSettingsPanel
               draftRow={payload?.settings ?? null}
-              league={payload?.league ?? null}
+              league={payload?.league ? { ...payload.league, settings: payload.league.settings ?? null } : null}
               leagueId={leagueId}
               canEdit={canEditArea('league')}
               save={save}

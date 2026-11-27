@@ -42,14 +42,14 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
       draftDateUtc: { lte: now, gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
       league: { is: { OR: [{ survivorMode: true }, { guillotineMode: true }, { leagueVariant: 'guillotine' }] } },
     },
-    select: { leagueId: true, league: { select: { platform: true } } },
+    select: { leagueId: true, league: { select: { platform: true, settings: true } } },
     orderBy: { draftDateUtc: 'asc' },
     take: 100,
   })
   const summary: ScheduledSurvivorDraftSummary = { scanned: due.length, started: 0, skipped: 0, errors: [] }
   for (const { leagueId, league } of due) {
     try {
-      if (resolveWriteAuthority(league.platform) !== 'NATIVE') {
+      if (resolveWriteAuthority(league) !== 'NATIVE') {
         summary.skipped++
         continue
       }
@@ -124,12 +124,12 @@ export async function warnUnclaimedSeatsBeforeDraft(now: Date = new Date()): Pro
       draftDateUtc: { gt: now, lte: new Date(now.getTime() + SURVIVOR_SEATS_ALERT_LEAD_MS) },
       league: { is: { survivorMode: true } },
     },
-    select: { leagueId: true, draftDateUtc: true, league: { select: { platform: true } } },
+    select: { leagueId: true, draftDateUtc: true, league: { select: { platform: true, settings: true } } },
     take: 100,
   })
   let warned = 0
   for (const { leagueId, draftDateUtc, league } of upcoming) {
-    if (!draftDateUtc || resolveWriteAuthority(league.platform) !== 'NATIVE') continue
+    if (!draftDateUtc || resolveWriteAuthority(league) !== 'NATIVE') continue
     const session = await prisma.draftSession.findFirst({
       where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { status: true, sessionKind: true, sleeperDraftId: true, teamCount: true, rounds: true, slotOrder: true },

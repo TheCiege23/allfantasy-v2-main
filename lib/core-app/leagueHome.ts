@@ -753,7 +753,7 @@ export async function getLeagueHomeData(
    */
   const hubHref = `/core/commissioner?league=${encodeURIComponent(league.id)}`
   const activityNow = new Date()
-  const nativeLeague = resolveWriteAuthority(league.platform) === 'NATIVE'
+  const nativeLeague = resolveWriteAuthority(league) === 'NATIVE'
   const activityStale = viewerIsCommissioner
     ? staleActivityReason({ native: nativeLeague, lastSyncedAt: league.lastSyncedAt, now: activityNow })
     : null

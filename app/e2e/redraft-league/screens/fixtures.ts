@@ -401,3 +401,45 @@ export function guillotineSummaryResponse() {
     config: { eliminationStartWeek: 1, eliminationEndWeek: 11 },
   }
 }
+
+/** `/api/leagues/[id]/week-cards`: the League page's matchups — six games, the viewer's (r-0) first. */
+export function weekCardsResponse(sport: HarnessSport) {
+  const cfg = SPORTS[sport]
+  const played = cfg.week - 1
+  const base = cfg.pts * cfg.slots.length
+  const team = (i: number) => {
+    const wins = Math.max(0, played - Math.round((i * played) / 11))
+    return {
+      rosterId: `r-${i}`, name: MANAGERS[i], avatarUrl: null, record: `${wins}-${played - wins}`,
+      points: i % 4 === 1 ? null : Math.round(base * (0.35 + (i % 5) * 0.06) * 10) / 10,
+      projected: Math.round(base * (1.15 - i * 0.025) * 10) / 10, isYou: i === 0,
+    }
+  }
+  const cards = [0, 2, 4, 6, 8, 10].map((i, n) => {
+    const home = team(i)
+    const away = team(i + 1)
+    const p = home.projected / (home.projected + away.projected)
+    return { id: `g-${n}`, label: null, status: n === 5 ? 'upcoming' : 'live', mine: n === 0, games: n === 1 ? 3 : 1, homeWinProbability: Math.round(p * 100) / 100,
+      home: n === 5 ? { ...home, points: null } : home, away: n === 5 ? { ...away, points: null } : away }
+  })
+  return { season: 2026, week: cfg.week, cards }
+}
+
+/** `/api/app/leagues/[id]/chat/moves`: the League page's activity — a trade, a waiver claim and a free-agent pickup. */
+export function activityResponse(sport: HarnessSport) {
+  const cfg = SPORTS[sport]
+  const pl = (k: number, pos: string, to: string | null = null) => ({ id: `${sport}-act-${k}`, name: name(500 + k * 7), position: pos, team: cfg.teams[k % cfg.teams.length], imageUrl: null, to })
+  const ago = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+  const pos = cfg.slots.filter(s => !['FLEX', 'UTIL', 'G', 'F'].includes(s))
+  return {
+    moves: [
+      { id: 'm1', kind: 'trade', occurredAt: ago(3), teamName: MANAGERS[1], managerName: null, avatarUrl: null, involvedTeams: [MANAGERS[1], MANAGERS[4]],
+        adds: [pl(1, pos[0], MANAGERS[1]), pl(2, pos[1 % pos.length], MANAGERS[4])], drops: [], bid: null, picks: [] },
+      { id: 'm2', kind: 'waiver', occurredAt: ago(20), teamName: MANAGERS[0], managerName: null, avatarUrl: null, involvedTeams: [MANAGERS[0]],
+        adds: [pl(3, pos[2 % pos.length])], drops: [pl(4, pos[2 % pos.length])], bid: 14, picks: [] },
+      { id: 'm3', kind: 'roster_move', occurredAt: ago(30), teamName: MANAGERS[6], managerName: null, avatarUrl: null, involvedTeams: [MANAGERS[6]],
+        adds: [pl(5, pos[3 % pos.length])], drops: [pl(6, pos[0])], bid: null, picks: [] },
+    ],
+    leagues: [],
+  }
+}

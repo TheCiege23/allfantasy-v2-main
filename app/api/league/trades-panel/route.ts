@@ -1104,7 +1104,7 @@ export async function GET(req: NextRequest) {
        * empty here while /core Trades listed every deal. Read from the database only; a failure costs this
        * list, never the panel.
        */
-      resolveWriteAuthority(league.platform) === 'NATIVE'
+      resolveWriteAuthority(league) === 'NATIVE'
         ? Promise.resolve([] as LeagueTradeHistoryItem[])
         : prisma.leagueTeam
             .findFirst({ where: { leagueId, claimedByUserId: userId }, select: { platformUserId: true } })
@@ -1255,7 +1255,7 @@ export async function GET(req: NextRequest) {
     }
 
     const executedTrades =
-      resolveWriteAuthority(league.platform) === 'NATIVE' ? await buildNativeExecutedTrades(leagueId, userId, league.sport ?? undefined) : []
+      resolveWriteAuthority(league) === 'NATIVE' ? await buildNativeExecutedTrades(leagueId, userId, league.sport ?? undefined) : []
 
     return NextResponse.json({
       draft,
@@ -1265,7 +1265,7 @@ export async function GET(req: NextRequest) {
        * An imported league's empty block is a platform we cannot read, not a league with nothing on
        * it, so the tab says which. A native league keeps its plain empty state.
        */
-      tradeBlockNote: resolveWriteAuthority(league.platform) === 'NATIVE' ? null : tradeBlockSupport(platform).note,
+      tradeBlockNote: resolveWriteAuthority(league) === 'NATIVE' ? null : tradeBlockSupport(platform).note,
       activeTrades,
       historyTrades,
       executedTrades,

@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { Zap, BookOpen, ExternalLink } from 'lucide-react'
 import { postWithTokenConfirm } from '@/lib/tokens/clientTokenConfirm'
+import { StoryAiLockNotice, type StoryAiLock } from '@/components/league-story-ai/StoryAiLockNotice'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 
 interface DramaEventItem {
@@ -42,6 +43,7 @@ export function LeagueDramaWidget({
   const [storyEventId, setStoryEventId] = useState<string | null>(null)
   const [storyNarrative, setStoryNarrative] = useState<string | null>(null)
   const [storyLoading, setStoryLoading] = useState<string | null>(null)
+  const [storyLock, setStoryLock] = useState<StoryAiLock>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -90,8 +92,9 @@ export function LeagueDramaWidget({
     }
     setStoryEventId(eventId)
     setStoryNarrative(null)
+    setStoryLock(null)
     setStoryLoading(eventId)
-    // Asks before any token is spent; a decline spends nothing and closes the story.
+    // No longer token-billed (2026-11-27): the commissioner's plan unlocks it. A 409 would still ask first.
     postWithTokenConfirm(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, { eventId })
       .then(async ({ response: r, declined }) => {
         if (declined) return { declined: true as const }
@@ -114,6 +117,7 @@ export function LeagueDramaWidget({
           return
         }
         setStoryNarrative(data?.narrative ?? 'No story available.')
+        setStoryLock(data?.aiLocked ?? null)
         setStoryLoading(null)
       })
       .catch((error) => {
@@ -202,6 +206,9 @@ export function LeagueDramaWidget({
             )}
             {storyEventId === e.id && storyNarrative && !storyLoading && (
               <p className="mt-2 text-[11px] text-[var(--text2)] border-t border-[var(--line)] pt-2">{storyNarrative}</p>
+            )}
+            {storyEventId === e.id && storyNarrative && !storyLoading && (
+              <StoryAiLockNotice lock={storyLock} featureName="Chimmy drama stories" className="mt-2" />
             )}
           </li>
         ))}

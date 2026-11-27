@@ -73,6 +73,7 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
   'collegeProDraftChecklist', // lib/league/collegePro/draftChecklist.ts — the commissioner's ticked offseason steps, per draft year
   'collegeConferenceScope', // lib/college/conferenceScope.ts — which conferences a college league drafts from (commissioner)
   'rookieDraftDone', // lib/dynasty-core/rookieDraftDone.ts — "had this season's rookie draft?", asked at import
+  'switching', // lib/league/switching/switchingLeague.ts — made official on AllFantasy, and which teams switched
 
   // ── Notifications, feed and automation preferences ────────────────────────
   'leagueNotificationPrefs', // NotificationsSettingsPanel settingsMerge

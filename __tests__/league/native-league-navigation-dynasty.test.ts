@@ -40,8 +40,9 @@ describe('native league navigation: Dynasty group', () => {
     expect(groups.map(group => group.id)).toEqual(['league'])
     expect(groups.map(group => group.title)).toEqual(['This league'])
     expect(groups[0].items.map(item => item.label)).toEqual(['Draft', 'Matchup', 'Team', 'League', 'Trade'])
-    // League history (Legacy), once alone under "More tools", is a League sub-tab; League opens on standings.
-    expect(groups[0].items.find(item => item.label === 'League')?.children.map(child => child.label)).toEqual(['Standings & playoffs', 'League history', 'League chat', 'Overview'])
+    // League is one page (owner, 2026-11-27): matchups, standings and activity on the standings id. History is
+    // a link on that page and chat is in the bottom bar, so neither is a sub-tab.
+    expect(groups[0].items.find(item => item.label === 'League')?.children.map(child => child.label)).toEqual(['Standings & playoffs'])
   })
 
   it('labels and titles go through i18n: Spanish', () => {

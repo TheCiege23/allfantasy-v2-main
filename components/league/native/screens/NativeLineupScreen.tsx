@@ -280,7 +280,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [offlineSince, setOfflineSince] = useState<string | null>(null)
   /** A lineup change kept on this device and not yet accepted by the server (lib/pwa/offlineLineupQueue.ts). */
   const [pendingEdit, setPendingEdit] = useState<QueuedLineupEdit | null>(null)
-  const copy =useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
+  const copy =useMemo(() => writeAuthorityCopy('lineup', { platform: league.platform, settings: league.settings ?? null }), [league.platform, league.settings])
   /** Only the newest load may land: switching days quickly must not let an older day's answer win. */
   const loadSeq = useRef(0)
 

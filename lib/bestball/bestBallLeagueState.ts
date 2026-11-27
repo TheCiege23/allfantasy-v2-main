@@ -47,7 +47,8 @@ type BestBallLeagueStateInput = {
   leagueType?: string | null
   leagueVariant?: string | null
   guillotineMode?: boolean | null
-  settings?: unknown
+  /** Required: it also says whether an imported league was made official on AllFantasy (lib/league/switching). */
+  settings: unknown
   bestBallVariant?: string | null
   bbMatchupFormat?: string | null
   bbWaiversEnabled?: boolean | null
@@ -107,7 +108,7 @@ export function resolveBestBallLeagueState(league: BestBallLeagueStateInput | nu
     return { shape: 'guillotine', lineupSetsItself: setsItself, scoringPeriod: 'weekly', transactions: NO_POLICY, competition: 'guillotine' }
   }
   if (isClassicShape(league)) {
-    const native = resolveWriteAuthority(league.platform) === 'NATIVE'
+    const native = resolveWriteAuthority(league) === 'NATIVE'
     return {
       shape: 'classic',
       lineupSetsItself: setsItself,

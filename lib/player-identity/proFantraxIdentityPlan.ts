@@ -1,5 +1,6 @@
 import type { FantraxPlayerRef } from '@/lib/league-import/fantrax/fantraxApi'
 import { fantraxSoccerScoringPosition } from '@/lib/league-import/fantrax/fantraxScoring'
+import { givenNameNicknameOf } from '@/lib/player-match/verifiedNameMatch'
 
 /**
  * Fantrax player id -> our `PlayerIdentityMap` row, for the pro sports a Fantrax dynasty league lives in.
@@ -152,15 +153,9 @@ function nameSplit(value: string): { first: string; last: string } | null {
   return words.length >= 2 ? { first: words[0]!, last: words.slice(1).join('') } : null
 }
 
-/**
- * "Mitch" for "Mitchell", "Matt" for "Matthew": one given name a prefix (3+ letters) of the other.
- * Measured 2026-11-19: Mitch Marner and Matt Coronato were unlinked for exactly this. Used only in a
- * second pass, after the exact name found nothing, and still bound by team, role and one candidate.
- */
-function nicknameOf(a: string, b: string): boolean {
-  const [short, long] = a.length <= b.length ? [a, b] : [b, a]
-  return short.length >= 3 && short !== long && long.startsWith(short)
-}
+/** "Mitch" for "Mitchell" — the rule lives in verifiedNameMatch.ts. Used only in a second pass, after the
+ * exact name found nothing, and still bound by team, role and one candidate. */
+const nicknameOf = givenNameNicknameOf
 
 /**
  * Hockey's second split, used ONLY to break a tie between candidates that already agree on name, team

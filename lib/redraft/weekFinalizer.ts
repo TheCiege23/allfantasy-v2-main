@@ -622,6 +622,7 @@ export async function finalizeRedraftWeek(
           season: season.season,
           week: params.week,
           platform: league?.platform ?? null,
+          settings: league?.settings ?? null,
         })
       : rosterPlayers
     for (const p of sealRows) {

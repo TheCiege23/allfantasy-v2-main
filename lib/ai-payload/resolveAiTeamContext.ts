@@ -247,8 +247,8 @@ async function foreignRosterRefs(args: {
     // `sport` matters: an ESPN baseball/basketball id put through the NFL crosswalk is an NFL player.
     if (rosterIdSpaceOf(args.platform, args.sport) === 'espn') {
       toSleeper = await loadEspnToSleeperMap(ids, args.sport)
-    } else if (bridgeColumnFor(args.platform) && args.sport === 'NFL') {
-      const bridged = await loadBridgedLeagues([{ id: args.leagueId, platform: args.platform }])
+    } else if (bridgeColumnFor(args.platform, args.sport) && args.sport === 'NFL') {
+      const bridged = await loadBridgedLeagues([{ id: args.leagueId, platform: args.platform, sport: args.sport }])
       toSleeper = new Map(bridged.get(args.leagueId)?.map ?? [])
     }
   } catch {

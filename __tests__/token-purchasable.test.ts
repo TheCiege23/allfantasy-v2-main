@@ -35,14 +35,14 @@ const NAMING_ONLY = [
 ]
 
 describe('TOKEN_PURCHASABLE_RULES', () => {
-  it('every listed action is a priced rule, and there are 13 of the table’s 64', () => {
+  it('every listed action is a priced rule, and there are 12 of the table’s 64', () => {
     for (const r of TOKEN_PURCHASABLE_RULES) {
       const entry = getTokenSpendRuleMatrixEntry(r.code)
       expect(entry, r.code).not.toBeNull()
       expect(entry!.tokenCost, r.code).toBeGreaterThan(0)
     }
-    expect(TOKEN_PURCHASABLE_RULES).toHaveLength(13)
-    expect(new Set(TOKEN_PURCHASABLE_RULES.map((r) => r.code)).size).toBe(13)
+    expect(TOKEN_PURCHASABLE_RULES).toHaveLength(12)
+    expect(new Set(TOKEN_PURCHASABLE_RULES.map((r) => r.code)).size).toBe(12)
     expect(listTokenSpendRuleMatrix().length).toBe(64)
   }, 60_000)
 
@@ -66,6 +66,7 @@ describe('TOKEN_PURCHASABLE_RULES', () => {
       'survivor_ai_blindside_risk', // only a developer smoke-test button
       'big_brother_ai_vote_prediction', // no screen calls the route
       'ai_matchup_explanation_single', // the screen cannot confirm the charge
+      'ai_storyline_creation', // league write-ups are the commissioner's plan only since 2026-11-27; tokens no longer buy them
     ]) {
       expect(isTokenPurchasableRule(code), code).toBe(false)
     }
