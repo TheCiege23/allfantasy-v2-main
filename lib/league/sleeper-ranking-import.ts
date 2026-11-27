@@ -1,4 +1,5 @@
 import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
+import { findConvertedLeague } from '@/lib/league/nativeConversionLookup'
 import { LeagueSport, type Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRosters } from '@/lib/sleeper-client'
@@ -26,6 +27,8 @@ export async function upsertSleeperRankingImportLeague(
 ): Promise<{ leagueId: string } | null> {
   const platformLeagueId = leagueData.league_id?.toString()
   if (!platformLeagueId) return null
+  // Switched to AllFantasy in place: never written back as an imported copy (conversion plan, step 5).
+  if (await findConvertedLeague({ platform: 'sleeper', platformLeagueIds: [platformLeagueId] })) return null
 
   const rosters: unknown = await getLeagueRosters(platformLeagueId).catch(() => [] as unknown)
   const mine = Array.isArray(rosters)

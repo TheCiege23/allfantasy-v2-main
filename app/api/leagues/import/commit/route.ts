@@ -106,6 +106,7 @@ import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportN
 import {
   ImportedLeagueAlreadyHereError,
   ImportedLeagueConflictError,
+  ImportedLeagueConvertedError,
   ImportedLeagueTombstonedError,
 } from '@/lib/league-import/ImportedLeagueCommitService'
 import { ImportRunInFlightError, persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
@@ -599,6 +600,12 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
           code: 'IMPORT_IN_PROGRESS',
           hint: 'Wait a moment and try again.',
         },
+        { status: 409 },
+      )
+    }
+    if (error instanceof ImportedLeagueConvertedError) {
+      return NextResponse.json(
+        { error: error.message, code: 'LEAGUE_NOW_ON_ALLFANTASY', leagueId: error.leagueId, hint: 'The commissioner can copy the invite link from the league page.' },
         { status: 409 },
       )
     }

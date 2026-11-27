@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { isLeagueTombstoned } from '@/lib/league-delete/leagueTombstones'
+import { findConvertedLeague } from '@/lib/league/nativeConversionLookup'
 import { runWithConcurrency } from '@/lib/async-utils'
 import { SLEEPER_IMPORT_SPORTS, SLEEPER_SPORT_BY_SUPPORTED } from '@/lib/league-import/sleeper/import-sports'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
@@ -314,6 +315,10 @@ export async function POST(req: NextRequest) {
          * accurate — nothing was written.
          */
         if (await isLeagueTombstoned({ userId, platform: 'sleeper', platformLeagueId })) {
+          return 0
+        }
+        // Switched to AllFantasy in place: never written back as an imported copy (conversion plan, step 5).
+        if (await findConvertedLeague({ platform: 'sleeper', platformLeagueIds: [platformLeagueId] })) {
           return 0
         }
 
