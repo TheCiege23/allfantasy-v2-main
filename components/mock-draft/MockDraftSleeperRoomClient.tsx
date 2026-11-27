@@ -2832,9 +2832,10 @@ export default function MockDraftSleeperRoomClient({
     /** Phone tray panels: a named region with Close, as the mock's tray always had. */
     const trayPanel = (title: string, body: ReactNode) => (
       <div role="region" aria-label={title} className="flex h-full min-h-0 flex-col">
-        <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-2 py-2">
+        {/* py-1 + a 44px Close keeps the header row at its old 52px while the button meets the touch minimum. */}
+        <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-2 py-1">
           <div className="text-sm font-bold text-white">{title}</div>
-          <button type="button" onClick={() => setMobileTab('board')} className="min-h-[36px] px-2 text-white/65">
+          <button type="button" onClick={() => setMobileTab('board')} className="min-h-[44px] min-w-[44px] px-2 text-white/65">
             {mockCopy.close}
           </button>
         </div>

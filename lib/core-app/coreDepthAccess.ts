@@ -27,7 +27,13 @@
  */
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 
-export type CoreDepth = 'player_depth' | 'trade_depth' | 'commissioner_depth' | 'competitive_edge' | 'af_intelligence'
+export type CoreDepth =
+  | 'player_depth'
+  | 'trade_depth'
+  | 'commissioner_depth'
+  | 'competitive_edge'
+  | 'af_intelligence'
+  | 'decision_history'
 
 export type CoreDepthSpec = {
   /** The plan feature that unlocks it — resolved through the entitlement matrix, not by plan name. */
@@ -84,6 +90,17 @@ export const CORE_DEPTH: Record<CoreDepth, CoreDepthSpec> = {
     featureId: 'af_intelligence',
     planName: 'AF Pro',
     label: 'AF projections and AF ADP',
+    upgradePath: '/upgrade?plan=pro',
+  },
+  /*
+   * /core/decisions (2026-11-26): your logged decisions with their trade and outcome grades. AF Pro and
+   * AF Supreme only — `decision_log_history` is a single-plan matrix key, so AF Commissioner alone stays
+   * locked. GET /api/legacy/decision-log refuses the same viewers server-side.
+   */
+  decision_history: {
+    featureId: 'decision_log_history',
+    planName: 'AF Pro',
+    label: 'Your decision history',
     upgradePath: '/upgrade?plan=pro',
   },
 }

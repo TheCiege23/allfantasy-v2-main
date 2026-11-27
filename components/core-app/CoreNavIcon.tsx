@@ -143,6 +143,14 @@ const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
       <path d="M12 13v3.5M9 20h6M10 16.5h4v3.5h-4Z" />
     </>
   ),
+  /* Clipboard with a tick — the calls you made, graded (My decisions, 2026-11-26). */
+  decisions: (
+    <>
+      <rect x="5" y="4.5" width="14" height="16" rx="2" />
+      <path d="M9 4.5V3.5h6v1" />
+      <path d="M8.8 12.8l2.2 2.2 4.4-4.6" />
+    </>
+  ),
   /* Bars, ascending. */
   rankings: (
     <>

@@ -45,7 +45,12 @@ import { DEVY_BASIS_NOTE } from './leagueAssetRules'
 import { belowChartFloorNote } from '@/lib/trade-value/belowChartFloor'
 import { projectedPicksNote } from '@/lib/trade-value/pickSlotProjection'
 import { isPirateLeague } from '@/lib/trade-intel/pirateSteal'
-import { loadTradeMarketOverlay, sleeperIdOfLine } from '@/lib/trade-value-console/tradeMarketOverlay'
+import {
+  moveBoardPlayerValues,
+  loadBoardMarketInputs,
+  loadTradeMarketOverlay,
+  sleeperIdOfLine,
+} from '@/lib/trade-value-console/tradeMarketOverlay'
 import { bookKey } from '@/lib/trade-market/formatMarkets'
 import { lineupProfileFromSettings } from '@/lib/league/lineupProfile'
 import { resolveConceptGrading } from './conceptGradingRegistry'
@@ -541,12 +546,13 @@ export async function createLeagueTradeGrader(args: {
    * One board player's league value on `chart`, through the SAME pricer a traded player goes through —
    * memoised per chart, because the suggestions list prices many swaps on one board.
    */
-  const boardValues = new WeakMap<LeagueTradeChart, Map<string, Promise<{ value: number | null; source: string | null }>>>()
+  type BoardPlayerValue = { value: number | null; source: string | null; sleeperId: string | null; position: string | null; chartPriced: boolean }
+  const boardValues = new WeakMap<LeagueTradeChart, Map<string, Promise<BoardPlayerValue>>>()
   const boardPlayerValue = (
     chart: LeagueTradeChart,
     p: LiveDraftBoardPlayer,
     opts: Parameters<typeof resolveAssets>[1],
-  ): Promise<{ value: number | null; source: string | null }> => {
+  ): Promise<BoardPlayerValue> => {
     let memo = boardValues.get(chart)
     if (!memo) boardValues.set(chart, (memo = new Map()))
     // An id is passed only when it is a Sleeper id this chart carries; a draft-pool id may be another space.
@@ -555,11 +561,21 @@ export async function createLeagueTradeGrader(args: {
     const hit = memo.get(key)
     if (hit) return hit
     const run = resolveAssets([{ kind: 'player', name: p.name, ...(id ? { playerId: id } : {}) }], { ...opts, dataGaps: [] })
-      .then((r) => {
+      .then((r): BoardPlayerValue => {
         const priced = applyChartTePremium(chart, r.priced)[0]
-        return priced && !priced.unpriced ? { value: priced.value, source: priced.source ?? null } : { value: null, source: null }
+        const line = r.lines[0]
+        return priced && !priced.unpriced
+          ? {
+              value: priced.value,
+              source: priced.source ?? null,
+              sleeperId: line ? sleeperIdOfLine(line) : null,
+              position: line?.position ?? p.position ?? null,
+              // The overlay moves only lines the chart priced (`buildTradeMarketOverlay`); so does the board.
+              chartPriced: line?.pricedSource === 'fantasycalc' && !line.unpriced,
+            }
+          : { value: null, source: null, sleeperId: null, position: null, chartPriced: false }
       })
-      .catch(() => ({ value: null, source: null }))
+      .catch((): BoardPlayerValue => ({ value: null, source: null, sleeperId: null, position: null, chartPriced: false }))
     memo.set(key, run)
     return run
   }
@@ -629,11 +645,35 @@ export async function createLeagueTradeGrader(args: {
       let boardNote: string | null = null
       if (boardPicks.length > 0) {
         if (!draftBoard) return { graded: false, reason: DRAFT_BOARD_UNAVAILABLE_REASON, basis: null }
-        const { quotes, order } = await priceDraftBoardPicks({
+        /*
+         * 🛑 THE MARKET MOVES A BOARD PICK THROUGH ITS PLAYERS (owner-approved, 2026-11-26). Each expected
+         * player takes exactly the trade-market and lineup moves his own line would take in this grade (same
+         * gate: `useMarket && tradeMarketInGradesOn()`, same helper, same clamp), BEFORE the window mean and
+         * the order rule — so the pick is the mean of moved values and an earlier pick still never prices
+         * below a later one. The learned PICK market is not applied: it prices rookie slots, not players.
+         */
+        const marketOn = useMarket && tradeMarketInGradesOn()
+        const moved = new Set<string>()
+        const { quotes, order, chartTail } = await priceDraftBoardPicks({
           overalls: boardPicks.map((p) => p.liveBoardOverall),
           board: draftBoard,
           fcPlayers: chart.fcPlayers,
-          valueOf: (players) => Promise.all(players.map((p) => boardPlayerValue(chart, p, baseOpts))),
+          valueOf: async (players) => {
+            const base = await Promise.all(players.map((p) => boardPlayerValue(chart, p, baseOpts)))
+            // A player priced on the AF market book is already at what managers paid: nothing to move, nothing to read.
+            if (!marketOn || !base.some((b) => b.chartPriced && b.value != null)) return base
+            const inputs = await loadBoardMarketInputs(prisma, {
+              effectiveSport: sport,
+              chartIsDynasty: chart.chartIsDynasty,
+              isSuperFlex: chart.isSuperFlex,
+              lineup: lineupProfile,
+              sleeperIds: base.filter((b) => b.chartPriced && b.sleeperId).map((b) => b.sleeperId!),
+            }).catch(() => null)
+            if (!inputs) return base
+            const out = moveBoardPlayerValues(base, inputs)
+            out.moved.forEach((m, i) => m && moved.add(`${base[i]!.sleeperId ?? ''}|${players[i]!.name}`))
+            return out.values
+          },
         })
         for (const p of boardPicks) {
           const q = quotes.get(p.liveBoardOverall)
@@ -643,7 +683,7 @@ export async function createLeagueTradeGrader(args: {
           const q = pick.liveBoardOverall != null ? quotes.get(pick.liveBoardOverall) : null
           return q && q.value != null ? { value: q.value, source: q.source } : null
         }
-        boardNote = draftBoardBasisNote(order)
+        boardNote = draftBoardBasisNote(order, { chartTail, marketMovedPlayers: moved.size })
       }
       const opts = { ...baseOpts, ...(draftBoardQuote ? { draftBoardQuote } : {}) }
       let [g, t] = await Promise.all([resolveAssets(give, opts), resolveAssets(get, opts)])

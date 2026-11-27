@@ -33,7 +33,7 @@ import type { PlayerCardData } from '@/lib/core-app/playerCard'
 
 const BEFORE = new Date('2026-10-01T12:00:00.000Z')
 const AFTER = new Date('2026-10-20T12:00:00.000Z')
-const DEPTHS: CoreDepth[] = ['player_depth', 'trade_depth', 'commissioner_depth', 'competitive_edge', 'af_intelligence']
+const DEPTHS: CoreDepth[] = ['player_depth', 'trade_depth', 'commissioner_depth', 'competitive_edge', 'af_intelligence', 'decision_history']
 
 const locked = (depth: CoreDepth) => decideCoreDepth(depth, { live: true, startsAt: DEFAULT_PAYWALL_STARTS_AT, hasPlan: false })
 const open = (depth: CoreDepth) => decideCoreDepth(depth, { live: true, startsAt: DEFAULT_PAYWALL_STARTS_AT, hasPlan: true })
@@ -94,6 +94,14 @@ describe('the plan mapping, read through the real entitlement matrix', () => {
     for (const plan of ['pro', 'commissioner', 'supreme'] as const) expect(opens([plan], 'af_intelligence'), plan).toBe(true)
     expect(opens(['war_room'], 'af_intelligence')).toBe(false)
     expect(opens([], 'af_intelligence')).toBe(false)
+  })
+
+  it('Decision history (2026-11-26) opens for AF Pro and AF Supreme — never for AF Commissioner alone, Legacy, or nobody', () => {
+    expect(opens(['pro'], 'decision_history')).toBe(true)
+    expect(opens(['supreme'], 'decision_history')).toBe(true)
+    expect(opens(['commissioner'], 'decision_history')).toBe(false)
+    expect(opens(['war_room'], 'decision_history')).toBe(false)
+    expect(opens([], 'decision_history')).toBe(false)
   })
 
   it('Competitive Edge opens for AF Pro AND the War Room plan — which does not get the trade breakdown', () => {

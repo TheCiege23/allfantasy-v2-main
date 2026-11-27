@@ -13,6 +13,7 @@ import {
   type AfMarketRow,
 } from '@/lib/trade-market/afTradeMarketReads'
 import type { TradeConsolePlayerLine, TradeConsoleTradeMarket } from './types'
+import { applyLeagueAdjustments } from '@/lib/trade-value/leagueTradeValue'
 import { bookKey } from '@/lib/trade-market/formatMarkets'
 import { learnedPickAdjustment, learnedPicksOn, loadLearnedTables, type LearnedTables } from '@/lib/trade-market/learnedInGrades'
 
@@ -43,6 +44,67 @@ export function sleeperIdOfLine(l: Pick<TradeConsolePlayerLine, 'enrichmentPlaye
 }
 
 type Adjustments = { give: Array<LeagueValueAdjustment | null>; get: Array<LeagueValueAdjustment | null> }
+
+/**
+ * Pure: the two moves ONE chart-priced player takes — the trade market for his Sleeper id in this book, and
+ * the lineup for his position. `buildTradeMarketOverlay` uses it for every player line, and the grader uses
+ * it for every player on a startup/redraft draft board (`draftBoardPickPricing.ts`), so a board pick moves
+ * through exactly the moves its expected players would take as lines in a deal.
+ */
+export function boardPlayerMarketAdjustments(args: {
+  sleeperId: string | null
+  position: string | null | undefined
+  rows: ReadonlyMap<string, AfMarketRow>
+  book: MarketBook
+  lineup?: LineupProfile | null
+  lineupFactors?: LineupFactorTable | null
+}): { market: LeagueValueAdjustment | null; lineup: LeagueValueAdjustment | null } {
+  const row = args.sleeperId ? args.rows.get(args.sleeperId) : undefined
+  return {
+    market: row ? tradeMarketAdjustment(row, args.book) : null,
+    lineup: lineupAdjustment(args.lineupFactors ?? null, args.lineup ?? null, args.position),
+  }
+}
+
+/**
+ * Pure: board players' values moved as their player lines would be. Only a CHART-priced player moves — one
+ * priced on the AF market book (`source: 'allfantasy'`) is already at what managers paid, exactly as
+ * `buildTradeMarketOverlay` leaves an `allfantasy` line alone. Same product and clamp as a line
+ * (`applyLeagueAdjustments`). `moved[i]` says whether player i moved.
+ */
+export function moveBoardPlayerValues<T extends { value: number | null; sleeperId: string | null; position: string | null; chartPriced: boolean }>(
+  base: readonly T[],
+  inputs: { rows: ReadonlyMap<string, AfMarketRow>; book: MarketBook; lineup?: LineupProfile | null; lineupFactors?: LineupFactorTable | null },
+): { values: T[]; moved: boolean[] } {
+  const moved: boolean[] = []
+  const values = base.map((b) => {
+    if (b.value == null || !b.chartPriced) return moved.push(false), b
+    const moves = boardPlayerMarketAdjustments({ ...inputs, sleeperId: b.sleeperId, position: b.position })
+    const valued = applyLeagueAdjustments(b.value, [moves.market, moves.lineup])
+    if (valued.adjustments.length === 0 || valued.leagueValue == null) return moved.push(false), b
+    moved.push(true)
+    return { ...b, value: valued.leagueValue }
+  })
+  return { values, moved }
+}
+
+/**
+ * Load what `boardPlayerMarketAdjustments` reads, for a set of board players. Null when the market does not
+ * apply to this sport. Read failures leave the board on the bare chart, as they leave a player line.
+ */
+export async function loadBoardMarketInputs(
+  prisma: Parameters<typeof loadAfTradeMarketRows>[0] & Parameters<typeof loadLineupFactors>[0],
+  args: { effectiveSport: string; chartIsDynasty: boolean; isSuperFlex: boolean; lineup?: LineupProfile | null; sleeperIds: readonly string[] },
+): Promise<{ rows: Map<string, AfMarketRow>; book: MarketBook; lineup: LineupProfile | null; lineupFactors: LineupFactorTable | null } | null> {
+  if (!tradeMarketAppliesTo(args)) return null
+  const book = bookForChart(args)
+  const ids = [...new Set(args.sleeperIds.filter(Boolean))]
+  const [rows, lineupFactors] = await Promise.all([
+    ids.length ? loadAfTradeMarketRows(prisma, ids, book).catch(() => new Map<string, AfMarketRow>()) : Promise.resolve(new Map<string, AfMarketRow>()),
+    args.lineup ? loadLineupFactors(prisma).catch(() => null) : Promise.resolve(null),
+  ])
+  return { rows, book, lineup: args.lineup ?? null, lineupFactors }
+}
 
 /** Pure: rows + lineup factors → index-aligned adjustments and the summary shown beside the grade. */
 export function buildTradeMarketOverlay(args: {
@@ -77,8 +139,9 @@ export function buildTradeMarketOverlay(args: {
       if (priced) {
         const id = sleeperIdOfLine(l)
         const row = id ? args.rows.get(id) : undefined
-        if (row) {
-          m = tradeMarketAdjustment(row, args.book)
+        const moves = boardPlayerMarketAdjustments({ sleeperId: id, position: l.position, rows: args.rows, book: args.book, lineup: args.lineup, lineupFactors: args.lineupFactors })
+        if (row && moves.market) {
+          m = moves.market
           lines.push({
             side,
             name: l.name,
@@ -91,7 +154,7 @@ export function buildTradeMarketOverlay(args: {
           })
           if (!latest || row.generatedAt > latest) latest = row.generatedAt
         }
-        u = lineupAdjustment(args.lineupFactors ?? null, args.lineup ?? null, l.position)
+        u = moves.lineup
         if (u) {
           const f = args.lineupFactors!.factors.find((x) => x.position === String(l.position).toUpperCase() && Math.abs(x.factor - u!.factor) < 1e-9)
           lines.push({
@@ -108,7 +171,12 @@ export function buildTradeMarketOverlay(args: {
       }
       market[side].push(m)
       lineup[side].push(u)
-      // A board-priced pick (a startup/redraft draft) is a player's value, not a rookie pick: the pick market does not move it.
+      /*
+       * 🛑 A board-priced pick (a startup/redraft draft) is never moved by the learned PICK market. That market
+       * measures rookie slots ("2026 Pick 1.04"); a board pick is the mean of the players expected there, and
+       * those players already carry their own trade-market moves (`moveBoardPlayerValues`, applied before the
+       * mean). Moving it again by a rookie-slot market would count a second, unrelated market against it.
+       */
       const pickMove = args.learned && l.pricedSource === 'pick' && l.dataSource !== 'draft_board'
         ? learnedPickAdjustment(args.learned, bookKey(args.book), l.name, args.teams ?? null, args.now ?? new Date())
         : null

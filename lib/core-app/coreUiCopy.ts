@@ -43,6 +43,7 @@ const spanish: Record<string, string> = {
   'Season Outlook': 'Proyección de temporada',
   Outlook: 'Proyección',
   'Your career': 'Tu trayectoria',
+  'My decisions': 'Mis decisiones',
   Rankings: 'Clasificaciones',
   Leaderboards: 'Tablas de líderes',
   Portfolio: 'Portafolio',

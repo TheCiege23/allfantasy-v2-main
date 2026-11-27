@@ -13,7 +13,7 @@ import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai
 import { checkAiRateLimit, getCachedResponse, setCachedResponse, buildCacheKey, getAiActionConfig } from '@/lib/ai-protection'
 import { buildHistoricalTradeContext, getDataInfo, calculateTradeConfidence, computeDualModeGrades } from '@/lib/historical-values'
 import { pricePlayer, pricePick, compositeScore, compositeTotal, idpCeilingCompositeBand, isEvidencedPrice, ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
-import { computeLineupDelta, computeValueFairness, type LineupPlayer, type RosterSlots, type LineupDelta } from '@/lib/lineup-optimizer'
+import { computeLineupDelta, type LineupPlayer, type RosterSlots, type LineupDelta } from '@/lib/lineup-optimizer'
 import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converter'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
 import { getTotalIdpStarterSlots, canFieldLegalIdpLineup } from '@/lib/trade-engine/idp-lineup-check'
@@ -30,7 +30,7 @@ import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-logger'
 import { checkBehaviorRules, logRuleViolations } from '@/lib/ai/behavior-rules'
 import { detectTradeLabels, getPositiveLabels, getWarningLabels, TradeAsset } from '@/lib/trade-labels'
-import { fairnessFromGrade, vetoRiskFromGrade } from '@/lib/decision-os/trade/gradeFairness'
+import { fairnessFromGrade, idpCeilingGradeCaveat, vetoRiskFromGrade } from '@/lib/decision-os/trade/gradeFairness'
 import { buildLeagueDecisionContext, summarizeLeagueDecisionContext, LeagueDecisionContext } from '@/lib/league-decision-context'
 import { buildUnifiedTradeContext, type LegacyAssetInput } from '@/lib/trade-engine/unified-context'
 import { computeDataCoverageTier } from '@/lib/trade-engine/trade-decision-context'
@@ -1387,10 +1387,10 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
      * production trades across a plausible range of it moved one of them five grades, from
      * "major overpay" to "clear win", on the same two rosters.
      *
-     * ⚠ THE CONDITION IS A FLIPPED WINNER, NOT A WIDE RANGE. Every IDP trade's number moves
+     * ⚠ THE CONDITION IS A CHANGED LETTER, NOT A WIDE RANGE. Every IDP trade's number moves
      * a little; that is noise a manager cannot act on. What is worth interrupting them for
-     * is the band spanning 50 — the point where the answer to "who wins this" changes
-     * depending on a constant we picked. A trade with defenders on BOTH sides usually will
+     * is a band whose two ends grade differently — the point where the letter on screen
+     * depends on a constant we picked. A trade with defenders on BOTH sides usually will
      * not trip it, and correctly so: the ceiling is a factor common to both sides there, so
      * it cancels out of the ratio almost entirely.
      */
@@ -1400,33 +1400,10 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
       // Composite-scale offsets, per `idpCeilingCompositeBand`'s `extra` — so they convert too.
       { received: faabValue(data.receiver.gives_faab), gave: faabValue(data.sender.gives_faab) },
     )
-    let idpCeilingCaveat: {
-      lowFairness: number
-      highFairness: number
-      flipsWinner: boolean
-      note: string
-    } | null = null
-    // ⚠ Only beside a real grade: a withheld grade has no verdict for the defender rate to flip.
-    if (idpCeilingBand && canonicalFairness.graded) {
-      const lowFairness = computeValueFairness(idpCeilingBand.low.received, idpCeilingBand.low.gave)
-      const highFairness = computeValueFairness(idpCeilingBand.high.received, idpCeilingBand.high.gave)
-      const lo = Math.min(lowFairness, highFairness)
-      const hi = Math.max(lowFairness, highFairness)
-      const flipsWinner = lo < 50 && hi > 50
-      if (flipsWinner) {
-        idpCeilingCaveat = {
-          lowFairness,
-          highFairness,
-          flipsWinner,
-          note:
-            'This trade sends defenders one way and offence the other, so the verdict rests on how ' +
-            'much a defender is worth against an offensive player — a rate no market publishes and ' +
-            'that we set ourselves. Move that rate within a defensible range and this trade scores ' +
-            `anywhere from ${lo} to ${hi}, which changes who it favours. Treat it as close, and ` +
-            'weigh what your lineup actually needs.',
-        }
-      }
-    }
+    // ⚠ On the GRADE's scale (2026-11-26): both ends read as value gaps → N/100 and letters by the
+    // grade's own helpers, and only a band that changes the letter is reported — never beside a
+    // withheld grade. It used to be a range of the old 50-is-even composite fairness gated on crossing 50.
+    const idpCeilingCaveat = idpCeilingGradeCaveat(idpCeilingBand, canonicalFairness)
 
     const tradeLabels = detectTradeLabels({
       givenAssets: senderGivenAssets,

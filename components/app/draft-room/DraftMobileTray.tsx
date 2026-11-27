@@ -106,7 +106,7 @@ export function DraftMobileTray({
     const measure = () => {
       const chrome = chromeRef.current?.offsetHeight ?? 0
       // Leave a sliver of board above a full tray so the sheet still reads as a sheet.
-      const handle = handleRef.current?.offsetHeight ?? 32
+      const handle = handleRef.current?.offsetHeight ?? 44
       const full = layout.clientHeight - chrome - handle - 8
       /*
        * ⚠ ZERO MEANS "NOT LAID OUT", NOT "NO ROOM". Mobile layouts are hidden at desktop widths, so
@@ -215,7 +215,12 @@ export function DraftMobileTray({
             settle(stepTraySnap(snap, 'down'))
           }
         }}
-        className="flex min-h-[28px] shrink-0 cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing"
+        /*
+          ⚠ THE HIT AREA IS 44px TALL, THE GRABBER IS NOT. It was a 28px-min box (32px rendered) — under
+          the 44×44 touch minimum, on the control a phone drafter reaches for most. The row is padded
+          to 44 and spans the tray's width; the visible bar stays the 40×4 pill below.
+        */
+        className="flex min-h-[44px] w-full shrink-0 cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing"
       >
         <span className="h-1 w-10 rounded-full bg-white/30" aria-hidden />
       </div>

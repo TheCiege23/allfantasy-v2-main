@@ -230,9 +230,15 @@ describe('the /trade-evaluator page shows only the receipt beside its letter', (
     ['composite fairness', /fairnessScore:\s*null,/],
     ['composite confidence', /confidencePct:\s*null,/],
     ['acceptance drivers', /drivers:\s*\[\],/],
-    ['the IDP fairness range', /idpCeilingCaveat:\s*null,/],
   ])('blanks %s', (_what, shape) => {
     expect(map).toMatch(shape)
+  })
+
+  // The IDP ceiling caveat was blanked here while it was on the old composite scale. Since 2026-11-26
+  // it is in the grade's own letters, and is mapped only beside the real grade it was computed for.
+  it('maps the IDP ceiling caveat only beside the matching real grade', () => {
+    expect(map).toMatch(/caveat\.gradeLetter === panel\.senderGrade/)
+    expect(map).toMatch(/!panel\.gradeWithheld/)
   })
 
   it('never derives a verdict from acceptance odds, and keeps no historical letter scale', () => {
