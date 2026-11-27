@@ -1,6 +1,11 @@
 /**
- * One gate for Chimmy's league WRITE-UPS: the Hall of Fame "why this matters", the league story, and the
- * rivalry explainer.
+ * One gate for Chimmy's league WRITE-UPS: the Hall of Fame "why this matters", the league story, the
+ * rivalry explainer, the relationship-insights explainer, the League Intelligence Graph insight, and the
+ * drama "tell me the story" narration, and the playoff forecast summary (owner approved 2026-11-27).
+ *
+ * The last three joined on the owner's 2026-11-27 follow-up decision ("the remaining ungated league AI, same
+ * rule"): relationship explain and graph insight had no plan and no cap; drama was gated per CALLER with a
+ * token fallback, so a token purchase could buy model calls for a free commissioner's league.
  *
  * 🛑 OWNER'S DECISION (2026-11-27), AFTER THE GATING AUDIT: these routes had no plan check and no daily cap,
  * so every click was a model call paid for by nobody. Now:
@@ -31,13 +36,26 @@ import { buildFeatureUpgradePath } from '@/lib/subscription/feature-access'
 
 export const LEAGUE_STORY_AI_FEATURE = 'storyline_creation' as const
 
-export type LeagueStoryAiKind = 'hall_of_fame' | 'league_story' | 'rivalry'
+export type LeagueStoryAiKind =
+  | 'hall_of_fame'
+  | 'league_story'
+  | 'rivalry'
+  | 'relationship_explain'
+  | 'graph_insight'
+  | 'drama'
+  | 'forecast_summary'
 
 /** Model write-ups per league per UTC day. Tune here and nowhere else. */
 export const LEAGUE_STORY_AI_DAILY_LIMITS: Readonly<Record<LeagueStoryAiKind, number>> = {
   hall_of_fame: 5,
   league_story: 10,
   rivalry: 10,
+  relationship_explain: 10,
+  // One allowance for every graph-insight type (summary, rivalry, manager, timeline, unified): each is the
+  // same three-model consensus call.
+  graph_insight: 20,
+  drama: 10,
+  forecast_summary: 10,
 }
 
 const COUNTER_PROVIDER = 'league_story_ai'
@@ -48,6 +66,11 @@ const LABELS: Record<LeagueStoryAiKind, Record<Lang, string>> = {
   hall_of_fame: { en: 'Hall of Fame write-ups', es: 'textos del Salón de la Fama' },
   league_story: { en: 'league story write-ups', es: 'relatos de la liga' },
   rivalry: { en: 'rivalry write-ups', es: 'textos de rivalidades' },
+  // Spanish labels are masculine plurals on purpose: the copy below says "Los …" / "los …".
+  relationship_explain: { en: 'relationship explainers', es: 'textos sobre las relaciones de la liga' },
+  graph_insight: { en: 'league graph insights', es: 'análisis del grafo de la liga' },
+  drama: { en: 'drama stories', es: 'relatos del drama de la liga' },
+  forecast_summary: { en: 'playoff forecast summaries', es: 'resúmenes del pronóstico de playoffs' },
 }
 
 export type LeagueStoryAiGateOutcome =

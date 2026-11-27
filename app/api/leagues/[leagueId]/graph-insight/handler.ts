@@ -1,11 +1,20 @@
 /**
  * AI explanation of the League Intelligence Graph.
  * DeepSeek: metrics/interpretation. Grok: momentum/storyline. OpenAI: readable summary.
+ *
+ * 🛑 AF COMMISSIONER FOR THE WHOLE LEAGUE (owner, 2026-11-27). Every insight type (summary, rivalry,
+ * manager, timeline, unified) is the same three-model consensus call, so every type is gated: it runs only
+ * when the league's COMMISSIONER holds AF Commissioner or AF Supreme, at most
+ * LEAGUE_STORY_AI_DAILY_LIMITS.graph_insight times a league a day (lib/league-story-ai/leagueStoryAiGate.ts).
+ * Locked or capped, the fact-built graph summary is served with `aiLocked` and no model is called.
+ *
+ * Membership is checked too: this used to accept any signed-in user for any league id, which would let an
+ * outsider spend an entitled league's daily allowance.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireLeagueApiAccess } from "@/lib/api/require-league-access";
+import { checkLeagueStoryAiGate } from "@/lib/league-story-ai/leagueStoryAiGate";
 import {
   buildLeagueRelationshipProfile,
   normalizeSportForGraph,
@@ -79,17 +88,22 @@ export async function POST(
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
   try {
-    const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null;
-    const sessionUserId = session?.user?.id;
-    if (!sessionUserId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const { leagueId } = await ctx.params;
     if (!leagueId) {
       return NextResponse.json({ error: "Missing leagueId" }, { status: 400 });
     }
-    let body: { type?: InsightType; season?: number | null; sport?: string | null; focusEntityId?: string } = {};
+    // 401 signed out, 404 no such league, 403 not a member.
+    const access = await requireLeagueApiAccess(leagueId);
+    if (!access.ok) return access.response;
+    const sessionUserId = access.userId;
+
+    let body: {
+      type?: InsightType;
+      season?: number | null;
+      sport?: string | null;
+      focusEntityId?: string;
+      lang?: unknown;
+    } = {};
     try {
       body = await req.json().catch(() => ({}));
     } catch {}
@@ -153,11 +167,15 @@ export async function POST(
         `League graph insight request. ${focusNote} Explain key rivalries, relationship clusters, and power shifts with deterministic evidence only.`,
     })
 
-    const orchestration = await runUnifiedOrchestration({
-      envelope,
-      mode: "consensus",
-      options: { timeoutMs: 20_000, maxRetries: 1 },
-    })
+    // Locked or capped → the fact-built summary below, no model call.
+    const aiGate = await checkLeagueStoryAiGate({ leagueId: access.leagueId, kind: "graph_insight", lang: body.lang });
+    const orchestration = aiGate.ok
+      ? await runUnifiedOrchestration({
+          envelope,
+          mode: "consensus",
+          options: { timeoutMs: 20_000, maxRetries: 1 },
+        })
+      : null
 
     let metricsInterpretation = "";
     let momentumStoryline = "";
@@ -173,7 +191,7 @@ export async function POST(
       | undefined
     let factGuardWarnings: string[] | undefined
 
-    if (orchestration.ok) {
+    if (orchestration?.ok) {
       const formatted = formatToolResult({
         toolKey: "rivalries",
         primaryAnswer:
@@ -217,6 +235,8 @@ export async function POST(
       sections,
       factGuardWarnings,
       generatedAt: new Date().toISOString(),
+      source: orchestration?.ok ? "ai" : "template",
+      aiLocked: aiGate.ok ? null : aiGate.body,
       unifiedStorylineCount:
         Array.isArray((unifiedContext?.payload as { storylines?: unknown[] } | undefined)?.storylines)
           ? ((unifiedContext?.payload as { storylines?: unknown[] }).storylines?.length ?? 0)

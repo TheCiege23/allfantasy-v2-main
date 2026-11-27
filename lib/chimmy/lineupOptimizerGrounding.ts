@@ -192,7 +192,7 @@ export async function buildLineupOptimization(
    */
   const provider = world.provenance?.provider
   if (isForeignIdSpace(provider, espnSportOf(provider, world.league.sport))) {
-    if (!bridgeColumnFor(provider) || roster.playerIds.length === 0) {
+    if (!bridgeColumnFor(provider, world.league.sport) || roster.playerIds.length === 0) {
       return unresolved('roster_ids_unreadable', `${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
     }
     const activeIds = activePlayerIds(roster)

@@ -12,9 +12,10 @@ export interface DramaNarrativeResult {
 }
 
 /**
- * Produce a short narrative for the drama event. Default: template-based; can be wired to AI later.
+ * The fact-built narrative: the event's own headline, summary, managers and score, no model. Served on its
+ * own when the league's AI write-ups are locked or capped (lib/league-story-ai/leagueStoryAiGate.ts).
  */
-function buildTemplateNarrative(event: DramaEventView): DramaNarrativeResult {
+export function buildTemplateNarrative(event: DramaEventView): DramaNarrativeResult {
   const parts: string[] = []
   parts.push(event.headline)
   if (event.summary) parts.push(event.summary)

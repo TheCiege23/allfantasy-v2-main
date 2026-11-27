@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, BookOpen } from 'lucide-react'
 import { postWithTokenConfirm, responseErrorMessage } from '@/lib/tokens/clientTokenConfirm'
+import { StoryAiLockNotice, type StoryAiLock } from '@/components/league-story-ai/StoryAiLockNotice'
 
 interface DramaEventDetail {
   id: string
@@ -27,6 +28,7 @@ export default function DramaEventDetailPage() {
   const [event, setEvent] = useState<DramaEventDetail | null>(null)
   const [narrative, setNarrative] = useState<string | null>(null)
   const [narrativeLoading, setNarrativeLoading] = useState(false)
+  const [narrativeLock, setNarrativeLock] = useState<StoryAiLock>(null)
   const [rivalryResolving, setRivalryResolving] = useState(false)
   const [rivalryError, setRivalryError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -49,8 +51,9 @@ export default function DramaEventDetailPage() {
   const tellStory = () => {
     if (!leagueId || !eventId) return
     setNarrative(null)
+    setNarrativeLock(null)
     setNarrativeLoading(true)
-    // Asks before any token is spent; a decline spends nothing and shows nothing.
+    // No longer token-billed (2026-11-27): the commissioner's plan unlocks it. A 409 would still ask first.
     postWithTokenConfirm(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, { eventId })
       .then(async ({ response, declined }) => {
         if (declined) return
@@ -60,6 +63,8 @@ export default function DramaEventDetailPage() {
         }
         const data = await response.json().catch(() => ({}))
         setNarrative(data?.narrative ?? 'No story available.')
+        // The fact-built story is shown either way; `aiLocked` says why Chimmy did not write it.
+        setNarrativeLock(data?.aiLocked ?? null)
       })
       .catch(() => setNarrative('Could not load story.'))
       .finally(() => setNarrativeLoading(false))
@@ -216,6 +221,7 @@ export default function DramaEventDetailPage() {
             <p className="text-sm text-white/80 leading-relaxed">{narrative}</p>
           </div>
         )}
+        {narrative && <StoryAiLockNotice lock={narrativeLock} featureName="Chimmy drama stories" />}
       </div>
     </div>
   )

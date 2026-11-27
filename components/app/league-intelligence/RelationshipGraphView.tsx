@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { StoryAiLockNotice, type StoryAiLock } from "@/components/league-story-ai/StoryAiLockNotice";
 
 type MapData = {
   leagueId: string;
@@ -40,6 +41,8 @@ export function RelationshipGraphView({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<SelectedEdge | null>(null);
   const [relationshipInsight, setRelationshipInsight] = useState<string | null>(null);
+  // Set when Chimmy did not write the explanation (plan or daily cap); the fact-built summary is shown instead.
+  const [relationshipInsightLock, setRelationshipInsightLock] = useState<StoryAiLock>(null);
   const [insightLoading, setInsightLoading] = useState(false);
 
   const load = useCallback((options?: { rebuild?: boolean }) => {
@@ -96,6 +99,7 @@ export function RelationshipGraphView({
     if (!selectedEdgeRecord) return;
     setInsightLoading(true);
     setRelationshipInsight(null);
+    setRelationshipInsightLock(null);
     try {
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/graph-insight`, {
         method: "POST",
@@ -109,6 +113,7 @@ export function RelationshipGraphView({
       });
       if (!res.ok) throw new Error("Failed to explain relationship");
       const json = await res.json();
+      setRelationshipInsightLock(json?.aiLocked ?? null);
       setRelationshipInsight(
         json?.readableSummary ??
           json?.metricsInterpretation ??
@@ -140,6 +145,7 @@ export function RelationshipGraphView({
 
   const openRivalryContext = async () => {
     if (!selectedEdgeRecord || selectedEdgeRecord.edgeType !== "RIVAL_OF") return;
+    setRelationshipInsightLock(null);
     const sourceEdge = data?.edges.find(
       (edge) =>
         edge.edgeType === selectedEdgeRecord.edgeType &&
@@ -239,6 +245,7 @@ export function RelationshipGraphView({
                       setSelectedNodeId(r.nodeA);
                       setSelectedEdge(null);
                       setRelationshipInsight(null);
+                      setRelationshipInsightLock(null);
                     }}
                     className="text-cyan-300 hover:underline"
                   >
@@ -251,6 +258,7 @@ export function RelationshipGraphView({
                       setSelectedNodeId(r.nodeB);
                       setSelectedEdge(null);
                       setRelationshipInsight(null);
+                      setRelationshipInsightLock(null);
                     }}
                     className="text-cyan-300 hover:underline"
                   >
@@ -268,6 +276,7 @@ export function RelationshipGraphView({
                       });
                       setSelectedNodeId(null);
                       setRelationshipInsight(null);
+                      setRelationshipInsightLock(null);
                     }}
                     className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/80 hover:bg-white/10"
                   >
@@ -301,6 +310,7 @@ export function RelationshipGraphView({
                       setSelectedNodeId(t.fromNodeId);
                       setSelectedEdge(null);
                       setRelationshipInsight(null);
+                      setRelationshipInsightLock(null);
                     }}
                     className="text-cyan-300 hover:underline"
                   >
@@ -313,6 +323,7 @@ export function RelationshipGraphView({
                       setSelectedNodeId(t.toNodeId);
                       setSelectedEdge(null);
                       setRelationshipInsight(null);
+                      setRelationshipInsightLock(null);
                     }}
                     className="text-cyan-300 hover:underline"
                   >
@@ -330,6 +341,7 @@ export function RelationshipGraphView({
                       });
                       setSelectedNodeId(null);
                       setRelationshipInsight(null);
+                      setRelationshipInsightLock(null);
                     }}
                     className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/80 hover:bg-white/10"
                   >
@@ -383,6 +395,7 @@ export function RelationshipGraphView({
               onClick={() => {
                 setSelectedEdge(null);
                 setRelationshipInsight(null);
+                setRelationshipInsightLock(null);
               }}
               className="rounded border border-white/20 bg-white/5 px-2 py-1 text-xs text-white/80 hover:bg-white/10"
             >
@@ -416,6 +429,13 @@ export function RelationshipGraphView({
           </div>
           {relationshipInsight && (
             <p className="mt-3 text-sm text-white/90">{relationshipInsight}</p>
+          )}
+          {relationshipInsight && (
+            <StoryAiLockNotice
+              lock={relationshipInsightLock}
+              featureName="Chimmy league graph insights"
+              className="mt-2"
+            />
           )}
         </div>
       )}
