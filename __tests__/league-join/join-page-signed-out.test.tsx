@@ -143,3 +143,15 @@ describe('counting invite opens and joins', () => {
     expect(joinCallbackUrl('ABC', '<x>')).toBe('/join?code=ABC&go=1')
   })
 })
+
+describe('seat-specific invite links (step 4b-3)', () => {
+  it('keep the team through signing in, and drop anything that does not look like a roster id', async () => {
+    const { joinCallbackUrl, inviteSeat, seatInviteUrl } = await import('@/lib/league-join/joinLanding')
+    expect(joinCallbackUrl('ABC', null, 'cm1x2y3z4a5b6c7d8')).toBe('/join?code=ABC&go=1&team=cm1x2y3z4a5b6c7d8')
+    expect(joinCallbackUrl('ABC', 'recap', 'cm1x2y3z4a5b6c7d8')).toBe('/join?code=ABC&go=1&src=recap&team=cm1x2y3z4a5b6c7d8')
+    expect(joinCallbackUrl('ABC', null, '<script>')).toBe('/join?code=ABC&go=1')
+    expect(inviteSeat('short')).toBeNull()
+    expect(seatInviteUrl('https://allfantasy.ai/join?code=ABC', 'r-1234567')).toBe('https://allfantasy.ai/join?code=ABC&team=r-1234567')
+    expect(seatInviteUrl('https://allfantasy.ai/join/tok', 'r-1234567')).toBe('https://allfantasy.ai/join/tok?team=r-1234567')
+  })
+})
