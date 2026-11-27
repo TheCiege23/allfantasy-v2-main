@@ -316,6 +316,34 @@ export interface AfBaselineProjection {
  * `PlayerIdentityMap.rollingInsightsId`. An RI id claimed by more than one identity is dropped —
  * picking one would hand a player a stranger's projection.
  */
+/**
+ * College football season projections, by CFBD athlete id.
+ *
+ * The NCAAF engine keys `AFProjectionSnapshot.playerId` on the CFBD athlete id itself (`5079574`), not
+ * on a `PlayerIdentityMap` id, so the Rolling Insights join above finds none of them (measured
+ * 2026-11-27: 0 of 17,160). Read by the CFBD id the pool row carries; 3,609 of CFBD's 7,158 pool rows
+ * have one. Positive values only, newest season and computation first.
+ */
+export async function loadAfBaselineProjectionsByCfbdIds(args: {
+  cfbdIds: string[]
+  season?: number | null
+}): Promise<Map<string, AfBaselineProjection>> {
+  const out = new Map<string, AfBaselineProjection>()
+  const ids = [...new Set(args.cfbdIds.map((id) => String(id ?? '').trim()).filter((id) => /^\d+$/.test(id)))]
+  if (ids.length === 0) return out
+  const rows = await prisma.aFProjectionSnapshot.findMany({
+    where: { sport: 'NCAAF', week: null, playerId: { in: ids }, ...(args.season != null ? { season: { lte: args.season } } : {}) },
+    orderBy: [{ season: 'desc' }, { computedAt: 'desc' }],
+    select: { playerId: true, afProjection: true, season: true, computedAt: true },
+  })
+  for (const row of rows) {
+    if (out.has(row.playerId)) continue
+    if (!Number.isFinite(row.afProjection) || row.afProjection <= 0) continue
+    out.set(row.playerId, { afProjection: row.afProjection, season: row.season, computedAt: row.computedAt })
+  }
+  return out
+}
+
 export async function loadAfBaselineProjectionsByRollingInsightsIds(args: {
   sport: string
   rollingInsightsIds: string[]

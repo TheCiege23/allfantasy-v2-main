@@ -90,9 +90,19 @@ import {
   type DraftSeasonStatLine,
 } from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
 import {
+  loadAfBaselineProjectionsByCfbdIds,
   loadAfBaselineProjectionsByRollingInsightsIds,
   type AfBaselineProjection,
 } from '@/lib/af-projections/readAfProjections'
+
+/** The CFBD athlete id a CFBD pool row carries, or null: the key college football projections are filed under. */
+export function cfbdIdOfPoolRow(
+  row: { external_source_id?: string | null; metadata?: Record<string, unknown> | null } | null | undefined,
+): string | null {
+  if (!row || String(row.metadata?.source ?? '').trim().toLowerCase() !== 'cfbd') return null
+  const id = String(row.external_source_id ?? '').trim()
+  return /^\d+$/.test(id) ? id : null
+}
 import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
@@ -2231,6 +2241,24 @@ async function buildResolvedDraftPoolForLeague(
    * failure leaves the column empty, never the draft broken.
    */
   let afProjectionsByRiId: Map<string, AfBaselineProjection> | null = null
+  /*
+   * College football projections, by the CFBD id on a CFBD pool row (`loadAfBaselineProjectionsByCfbdIds`).
+   * Without them nothing ranked a college football pool — no ADP feed, no AI ADP — so it listed and
+   * auto-picked by name (2026-11-27).
+   */
+  let afProjectionsByCfbdId: Map<string, AfBaselineProjection> | null = null
+  if (sport === 'NCAAF' && poolRows.length > 0) {
+    afProjectionsByCfbdId = await loadAfBaselineProjectionsByCfbdIds({
+      cfbdIds: poolRows.flatMap((p) => {
+        const id = cfbdIdOfPoolRow(p)
+        return id ? [id] : []
+      }),
+      season: Number.isInteger(league?.season) ? Number(league?.season) : null,
+    }).catch((err) => {
+      console.warn('[draft-pool] NCAAF AF projections unavailable:', err instanceof Error ? err.message : String(err))
+      return null
+    })
+  }
   if ((sport === 'MLB' || sport === 'NHL') && poolRows.length > 0) {
     const perfAfProj = perfStart('11c. AF projections (MLB/NHL)')
     afProjectionsByRiId = await loadAfBaselineProjectionsByRollingInsightsIds({
@@ -2783,7 +2811,9 @@ async function buildResolvedDraftPoolForLeague(
       seasonStatLine: sport === 'MLB' || sport === 'NHL' ? (storedSeason?.seasonStatLine ?? sprAug?.seasonStatLine ?? null) : null,
       afProjectionPerGame: sport === 'NCAAB'
         ? (ncaabLine?.projectedPointsPerGame ?? null)
-        : (afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null),
+        : sport === 'NCAAF'
+          ? (afProjectionsByCfbdId?.get(cfbdIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null)
+          : (afProjectionsByRiId?.get(rollingInsightsIdOfPoolRow(poolMatch) ?? '')?.afProjection ?? null),
       lifetimeValue:
         resolvedAnalytics?.lifetimeValue ??
         analytics?.lifetimeValue ??

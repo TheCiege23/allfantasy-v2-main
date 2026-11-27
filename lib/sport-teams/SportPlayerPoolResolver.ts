@@ -117,10 +117,44 @@ function expandNflIdpPositions(positions: string[]): string[] {
   return [...expanded]
 }
 
-function normalizePoolPosition(sport: string, position: string | null): string {
+/**
+ * 🛑 ROLLING INSIGHTS SENDS SOCCER POSITIONS AS WORDS, AND THE DRAFT ONLY ACCEPTS GKP / DEF / MID / FWD.
+ * Measured on production 2026-11-27: of 4,331 Rolling Insights soccer players, 1,396 were "Defender",
+ * 1,305 "Midfielder", 1,098 "Forward", 531 "Goalkeeper" and ONE "FWD". The draft's position filter
+ * dropped every word-labelled row, so a new soccer league's pool held exactly one player (Viktor
+ * Gyökeres, the one "FWD"). Only Rolling Insights rows reach a soccer pool (`scorableSoccerRowsOnly`).
+ */
+export const SOCCER_POSITION_WORDS: Readonly<Record<string, 'GKP' | 'DEF' | 'MID' | 'FWD'>> = {
+  GK: 'GKP', GOALKEEPER: 'GKP', KEEPER: 'GKP',
+  DEFENDER: 'DEF', DEFENCE: 'DEF', DEFENSE: 'DEF',
+  MIDFIELDER: 'MID', MIDFIELD: 'MID',
+  FORWARD: 'FWD', ATTACKER: 'FWD', STRIKER: 'FWD',
+}
+
+/**
+ * 🛑 COLLEGE FOOTBALL: A ROW ITS OWN SOURCE MARKS INACTIVE IS A FORMER PLAYER, NOT A DRAFTABLE ONE.
+ * Rolling Insights keeps every man who ever played as a row: measured on production 2026-11-27, 54,189
+ * of its 69,338 NCAAF rows were "INACT" (14,991 "ACT"), beside CFBD's 7,158 current ones. The pool
+ * query reads the table in NAME order and cuts at its limit, so a new college football league's pool
+ * was 1,547 rows of which 462 started with "A", with a man listed once per school he ever played for
+ * (A.J. Barner at Indiana and Michigan — now in the NFL) and none of them ranked. College basketball
+ * already drops departed players (ncaabPlayerPoolRules.ts); this is football's equivalent. Only a
+ * status the source itself wrote is read: a row with no status stays.
+ */
+export function isFormerCollegeFootballRow(sport: string, row: { source?: string | null; status?: string | null }): boolean {
+  if (String(sport).trim().toUpperCase() !== 'NCAAF') return false
+  const source = String(row.source ?? '').trim().toLowerCase()
+  const status = String(row.status ?? '').trim().toUpperCase()
+  if (!status) return false
+  if (source === 'rolling_insights') return status === 'INACT'
+  if (source === 'thesportsdb') return status !== 'ACTIVE'
+  return false
+}
+
+export function normalizePoolPosition(sport: string, position: string | null): string {
   const raw = String(position ?? '').trim().toUpperCase()
   if (!raw) return ''
-  if (sport === 'SOCCER' && raw === 'GK') return 'GKP'
+  if (sport === 'SOCCER') return SOCCER_POSITION_WORDS[raw] ?? raw
   if (sport === 'NFL') return normalizeNflIdpPosition(raw)
   return raw
 }
@@ -555,7 +589,7 @@ async function buildPlayerPoolRecords(
   )
   // Sleeper's placeholder entries ("Duplicate Player", "Player Invalid") are not players; they
   // never reach a draft pool or waiver wire. After the cache, so the cached set stays the table.
-  const rows = cachedRows.filter((row) => !isSleeperPlaceholderName(row.name))
+  const rows = cachedRows.filter((row) => !isSleeperPlaceholderName(row.name) && !isFormerCollegeFootballRow(sport, row))
 
   // De-dupe by (name, position, team), preferring rows that have real image URLs
   // and explicit sleeper IDs. Some imports write duplicate players across sources,
