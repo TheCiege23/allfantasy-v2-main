@@ -24,6 +24,9 @@ import { captureRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnaps
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { safeDisplayName } from '@/lib/chat-notifications/displayName'
 import { tradeParticipantRosterIds, uninvolvedTradeParticipants } from '@/lib/redraft/tradeParticipants'
+import { tradeTeamsNotOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer'
+import { TRADE_TEAM_NOT_SWITCHED_CODE, tradeTeamNotSwitchedMessage } from '@/lib/league/switching/switchingLeague'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
 
 /**
  * 🛑 THE RECEIVER OF A REDRAFT TRADE OFFER WAS NEVER TOLD. This route wrote the proposal, its value
@@ -202,6 +205,22 @@ export async function createRedraftTradeProposal(input: CreateRedraftTradePropos
     return refuse(
       { error: 'Every team in a multi-team trade must send or receive at least one asset.', code: 'TEAM_NOT_IN_TRADE' },
       { status: 400 },
+    )
+  }
+
+  /*
+   * A league made official on AllFantasy trades here only between teams that switched. A team still on the
+   * old platform has its roster copied in from there, so a trade made here would be undone by the next copy.
+   */
+  const notSwitched = await tradeTeamsNotOnAllFantasy(leagueId, participantRosterIds)
+  if (notSwitched.length > 0) {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
+    return refuse(
+      {
+        error: tradeTeamNotSwitchedMessage(notSwitched.map((t) => t.name), sourcePlatformLabel(league?.platform)),
+        code: TRADE_TEAM_NOT_SWITCHED_CODE,
+      },
+      { status: 409 },
     )
   }
 

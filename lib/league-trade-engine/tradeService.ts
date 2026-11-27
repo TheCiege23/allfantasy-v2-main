@@ -56,6 +56,9 @@ import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/s
 import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
 import { ensureSeasonRosterLinksBeforeMove } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import { CHIMMY_TRADES_OFF_MESSAGE, CHIMMY_TWO_TEAM_MESSAGE, chimmyRunTeams, resolveChimmyActor } from './chimmyActor'
+import { leagueTradeTeamsNotOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer'
+import { TRADE_TEAM_NOT_SWITCHED_CODE, tradeTeamNotSwitchedMessage } from '@/lib/league/switching/switchingLeague'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
 
 /**
  * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
@@ -527,6 +530,20 @@ function lifecycleGateThrowable(err: { error: string; code: string; status: numb
  * (deadline chosen by the requester). The week is resolved here, from the league's own season —
  * see lib/trade-deadline/tradeDeadlineWindow.ts.
  */
+/**
+ * A league made official on AllFantasy trades here only between teams that switched (lib/league/switching):
+ * a team still on the old platform has its roster copied in from there, so a trade made here would be undone
+ * by the next copy. Checked when the offer is made and again when it is processed.
+ */
+async function assertTradeTeamsSwitched(leagueId: string, platform: string | null | undefined, rosterIds: string[]): Promise<void> {
+  const notSwitched = await leagueTradeTeamsNotOnAllFantasy(leagueId, rosterIds)
+  if (notSwitched.length === 0) return
+  throw new CodedTradeError(
+    TRADE_TEAM_NOT_SWITCHED_CODE,
+    tradeTeamNotSwitchedMessage(notSwitched.map((t) => t.name), sourcePlatformLabel(platform)),
+  )
+}
+
 export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   verifiedProposalEvidence?: VerifiedProposalEvidence | null
 }): Promise<{ id: string }> {
@@ -571,6 +588,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   }
   // One manager, several teams: no moving players between them (lib/league-trade-engine/ownTeamTrade.ts).
   await assertNotOwnTeamTrade(input.proposedByUserId, participants)
+  await assertTradeTeamsSwitched(input.leagueId, league.platform, participantRosterIds)
 
   /*
    * A team Chimmy runs takes offers only as its commissioner allows (lib/inactive-manager), and only in a
@@ -1164,6 +1182,7 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   }
 
   const league = await prisma.league.findUniqueOrThrow({ where: { id: trade.leagueId } })
+  await assertTradeTeamsSwitched(trade.leagueId, league.platform, participantRosterIds)
   // Survivor: a free-trade token this trade relies on is spent once the trade has executed (below).
   // Read BEFORE the assets move, while the played-player facts still describe the trade. Survivor only.
   const survivorBypass = league.survivorMode
