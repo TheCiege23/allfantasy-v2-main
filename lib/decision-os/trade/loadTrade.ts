@@ -257,8 +257,11 @@ async function withPlayers(
   league: LeagueRow,
   space: PlayerIdSpace,
   resolvePlayers: LoadTradeDeps['resolvePlayers'],
-): Promise<{ ok: true; sides: { a: LoadedTradeAsset[]; b: LoadedTradeAsset[] } } | { ok: false; refusal: TradeRefusal }> {
-  const ids = [...raw.sideA.gives, ...raw.sideB.gives].flatMap((a) => (a.kind === 'player' ? [a.playerId] : []))
+): Promise<
+  | { ok: true; sides: { a: LoadedTradeAsset[]; b: LoadedTradeAsset[]; aDrops?: LoadedTradeAsset[]; bDrops?: LoadedTradeAsset[] } }
+  | { ok: false; refusal: TradeRefusal }
+> {
+  const ids = [...raw.sideA.gives, ...raw.sideB.gives, ...(raw.sideA.drops ?? []), ...(raw.sideB.drops ?? [])].flatMap((a) => (a.kind === 'player' ? [a.playerId] : []))
   const found = ids.length ? await resolvePlayers(ids, { space, sport: league.sport, membershipCheckedLeagueId: league.id }).catch(() => new Map<string, ResolvedTradePlayer>()) : new Map<string, ResolvedTradePlayer>()
   const missing: string[] = []
   const toLoaded = (asset: RawTrade['sideA']['gives'][number]): LoadedTradeAsset | null => {
@@ -272,6 +275,8 @@ async function withPlayers(
   }
   const a = raw.sideA.gives.map(toLoaded)
   const b = raw.sideB.gives.map(toLoaded)
+  const aDrops = raw.sideA.drops?.map(toLoaded)
+  const bDrops = raw.sideB.drops?.map(toLoaded)
   if (missing.length) {
     return {
       ok: false,
@@ -282,7 +287,15 @@ async function withPlayers(
       },
     }
   }
-  return { ok: true, sides: { a: a as LoadedTradeAsset[], b: b as LoadedTradeAsset[] } }
+  return {
+    ok: true,
+    sides: {
+      a: a as LoadedTradeAsset[],
+      b: b as LoadedTradeAsset[],
+      ...(aDrops?.length ? { aDrops: aDrops as LoadedTradeAsset[] } : {}),
+      ...(bDrops?.length ? { bDrops: bDrops as LoadedTradeAsset[] } : {}),
+    },
+  }
 }
 
 const PRIVATE_REFUSAL = refuse(
@@ -378,7 +391,12 @@ export async function loadTrade(
     const pvParties = [...row.rosterIds, ...row.assets.flatMap((a) => [a.fromRosterId, a.toRosterId])]
     if (!(await mayView('provider', pvStatus, pvParties))) return PRIVATE_REFUSAL
     const sides = twoSides(
-      row.assets.map((a) => ({ fromTeamId: a.fromRosterId, toTeamId: a.toRosterId, asset: providerAsset(a) })),
+      row.assets.map((a) =>
+        // An ESPN conditional drop: released by its sender, received by nobody (`espnTradeOffers.ts`).
+        a.assetType === 'drop'
+          ? { fromTeamId: a.fromRosterId, toTeamId: null, drop: true, asset: a.playerId ? { kind: 'player' as const, playerId: a.playerId } : 'a dropped player (no player id on record)' }
+          : { fromTeamId: a.fromRosterId, toTeamId: a.toRosterId, asset: providerAsset(a) },
+      ),
       { sideAId: row.proposedByRosterId, declaredTeamIds: row.rosterIds },
     )
     if (!sides.ok) return sides
@@ -409,8 +427,8 @@ export async function loadTrade(
     sport: league.sport,
     origin,
     status,
-    sideA: { teamId: raw.sideA.teamId, rosterId: rosterIdFor(raw.sideA.teamId), gives: players.sides.a },
-    sideB: { teamId: raw.sideB.teamId, rosterId: rosterIdFor(raw.sideB.teamId), gives: players.sides.b },
+    sideA: { teamId: raw.sideA.teamId, rosterId: rosterIdFor(raw.sideA.teamId), gives: players.sides.a, ...(players.sides.aDrops ? { drops: players.sides.aDrops } : {}) },
+    sideB: { teamId: raw.sideB.teamId, rosterId: rosterIdFor(raw.sideB.teamId), gives: players.sides.b, ...(players.sides.bDrops ? { drops: players.sides.bDrops } : {}) },
     proposedAt,
     completedAt,
   }

@@ -25,7 +25,7 @@ export type TradeSource = 'af' | 'redraft' | 'provider'
 export type TradeRef =
   | { kind: 'af'; tradeId: string }
   | { kind: 'redraft'; proposalId: string }
-  | { kind: 'provider'; provider: 'sleeper'; providerTradeId: string }
+  | { kind: 'provider'; provider: 'sleeper' | 'espn'; providerTradeId: string }
 
 export type TradeStatus = 'proposed' | 'accepted' | 'rejected' | 'vetoed' | 'expired' | 'completed' | 'unknown'
 
@@ -58,6 +58,12 @@ export type TradeSide = {
   /** The canonical `Roster.id`, when known. Always set for `af`; mapped for `redraft`; set later for `provider`. */
   rosterId: string | null
   gives: LoadedTradeAsset[]
+  /**
+   * Players this side RELEASES when the trade executes (an ESPN conditional drop). They leave this
+   * roster and reach nobody, so they are a cost to this side only and never appear in the other
+   * side's receipts. Absent on every source that has no such thing.
+   */
+  drops?: LoadedTradeAsset[]
 }
 
 export type LoadedTrade = {
@@ -304,8 +310,8 @@ export function providerAsset(a: {
 // ── Two sides out of movements ────────────────────────────────────────────────
 
 export type RawTrade = {
-  sideA: { teamId: string; gives: RawTradeAsset[] }
-  sideB: { teamId: string; gives: RawTradeAsset[] }
+  sideA: { teamId: string; gives: RawTradeAsset[]; drops?: RawTradeAsset[] }
+  sideB: { teamId: string; gives: RawTradeAsset[]; drops?: RawTradeAsset[] }
 }
 
 /**
@@ -314,10 +320,17 @@ export type RawTrade = {
  * side sends nothing.
  */
 export function twoSides(
-  movements: ReadonlyArray<{ fromTeamId: string | null; toTeamId: string | null; asset: RawTradeAsset | Unreadable }>,
+  allMovements: ReadonlyArray<{ fromTeamId: string | null; toTeamId: string | null; asset: RawTradeAsset | Unreadable; drop?: boolean }>,
   opts: { sideAId?: string | null; sideBId?: string | null; declaredTeamIds?: readonly string[] } = {},
 ): { ok: true; trade: RawTrade } | { ok: false; refusal: TradeRefusal } {
-  const unreadable = movements.flatMap((m) => (typeof m.asset === 'string' ? [m.asset] : []))
+  /*
+   * A conditional drop has a sender and no receiver by definition, so it is held apart from the
+   * movements: it neither names a third team nor fails the "who sends what" check, and it is filed
+   * under the side that releases the player.
+   */
+  const dropMoves = allMovements.filter((m) => m.drop)
+  const movements = allMovements.filter((m) => !m.drop)
+  const unreadable = allMovements.flatMap((m) => (typeof m.asset === 'string' ? [m.asset] : []))
   if (unreadable.length) {
     return {
       ok: false,
@@ -351,9 +364,17 @@ export function twoSides(
   if (!a || !b || movements.some((m) => !m.fromTeamId || !m.toTeamId)) {
     return { ok: false, refusal: { code: 'no_assets', reason: 'This trade does not record who sends what.', missingAssets: [] } }
   }
+  if (dropMoves.some((m) => !m.fromTeamId || (m.fromTeamId !== a && m.fromTeamId !== b))) {
+    return { ok: false, refusal: { code: 'no_assets', reason: 'This trade drops a player from a team that is not in it.', missingAssets: [] } }
+  }
   const gives = (team: string) =>
     movements.filter((m) => m.fromTeamId === team).map((m) => m.asset as RawTradeAsset)
-  const trade: RawTrade = { sideA: { teamId: a, gives: gives(a) }, sideB: { teamId: b, gives: gives(b) } }
+  const drops = (team: string) => dropMoves.filter((m) => m.fromTeamId === team).map((m) => m.asset as RawTradeAsset)
+  const side = (team: string) => {
+    const d = drops(team)
+    return { teamId: team, gives: gives(team), ...(d.length ? { drops: d } : {}) }
+  }
+  const trade: RawTrade = { sideA: side(a), sideB: side(b) }
   if (!trade.sideA.gives.length || !trade.sideB.gives.length) {
     return { ok: false, refusal: { code: 'no_assets', reason: 'One side of this trade sends nothing.', missingAssets: [] } }
   }

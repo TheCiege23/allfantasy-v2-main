@@ -72,7 +72,7 @@ support_matrix:
     fantasy_league: { status: probed, fixture: fixtures/fantasy-league.NFL.2026.json, captured: 2026-11-08, see: fantasy_nfl }
     fantasy_communication: { status: http_401_without_cookies, captured: 2026-11-08, see: fantasy_nfl.communication }
     fantasy_matchup: { status: probed, fixture: fixtures/fantasy-matchup.NFL.2026.week11.json, captured: 2026-11-24, see: fantasy_nfl_matchup }
-    fantasy_pending_transactions: { status: not_yet_captured, see: fantasy_nfl_pending }
+    fantasy_pending_transactions: { status: probed, fixture: fixtures/fantasy-pending.NFL.2026.json, captured: 2026-11-27, see: fantasy_nfl_pending }
   # Every other sport: not in this contract. Adding one = probe + fixture + this
   # matrix, in one commit.
 
@@ -354,17 +354,39 @@ fantasy_nfl_matchup:
     - Stat corrections ESPN applies after the week rolls over are not seen by such a writer.
 
 fantasy_nfl_pending:
-  # GAPS.md T-03. NOT CAPTURED. Recorded 2026-11-25 with the owner-only capture button
-  # (app/api/admin/contract-capture, lib/league-import/espn/espnContractCapture.ts), which reads the
-  # owner's OWN league with the owner's OWN stored cookies and downloads one redacted file.
+  # GAPS.md T-03. CAPTURED 2026-11-27 with the owner-only capture button (app/api/admin/contract-capture,
+  # lib/league-import/espn/espnContractCapture.ts): the owner's OWN league, his OWN stored cookies, one
+  # redacted file, committed unmodified as the fixture below.
   base_url: https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl
   path: /seasons/{season}/segments/0/leagues/{league_id}
+  fixture: fixtures/fantasy-pending.NFL.2026.json
+  captured: 2026-11-27
+  sanitization: server-side (lib/admin/contractCapture/redactContractCapture.ts) — 29 synthetic values, league id -> 123456, 10 images, 3 credential values verified absent
   requests:
-    league_teams_transactions: { query: view=mTeam&view=mTransactions2, basis: "both views already in fantasy_nfl.query", status: not_yet_captured }
-    pending_transactions_candidate:
+    league_teams_transactions:
+      query: view=mTeam&view=mTransactions2
+      status: probed (HTTP 200)
+      shape: >
+        A pending offer appears in teams[].pendingTransactions of BOTH teams involved (and no other team),
+        and in the top-level transactions[] as type TRADE_PROPOSAL, status PENDING. There is NO top-level
+        pendingTransactions key in this body.
+    pending_transactions:
       query: view=mPendingTransactions
-      basis: CANDIDATE view name — not named anywhere in this repo before 2026-11-25
-      status: not_yet_captured
-      note: ESPN may ignore an unknown view and answer 200 with the base league object, so a 200 alone does not prove the view exists. Read the body.
-  auth: owner's espn_s2 + SWID cookies, Cookie header only (pending offers are expected to be visible only to the teams involved)
+      status: probed (HTTP 200) — CONFIRMED real view (the capture file's own note still calls it a candidate; that note predates the read)
+      shape: top-level pendingTransactions[] beside draftDetail, gameId, id, scoringPeriodId, seasonId, segmentId, status
+  offer:
+    fields: { id: uuid string, type: TRADE_PROPOSAL, status: PENDING, isPending: true, teamId: proposer team id, memberId: proposer member id, proposedDate: epoch ms, expirationDate: epoch ms, teamActions: '{"<teamId>": "ACCEPTED"}', scoringPeriodId: int, bidAmount: 0, executionType: EXECUTE, rating: 0 }
+    items[]: { type: "TRADE | DROP", playerId: ESPN player id, fromTeamId: int, toTeamId: "int; 0 on a DROP", fromLineupSlotId: int, toLineupSlotId: "-1", isKeeper: false, overallPickNumber: 0 }
+    drop: >
+      A DROP item (toTeamId 0) is the PROPOSING side's conditional drop: released when the trade executes,
+      received by nobody. Stored as asset type `drop` (lib/provider-trades/espnTradeOffers.ts) and counted
+      as a cost to the dropping side only in the grade.
+    observed: >
+      One offer: team 7 gives 4360761 (Michael Wilson) to team 2, gets 4426515 (Puka Nacua), drops
+      4432708 (Marvin Harrison Jr.); teamActions {"7": "ACCEPTED"}; expires 2026-11-28T22:43:50Z.
+  auth: owner's espn_s2 + SWID cookies, Cookie header only. The sweep never falls back to a cookieless read for this view.
+  unverified:
+    - Offers between two OTHER teams — not observable in this league (GAPS T-03a). Owner rule keeps only the reader's team's offers.
+    - Whether ESPN sends pendingTransactions [] or omits it when nothing is pending (GAPS T-03b).
+    - Any status other than PENDING (GAPS T-03c). Accept/decline/counter are not captured (T-03d).
   privacy: owner rule 2026-11-25 — keep and show only offers the signed-in user sent or received (GAPS.md T-03)
