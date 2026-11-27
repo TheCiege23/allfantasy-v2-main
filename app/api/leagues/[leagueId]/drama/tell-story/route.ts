@@ -1,19 +1,17 @@
-import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league-access'
 import { getDramaEventById } from '@/lib/drama-engine/DramaQueryService'
-import { buildDramaNarrative } from '@/lib/drama-engine/AIDramaNarrativeAdapter'
+import { buildDramaNarrative, buildTemplateNarrative } from '@/lib/drama-engine/AIDramaNarrativeAdapter'
 import { buildAIRelationshipContext } from '@/lib/relationship-insights'
-import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
-import { refundStorylineSpend } from '@/lib/tokens/storylineSpendRefund'
+import { checkLeagueStoryAiGate } from '@/lib/league-story-ai/leagueStoryAiGate'
 
 export const dynamic = 'force-dynamic'
 
 type DramaEvent = NonNullable<Awaited<ReturnType<typeof getDramaEventById>>>
 
-async function tellStory(leagueId: string, event: DramaEvent) {
+async function tellStory(leagueId: string, event: DramaEvent, opts: { ai: boolean }) {
   const relationshipContext = await buildAIRelationshipContext({
     leagueId,
     sport: event.sport,
@@ -33,25 +31,26 @@ async function tellStory(leagueId: string, event: DramaEvent) {
     .filter(Boolean)
     .join(' ')
 
-  const { narrative, source } = await buildDramaNarrative({
-    ...event,
-    summary: enrichedSummary || event.summary,
-  })
+  const grounded = { ...event, summary: enrichedSummary || event.summary }
+  const { narrative, source } = opts.ai ? await buildDramaNarrative(grounded) : buildTemplateNarrative(grounded)
   return { narrative, source, relationshipContextUsed: Boolean(relationshipContext) }
 }
 
 /**
  * POST /api/leagues/[leagueId]/drama/tell-story
- * Body: { eventId: string, confirmTokenSpend?: boolean }
+ * Body: { eventId: string, lang?: 'en' | 'es' }
  * Returns narrative for "Tell me the story" button.
  *
- * 🛑 THE REQUEST IS CHECKED BEFORE ANYTHING IS CHARGED (2026-09-29). The gate used to run first with
- * `confirmTokenSpend: true` hardcoded, so a click spent tokens with no question asked, and a missing
- * or foreign `eventId` was charged and then refused. Now a bad request costs nothing, tokens are
- * spent only when the client says the person confirmed the cost (`lib/tokens/clientTokenConfirm.ts`,
- * which turns the gate's 409 into that question), and a story that fails after the charge is refunded.
+ * 🛑 AF COMMISSIONER FOR THE WHOLE LEAGUE (owner, 2026-11-27). The narration is a model call, so it runs only
+ * when the league's COMMISSIONER holds AF Commissioner or AF Supreme — then every member gets it — and at
+ * most LEAGUE_STORY_AI_DAILY_LIMITS.drama times a league a day (lib/league-story-ai/leagueStoryAiGate.ts).
+ * Locked or capped, the fact-built narrative from the event itself is served with `aiLocked`, no model.
+ * This replaced the CALLER's own `storyline_creation` check with a token fallback, exactly as `story/create`
+ * did: a token purchase must not buy model calls for a free commissioner's league, so nothing is charged.
+ *
+ * The request is still checked before the gate (2026-09-29 rule): a missing or foreign `eventId` costs no cap.
  */
-async function paidToolPost(
+export async function POST(
   req: Request,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -70,7 +69,7 @@ async function paidToolPost(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const body = (await req.json().catch(() => ({}))) as { eventId?: unknown; confirmTokenSpend?: unknown }
+    const body = (await req.json().catch(() => ({}))) as { eventId?: unknown; lang?: unknown }
     const eventId = typeof body.eventId === 'string' ? body.eventId : ''
     if (!eventId) return NextResponse.json({ error: 'Missing eventId' }, { status: 400 })
 
@@ -79,34 +78,9 @@ async function paidToolPost(
       return NextResponse.json({ error: 'Drama event not found' }, { status: 404 })
     }
 
-    const gate = await requireFeatureEntitlement({
-      userId,
-      userEmail: session?.user?.email,
-      featureId: 'storyline_creation',
-      allowTokenFallback: true,
-      confirmTokenSpend: body.confirmTokenSpend === true,
-      tokenRuleCode: 'ai_storyline_creation',
-      tokenSourceType: 'league_drama_tell_story',
-      tokenSourceId: `${leagueId}:${Date.now()}`,
-      tokenDescription: 'League drama story narration',
-      tokenMetadata: {
-        leagueId,
-        eventId,
-      },
-    })
-    if (!gate.ok) return gate.response
+    const aiGate = await checkLeagueStoryAiGate({ leagueId, kind: 'drama', lang: body.lang })
+    const story = await tellStory(leagueId, event, { ai: aiGate.ok })
 
-    let story: Awaited<ReturnType<typeof tellStory>>
-    try {
-      story = await tellStory(leagueId, event)
-    } catch (e) {
-      if (gate.tokenSpend) {
-        await refundStorylineSpend({ userId, ledgerId: gate.tokenSpend.id, surface: 'league_drama_tell_story' })
-      }
-      throw e
-    }
-
-    if (story.source !== 'ai') paidToolNotDelivered()
     return NextResponse.json({
       eventId,
       leagueId,
@@ -115,14 +89,7 @@ async function paidToolPost(
       headline: event.headline,
       dramaType: event.dramaType,
       relationshipContextUsed: story.relationshipContextUsed,
-      tokenSpend: gate.tokenSpend
-        ? {
-            ruleCode: gate.tokenPreview?.ruleCode ?? 'ai_storyline_creation',
-            tokenCost: gate.tokenPreview?.tokenCost ?? null,
-            balanceAfter: gate.tokenSpend.balanceAfter,
-            ledgerId: gate.tokenSpend.id,
-          }
-        : null,
+      aiLocked: aiGate.ok ? null : aiGate.body,
     })
   } catch (e) {
     console.error('[drama/tell-story POST]', e)
@@ -133,4 +100,3 @@ async function paidToolPost(
   }
 }
 
-export const POST = withPaidToolBilling(paidToolPost)

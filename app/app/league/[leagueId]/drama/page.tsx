@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, BookOpen } from 'lucide-react'
 import { postWithTokenConfirm, responseErrorMessage } from '@/lib/tokens/clientTokenConfirm'
+import { StoryAiLockNotice, type StoryAiLock } from '@/components/league-story-ai/StoryAiLockNotice'
 import { DRAMA_TYPES } from '@/lib/drama-engine/types'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
@@ -43,6 +44,7 @@ export default function LeagueDramaDashboardPage() {
   const [timeline, setTimeline] = useState<DramaRow[]>([])
   const [storyByEvent, setStoryByEvent] = useState<Record<string, string>>({})
   const [storyLoadingId, setStoryLoadingId] = useState<string | null>(null)
+  const [storyLockByEvent, setStoryLockByEvent] = useState<Record<string, StoryAiLock>>({})
 
   const canPrev = offset > 0
   const canNext = timeline.length === PAGE_LIMIT
@@ -119,15 +121,17 @@ export default function LeagueDramaDashboardPage() {
       }
       setStoryLoadingId(eventId)
       try {
-        // Asks before any token is spent; a decline spends nothing and shows nothing.
+        // No longer token-billed (2026-11-27): the commissioner's plan unlocks it. A 409 would still ask first.
         const { response: res, declined } = await postWithTokenConfirm(
           `/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`,
           { eventId },
         )
         if (declined) return
-        const text = res.ok
-          ? ((await res.json().catch(() => ({})))?.narrative ?? 'No story available.')
+        const data = res.ok ? await res.json().catch(() => ({})) : null
+        const text = data
+          ? (data?.narrative ?? 'No story available.')
           : await responseErrorMessage(res, 'Could not load story.')
+        setStoryLockByEvent((prev) => ({ ...prev, [eventId]: data?.aiLocked ?? null }))
         setStoryByEvent((prev) => ({
           ...prev,
           [eventId]: text,
@@ -313,6 +317,9 @@ export default function LeagueDramaDashboardPage() {
             {event.summary && <p className="mt-1 text-xs text-white/60">{event.summary}</p>}
             {storyByEvent[event.id] && (
               <p className="mt-2 border-t border-white/10 pt-2 text-xs text-white/75">{storyByEvent[event.id]}</p>
+            )}
+            {storyByEvent[event.id] && (
+              <StoryAiLockNotice lock={storyLockByEvent[event.id]} featureName="Chimmy drama stories" className="mt-2" />
             )}
           </article>
         ))}
