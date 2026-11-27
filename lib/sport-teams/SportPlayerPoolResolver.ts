@@ -19,7 +19,7 @@ import { dbFirstMode } from '@/lib/db-first-mode'
 import { createTtlMemo } from '@/lib/ttl-memo'
 import { filterPoolByCollegeScope, loadCollegeTeamConferences, loadLeagueCollegeScope } from '@/lib/college/collegeTeamConferences'
 import { loadNcaabSeasonBoxes, type NcaabSeasonBoxes } from './ncaabSeasonBoxes'
-import { ncaabPoolRowImage, ncaabPoolRowVerdict, ncaabProductionPerGame } from './ncaabPlayerPoolRules'
+import { buildNcaabTransferPhotoIndex, ncaabPoolRowImage, ncaabPoolRowVerdict, ncaabProductionPerGame } from './ncaabPlayerPoolRules'
 import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
@@ -54,6 +54,8 @@ const POOL_PLAYER_SELECT = {
   externalId: true,
   age: true,
   imageUrl: true,
+  // The jersey number: with the name, what matches a college basketball row to its ESPN roster entry.
+  number: true,
   source: true,
   // `0` is a rookie, NULL is unknown — carried as `experience` for every sport (see nonNflRookieFields).
   yearsExp: true,
@@ -616,12 +618,24 @@ async function buildPlayerPoolRecords(
     ? new Set([...ncaabBoxes.byRiId].flatMap(([riId, lines]) => (lines.current ? [riId] : [])))
     : null
   const ncaabPhotoOnlyIds = new Set<string>()
+  // A transfer's photo, carried from his old school's row by ESPN id (buildNcaabTransferPhotoIndex). A failed
+  // roster read carries nothing: the pool keeps what it had.
+  const ncaabTransferPhoto = isNcaab
+    ? buildNcaabTransferPhotoIndex({
+        roster: await prisma.devyPlayer
+          .findMany({ where: { sport: 'NCAAB', source: 'espn_ncaab_roster' }, select: { id: true, name: true, jerseyNumber: true } })
+          .catch(() => []),
+        storedImageUrls: rows.map((row) => row.imageUrl),
+      })
+    : null
   const ncaabRows = isNcaab
     ? rows.flatMap((row) => {
         const verdict = ncaabPoolRowVerdict(row, ncaabPlayed)
         if (verdict === 'drop') return []
         if (verdict === 'photo_only') ncaabPhotoOnlyIds.add(row.id)
-        return [{ ...row, imageUrl: ncaabPoolRowImage(row.imageUrl) }]
+        const own = ncaabPoolRowImage(row.imageUrl)
+        const carried = !own && verdict === 'keep' ? ncaabTransferPhoto?.(row as { name?: string | null; number?: number | null }) ?? null : null
+        return [{ ...row, imageUrl: own ?? carried }]
       })
     : null
   const sourceRows = isNfl ? collapseNflRowsOntoSleeper(rows) : ncaabRows ?? scorableSoccerRowsOnly(sport, rows)
