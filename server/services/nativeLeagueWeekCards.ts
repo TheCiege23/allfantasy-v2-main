@@ -44,6 +44,8 @@ export type LeagueWeekCard = {
   /** Chance the HOME side wins, 0–1, before the game is final. Null when either side is unpriced. */
   homeWinProbability: number | null
   mine: boolean
+  /** How many games the two teams play each other this week (a league that plays several a week); points add up. */
+  games: number
 }
 
 export type LeagueWeekCards = { season: number; week: number; cards: LeagueWeekCard[] }
@@ -106,11 +108,37 @@ export async function loadNativeLeagueWeekCards(params: { league: LeagueArg; vie
     }
   }
 
-  const cards = board.games.map((g): LeagueWeekCard => {
-    const home = team(g.home, g.status)
-    const away = g.away ? team(g.away, g.status) : null
+  /*
+   * One card per pairing. A league that plays several games a week (live check, 2026-11-27: a 16-team NBA league
+   * whose week-7 schedule pairs each team with the same opponent three times — 24 games, 8 pairings) would
+   * otherwise draw three identical cards. The pairing's points are its games' points added up; the projection
+   * is already the week's, so it is not multiplied.
+   */
+  type Group = { games: typeof board.games }
+  const groups = new Map<string, Group>()
+  for (const g of board.games) {
+    const key = [g.home.rosterId, g.away?.rosterId ?? 'bye'].sort().join('|') + (g.label ? `|${g.label}` : '')
+    const group = groups.get(key) ?? { games: [] }
+    group.games.push(g)
+    groups.set(key, group)
+  }
+  const sumPoints = (vals: Array<number | null>): number | null =>
+    vals.some((v) => v != null) ? Math.round(vals.reduce<number>((t, v) => t + (v ?? 0), 0) * 100) / 100 : null
+
+  const cards = [...groups.values()].map(({ games }): LeagueWeekCard => {
+    const g = games[0]
+    const status: NativeGameStatus = games.some((x) => x.status === 'live')
+      ? 'live'
+      : games.every((x) => x.status === 'final')
+        ? 'final'
+        : games.some((x) => x.status === 'final') ? 'live' : 'upcoming'
+    const sideOf = (rosterId: string) => (x: (typeof games)[number]) => (x.home.rosterId === rosterId ? x.home : x.away)
+    const homeSide = { ...g.home, totalPoints: sumPoints(games.map((x) => (x.status === 'upcoming' ? null : sideOf(g.home.rosterId)(x)?.totalPoints ?? null))) }
+    const awaySide = g.away ? { ...g.away, totalPoints: sumPoints(games.map((x) => (x.status === 'upcoming' ? null : sideOf(g.away!.rosterId)(x)?.totalPoints ?? null))) } : null
+    const home = team(homeSide, status)
+    const away = awaySide ? team(awaySide, status) : null
     const homeWinProbability =
-      g.status !== 'final' && away && home.projected != null && away.projected != null
+      status !== 'final' && away && home.projected != null && away.projected != null
         ? computeMatchupWinProbability(
             { projectedTotal: home.projected, projectedTotalIncludesFallback: false },
             { projectedTotal: away.projected, projectedTotalIncludesFallback: false },
@@ -121,12 +149,15 @@ export async function loadNativeLeagueWeekCards(params: { league: LeagueArg; vie
     return {
       id: g.id,
       label: g.label,
-      status: g.status,
+      status,
       home: flip && away ? away : home,
       away: flip ? home : away,
       homeWinProbability: homeWinProbability == null ? null : flip ? 1 - homeWinProbability : homeWinProbability,
-      mine: g.mine,
+      mine: games.some((x) => x.mine),
+      games: games.length,
     }
   })
+  // Your game first, then the rest in schedule order.
+  cards.sort((a, b) => Number(b.mine) - Number(a.mine))
   return { season: board.season, week, cards }
 }

@@ -564,6 +564,8 @@
 .nls-lp-label { margin-bottom: 8px; color: var(--faint); font: 700 11px/1.2 var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
 .nls-lp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 12px; }
 .nls-lp-vs { align-self: center; color: var(--faint); font: 700 11px/1 var(--nl-mono); text-transform: uppercase; }
+.nls-lp-vs { display: grid; justify-items: center; gap: 4px; }
+.nls-lp-vs small { color: var(--muted); font: 600 11px/1 var(--nl-mono); text-transform: none; white-space: nowrap; }
 .nls-lp-side { display: grid; gap: 8px; min-width: 0; }
 .nls-lp-top { display: flex; align-items: center; gap: 12px; }
 .nls-lp-side[data-align=right] .nls-lp-top { flex-direction: row-reverse; }

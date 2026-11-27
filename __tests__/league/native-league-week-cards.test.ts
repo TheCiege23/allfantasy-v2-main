@@ -70,6 +70,25 @@ describe('loadNativeLeagueWeekCards', () => {
     expect(other.homeWinProbability).toBeNull()
   })
 
+  it('a pairing that plays several games this week is ONE card, its points added up (live NBA league, 2026-11-27)', async () => {
+    const g = (id: string, status: string, a: number, b: number) => ({ id, kind: 'regular', label: null, status, mine: true,
+      home: { rosterId: 'r1', teamName: 'Ghosts', totalPoints: a }, away: { rosterId: 'r2', teamName: 'Owls', totalPoints: b } })
+    games.mockReturnValue([
+      g('g1', 'final', 100, 90), g('g2', 'live', 40, 55), g('g3', 'upcoming', 0, 0),
+      { id: 'g4', kind: 'regular', label: null, status: 'upcoming', mine: false,
+        home: { rosterId: 'r3', teamName: 'Mob', totalPoints: 0 }, away: { rosterId: 'r4', teamName: 'Tanks', totalPoints: 0 } },
+    ])
+    const out = await loadNativeLeagueWeekCards({ league, viewerUserId: 'me' })
+    expect(out!.cards).toHaveLength(2)
+    const [mine, other] = out!.cards
+    expect(mine).toMatchObject({ games: 3, status: 'live', mine: true })
+    // Yours first (r2), and each side's points are the played games' sum; the unplayed one adds nothing.
+    expect(mine.home).toMatchObject({ rosterId: 'r2', points: 145 })
+    expect(mine.away).toMatchObject({ rosterId: 'r1', points: 140 })
+    expect(other).toMatchObject({ games: 1, status: 'upcoming' })
+    expect(other.home.points).toBeNull()
+  })
+
   it('a final game has no win chance', async () => {
     games.mockReturnValue([{ id: 'g1', kind: 'regular', label: null, status: 'final', mine: false,
       home: { rosterId: 'r1', teamName: 'Ghosts', totalPoints: 100 }, away: { rosterId: 'r3', teamName: 'Mob', totalPoints: 90 } }])
