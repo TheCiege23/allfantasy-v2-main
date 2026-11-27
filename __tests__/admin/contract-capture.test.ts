@@ -312,6 +312,40 @@ describe('redaction', () => {
     expect(run).toThrow(ContractCaptureRedactionError)
   })
 
+  it('a three-letter member name inside an NFL player name is not a leak (owner capture 2026-11-27)', () => {
+    const doc = buildRedactedCaptureDocument({
+      provider: 'espn', capturedAt: '2026-11-27T00:00:00Z', sport: 'NFL', season: 2026, week: null,
+      leagueIdentifiers: ['919055'], ownerTeamKey: null, credentialValues: [], notes: [],
+      requests: [{ resource: 'league_teams_transactions', requestTemplate: 'x', httpStatus: 200, body: {
+        members: [{ id: '{AAAAAAAA-1111-2222-3333-444444444444}', firstName: 'Rob', lastName: 'Quinnbury', displayName: 'robq' }],
+        teams: [{ id: 1, name: 'Quinnbury Crew', abbrev: 'QBC', roster: { entries: [{ playerPoolEntry: { player: { fullName: 'Bijan Robinson' } } }] } }],
+      } }],
+    })
+    expect(doc.json).toContain('Bijan Robinson')
+    expect(doc.json).not.toContain('"Rob"')
+    expect(doc.json).not.toContain('Quinnbury')
+  })
+
+  it('a short value left standing as a whole field is still refused, and the refusal names its kind, not the value', () => {
+    let error: unknown
+    try {
+      buildRedactedCaptureDocument({
+        provider: 'espn', capturedAt: '2026-11-27T00:00:00Z', sport: 'NFL', season: 2026, week: null,
+        leagueIdentifiers: ['919055'], ownerTeamKey: null, credentialValues: [], notes: [],
+        requests: [{ resource: 'league_teams_transactions', requestTemplate: 'x', httpStatus: 200, body: {
+          members: [{ id: '{AAAAAAAA-1111-2222-3333-444444444444}', firstName: 'Rob' }],
+          // An unknown field holding the short name as a whole value: no rule rewrites it.
+          extra: { owner_label: 'Rob' },
+        } }],
+      })
+    } catch (e) {
+      error = e
+    }
+    expect(error).toBeInstanceOf(ContractCaptureRedactionError)
+    expect((error as Error).message).toContain('person, 3 chars')
+    expect((error as Error).message).not.toContain('Rob')
+  })
+
   it('the refusal reaches the client as an error with no body', async () => {
     signInAsAdmin()
     leagueFindFirst.mockResolvedValue({ id: 'lg1', platform: 'yahoo', platformLeagueId: Y_LEAGUE, season: 2026 })

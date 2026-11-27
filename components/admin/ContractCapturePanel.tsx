@@ -124,6 +124,12 @@ export function ContractCapturePanel() {
           {busy ? "Capturing…" : "Download capture"}
         </button>
       </div>
+      {leagues && leagues.length > 1 ? (
+        <p className="text-xs text-slate-400">
+          {leagues.length} leagues on your account ({leagues.filter((l) => l.provider === "espn").length} ESPN,{" "}
+          {leagues.filter((l) => l.provider === "yahoo").length} Yahoo) — open the League list to pick one.
+        </p>
+      ) : null}
       {message ? <p className="text-xs text-slate-300">{message}</p> : null}
     </div>
   )
