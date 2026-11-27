@@ -558,7 +558,12 @@ so, because the build follows the answer.
      carried unless the commissioner saved their own in AF (Q8), fill-only waiver and draft-settings rows, and the
      league invite. ⚠ `mapImportedRosterToAF` was found to map nothing for ESPN/Sleeper and `validateRosterConfig` to
      skip unknown keys, so the layout comes from `importedLineupTemplateSlots` with a known-key check.
-   - **4b (rest)** — native settings and scoring scaffolding (§7 step 3.10, AF edits win per Q8), the past-weekly-score
+   - **4b-2** — past provider weeks into native tables (`lib/league/copyProviderWeeklyScores.ts`, Q4): the season's
+     `WeeklyMatchup` rows become final `RedraftMatchup`s on its `RedraftRoster`s (playoff weeks typed `playoff`, byes
+     one-sided), and `LeaguePlayerWeeklyScore` rows are re-keyed to `League.id` / `source='allfantasy'` / native seat
+     and player ids. Provider rows stay; anything unmatched is counted and skipped; a season that already has
+     matchups is not copied into. Standings are not recomputed.
+   - **4b (original note)** — native settings and scoring scaffolding (§7 step 3.10, AF edits win per Q8), the past-weekly-score
      copy (Q4: `RedraftMatchup` rows plus `LeaguePlayerWeeklyScore` re-keyed to `League.id`, `source='allfantasy'`),
      and per-seat invite links (Q7, which needs new plumbing: `LeagueInvite` has no seat). The admin gate comes off
      with 4b, not before.

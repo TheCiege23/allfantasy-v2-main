@@ -11,6 +11,7 @@ import {
   type ImportedTeam,
 } from '@/lib/league-creation/canonical/importedIdentityPlan'
 import { checkNativeReadiness, type NativeReadinessItem } from '@/lib/league/nativeReadiness'
+import { copyProviderWeeklyScores, type ProviderScoreCopy } from '@/lib/league/copyProviderWeeklyScores'
 import { planImportedRosterLayout, savedInAllFantasy, sportScoringStore } from '@/lib/league/nativeScaffolding'
 import {
   importedGamesPerWeekSettings,
@@ -40,8 +41,11 @@ import { ensureLeagueSettingsRow } from '@/lib/draft-defaults/ensureLeagueSettin
  * cannot join this transaction, so it runs just BEFORE it: harmless on an imported league, which reads the
  * provider's positions first while it is imported.
  *
- * ⚠ STILL TO COME, SO THE ROUTE STAYS ADMIN-GATED: copying past provider weekly scores into native tables (Q4) and
- * per-seat invite links (Q7). The first conversions are supervised (plan §8).
+ * PAST WEEKS (step 4b-2, copyProviderWeeklyScores.ts): the season's provider matchups and per-player points are copied
+ * into AllFantasy's own tables (Q4), before the flip, while the provider league id still names their rows.
+ *
+ * ⚠ STILL TO COME, SO THE ROUTE STAYS ADMIN-GATED: per-seat invite links (Q7). The first conversions are supervised
+ * (plan §8).
  *
  * What it keeps, by the owner's decisions (§13): team names, logos and the provider manager name on every seat,
  * claimed or not (Q3); carried players become ordinary drafted players (Q6).
@@ -74,6 +78,8 @@ export type NativeConversionSnapshotV1 = {
   }
   /** Rows the switch created and undo must delete; plus slots it changed, with their old values. */
   created: { memberIds: string[]; chatRoomIds: string[]; entrySlotIds: string[]; inviteIds?: string[] }
+  /** Rows the past-week copy wrote, for undo: these matchups, and the native player rows for this season. */
+  copiedScores?: { matchupIds: string[]; playerScoresSeasonYear: number }
   /** Baseball only: the scoring tables the switch replaced, as they were (the copy flow's converter rewrites them). */
   mlbTablesBefore?: { rosterConfig: unknown; scoringOverrides: unknown[] }
   entrySlotsBefore: Array<{ id: string; rosterId: string | null; status: string }>
@@ -159,6 +165,8 @@ export type NativeConversionResult =
       /** What the league plays by now: the provider's rules converted, the commissioner's AF edits kept, or defaults. */
       scoring: 'converted' | 'kept_af' | 'default'
       roster: 'mapped' | 'af_saved' | 'mlb'
+      /** The provider's past weeks copied into native tables (Q4), or null when the league has no season to copy into. */
+      pastScores: Omit<ProviderScoreCopy, 'matchupIds'> | null
     }
   | { kind: 'already_converted'; conversionId: string }
 
@@ -263,7 +271,7 @@ async function convertInTransaction(
   const teamRows = await tx.leagueTeam.findMany({
     where: { leagueId }, select: { id: true, externalId: true, platformUserId: true, isOrphan: true, role: true },
   })
-  const season = await tx.redraftSeason.findFirst({ where: { leagueId }, orderBy: [{ season: 'desc' }, { createdAt: 'desc' }], select: { id: true } })
+  const season = await tx.redraftSeason.findFirst({ where: { leagueId }, orderBy: [{ season: 'desc' }, { createdAt: 'desc' }], select: { id: true, season: true, playoffStartWeek: true } })
   const redraftRosters = season
     ? await tx.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, ownerId: true, managerUserId: true } })
     : []
@@ -333,6 +341,8 @@ async function convertInTransaction(
   // 7. The current redraft season: owner keys match the rosters' exactly (standingsEngine maps one onto the other), and
   //    carried players become ordinary drafted players (Q6) with native ids.
   let playersRewritten = 0
+  /** Provider team id → this season's RedraftRoster.id, for the past-week copy (step 11c). */
+  const redraftRosterIdByExternalId = new Map<string, string>()
   if (season) {
     const redraftByOwner = new Map(redraftRosters.map((r) => [r.ownerId, r]))
     const redraftById = new Map(redraftRosters.map((r) => [r.id, r]))
@@ -344,6 +354,7 @@ async function convertInTransaction(
         ?? redraftByOwner.get(row.platformUserId) ?? redraftByOwner.get(team.id)
       if (!linked) refuse(`The season standings have no row for ${team.teamName}. Refresh the import, then try again.`)
       pairs.push({ seat, redraftRosterId: linked.id })
+      redraftRosterIdByExternalId.set(team.externalId, linked.id)
     }
     if (new Set(pairs.map((p) => p.redraftRosterId)).size !== pairs.length) refuse('Two teams share one season-standings row. Refresh the import, then try again.')
     for (const { redraftRosterId } of pairs) {
@@ -477,6 +488,21 @@ async function convertInTransaction(
     created.inviteIds = [invite.id]
   }
 
+  // 11c. The provider's past weeks into native tables (Q4), keyed by the provider league id the flip is about to replace.
+  const pastScores = season
+    ? await copyProviderWeeklyScores(tx, {
+        leagueId,
+        providerLeagueId: league.platformLeagueId,
+        season: season.season,
+        seasonId: season.id,
+        playoffStartWeek: season.playoffStartWeek,
+        sport,
+        platform: String(league.platform),
+        redraftRosterIdByExternalId,
+        idMap: plan.idMap,
+      })
+    : null
+
   // 12. The record, then the flip — last, so nothing above ran on a league the engines already treat as native.
   const snapshot: NativeConversionSnapshotV1 = {
     version: 1,
@@ -496,6 +522,7 @@ async function convertInTransaction(
     },
     created,
     ...(mlbTablesBefore ? { mlbTablesBefore } : {}),
+    ...(pastScores && season ? { copiedScores: { matchupIds: pastScores.matchupIds, playerScoresSeasonYear: season.season } } : {}),
     entrySlotsBefore: entrySlotsBefore.map((s) => ({ id: s.id, rosterId: s.rosterId, status: String(s.status) })),
   }
   const record = {
@@ -526,6 +553,7 @@ async function convertInTransaction(
   return {
     kind: 'converted', conversionId: conversion.id, seats: seats.length, players: plan.idMap.size,
     seasonPlayersRewritten: playersRewritten, futurePicks: futurePicks.length, scoring,
+    pastScores: pastScores ? (({ matchupIds: _ids, ...counts }) => counts)(pastScores) : null,
     roster: args.roster === 'none' ? 'af_saved' : args.roster,
   }
 }
