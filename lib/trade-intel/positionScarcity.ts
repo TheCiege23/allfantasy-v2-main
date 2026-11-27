@@ -3,7 +3,8 @@ import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 
 import { prisma } from '@/lib/prisma'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, stripForeignIds } from '@/lib/core-app/rosterIdSpace'
+import { declaredAvailability } from '@/lib/core-app/declaredAvailability'
 import { replaceableThreshold } from './leagueScale'
 import type { Scarcity } from './rosterNeed'
 
@@ -32,14 +33,38 @@ import type { Scarcity } from './rosterNeed'
 
 export type ScarcityBoard = Map<string, NonNullable<Scarcity>>
 
-export async function getPositionScarcity(args: {
+/**
+ * A pasted Yahoo league's verdict, beside the board (declaredAvailability.ts). `verified: false` means
+ * the board is EMPTY because nobody can be called a free agent there — "we did not look", with the
+ * reason. `verified: true` means the counts stand, each unmatched rostered player's own row excluded.
+ * Null for every other league.
+ */
+export type ScarcityAvailability = { verified: boolean; unmatched: number } | null
+
+type ScarcityArgs = {
   leagueId: string
   sport: string
   /** The week whose projections decide who counts as startable. */
   projectionWeek: { season: string; week: number } | null
   /** Only these positions are counted — the ones the trade actually involves. */
   positions: string[]
-}): Promise<ScarcityBoard> {
+}
+
+export async function getPositionScarcity(args: ScarcityArgs): Promise<ScarcityBoard> {
+  return (await getPositionScarcityWithAvailability(args)).board
+}
+
+export async function getPositionScarcityWithAvailability(
+  args: ScarcityArgs,
+): Promise<{ board: ScarcityBoard; availability: ScarcityAvailability }> {
+  let availability: ScarcityAvailability = null
+  const board = await scarcityBoard(args, (a) => {
+    availability = a
+  })
+  return { board, availability }
+}
+
+async function scarcityBoard(args: ScarcityArgs, report: (a: ScarcityAvailability) => void): Promise<ScarcityBoard> {
   const { leagueId, sport, projectionWeek, positions } = args
   const out: ScarcityBoard = new Map()
   if (!projectionWeek || positions.length === 0) return out
@@ -55,11 +80,19 @@ export async function getPositionScarcity(args: {
    * A foreign league's roster ids (Fleaflicker, MFL, ...) collide with real Sleeper ids, so nobody
    * here can be subtracted from the wire. Empty — "we did not look" — rather than a full wire.
    */
-  if (rosters.some((r) => isForeignIdSpace(r.league?.platform, r.league?.sport))) return out
+  /*
+   * ⚠ EXCEPT A PASTED YAHOO LEAGUE above the coverage bar: its declared Sleeper ids are read
+   * (`stripForeignIds` keeps exactly those) and its unmatched rostered players are kept out of the count
+   * by name. Below the bar: empty, with the verdict reported.
+   */
+  const foreign = rosters.some((r) => isForeignIdSpace(r.league?.platform, r.league?.sport))
+  const declared = foreign ? declaredAvailability(rosters[0]?.league?.platform, rosters.map((r) => r.playerData)) : null
+  if (declared) report({ verified: declared.verified, unmatched: declared.unmatched })
+  if (foreign && !declared?.verified) return out
 
   const rostered = new Set<string>()
   for (const r of rosters) {
-    const pd = (r.playerData ?? {}) as Record<string, unknown>
+    const pd = (declared ? stripForeignIds(r.playerData) : (r.playerData ?? {})) as Record<string, unknown>
     if (!Array.isArray(pd.players)) continue
     for (const raw of pd.players) {
       const id = String(raw)
@@ -95,7 +128,9 @@ export async function getPositionScarcity(args: {
     })
     .catch(() => [])
 
-  const candidates = players.filter((p) => p.sleeperId && !rostered.has(p.sleeperId))
+  const candidates = players.filter(
+    (p) => p.sleeperId && !rostered.has(p.sleeperId) && !declared?.hides({ name: p.name, position: p.position, team: p.team }),
+  )
   if (candidates.length === 0) {
     /*
      * Nothing unrostered is projected at any requested position. That is a real

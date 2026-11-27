@@ -1765,6 +1765,7 @@ async function buildStructuredFantasyContext(
           freeAgentOptions: result.freeAgentOptions,
           claimTarget: result.claimTarget,
           limitation: result.limitation,
+          ...(result.unmatchedRostered != null ? { unmatchedRostered: result.unmatchedRostered } : {}),
         }
       }
     }

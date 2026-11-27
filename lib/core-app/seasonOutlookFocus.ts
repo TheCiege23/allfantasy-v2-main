@@ -11,6 +11,8 @@ import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { myRosterCandidates } from './myRoster'
 import { isForeignIdSpace, translateRostersByLeague } from './rosterIdSpace'
+import { declaredAvailability } from './declaredAvailability'
+import { leagueUnverifiedClause, unmatchedRosteredNote } from './foreignIdSpaceCopy'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { fragilePositions, rosterSlots, topStack } from './portfolioInsights'
 import { isAtRisk, isRuledOut } from './injuryStatus'
@@ -135,7 +137,12 @@ export async function loadScenarioModel(args: {
   weeks: number[]
   names: ReadonlyMap<string, string>
   now: Date
-}): Promise<{ model: ScenarioModel; injuryFeedNote: string | null }> {
+}): Promise<{
+  model: ScenarioModel
+  injuryFeedNote: string | null
+  /** A pasted Yahoo league above the coverage bar: how many rostered players could not be matched. */
+  unmatchedNote?: string | null
+}> {
   const base: ScenarioModel = {
     leagueId: args.leagueId,
     basisWeek: null,
@@ -170,6 +177,24 @@ export async function loadScenarioModel(args: {
       select: { id: true, leagueId: true, platformUserId: true, playerData: true },
     }),
   ]).catch(() => [[], []] as const)
+
+  /*
+   * 🛑 A PASTED YAHOO LEAGUE (declaredAvailability.ts). Its declared Sleeper ids survive the translation
+   * and its unmatched players do not — so below the coverage bar every team reads short and each
+   * unmatched player would be offered as a waiver add. Refused there, with the count; above it the
+   * free-agent pool hides each one's own row by name and the count travels as a note.
+   */
+  const declared = declaredAvailability(args.platform, rawRosters.map((r) => r.playerData))
+  if (declared && !declared.verified) {
+    return {
+      model: {
+        ...base,
+        basisWeek: basis.week,
+        refusal: `Roster changes cannot be priced here: ${leagueUnverifiedClause(declared.unmatched)}.`,
+      },
+      injuryFeedNote: null,
+    }
+  }
 
   const rosters = await translateRostersByLeague(
     rawRosters,
@@ -255,6 +280,16 @@ export async function loadScenarioModel(args: {
     if (rostered.has(row.playerId) || faMeta.has(row.playerId)) continue
     const stats = (row.stats ?? {}) as Obj
     const position = typeof stats.position === 'string' ? stats.position.toUpperCase() : null
+    // A pasted Yahoo league's unmatched rostered player is somebody's, not a free agent.
+    if (
+      declared?.hides({
+        name: typeof stats.name === 'string' ? stats.name : null,
+        position,
+        team: typeof stats.team === 'string' ? stats.team : null,
+      })
+    ) {
+      continue
+    }
     if (!position || !slotPositions.has(position)) continue
     const n = perPosition.get(position) ?? 0
     if (n >= FREE_AGENTS_PER_POSITION) continue
@@ -350,6 +385,7 @@ export async function loadScenarioModel(args: {
   return {
     model: { ...base, basisWeek: basis.week, teams: scenarioTeams, freeAgents },
     injuryFeedNote,
+    ...(declared?.unmatched ? { unmatchedNote: unmatchedRosteredNote(declared.unmatched) } : {}),
   }
 }
 

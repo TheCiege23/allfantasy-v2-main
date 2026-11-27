@@ -5,6 +5,7 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import type { FantasyCalcSettings } from '@/lib/fantasycalc'
 import { espnSportOf, isForeignIdSpace, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
 import { excludeUntranslatedEspn } from '@/lib/decision-os/waiver/pool'
+import { declaredAvailability, type DeclaredAvailability } from '@/lib/core-app/declaredAvailability'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { valueBookFor, type ValueBook } from '@/lib/core-app/valueBook'
 
@@ -265,7 +266,13 @@ type Rostered = { ids: Set<string>; untranslated: number; hidesByName: (row: Nam
  * other foreign platforms are refused before this is called, and an ESPN id the map cannot place is
  * still a player on somebody's team, so it is hidden by name exactly as the waiver pool hides it.
  */
-async function rosteredPlayerIds(leagueId: string, platform: string | null, sport: string): Promise<Rostered> {
+async function rosteredPlayerIds(
+  leagueId: string,
+  platform: string | null,
+  sport: string,
+  /** A pasted Yahoo league's verdict: its unmatched rostered players are hidden by name too. */
+  declared: DeclaredAvailability | null = null,
+): Promise<Rostered> {
   const raw = await prisma.roster
     .findMany({ where: { leagueId }, select: { playerData: true } })
     .catch(() => [] as Array<{ playerData: unknown }>)
@@ -299,10 +306,12 @@ async function rosteredPlayerIds(leagueId: string, platform: string | null, spor
       }
     }
   }
+  const hidesDeclared = (row: NameRow) =>
+    Boolean(declared?.hides({ name: row.full_name, position: row.position, team: row.team_abbreviation }))
   return {
     ids,
     untranslated: untranslatedEspnIds.length,
-    hidesByName: hide ? (row) => hide.hides(row) : () => false,
+    hidesByName: hide ? (row) => hide.hides(row) || hidesDeclared(row) : hidesDeclared,
   }
 }
 
@@ -379,9 +388,34 @@ export async function buildAvailablePlayersContext(
    * it anyway listed their own rostered players as "available". Refused, the same way the lineup
    * optimizer refuses — with the real reason, not "the rosters have not synced".
    */
+  /*
+   * ⚠ EXCEPT A PASTED YAHOO LEAGUE (declaredAvailability.ts): its matched players carry Sleeper ids.
+   * Above the coverage bar it is read, its unmatched rostered players hidden by name and counted; below
+   * it, nobody may be named as available.
+   */
+  const declared = isForeignIdSpace(league.platform)
+    ? declaredAvailability(
+        league.platform,
+        (
+          await prisma.roster
+            .findMany({ where: { leagueId }, select: { playerData: true } })
+            .catch(() => [] as Array<{ playerData: unknown }>)
+        ).map((r) => r.playerData),
+      )
+    : null
+  if (declared && !declared.verified) {
+    return [
+      `${declared.unmatched} player${declared.unmatched === 1 ? '' : 's'} on the rosters in "${leagueName}" couldn't be matched to ours,`,
+      'so we cannot tell who is taken and who is free there. Say that plainly and suggest checking free agents',
+      `in ${league.platform} directly; do NOT name anyone as available.`,
+    ].join(' ')
+  }
+  const unmatchedLine = declared?.unmatched
+    ? `${declared.unmatched} player${declared.unmatched === 1 ? '' : 's'} on rosters in this league couldn't be matched to ours; they are kept off this list. Say so when naming anyone.`
+    : null
   // An ESPN league of another sport is refused here too: its ids would otherwise be read through the
   // NFL crosswalk (ESPN 15847 → Sleeper 1466, which is NFL Travis Kelce and NBA JaVale McGee).
-  if (isForeignIdSpace(league.platform, espnSportOf(league.platform, sportCode))) {
+  if (!declared && isForeignIdSpace(league.platform, espnSportOf(league.platform, sportCode))) {
     return [
       `"${leagueName}" is a ${league.platform} league, and AllFantasy cannot yet match ${league.platform} roster entries to players,`,
       'so we cannot tell who is taken and who is free there. Say that plainly and suggest checking free agents',
@@ -391,7 +425,7 @@ export async function buildAvailablePlayersContext(
 
   let rostered: Rostered
   try {
-    rostered = await rosteredPlayerIds(leagueId, league.platform ?? null, sportCode)
+    rostered = await rosteredPlayerIds(leagueId, league.platform ?? null, sportCode, declared)
   } catch {
     return `The rosters in "${leagueName}" could not be fully read just now, so who is free is unknown. Say so; do NOT name anyone as available.`
   }
@@ -475,6 +509,7 @@ export async function buildAvailablePlayersContext(
         `${shown.join('; ')}${more}`,
         `That is ${free.length} of the ${chart.rows.length} players on the chart.`,
         ...limits,
+        ...(unmatchedLine ? [unmatchedLine] : []),
       ].join('\n')
     }
   }
@@ -600,6 +635,7 @@ export async function buildAvailablePlayersContext(
           : 'This league has no roster positions on file, so these ranks come from a SUPERFLEX (2QB), 12-team dynasty baseline rather than its own settings. If it is a 1QB league, quarterbacks are ranked higher here than they are worth to them — say so rather than recommending a quarterback off this list alone.',
       )
       lines.push(...limitLines(fcSettings.isDynasty ? 'FantasyCalc dynasty' : 'FantasyCalc redraft', unranked))
+      if (unmatchedLine) lines.push(unmatchedLine)
       return lines.join('\n')
     }
   }
@@ -630,6 +666,7 @@ export async function buildAvailablePlayersContext(
   }
 
   lines.push(...limitLines(concepts, unranked))
+  if (unmatchedLine) lines.push(unmatchedLine)
 
   return lines.join('\n')
 }

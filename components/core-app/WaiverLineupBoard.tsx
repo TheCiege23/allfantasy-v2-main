@@ -6,7 +6,7 @@ import { DynastyMarkersScope, DynastyNameLine } from '@/components/core-app/scre
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { FOREIGN_IDS_UNREADABLE, availabilityUnverifiedSentence, unmatchedRosteredNote } from '@/lib/core-app/foreignIdSpaceCopy'
 import type { WaiverBoard, WaiverBoardState } from '@/lib/waivers/waiverBoard'
 import type { RosterNeeds } from '@/lib/waivers/rosterNeeds'
 import { useWaiverIntel } from '@/components/decide/useWaiverIntel'
@@ -40,6 +40,8 @@ const REASON: Record<Exclude<WaiverBoardState, 'ok'>, string> = {
   no_roster: 'no roster rows imported for your team yet',
   // Imported, but unread: "no roster rows" would be false of a league whose ids we cannot match.
   ids_unreadable: FOREIGN_IDS_UNREADABLE.toLowerCase(),
+  // A pasted Yahoo league below the coverage bar. The count, when the board carries it, replaces this.
+  availability_unverified: 'we can’t verify who’s available in this league',
   no_scoring_settings: 'this league publishes no scoring settings, so nothing here can be priced',
   no_slots: 'this league publishes no starting slots, so there is no lineup to improve',
   no_projections: 'nothing on your roster could be projected under this league’s scoring yet',
@@ -176,7 +178,12 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
 
       {board.state === 'ok' && board.needs ? <RosterNeedsStrip needs={board.needs} /> : null}
 
-      {board.state !== 'ok' ? (
+      {board.state === 'availability_unverified' && board.unmatchedRostered != null ? (
+        /* A pasted Yahoo league: a plain sentence with the count, never a list of false free agents. */
+        <p className="af-wlb-why" data-testid="waiver-lineup-board-unverified">
+          {copy(availabilityUnverifiedSentence(board.unmatchedRostered))}
+        </p>
+      ) : board.state !== 'ok' ? (
         <p className="af-wlb-why">{copy(REASON[board.state])}</p>
       ) : board.candidates.length === 0 ? (
         // A finding, not an error — nobody available changes the lineup.
@@ -336,6 +343,13 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         </DynastyMarkersScope>
       )}
 
+      {board.state === 'ok' && board.unmatchedRostered ? (
+        /* A pasted Yahoo league above the bar: the list stands, and says what it could not see. */
+        <p className="af-wlb-why" data-testid="waiver-lineup-board-unmatched">
+          {copy(unmatchedRosteredNote(board.unmatchedRostered))}
+        </p>
+      ) : null}
+
       {rollingPriority && board.state === 'ok' && board.candidates.length > 0 ? (
         <PriorityCost priority={rollingPriority} candidates={board.candidates} perGame={perGame} />
       ) : null}
@@ -344,7 +358,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         Coverage rides with the ranking. A board built from a third of the wire is a different
         claim from one built off all of it, and nothing else on screen would say which.
       */}
-      {board.notes.length > 0 ? (
+      {board.notes.length > 0 && board.state !== 'availability_unverified' ? (
         <button
           type="button"
           className="af-wlb-notes-toggle"
@@ -356,7 +370,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         </button>
       ) : null}
       <div className="af-wlb-notes" id="af-wlb-notes" data-open={notesOpen || undefined}>
-        {board.notes.map((n) => (
+        {(board.state === 'availability_unverified' ? [] : board.notes).map((n) => (
           <p key={n} className="af-wlb-note">
             {copy(n)}
           </p>

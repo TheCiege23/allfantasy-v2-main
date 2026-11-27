@@ -9,7 +9,7 @@
  */
 
 import React from "react"
-import { FOREIGN_IDS_UNREADABLE } from "@/lib/core-app/foreignIdSpaceCopy"
+import { FOREIGN_IDS_UNREADABLE, availabilityUnverifiedSentence, unmatchedRosteredNote } from "@/lib/core-app/foreignIdSpaceCopy"
 
 type UrgencyLevel = "critical" | "high" | "medium" | "low" | "none"
 
@@ -103,6 +103,8 @@ interface ReplacementsResponse {
   claimTarget?: ClaimTarget
   lineupTarget?: ClaimTarget
   limitation?: string | null
+  /** A pasted Yahoo league only: rostered players we could not match. */
+  unmatchedRostered?: number
 }
 
 const URGENCY_STYLES: Record<UrgencyLevel, string> = {
@@ -274,6 +276,14 @@ function ReplacementPanel({
   if (reps.limitation === "roster_ids_unreadable") {
     return <div className="mt-2 text-[11px] text-white/40">{FOREIGN_IDS_UNREADABLE}, so we can't compare replacements.</div>
   }
+  if (reps.limitation === "availability_unverified") {
+    // A pasted Yahoo league below the coverage bar: one plain sentence, never a list of false free agents.
+    return (
+      <div className="mt-2 text-[11px] text-white/40" data-testid="replacements-unverified">
+        {availabilityUnverifiedSentence(reps.unmatchedRostered ?? 0)}
+      </div>
+    )
+  }
   const empty = (reps.benchOptions?.length ?? 0) === 0 && (reps.freeAgentOptions?.length ?? 0) === 0
   return (
     <div key={playerId}>
@@ -282,6 +292,11 @@ function ReplacementPanel({
       )}
       <CandidateRow label="Best on your bench" options={reps.benchOptions ?? []} claimTarget={reps.lineupTarget} />
       <CandidateRow label="Best available" options={reps.freeAgentOptions ?? []} claimTarget={reps.claimTarget} />
+      {reps.unmatchedRostered ? (
+        <div className="mt-1.5 text-[11px] text-white/40" data-testid="replacements-unmatched">
+          {unmatchedRosteredNote(reps.unmatchedRostered)}
+        </div>
+      ) : null}
       {empty && <div className="mt-1.5 text-[11px] text-white/40">No clearly better options found at this position.</div>}
     </div>
   )

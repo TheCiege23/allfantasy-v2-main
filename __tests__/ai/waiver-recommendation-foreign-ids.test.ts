@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
   pool: null as unknown,
   claims: [] as unknown[],
   runCalls: 0,
+  rosters: [] as Array<{ playerData: unknown }>,
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'u1' } })) }))
@@ -35,7 +36,10 @@ vi.mock('@/lib/entitlements/afAccess', () => ({
   },
 }))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { league: { findUnique: vi.fn(async () => ({ platform: h.platform })) } },
+  prisma: {
+    league: { findUnique: vi.fn(async () => ({ platform: h.platform })) },
+    roster: { findMany: vi.fn(async () => h.rosters) },
+  },
 }))
 vi.mock('@/lib/decision-os/waiver/loader', () => ({
   loadWaiverWorldFacts: vi.fn(async () => h.facts),
@@ -98,6 +102,7 @@ beforeEach(() => {
   h.pool = POOL
   h.claims = [claim({})]
   h.runCalls = 0
+  h.rosters = []
 })
 
 describe('POST /api/ai/waivers/recommend — who reaches the engine', () => {
@@ -180,5 +185,42 @@ describe('POST /api/ai/waivers/recommend — the panel contract, from the engine
     const unpriced = await (await call()).json()
     expect(unpriced.insufficientData).toBe(true)
     expect(unpriced.meta.dataGaps).toContain('free_agent_pool_unpriced')
+  })
+})
+
+/*
+ * A PASTED Yahoo league (lib/core-app/declaredAvailability.ts): matched players stored `sleeper:<id>`, the
+ * unmatched as `yahoo-paste:`. Above the 80% coverage bar it reaches the engine and the response counts
+ * what it could not see; below it, nobody is called available and the panel gets the count.
+ */
+describe('POST /api/ai/waivers/recommend — a pasted Yahoo league', () => {
+  const declared = (n: number) => Array.from({ length: n }, (_, i) => `sleeper:${100 + i}`)
+
+  it('above the bar: reaches the engine, and says how many rostered players it could not match', async () => {
+    h.platform = 'yahoo'
+    h.rosters = [{ playerData: { players: [...declared(9), 'yahoo-paste:some guy|WR|KC'] } }]
+    const body = await (await call()).json()
+    expect(h.runCalls).toBe(1)
+    expect(body.recommendations.length).toBeGreaterThan(0)
+    expect(body.availability).toEqual({ verified: true, unmatchedRostered: 1 })
+  })
+
+  it('below the bar: never reaches the engine, and says it cannot verify, with the count', async () => {
+    h.platform = 'yahoo'
+    h.rosters = [{ playerData: { players: ['sleeper:1', 'yahoo-paste:a|WR|KC', 'yahoo-paste:b|RB|KC'] } }]
+    const body = await (await call()).json()
+    expect(h.runCalls).toBe(0)
+    expect(body.recommendations).toEqual([])
+    expect(body.meta.dataGaps).toEqual(['availability_unverified'])
+    expect(body.availability).toEqual({ verified: false, unmatchedRostered: 2 })
+  })
+
+  it('CONTROL: a Yahoo league with no declared id at all keeps the old refusal', async () => {
+    h.platform = 'yahoo'
+    h.rosters = [{ playerData: { players: ['4046', '6038'] } }]
+    const body = await (await call()).json()
+    expect(h.runCalls).toBe(0)
+    expect(body.meta.dataGaps).toContain('roster_ids_not_readable_for_platform')
+    expect(body.availability).toBeUndefined()
   })
 })

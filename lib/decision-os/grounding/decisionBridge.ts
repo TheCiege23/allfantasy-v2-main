@@ -330,6 +330,26 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
       // The engine's graded record — only in a redraft full-PPR NFL league; elsewhere nothing changes.
       loadWaiverCalibrationForLeague(leagueId),
     ])
+    /*
+     * 🛑 A PASTED YAHOO LEAGUE BELOW THE COVERAGE BAR: the pool is empty because nobody can be called
+     * available, not because the wire is bare — "every player is already rostered" would be false.
+     */
+    if (pool.declaredRostered && !pool.declaredRostered.verified) {
+      const { availabilityUnverifiedSentence } = await import('@/lib/core-app/foreignIdSpaceCopy')
+      return {
+        present: false,
+        value: null,
+        asOf: null,
+        servedFrom: null,
+        confidence: null,
+        conclusive: { ok: true },
+        gap: {
+          reason: 'not_synced',
+          detail: availabilityUnverifiedSentence(pool.declaredRostered.unmatched),
+          remedy: 'Check free agents on Yahoo directly; do not name anyone as available.',
+        },
+      }
+    }
     if (pool.availablePlayers.length === 0) {
       /*
        * Distinct from "no roster": the league resolved and the wire is empty after subtraction.

@@ -16,6 +16,7 @@ import { lineupSeatsFromSettings } from '@/lib/core-app/slotEligibility'
 import { leagueContextFor } from '@/lib/core-app/leagueContext'
 import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { loadDeclaredAvailability, type DeclaredAvailability } from '@/lib/core-app/declaredAvailability'
 import { startingSlots } from '@/lib/core-app/slotEligibility'
 import { prisma } from '@/lib/prisma'
 import { boardGamesText, boardUnit, isBoardValueSport, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
@@ -125,6 +126,11 @@ export type FaabBidPlan =
       horizonBasis: string | null
       allocReason: string | null
       rosteredCount: number
+      /**
+       * A pasted Yahoo league only: rostered players no Sleeper-id read can see. Each one's own row is
+       * kept out of the pool by name; the count is said in the text.
+       */
+      unmatchedRostered?: number
       /** Every valued unrostered player the allocator priced. */
       pricedCount: number
       /** All genuine upgrades, best first — renderers cap the list themselves. */
@@ -147,8 +153,20 @@ const refuse = (line: string): FaabBidPlan => ({ status: 'refused', line })
 export async function computeFaabBidPlan(leagueId: string, userId: string, deps: FaabPlanDeps = {}): Promise<FaabBidPlan> {
   const league = await leagueContextFor(leagueId, userId).league().catch(() => null)
   if (!league) return refuse('FAAB BID PLAN: the league in scope could not be read. Do not estimate bids.')
+  /*
+   * A pasted Yahoo league is read through its declared Sleeper ids — but only above the coverage bar,
+   * and with its unmatched rostered players kept out of the pool (declaredAvailability.ts).
+   */
+  const declared: DeclaredAvailability | null = isForeignIdSpace(league.platform, league.sport)
+    ? await loadDeclaredAvailability({ id: leagueId, platform: league.platform }).catch(() => null)
+    : null
+  if (declared && !declared.verified) {
+    return refuse(
+      `FAAB BID PLAN: ${declared.unmatched} player${declared.unmatched === 1 ? '' : 's'} on this league's rosters couldn't be matched to ours, so who is available cannot be verified. Say so; do not estimate bids or name anyone as available.`,
+    )
+  }
   // A native league of another sport holds Rolling Insights ids, and these values are NFL Sleeper ids.
-  if (isForeignIdSpace(league.platform, league.sport)) {
+  if (!declared && isForeignIdSpace(league.platform, league.sport)) {
     return refuse('FAAB BID PLAN: this platform\'s player ids are not readable here, so available players cannot be priced. Say so; do not estimate bids.')
   }
   // 🛑 Any sport but the NFL leaves here, before the NFL chart is read (see the header).
@@ -173,9 +191,13 @@ export async function computeFaabBidPlan(leagueId: string, userId: string, deps:
   if (!values) return refuse('FAAB BID PLAN: no player values are loaded for this league\'s format yet, so nobody can be priced. Say so; do not estimate bids.')
 
   const rostered = new Set(rows.rosters.flatMap((r) => tradeRosterPlayerIds(r)))
-  const candidateIds = Object.keys(values.bySleeperId).filter((id) => !rostered.has(id))
+  const unrostered = Object.keys(values.bySleeperId).filter((id) => !rostered.has(id))
   const myIds = tradeRosterPlayerIds(myRoster)
-  const byId = await readTradePlayerRows([...new Set([...myIds, ...candidateIds])], league.sport)
+  const byId = await readTradePlayerRows([...new Set([...myIds, ...unrostered])], league.sport)
+  // A pasted Yahoo league's unmatched rostered player is somebody's, not a free agent.
+  const candidateIds = declared
+    ? unrostered.filter((id) => !declared.hides({ name: byId.get(id)?.name, position: byId.get(id)?.position }))
+    : unrostered
   const leagueScoring = marketContext.scoring.settings
   const myPlayers = toDiscoveryPlayers(myRoster, byId, values, leagueScoring)
   const pool = faabPoolFor({ candidateIds, byId, values, leagueScoring, myPlayers, leagueSettings: league.settings })
@@ -202,6 +224,7 @@ export async function computeFaabBidPlan(leagueId: string, userId: string, deps:
     seasonBudget: Number.isFinite(budgetRaw) && budgetRaw > 0 ? budgetRaw : null,
     seatsLabel: seats ? describeSeats(seats) : null,
     rosteredCount: rostered.size,
+    ...(declared ? { unmatchedRostered: declared.unmatched } : {}),
   }
   return finishPlan({ base, pool, rows, league, displacedById, seatsKnown: Boolean(seats) })
 }
@@ -377,6 +400,11 @@ export function renderFaabBidText(plan: FaabBidPlan): string {
       ? `Upgrades are measured against the user's best legal starting lineup under this league's slots (${plan.seatsLabel}).`
       : 'This league\'s starting slots are NOT on file, so a standard 1 QB / 2 RB / 2 WR / 1 TE lineup is ASSUMED. Say so: in a FLEX or SUPER_FLEX league the real upgrades can be very different.',
   ]
+  if (plan.unmatchedRostered) {
+    lines.push(
+      `${plan.unmatchedRostered} player${plan.unmatchedRostered === 1 ? '' : 's'} on this league's rosters couldn't be matched to ours; they are kept out of this list. Say so when naming bids.`,
+    )
+  }
   const onBoard = plan.valueUnit !== 'market'
 
   if (plan.outcome === 'no_pool') {

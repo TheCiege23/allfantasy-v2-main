@@ -4,7 +4,9 @@ import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 import { prisma } from '@/lib/prisma'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
 import { normalizePosition } from '@/lib/core-app/positionNormalization'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, stripForeignIds } from '@/lib/core-app/rosterIdSpace'
+import { loadDeclaredAvailability } from '@/lib/core-app/declaredAvailability'
+import { leagueUnverifiedClause } from '@/lib/core-app/foreignIdSpaceCopy'
 import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
 import {
   computeRosterNeed,
@@ -300,11 +302,21 @@ async function rosterNeedFactors(args: {
      */
     // Read off the league itself: a native NHL roster's Rolling Insights ids are NFL strangers by `sleeperId`.
     const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { platform: true, sport: true } })
-    if (isForeignIdSpace(league?.platform, league?.sport ?? args.sport)) {
+    const foreign = isForeignIdSpace(league?.platform, league?.sport ?? args.sport)
+    /*
+     * ⚠ EXCEPT A PASTED YAHOO LEAGUE above the coverage bar (declaredAvailability.ts): its declared
+     * Sleeper ids are read (`stripForeignIds` keeps exactly those). Below the bar a roster reads short —
+     * a hole that is really an unmatched player — so it is named as a gap, with the count.
+     */
+    const declared = foreign && league ? await loadDeclaredAvailability({ id: args.leagueId, platform: league.platform }).catch(() => null) : null
+    if (declared && !declared.verified) {
+      return none(give, get, `this league's rosters — ${leagueUnverifiedClause(declared.unmatched)}`)
+    }
+    if (foreign && !declared) {
       return none(give, get, "this league's rosters, whose player ids are the platform's own and cannot be matched to ours yet")
     }
 
-    const pd = (args.playerData ?? {}) as Record<string, unknown>
+    const pd = (declared ? stripForeignIds(args.playerData) : (args.playerData ?? {})) as Record<string, unknown>
     const rosterIds = Array.isArray(pd.players) ? pd.players.map(String).filter((x) => x && x !== '0') : []
     if (rosterIds.length === 0) return none(give, get, 'your roster in this league, which has no players on file')
 

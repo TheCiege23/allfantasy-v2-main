@@ -10,12 +10,14 @@ const h = vi.hoisted(() => ({
   rows: [] as Array<{ sleeperId: string; position: string; name: string }>,
   platform: 'sleeper',
   sleeperIdsAsked: [] as string[][],
+  leagueRosters: [] as Array<{ playerData: unknown }>,
 }))
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: async () => ({ platform: h.platform }) },
+    roster: { findMany: async () => h.leagueRosters },
     sportsPlayer: {
       findMany: async (a: { where?: { sleeperId?: { in?: string[] } } }) => {
         h.sleeperIdsAsked.push(a?.where?.sleeperId?.in ?? [])
@@ -40,6 +42,7 @@ import { loadRosterNeedFactors, loadViewerNeedFactors } from '@/lib/trade-value/
 beforeEach(() => {
   h.platform = 'sleeper'
   h.sleeperIdsAsked = []
+  h.leagueRosters = []
   h.rows = [
     { sleeperId: 'qb1', position: 'QB', name: 'Q' },
     { sleeperId: 'rb1', position: 'RB', name: 'R1' },
@@ -105,5 +108,38 @@ describe('a foreign league’s roster ids', () => {
     const f = await loadViewerNeedFactors(args)
     expect(h.sleeperIdsAsked).toEqual([['qb1', 'rb1', 'rb2', 'wr1', 'wr2', 'te1']])
     expect(f.gap).toBeNull()
+  })
+})
+
+/*
+ * A PASTED Yahoo league (lib/core-app/declaredAvailability.ts): resolved players stored `sleeper:<id>`,
+ * the unmatched as `yahoo-paste:`. Above the 80% coverage bar need is priced on the declared ids; below
+ * it a roster reads short — a "hole" that is an unmatched player — so it is a gap, with the count.
+ */
+describe('a pasted Yahoo league', () => {
+  const { userId: _u, ...rest } = args
+  const pasted = ['sleeper:qb1', 'sleeper:rb1', 'sleeper:rb2', 'sleeper:wr1', 'sleeper:wr2', 'sleeper:te1']
+
+  it('above the bar: need is priced on the declared Sleeper ids', async () => {
+    h.platform = 'yahoo'
+    h.leagueRosters = [{ playerData: { players: [...pasted, 'sleeper:x1', 'sleeper:x2', 'sleeper:x3', 'yahoo-paste:some guy|WR|KC'] } }]
+    const f = await loadRosterNeedFactors({ ...rest, playerData: { players: pasted } })
+    expect(h.sleeperIdsAsked).toEqual([['qb1', 'rb1', 'rb2', 'wr1', 'wr2', 'te1']])
+    expect(f.gap).toBeNull()
+  })
+
+  it('🛑 the unmatched pasted player is never looked up as anyone', async () => {
+    h.platform = 'yahoo'
+    h.leagueRosters = [{ playerData: { players: [...pasted, 'sleeper:x1', 'sleeper:x2', 'sleeper:x3', 'yahoo-paste:some guy|WR|KC'] } }]
+    await loadRosterNeedFactors({ ...rest, playerData: { players: [...pasted, 'yahoo-paste:some guy|WR|KC'] } })
+    expect(h.sleeperIdsAsked.flat().some((id) => id.includes('yahoo-paste'))).toBe(false)
+  })
+
+  it('below the bar: nothing is looked up, and the gap names how many could not be matched', async () => {
+    h.platform = 'yahoo'
+    h.leagueRosters = [{ playerData: { players: ['sleeper:qb1', 'yahoo-paste:a|WR|KC', 'yahoo-paste:b|RB|KC'] } }]
+    const f = await loadRosterNeedFactors({ ...rest, playerData: { players: ['sleeper:qb1'] } })
+    expect(h.sleeperIdsAsked).toEqual([])
+    expect(f.gap).toBe("this league's rosters — 2 players on its rosters couldn't be matched to ours")
   })
 })

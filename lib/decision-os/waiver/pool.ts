@@ -40,6 +40,7 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForSport } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { espnSportOf, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
+import { declaredAvailability } from '@/lib/core-app/declaredAvailability'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeTeamNeeds, type TeamNeedsMap } from '@/lib/waiver-engine/team-needs'
@@ -124,6 +125,12 @@ export interface WaiverPool {
    * refuse when it is non-zero.
    */
   untranslatedRostered: { ids: number; excludedFromWire: number; unnamed: number } | null
+  /**
+   * A pasted Yahoo league only (declaredAvailability.ts): rostered players no Sleeper-id read can see.
+   * `verified: false` means the league is below the coverage bar and `availablePlayers` is EMPTY — not
+   * because the wire is bare, but because nobody can be called available. A caller must say so.
+   */
+  declaredRostered?: { verified: boolean; unmatched: number } | null
 }
 
 /** Matches the assistant's `deep` mode. A larger slice costs one query, not one per player. */
@@ -233,10 +240,17 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
    * `excludeUntranslatedEspn` takes them off the wire by the ESPN identity row's own name.
    */
   const untranslated = await excludeUntranslatedEspn(untranslatedEspnIds, sport)
+  /*
+   * 🛑 A PASTED YAHOO LEAGUE'S UNMATCHED PLAYERS ARE ROSTERED TOO. The read above keeps its declared
+   * `sleeper:` ids and drops the rest, so below the coverage bar nobody is offered, and above it each
+   * unmatched player's own wire row is hidden by the name his paste id carries.
+   */
+  const declared = declaredAvailability(league?.platform, (rosterRows as RosterRow[]).map((r) => r.playerData))
 
-  const available = pool.filter((p) => {
+  const available = declared && !declared.verified ? [] : pool.filter((p) => {
     const ids = [p.player_id, p.external_source_id].filter(Boolean) as string[]
     if (ids.some((id) => rosteredIds.has(id))) return false
+    if (declared?.hides({ name: p.full_name, position: p.position, team: p.team_abbreviation })) return false
     return !untranslated.hides(p)
   })
 
@@ -426,6 +440,7 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
     poolIncomplete: pool.length >= POOL_LIMIT,
     leagueRosterCount: leagueRosters.length,
     untranslatedRostered: untranslated.summary(),
+    declaredRostered: declared ? { verified: declared.verified, unmatched: declared.unmatched } : null,
     pricing: {
       priced: availablePlayers.filter((p) => p.value > 0).length,
       total: availablePlayers.length,

@@ -2,6 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const leagueFindFirstMock = vi.fn()
 const rosterFindFirstMock = vi.fn()
+/*
+ * The league's rosters, for a pasted Yahoo league's coverage read (declaredAvailability.ts). Only that
+ * read selects `playerData`; the viewer-team read (lib/league/viewerTeams.ts) gets a non-array, which
+ * sends it to `findFirst` as these doubles always have.
+ */
+let leagueRosters: Array<{ playerData: unknown }> = []
+const rosterFindManyMock = vi.fn(async (args?: { select?: { playerData?: boolean } }) => (args?.select?.playerData ? leagueRosters : null))
 const playerIdentityMapFindManyMock = vi.fn()
 const sportsInjuryFindManyMock = vi.fn()
 const playerMetaTrendFindManyMock = vi.fn()
@@ -12,7 +19,7 @@ const parseJsonContentFromChatCompletionMock = vi.fn()
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findFirst: leagueFindFirstMock },
-    roster: { findFirst: rosterFindFirstMock },
+    roster: { findFirst: rosterFindFirstMock, findMany: rosterFindManyMock },
     playerIdentityMap: { findMany: playerIdentityMapFindManyMock },
     sportsInjury: { findMany: sportsInjuryFindManyMock },
     playerMetaTrend: { findMany: playerMetaTrendFindManyMock },
@@ -170,5 +177,47 @@ describe('LeagueAdvisorService — foreign roster ids', () => {
   it('CONTROL: the same id in a Sleeper league IS named', async () => {
     const { userContent } = await userContentFor('sleeper')
     expect(userContent).toContain('Starters: Wrong Player')
+  })
+})
+
+/*
+ * A PASTED Yahoo league (lib/core-app/declaredAvailability.ts): resolved players stored `sleeper:<id>`,
+ * the unmatched as `yahoo-paste:`. Above the 80% coverage bar the advisor reads the declared ids and
+ * says how many it could not match; below it the roster is unread, with the count — never a short one.
+ */
+describe('LeagueAdvisorService — a pasted Yahoo league', () => {
+  const declared = (n: number) => Array.from({ length: n }, (_, i) => `sleeper:${100 + i}`)
+  const mine = ['sleeper:6038', 'yahoo-paste:some guy|WR|KC']
+  const userContentFor = async (leaguePlayers: string[]) => {
+    vi.clearAllMocks()
+    leagueFindFirstMock.mockResolvedValue({ id: 'lg-y', name: 'Paste League', sport: 'NFL', platform: 'yahoo' })
+    rosterFindFirstMock.mockResolvedValue({ playerData: { players: mine, starters: ['sleeper:6038'] }, faabRemaining: null, waiverPriority: null })
+    leagueRosters = [{ playerData: { players: leaguePlayers } }]
+    playerIdentityMapFindManyMock.mockResolvedValue([])
+    sportsInjuryFindManyMock.mockResolvedValue([])
+    playerMetaTrendFindManyMock.mockResolvedValue([])
+    openaiChatJsonMock.mockResolvedValue({ ok: false, status: 500 })
+    const { getLeagueAdvisorAdvice } = await import('@/lib/league-advisor/LeagueAdvisorService')
+    await getLeagueAdvisorAdvice({ leagueId: 'lg-y', userId: 'u-1' })
+    const messages = openaiChatJsonMock.mock.calls[0]?.[0]?.messages ?? []
+    return String(messages[1]?.content ?? '')
+  }
+
+  it('above the bar: names the declared starter and counts the unmatched player', async () => {
+    const userContent = await userContentFor([...mine, ...declared(8)])
+    expect(userContent).toContain('Starters: Wrong Player')
+    expect(userContent).toContain("1 player on rosters in this league couldn't be matched to ours.")
+  })
+
+  it('🛑 the unmatched pasted player is never named or passed on as an id', async () => {
+    const userContent = await userContentFor([...mine, ...declared(8)])
+    expect(userContent).not.toMatch(/yahoo-paste|some guy/i)
+  })
+
+  it('below the bar: the roster is unread, with the count, and nobody is named', async () => {
+    const userContent = await userContentFor([...mine, 'yahoo-paste:a|RB|KC'])
+    expect(userContent).toContain("Roster: this league cannot be read yet — 2 players on its rosters couldn't be matched to ours.")
+    expect(userContent).not.toContain('Wrong Player')
+    expect(sportsInjuryFindManyMock).not.toHaveBeenCalled()
   })
 })

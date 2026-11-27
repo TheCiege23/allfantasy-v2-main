@@ -676,6 +676,7 @@ const spanish: Record<string, string> = {
   'this league’s tiebreak rule was not published': 'No se publicó la regla de desempate de esta liga.',
   'no claim limit was published — this platform does not expose one': 'No se publicó un límite de reclamos; esta plataforma no lo proporciona.',
   'we cannot tell which roster in this league is yours': 'No podemos identificar cuál es tu plantilla en esta liga.',
+  'we can’t verify who’s available in this league': 'No podemos confirmar quién está disponible en esta liga.',
   'This league does not use FAAB bidding.': 'Esta liga no usa ofertas FAAB.',
   'your platform does not publish remaining FAAB for this league, so we cannot show a budget — this is not the same as having none': 'Tu plataforma no publica el FAAB restante de esta liga, así que no podemos mostrar un presupuesto. Eso no significa que sea cero.',
   'this league does not publish a waiver priority, or runs blind bidding instead': 'Esta liga no publica la prioridad de reclamo o usa ofertas a ciegas.',
@@ -1606,6 +1607,26 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
       const listed = spanishLockList(m[1]!)
       return listed ? `Los partidos que ya empezaron quedan fijos: ${listed}.` : m[0]!
     },
+  ],
+  // A pasted Yahoo league (foreignIdSpaceCopy.ts `availabilityUnverifiedSentence` / `unmatchedRosteredNote`).
+  [
+    /^We can't verify who's available in this league: 1 player on its rosters couldn't be matched to ours\.$/,
+    () => 'No podemos confirmar quién está disponible en esta liga: no pudimos emparejar 1 jugador de sus plantillas con los nuestros.',
+  ],
+  [
+    /^We can't verify who's available in this league: (\d+) players on its rosters couldn't be matched to ours\.$/,
+    (m) => `No podemos confirmar quién está disponible en esta liga: no pudimos emparejar ${m[1]} jugadores de sus plantillas con los nuestros.`,
+  ],
+  // foreignIdSpaceCopy.ts `leagueUnverifiedClause`, as a refusal's detail ("Roster changes cannot be priced here: …").
+  [/^1 player on its rosters couldn't be matched to ours$/, () => 'no pudimos emparejar 1 jugador de sus plantillas con los nuestros'],
+  [/^(\d+) players on its rosters couldn't be matched to ours$/, (m) => `no pudimos emparejar ${m[1]} jugadores de sus plantillas con los nuestros`],
+  [
+    /^1 player on rosters in this league couldn't be matched to ours\.$/,
+    () => 'No pudimos emparejar 1 jugador de las plantillas de esta liga con los nuestros.',
+  ],
+  [
+    /^(\d+) players on rosters in this league couldn't be matched to ours\.$/,
+    (m) => `No pudimos emparejar ${m[1]} jugadores de las plantillas de esta liga con los nuestros.`,
   ],
   [
     /^1 free agent is ruled out, on injured reserve or on a bye this week and not shown\.$/,

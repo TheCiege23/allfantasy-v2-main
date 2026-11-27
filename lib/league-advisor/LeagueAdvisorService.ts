@@ -7,6 +7,8 @@ import { matchInjuryRowsToPlayers, type InjuryPlayerLookup } from '@/lib/injurie
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isForeignIdSpace, sleeperReadablePlayerDataOf } from '@/lib/core-app/rosterIdSpace'
+import { loadDeclaredAvailability } from '@/lib/core-app/declaredAvailability'
+import { leagueUnverifiedClause, unmatchedRosteredNote } from '@/lib/core-app/foreignIdSpaceCopy'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import type { LeagueAdvisorAdvice, LeagueAdvisorContext } from './types'
@@ -371,11 +373,18 @@ export async function getLeagueAdvisorAdvice(input: GetAdvisorInput): Promise<Le
   // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids, so it is never named
   // as one; and with no names, the injury reads below would return the whole sport's list as "yours".
   // A native league of another sport too: its Rolling Insights ids are not Sleeper ids (rosterIdSpace.ts).
-  const unreadable = isForeignIdSpace(league.platform, league.sport)
+  /*
+   * ⚠ EXCEPT A PASTED YAHOO LEAGUE above the coverage bar (declaredAvailability.ts): its declared Sleeper
+   * ids are read (the translation below keeps exactly those), and the count it could not match is said.
+   */
+  const foreign = isForeignIdSpace(league.platform, league.sport)
+  const declared = foreign ? await loadDeclaredAvailability({ id: league.id, platform: league.platform }).catch(() => null) : null
+  const unreadable = foreign && !declared?.verified
   // An ESPN roster is translated into Sleeper ids first — raw, ESPN 12483 (Stafford) is named as
   // Sleeper's 12483 (Jack Bech) by the Sleeper player blob below.
   const playerData = await sleeperReadablePlayerDataOf(league.platform, roster.playerData, league.sport)
-  const playerIds = getRosterPlayerIds(playerData)
+  // An unreadable roster reads as none, never as a short one (a pasted league below the bar keeps some ids).
+  const playerIds = unreadable ? [] : getRosterPlayerIds(playerData)
   const identityById = new Map<string, { team: string | null; position: string | null }>()
   const nameMap = await resolveRosterPlayerNames(playerIds, sport, identityById)
   const rosterNames = [...nameMap.values()]
@@ -389,8 +398,12 @@ export async function getLeagueAdvisorAdvice(input: GetAdvisorInput): Promise<Le
     unreadable ? [] : getRecentInjuries(sport, rosterNames, injuryLookups),
   ])
   const rosterSummary = unreadable
-    ? "Roster: this platform's player ids cannot be resolved to players yet."
-    : buildRosterSummary(playerIds, nameMap, playerData)
+    ? declared
+      ? `Roster: this league cannot be read yet — ${leagueUnverifiedClause(declared.unmatched)}.`
+      : "Roster: this platform's player ids cannot be resolved to players yet."
+    : [buildRosterSummary(playerIds, nameMap, playerData), declared?.unmatched ? unmatchedRosteredNote(declared.unmatched) : null]
+        .filter(Boolean)
+        .join(' ')
   const injurySummary =
     injuries.length > 0
       ? injuries

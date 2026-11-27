@@ -81,6 +81,18 @@ export function bridgeCoverageReadable(translated: number, total: number): boole
 }
 
 /**
+ * Pure: a league's distinct roster ids against its bridge — how many translate, and whether a miss can
+ * be trusted. THE coverage rule; `loadBridgedLeagues` and `declaredAvailability.ts` both read it.
+ */
+export function bridgeVerdict(
+  ids: readonly string[],
+  map: ReadonlyMap<string, string>,
+): { total: number; translated: number; readable: boolean } {
+  const translated = ids.filter((id) => map.has(id)).length
+  return { total: ids.length, translated, readable: bridgeCoverageReadable(translated, ids.length) }
+}
+
+/**
  * Roster arrays in Sleeper ids: bridged ids replaced, UNBRIDGED ids DROPPED. Keys that are not
  * roster arrays are untouched.
  */
@@ -186,15 +198,7 @@ export async function loadBridgedLeagues(
     const column = bridgeColumnFor(l.platform)!
     const map = mapByColumn.get(column) ?? new Map<string, string>()
     const ids = idsByLeague.get(l.id) ?? []
-    const translated = ids.filter((id) => map.has(id)).length
-    out.set(l.id, {
-      platform: (l.platform ?? '').trim().toLowerCase(),
-      column,
-      map,
-      total: ids.length,
-      translated,
-      readable: bridgeCoverageReadable(translated, ids.length),
-    })
+    out.set(l.id, { platform: (l.platform ?? '').trim().toLowerCase(), column, map, ...bridgeVerdict(ids, map) })
   }
   return out
 }

@@ -1281,10 +1281,13 @@ export async function executeChimmyTool(
             `${player.projectedPoints.toFixed(2)} projected`,
             `+${player.gain.toFixed(2)} to the best eligible lineup`,
           ].join(' · '))
+          const { unmatchedRosteredNote } = await import('@/lib/core-app/foreignIdSpaceCopy')
           return [
             'The league’s Worth Adding board ranks these pickups by projected lineup gain.',
             ...rows,
             ...board.notes,
+            // A pasted Yahoo league: say what the list could not see.
+            ...(board.unmatchedRostered ? [`${unmatchedRosteredNote(board.unmatchedRostered)} Mention that when listing them.`] : []),
           ].join('\n')
         }
         return buildAvailablePlayersContext(ctx.leagueId, ctx.userId)

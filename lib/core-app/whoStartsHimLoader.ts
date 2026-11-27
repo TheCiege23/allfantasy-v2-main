@@ -12,6 +12,8 @@ import {
 } from './playerTradeVisual'
 import { normalizePosition } from './positionNormalization'
 import { rosterIdSpaceOf } from './rosterIdSpace'
+import { loadDeclaredAvailability } from './declaredAvailability'
+import { leagueUnverifiedClause } from './foreignIdSpaceCopy'
 import {
   PRICED_SHARE_MIN,
   SELL_LEAGUE_CAP,
@@ -64,7 +66,16 @@ function unmeasured(l: YourLeague, note: string, otherTeams = 0): SellLeague {
 }
 
 async function oneLeague(l: YourLeague, userId: string, sleeperId: string, position: string): Promise<SellLeague> {
-  if (rosterIdSpaceOf(l.platform) !== 'sleeper') return unread(l, 'other teams’ rosters in this league use the platform’s own player ids, so we can’t read them yet')
+  /*
+   * ⚠ EXCEPT A PASTED YAHOO LEAGUE above the coverage bar (declaredAvailability.ts): `readLeagueTradeRows`
+   * keeps its declared Sleeper ids, so the other teams read as the players they hold. Below the bar a team
+   * would read short and "start" anyone, so it is unread, with the count.
+   */
+  if (rosterIdSpaceOf(l.platform) !== 'sleeper') {
+    const declared = await loadDeclaredAvailability({ id: l.leagueId, platform: l.platform }).catch(() => null)
+    if (!declared) return unread(l, 'other teams’ rosters in this league use the platform’s own player ids, so we can’t read them yet')
+    if (!declared.verified) return unread(l, `${leagueUnverifiedClause(declared.unmatched)}, so we can’t compare its teams yet`)
+  }
 
   const [rows, league] = await Promise.all([
     readLeagueTradeRows(l.leagueId),

@@ -3,7 +3,9 @@ import 'server-only'
 import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
-import { isForeignIdSpace } from './rosterIdSpace'
+import { isForeignIdSpace, stripForeignIds } from './rosterIdSpace'
+import { bridgeColumnFor, isDeclaredBridge } from './bridgedRosterIds'
+import { declaredAvailability } from './declaredAvailability'
 
 /**
  * Own % and start %, computed from AllFantasy's OWN rosters.
@@ -59,6 +61,12 @@ export type RosteredMarketBoard = {
    * percentage below a threshold rather than publish noise.
    */
   leaguesCounted: number
+  /**
+   * Pasted Yahoo leagues left out because too many of their rostered players could not be matched
+   * (declaredAvailability.ts) — counted, they would read players as unowned who are owned. Zero when
+   * there are none.
+   */
+  leaguesUnverified: number
 }
 
 /** Sleeper writes an unfilled starting slot as "0" — a hole, not a player. */
@@ -96,16 +104,40 @@ const readMarketCached = unstable_cache(
       .catch(() => [])
       // A foreign league's ids collide with real Sleeper ids — counted, they own strangers. Unreadable, so uncounted.
       // So do a native NHL/NBA/MLB league's Rolling Insights ids: Sleeper ids exist only for NFL.
-      .then((ls) => ls.filter((l) => !isForeignIdSpace(l.platform, l.sport)))
+      // ⚠ EXCEPT A PASTED YAHOO LEAGUE, decided below from its own rosters (declaredAvailability.ts).
+      .then((ls) => ls.filter((l) => !isForeignIdSpace(l.platform, l.sport) || isDeclaredBridge(bridgeColumnFor(l.platform))))
 
-    if (leagues.length === 0) return { rows: [] as Array<[string, RosteredMarket]>, leagues: 0 }
+    if (leagues.length === 0) return { rows: [] as Array<[string, RosteredMarket]>, leagues: 0, unverified: 0 }
 
-    const rosters = await prisma.roster
+    const allRosters = await prisma.roster
       .findMany({
         where: { leagueId: { in: leagues.map((l) => l.id) } },
         select: { leagueId: true, playerData: true },
       })
-      .catch(() => [])
+      .catch(() => [] as Array<{ leagueId: string; playerData: unknown }>)
+
+    /*
+     * A pasted Yahoo league counts only above the coverage bar, read through its declared Sleeper ids
+     * (`stripForeignIds` keeps exactly those). Below it — or with no declared id at all — it is left out
+     * of the denominator too, as every other unreadable league is.
+     */
+    const declaredLeagues = new Set(leagues.filter((l) => isForeignIdSpace(l.platform, l.sport)).map((l) => l.id))
+    const byLeague = new Map<string, unknown[]>()
+    for (const r of allRosters) if (declaredLeagues.has(r.leagueId)) (byLeague.get(r.leagueId) ?? byLeague.set(r.leagueId, []).get(r.leagueId)!).push(r.playerData)
+    const dropped = new Set<string>()
+    let unverified = 0
+    for (const l of leagues) {
+      if (!declaredLeagues.has(l.id)) continue
+      const verdict = declaredAvailability(l.platform, byLeague.get(l.id) ?? [])
+      if (verdict?.verified) continue
+      dropped.add(l.id)
+      if (verdict) unverified += 1
+    }
+    const counted = leagues.filter((l) => !dropped.has(l.id))
+    if (counted.length === 0) return { rows: [] as Array<[string, RosteredMarket]>, leagues: 0, unverified }
+    const rosters = allRosters
+      .filter((r) => !dropped.has(r.leagueId))
+      .map((r) => (declaredLeagues.has(r.leagueId) ? { ...r, playerData: stripForeignIds(r.playerData) } : r))
 
     /*
      * Counted per LEAGUE, not per roster. A player can only be on one roster in
@@ -140,7 +172,7 @@ const readMarketCached = unstable_cache(
       }
     }
 
-    const total = leagues.length
+    const total = counted.length
     const rows: Array<[string, RosteredMarket]> = []
     for (const [id, owned] of rosteredLeagues) {
       const rosteredIn = owned.size
@@ -160,9 +192,9 @@ const readMarketCached = unstable_cache(
       ])
     }
 
-    return { rows, leagues: total }
+    return { rows, leagues: total, unverified }
   },
-  ['rostered-market-v1'],
+  ['rostered-market-v2'],
   // Rosters move on waivers and lineup locks, not by the second.
   { revalidate: 900 },
 )
@@ -172,10 +204,10 @@ export async function getRosteredMarket(args: {
   /** Null blends both; true/false scopes to dynasty or redraft. */
   dynastyOnly?: boolean | null
 }): Promise<RosteredMarketBoard> {
-  const { rows, leagues } = await readMarketCached(
+  const { rows, leagues, unverified } = await readMarketCached(
     args.sport ?? 'NFL',
     args.dynastyOnly ?? null,
-  ).catch(() => ({ rows: [] as Array<[string, RosteredMarket]>, leagues: 0 }))
+  ).catch(() => ({ rows: [] as Array<[string, RosteredMarket]>, leagues: 0, unverified: 0 }))
 
-  return { byPlayerId: new Map(rows), leaguesCounted: leagues }
+  return { byPlayerId: new Map(rows), leaguesCounted: leagues, leaguesUnverified: unverified ?? 0 }
 }
