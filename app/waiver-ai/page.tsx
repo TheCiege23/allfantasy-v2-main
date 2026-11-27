@@ -13,7 +13,6 @@ import EngagementEventTracker from '@/components/engagement/EngagementEventTrack
 import { DEFAULT_SPORT, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
-import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type WaiverType = 'FAAB' | 'ROLLING' | 'PRIORITY'
 type LeagueFormat = 'redraft' | 'dynasty' | 'keeper'
