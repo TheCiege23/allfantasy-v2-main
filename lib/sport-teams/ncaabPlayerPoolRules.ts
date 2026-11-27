@@ -43,6 +43,54 @@ export function ncaabPoolRowImage(imageUrl: string | null | undefined): string |
   return isEspnNcaabHeadshot(imageUrl) ? imageUrl : null
 }
 
+/** ESPN's athlete id inside one of its college basketball headshot URLs (`…/players/full/5174955.png`). */
+export function espnIdOfNcaabHeadshot(url: string | null | undefined): string | null {
+  if (!isEspnNcaabHeadshot(url)) return null
+  return /\/players\/full\/(\d+)\.png/i.exec(String(url))?.[1] ?? null
+}
+
+const transferKey = (name: string | null | undefined, jersey: unknown) => {
+  const n = String(name ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z]/g, '')
+  const j = String(jersey ?? '').trim()
+  return n && j ? `${n}|${j}` : null
+}
+
+/**
+ * 🛑 A TRANSFER'S PHOTO SITS ON HIS OLD SCHOOL'S ROW, AND NOTHING CARRIED IT ACROSS.
+ * The vendor writes one row per school, the ESPN photo lands on whichever row the roster sweep matched,
+ * and photos were only shared between rows of the SAME school. Measured on production 2026-11-27: 562 of
+ * a college basketball pool's 2,392 players showed a placeholder — among them the #2 and #3 ranked
+ * (Jayden Reid, Paulius Murauskas), both transfers whose ESPN photo is on their previous school's row.
+ *
+ * The carry is proven by ESPN's id, never by a name: the player's CURRENT ESPN roster entry (name +
+ * jersey, one match only) gives his ESPN id, and a stored ESPN headshot is used only if its URL carries
+ * that same id. Paulius Murauskas: ESPN roster `espn:ncaab:5174955` at Arizona State, photo
+ * `…/players/full/5174955.png` on his Saint Mary's row. A name shared by two current players, or a
+ * player whose ESPN id has no stored photo, gets nothing.
+ */
+export function buildNcaabTransferPhotoIndex(args: {
+  roster: ReadonlyArray<{ id: string; name: string | null; jerseyNumber: string | number | null }>
+  storedImageUrls: ReadonlyArray<string | null | undefined>
+}): (row: { name?: string | null; number?: string | number | null }) => string | null {
+  const urlById = new Map<string, string>()
+  for (const url of args.storedImageUrls) {
+    const id = espnIdOfNcaabHeadshot(url)
+    if (id && !urlById.has(id)) urlById.set(id, String(url))
+  }
+  const idByKey = new Map<string, string | null>()
+  for (const r of args.roster) {
+    const id = /^espn:ncaab:(\d+)$/.exec(r.id)?.[1]
+    const key = transferKey(r.name, r.jerseyNumber)
+    if (!id || !key) continue
+    idByKey.set(key, idByKey.has(key) && idByKey.get(key) !== id ? null : id)
+  }
+  return (row) => {
+    const key = transferKey(row.name, row.number)
+    const id = key ? idByKey.get(key) : null
+    return id ? urlById.get(id) ?? null : null
+  }
+}
+
 /**
  * How much a player has produced per game this season — points, rebounds, assists, steals and
  * blocks, unweighted. It only decides WHICH players a size-limited pool keeps, so a player nobody

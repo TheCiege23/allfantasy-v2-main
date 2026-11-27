@@ -27,6 +27,7 @@ import 'server-only'
  * resolvers: a wrong name on someone's roster is worse than the bare id.
  */
 import { prisma } from '@/lib/prisma'
+import { loadSoccerClubNames, soccerClubFor, type SoccerClub } from '@/lib/soccer/soccerClubNames'
 import { toImageUrl } from '@/lib/media/imageUrl'
 import { leagueIdSpaces, nonSleeperExternalIdWhere } from './externalIdNamespace'
 import { resolveSleeperRosterPlayers } from './resolveSleeperRosterPlayers'
@@ -76,6 +77,14 @@ export async function resolveNativeRosterPlayers(
         sleeperId: hits.find((h) => h.sleeperId)?.sleeperId ?? null,
         rollingInsightsId: hits.some((h) => String(h.source ?? '').toLowerCase() === 'rolling_insights') ? id : null,
       })
+    }
+  }
+  // Soccer: the club, not Rolling Insights' numeric club id (lib/soccer/soccerClubNames.ts).
+  if (s === 'SOCCER' && [...out.values()].some((p) => /^\d+$/.test(String(p.team ?? '').trim()))) {
+    const clubs = await loadSoccerClubNames().catch(() => new Map<string, SoccerClub>())
+    for (const p of out.values()) {
+      const club = soccerClubFor(p.team, clubs)
+      if (club) p.team = club.shortName ?? club.name
     }
   }
   return out

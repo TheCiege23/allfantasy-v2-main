@@ -13,6 +13,7 @@ import {
 } from '@/lib/player-data/getPlayerDataForSurface'
 import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerProductView'
 import type { PlayerDataSurface } from '@/lib/player-data/unifiedPlayerProductView'
+import { hasNumericSoccerTeam, loadSoccerClubNames, soccerClubFor, type SoccerClub } from '@/lib/soccer/soccerClubNames'
 
 export type NormalizedPlayerSurface = PlayerDataSurface
 
@@ -35,6 +36,15 @@ export async function getNormalizedPlayerData(
 ): Promise<NormalizedPlayerDataRow[]> {
   const { includeProviderFallbackDiagnostics, ...rest } = input
   const rows = await getPlayerDataForSurface(rest)
+  // Soccer shows the club, not Rolling Insights' numeric club id (lib/soccer/soccerClubNames.ts).
+  if (hasNumericSoccerTeam(rows)) {
+    const clubs = await loadSoccerClubNames().catch(() => new Map<string, SoccerClub>())
+    for (const row of rows) {
+      if (String(row.sport).toUpperCase() !== 'SOCCER') continue
+      const club = soccerClubFor(row.team, clubs)
+      if (club) row.team = club.shortName ?? club.name
+    }
+  }
 
   return rows.map((u) => {
     if (!includeProviderFallbackDiagnostics) return { ...u }

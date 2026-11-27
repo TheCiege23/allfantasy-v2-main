@@ -22,6 +22,7 @@
  * the placeholder.
  */
 import { prisma } from '@/lib/prisma'
+import { loadSoccerClubNames, type SoccerClub } from '@/lib/soccer/soccerClubNames'
 import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
 import { collegeLogoNameCandidates, exactKey, looseTeamKey } from '@/lib/sports-data/collegeTeamNames'
 
@@ -118,21 +119,9 @@ export async function loadDraftPoolTeamLogoResolver(
 }
 
 /** Put the stored crest on each entry that has one; entries without a match keep what they had. */
-export type SoccerClubName = { name: string; shortName: string | null }
-
-/** Rolling Insights' numeric soccer club ids → the club, from its stored team rows. */
-export async function loadSoccerClubNames(): Promise<Map<string, SoccerClubName>> {
-  const rows = await prisma.sportsTeam.findMany({
-    where: { sport: 'SOCCER', source: 'rolling_insights' },
-    select: { externalId: true, name: true, shortName: true },
-  })
-  const out = new Map<string, SoccerClubName>()
-  for (const r of rows) {
-    const id = String(r.externalId ?? '').trim()
-    if (id && r.name?.trim()) out.set(id, { name: r.name.trim(), shortName: r.shortName?.trim() || null })
-  }
-  return out
-}
+export type SoccerClubName = SoccerClub
+/** The shared club lookup (lib/soccer/soccerClubNames.ts): one naming for every surface. */
+export { loadSoccerClubNames }
 
 /**
  * 🛑 DISPLAY ONLY. A Rolling Insights soccer player's `team` is the club's numeric id ("17"), and the
