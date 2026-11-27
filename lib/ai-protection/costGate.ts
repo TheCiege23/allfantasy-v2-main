@@ -33,6 +33,7 @@ import { buildAiLimit429 } from '@/lib/ai-protection/withAiProtection'
 import { FeatureGateService, type FeatureGateDecision } from '@/lib/subscription/FeatureGateService'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import { isPaywallLive } from '@/lib/monetization/paywallLaunch'
+import { getDisplayPlanName, getRequiredPlanForFeature } from '@/lib/subscription/feature-access'
 
 export type AiCostGateConfig = {
   /** Shown to people in limit messages. */
@@ -48,6 +49,11 @@ export type AiCostGateConfig = {
   /** Calls per UTC day for a plan holder. */
   dailyPaid: number | null
   /**
+   * Where the daily-cap refusal sends a caller WITHOUT the plan (a free taste's lock). Defaults to
+   * /pricing. The plan it names is read from `featureId`.
+   */
+  upgradePath?: string
+  /**
    * Signed-out callers allowed (keyed by IP) up to this many a day — ONLY while the feature
    * is free. Once a `paidFromLaunch` feature is live, a signed-out caller must sign in:
    * otherwise an anonymous visitor would get more than a free account.
@@ -59,7 +65,12 @@ export const AI_COST_GATES = {
   // ── Pro: player tools ────────────────────────────────────────────────────────
   chimmy_voice: { label: 'Chimmy voice', featureId: 'ai_chat', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
   legacy_chat: { label: 'Chimmy chat', featureId: 'ai_chat', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 100, dailyAnonymous: 5 },
-  start_sit_ai: { label: 'start/sit analysis', featureId: 'pro_start_sit', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
+  /*
+   * 🛑 FREE TASTE (owner's decision 2026-11-27): a free account gets ONE start/sit AI answer a UTC day — the
+   * durable cap below (ApiRateLimitRecord), not a lock — then the 429 sends them to AF Pro. It was a hard
+   * 403 from launch (`paidFromLaunch: true`). AF Pro / AF Supreme keep 200 a day; signed out stays refused.
+   */
+  start_sit_ai: { label: 'start/sit analysis', featureId: 'pro_start_sit', paidFromLaunch: false, perMinute: 10, dailyFree: 1, dailyPaid: 200, upgradePath: '/upgrade?plan=pro' },
   trade_ai: { label: 'Chimmy trade analysis', featureId: 'trade_analyzer', paidFromLaunch: true, perMinute: 10, dailyFree: 15, dailyPaid: 200 },
   // /api/trade-finder never required sign-in; a small anonymous allowance keeps any logged-out
   // use working until launch, after which it needs an account and the plan like its siblings.
@@ -116,6 +127,11 @@ export type AiCostGateOutcome =
       reason: 'sign_in' | 'rate' | 'plan' | 'daily'
       response: NextResponse
     }
+
+function planNameFor(featureId: SubscriptionFeatureId): string {
+  const plan = getRequiredPlanForFeature(featureId)
+  return plan ? getDisplayPlanName(plan) : 'a paid plan'
+}
 
 function hashSubject(subject: string): string {
   return createHash('sha256').update(subject).digest('hex').slice(0, 24)
@@ -233,14 +249,19 @@ export async function evaluateAiCostGate(
         callsLimit: dailyLimit,
       })
       if (!daily.success) {
-        const upgrade = !hasPlan && cfg.featureId ? ' Upgrade for a higher daily limit.' : ''
+        const upgrade = !hasPlan && cfg.featureId
+          ? cfg.upgradePath
+            ? ` More is part of ${planNameFor(cfg.featureId)}.`
+            : ' Upgrade for a higher daily limit.'
+          : ''
         const body = {
           error: 'Daily limit reached',
           code: 'daily_limit_reached',
           message: `You've reached today's limit for ${cfg.label}. It resets at midnight UTC.${upgrade}`,
           limit: dailyLimit,
           retryAfterSec: daily.retryAfterSec,
-          upgradePath: !hasPlan && cfg.featureId ? '/pricing?from=ai_daily_cap' : null,
+          upgradePath: !hasPlan && cfg.featureId ? cfg.upgradePath ?? '/pricing?from=ai_daily_cap' : null,
+          ...(!hasPlan && cfg.featureId && cfg.upgradePath ? { requiredPlan: planNameFor(cfg.featureId) } : {}),
           useDeterministicFallback: true,
         }
         return {

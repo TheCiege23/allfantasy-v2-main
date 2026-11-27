@@ -4,16 +4,15 @@
  *
  * Two layers, both through the REAL plan rules (tierMatrixHarness; only the database read is replaced):
  *   1. every player-tool key opens for exactly { pro, supreme };
- *   2. the three Trade Finder surfaces — /core (/api/league/trade-finder) and the redraft Trade Center's
- *      partner search and package finder — refuse every other tier before any league read. The /core
- *      finder used `af_intelligence` (Commissioner opens it) and the redraft two had no gate at all.
+ *   2. the Trade Finder depth the three finder surfaces read (/core and the redraft Trade Center's partner
+ *      search and package finder). The /core finder used `af_intelligence` (Commissioner opens it) and the
+ *      redraft two had no gate at all.
  *
  * AF Intelligence (AF projections, AF ADP, the trade breakdown, player deep dives, Chimmy's deep answers)
  * keeps its Pro · Commissioner · Supreme gate on purpose (owner decided that earlier) — pinned at the end
  * so a change to it is a decision, not a side effect.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { NextRequest } from 'next/server'
 import { TIERS, setTier, tiersFor, type Tier } from './tierMatrixHarness'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 
@@ -98,53 +97,21 @@ describe('every player-tool key opens for AF Pro and AF Supreme only', () => {
   })
 })
 
-type Surface = { name: string; run: () => Promise<Response> }
-const SURFACES: Surface[] = [
-  {
-    name: '/core trade finder (/api/league/trade-finder)',
-    run: async () => (await import('@/app/api/league/trade-finder/route')).GET(new NextRequest('http://localhost/api/league/trade-finder?leagueId=L1')),
-  },
-  {
-    name: 'redraft Trade Center partner search (/api/redraft/trades/discovery)',
-    run: async () =>
-      (await import('@/app/api/redraft/trades/discovery/route')).GET(new NextRequest('http://localhost/api/redraft/trades/discovery?leagueId=L1&rosterId=r1')),
-  },
-  {
-    name: 'redraft Trade Center package finder (/api/redraft/trades/package-finder)',
-    run: async () =>
-      (await import('@/app/api/redraft/trades/package-finder/route')).POST(
-        new NextRequest('http://localhost/api/redraft/trades/package-finder', {
-          method: 'POST',
-          body: JSON.stringify({ leagueId: 'L1', myRosterId: 'r1', partnerRosterId: 'r2' }),
-        }),
-      ),
-  },
-]
-
-describe('the Trade Finder surfaces follow the same rule, server-side', () => {
-  for (const s of SURFACES) {
-    for (const tier of TIERS) {
-      const open = PRO_SUPREME.includes(tier)
-      it(`${s.name} — ${tier}: ${open ? 'goes on to the league' : '403 before any league read'}`, async () => {
-        setTier(tier)
-        let status = 599
-        let code: string | null = null
-        try {
-          const res = await s.run()
-          status = res.status
-          code = ((await res.json().catch(() => ({}))) as { code?: string }).code ?? null
-        } catch {
-          // Thrown by the (absent) database AFTER the gate.
-        }
-        if (open) {
-          expect(code).not.toBe('feature_not_entitled')
-          expect(leagueRead).toHaveBeenCalled()
-        } else {
-          expect([status, code]).toEqual([403, 'feature_not_entitled'])
-          expect(leagueRead).not.toHaveBeenCalled()
-        }
-      })
-    }
+/*
+ * The three Trade Finder surfaces (/api/league/trade-finder, /api/redraft/trades/discovery and
+ * /package-finder) read the `trade_finder` depth. Until the free taste (later the same day) they refused
+ * every tier outside {pro, supreme} with a 403; now those tiers get the top idea and a lock —
+ * __tests__/monetization/free-tastes-2026-11-27.test.ts runs each surface against all five tiers. Here,
+ * the depth itself:
+ */
+describe('the Trade Finder depth unlocks for exactly AF Pro and AF Supreme', () => {
+  for (const tier of TIERS) {
+    it(`${tier}`, async () => {
+      setTier(tier)
+      const { resolveCoreDepth } = await import('@/lib/core-app/corePaywall')
+      const access = await resolveCoreDepth('u1', 'trade_finder', { now: new Date('2026-11-27T18:00:00Z') })
+      expect(access.unlocked).toBe(PRO_SUPREME.includes(tier))
+    })
   }
 })
 

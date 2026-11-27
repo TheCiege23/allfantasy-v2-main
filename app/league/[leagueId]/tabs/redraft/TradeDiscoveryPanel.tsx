@@ -10,6 +10,8 @@ import {
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { tOr } from '@/lib/i18n/tInterpolate'
 import { matchReasonsText, serverErrorText } from '@/lib/i18n/trade-center-server-text'
+import type { FinderTasteLock } from '@/lib/trade-finder/finderTaste'
+import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
 
 function flag(f: string) {
   return f.toLowerCase().replace(/_/g, ' ')
@@ -35,6 +37,9 @@ export function TradeDiscoveryPanel({
   const fairnessLabel = (band: string) => tOr(t, `tradeCenter.discovery.fairness.${band.replace(/ /g, '_')}`, band)
   const [open, setOpen] = useState(false)
   const [partners, setPartners] = useState<TradePartnerMatch[] | null>(null)
+  // The free taste (2026-11-27): the server sends the top partner (and its top package) only.
+  const [lock, setLock] = useState<FinderTasteLock | null>(null)
+  const [pkgLock, setPkgLock] = useState<FinderTasteLock | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pkgFor, setPkgFor] = useState<string | null>(null)
@@ -47,6 +52,7 @@ export function TradeDiscoveryPanel({
     try {
       const res = await fetchTradeDiscovery({ leagueId, rosterId: myRosterId })
       setPartners(res.partners)
+      setLock(res.lock ?? null)
     } catch (e) {
       setError(e instanceof Error ? serverErrorText(e as Error & { code?: string | null }, e.message, t, language) : t('tradeCenter.discovery.loadFailed'))
     } finally {
@@ -62,8 +68,10 @@ export function TradeDiscoveryPanel({
       try {
         const res = await fetchTradePackages({ leagueId, myRosterId, partnerRosterId })
         setPackages(res.suggestedPackages)
+        setPkgLock(res.lock ?? null)
       } catch {
         setPackages([])
+        setPkgLock(null)
       } finally {
         setPkgLoading(false)
       }
@@ -158,6 +166,11 @@ export function TradeDiscoveryPanel({
                     ) : (
                       <p className="text-white/45">{t('tradeCenter.discovery.noPackages')}</p>
                     )}
+                    {pkgLock && pkgLock.lockedCount > 0 ? (
+                      <div data-testid="discovery-packages-taste-lock">
+                        <CoreDepthLock access={pkgLock.access} lang={language} />
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -165,6 +178,11 @@ export function TradeDiscoveryPanel({
           ) : (
             <p className="text-white/45">{t('tradeCenter.discovery.noPartners')}</p>
           )}
+          {lock && lock.lockedCount > 0 ? (
+            <div data-testid="discovery-taste-lock">
+              <CoreDepthLock access={lock.access} lang={language} />
+            </div>
+          ) : null}
           <p className="text-[11px] text-white/35">{t('tradeCenter.discovery.footer')}</p>
         </div>
       ) : null}

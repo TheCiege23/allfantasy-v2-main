@@ -6,6 +6,8 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 import { useCallback, useState } from 'react'
 import { readableApiError } from '@/lib/http/readableApiError'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import type { FinderTasteLock } from '@/lib/trade-finder/finderTaste'
+import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
 
 /**
  * Decision OS · Trade Finder, on the Trade Center.
@@ -45,6 +47,8 @@ type FinderResponse = {
   supported?: boolean
   linked?: boolean
   error?: string
+  /** The free taste (2026-11-27): set when the server sent only the top proposal. */
+  lock?: FinderTasteLock | null
   finder?: {
     proposals: Proposal[]
     contextNotes: string[]
@@ -156,6 +160,12 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
               ))}
             </div>
           )}
+
+          {data.lock && data.lock.lockedCount > 0 ? (
+            <div data-testid="finder-panel-taste-lock">
+              <CoreDepthLock access={data.lock.access} lang={language} />
+            </div>
+          ) : null}
 
           {data.finder.missing.length > 0 ? (
             <p className="af-tc-row-sub">{copy(" Working without: ")}{copy(data.finder.missing.join(', '))}{copy(". Suggestions are thinner than they would be with those. ")}</p>

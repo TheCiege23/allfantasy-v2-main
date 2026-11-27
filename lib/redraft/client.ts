@@ -1,4 +1,5 @@
 import type { CanonicalScheduleRuntimeState } from '@/lib/schedule-runtime/canonicalScheduleRuntime'
+import type { FinderTasteLock } from '@/lib/trade-finder/finderTaste'
 import type { NflRedraftPlayoffRuntimeState } from '@/lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime'
 import type { NflRedraftLiveScoringRuntimeState } from '@/lib/scoring-runtime/canonicalNflRedraftScoringRuntime'
 import type { NflRedraftTradeRuntimeState } from '@/lib/trade-runtime/canonicalNflRedraftTradeRuntime'
@@ -277,13 +278,13 @@ export type TradePackageSuggestion = {
   canStartProposal: boolean
 }
 
-export async function fetchTradeDiscovery(params: { leagueId: string; rosterId: string }): Promise<{ partners: TradePartnerMatch[]; summary: { myNeeds: string[]; mySurpluses: string[]; partnerCount: number; sport: string }; warnings: string[] }> {
+export async function fetchTradeDiscovery(params: { leagueId: string; rosterId: string }): Promise<{ partners: TradePartnerMatch[]; summary: { myNeeds: string[]; mySurpluses: string[]; partnerCount: number; sport: string }; warnings: string[]; lock?: FinderTasteLock | null }> {
   const qs = new URLSearchParams({ leagueId: params.leagueId, rosterId: params.rosterId })
   const res = await fetch(`/api/redraft/trades/discovery?${qs.toString()}`, { credentials: 'include' })
   return parseJson(res)
 }
 
-export async function fetchTradePackages(payload: { leagueId: string; myRosterId: string; partnerRosterId: string; targetPlayerId?: string | null; outgoingPlayerId?: string | null }): Promise<{ suggestedPackages: TradePackageSuggestion[]; warnings: string[]; canStartProposal: boolean }> {
+export async function fetchTradePackages(payload: { leagueId: string; myRosterId: string; partnerRosterId: string; targetPlayerId?: string | null; outgoingPlayerId?: string | null }): Promise<{ suggestedPackages: TradePackageSuggestion[]; warnings: string[]; canStartProposal: boolean; lock?: FinderTasteLock | null }> {
   const res = await fetch('/api/redraft/trades/package-finder', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   return parseJson(res)
 }

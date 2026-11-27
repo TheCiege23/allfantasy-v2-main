@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getTradeFinder } from '@/lib/trade-intel/tradeFinderService'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
+import { finderTaste } from '@/lib/trade-finder/finderTaste'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,21 +24,12 @@ export async function GET(req: NextRequest) {
   /*
    * The Trade Finder rule (AF Pro and AF Supreme — not AF Commissioner alone; owner 2026-11-27): the
    * `trade_finder` depth, the same key Partner Match reads. It was `trade_depth` (`af_intelligence`), which
-   * opened this finder to Commissioner while Partner Match stayed locked. Refused before any league read.
+   * opened this finder to Commissioner while Partner Match stayed locked.
+   *
+   * 🛑 FREE TASTE (owner, 2026-11-27): without the plan the finder still runs, and the viewer is sent the
+   * TOP proposal only, plus `lock` (how many more there were). The rest never leave the server.
    */
   const finderAccess = await resolveCoreDepth(userId, 'trade_finder', { email: session?.user?.email ?? null })
-  if (!finderAccess.unlocked) {
-    return NextResponse.json(
-      {
-        error: 'Premium feature',
-        code: 'feature_not_entitled',
-        message: `The trade finder is part of ${finderAccess.planName}.`,
-        requiredPlan: finderAccess.planName,
-        upgradePath: finderAccess.upgradePath,
-      },
-      { status: 403 },
-    )
-  }
 
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
@@ -76,5 +68,11 @@ export async function GET(req: NextRequest) {
       { status: 502 },
     )
   }
-  return NextResponse.json({ supported: true as const, linked: true as const, finder })
+  const taste = finderTaste(finder.proposals, finderAccess)
+  return NextResponse.json({
+    supported: true as const,
+    linked: true as const,
+    finder: { ...finder, proposals: taste.items },
+    lock: taste.lock,
+  })
 }
