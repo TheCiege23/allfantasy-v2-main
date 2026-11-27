@@ -44,6 +44,7 @@ import {
   type FutureWeekStatus,
 } from '@/lib/projections/futureWeekProjections'
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
+import type { PlayerKeeperCost } from '@/lib/keeper/keeperCardCostLine'
 import {
   normalizeIdentitySport,
   resolveFantraxIdentities,
@@ -484,6 +485,12 @@ export type PlayerCardData = {
    * Absent for every other card, and when nothing agreed is on file.
    */
   dynastyMarker?: DynastyRosterMarker | null
+  /**
+   * Keeper leagues only, when the league's commissioner holds AF Commissioner / AF Supreme: what keeping
+   * him costs under the league's rule and what that is worth (lib/keeper/keeperCardCost.ts). Set by the
+   * route for a player rostered in the league; absent everywhere else.
+   */
+  keeperCost?: PlayerKeeperCost | null
 }
 
 /* ── tuning ──────────────────────────────────────────────────────────────── */
