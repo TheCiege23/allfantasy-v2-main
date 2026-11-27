@@ -11,6 +11,18 @@ import {
   type ImportedTeam,
 } from '@/lib/league-creation/canonical/importedIdentityPlan'
 import { checkNativeReadiness, type NativeReadinessItem } from '@/lib/league/nativeReadiness'
+import { planImportedRosterLayout, savedInAllFantasy, sportScoringStore } from '@/lib/league/nativeScaffolding'
+import {
+  importedGamesPerWeekSettings,
+  importedMlbLeagueColumns,
+  importedMlbSettings,
+  importedNflSettings,
+  writeImportedMlbScoringTables,
+} from '@/lib/league-creation/canonical/importedScoringSettings'
+import { inviteMaxUsesFor } from '@/lib/league-creation/canonical/createCanonicalLeagueInTransaction'
+import { writeLeagueRosterConfig } from '@/lib/roster-engine/UnifiedRosterConfigService'
+import { bootstrapLeagueWaiverSettings } from '@/lib/waiver-defaults/LeagueWaiverBootstrapService'
+import { ensureLeagueSettingsRow } from '@/lib/draft-defaults/ensureLeagueSettingsRow'
 
 /**
  * Switch an imported league to running on AllFantasy IN PLACE — same League row, id, link, chat and history.
@@ -21,11 +33,15 @@ import { checkNativeReadiness, type NativeReadinessItem } from '@/lib/league/nat
  * `LeagueNativeConversion`, rewrites every provider-keyed id to its native form, and flips `platform` LAST. Any refusal
  * or error rolls all of it back, and the league is still a working import.
  *
- * ⚠ 4a IS NOT THE WHOLE SWITCH, AND THE ROUTE IS ADMIN-GATED UNTIL 4b LANDS. Not here yet: native settings/scoring
- * scaffolding (rows canonical create writes and an import may lack), copying past provider weekly scores into native
- * tables (owner decision Q4), and per-seat invite links (Q7). A league converted by 4a alone has native ids and has
- * stopped syncing, but may not score the way the commissioner expects. That is why the first conversions are
- * supervised (plan §8).
+ * NATIVE SETTINGS (step 4b-1, nativeScaffolding.ts). Without them a converted league silently plays AllFantasy DEFAULTS:
+ * scoring falls to standard PPR and the roster to a default template most imported rosters overflow. So the switch
+ * carries the provider's scoring (NFL/MLB, the copy flow's converters) and roster layout, unless the commissioner
+ * already saved their own in AllFantasy, which wins (Q8). The roster write goes through the one roster writer, which
+ * cannot join this transaction, so it runs just BEFORE it: harmless on an imported league, which reads the
+ * provider's positions first while it is imported.
+ *
+ * ⚠ STILL TO COME, SO THE ROUTE STAYS ADMIN-GATED: copying past provider weekly scores into native tables (Q4) and
+ * per-seat invite links (Q7). The first conversions are supervised (plan §8).
  *
  * What it keeps, by the owner's decisions (§13): team names, logos and the provider manager name on every seat,
  * claimed or not (Q3); carried players become ordinary drafted players (Q6).
@@ -57,7 +73,9 @@ export type NativeConversionSnapshotV1 = {
     leagueSeasons: Array<{ id: string; teamRecords: unknown }>
   }
   /** Rows the switch created and undo must delete; plus slots it changed, with their old values. */
-  created: { memberIds: string[]; chatRoomIds: string[]; entrySlotIds: string[] }
+  created: { memberIds: string[]; chatRoomIds: string[]; entrySlotIds: string[]; inviteIds?: string[] }
+  /** Baseball only: the scoring tables the switch replaced, as they were (the copy flow's converter rewrites them). */
+  mlbTablesBefore?: { rosterConfig: unknown; scoringOverrides: unknown[] }
   entrySlotsBefore: Array<{ id: string; rosterId: string | null; status: string }>
 }
 
@@ -131,7 +149,17 @@ function refuse(message: string, blockers: NativeReadinessItem[] = []): never {
 }
 
 export type NativeConversionResult =
-  | { kind: 'converted'; conversionId: string; seats: number; players: number; seasonPlayersRewritten: number; futurePicks: number }
+  | {
+      kind: 'converted'
+      conversionId: string
+      seats: number
+      players: number
+      seasonPlayersRewritten: number
+      futurePicks: number
+      /** What the league plays by now: the provider's rules converted, the commissioner's AF edits kept, or defaults. */
+      scoring: 'converted' | 'kept_af' | 'default'
+      roster: 'mapped' | 'af_saved' | 'mlb'
+    }
   | { kind: 'already_converted'; conversionId: string }
 
 export async function convertImportedLeagueInPlace(
@@ -139,8 +167,9 @@ export async function convertImportedLeagueInPlace(
   args: { leagueId: string; userId: string; acceptWeeklyLineups?: boolean; now?: Date },
 ): Promise<NativeConversionResult> {
   const teamCount = await prisma.leagueTeam.count({ where: { leagueId: args.leagueId } })
+  const roster = await prepareNativeSettings(prisma, args)
   try {
-    return await prisma.$transaction((tx) => convertInTransaction(tx, args), {
+    return await prisma.$transaction((tx) => convertInTransaction(tx, { ...args, roster }), {
       maxWait: 20_000,
       // The carryover's sizing (executeCanonicalLeagueCreation): two rows per team and then some.
       timeout: 60_000 + Math.max(0, teamCount - 32) * 1_500,
@@ -151,9 +180,43 @@ export async function convertImportedLeagueInPlace(
   }
 }
 
+/**
+ * The writes that cannot join the switch's transaction, run first and only for a league that would not be refused:
+ * the roster layout (through the single roster writer, which owns its own connection), and the fill-only waiver and
+ * draft-settings rows. Every one is idempotent and harmless on a league that is still imported, so a refusal later
+ * leaves nothing that needs undoing.
+ */
+async function prepareNativeSettings(
+  prisma: PrismaClient,
+  args: { leagueId: string; userId: string; now?: Date },
+): Promise<'mapped' | 'af_saved' | 'mlb' | 'none'> {
+  const readiness = await checkNativeReadiness(prisma as unknown as Tx, args.leagueId, args.now ?? new Date())
+  if (!readiness || readiness.status === 'native') return 'none'
+  const blockers = readiness.items.filter((item) => item.severity === 'blocker')
+  if (blockers.length) refuse(`${blockers.length} ${blockers.length === 1 ? 'thing needs' : 'things need'} fixing before this league can switch.`, blockers)
+
+  const league = await prisma.league.findUnique({
+    where: { id: args.leagueId },
+    select: { sport: true, platform: true, leagueType: true, settings: true, taxiSlots: true, irSlots: true },
+  })
+  if (!league) refuse('League not found.')
+  const layout = planImportedRosterLayout({ sport: String(league.sport), platform: String(league.platform), leagueType: league.leagueType, settings: league.settings, taxiSlots: league.taxiSlots, irSlots: league.irSlots })
+  if (layout.kind === 'unreadable') refuse(`We can't read this league's roster spots. ${layout.reason}`)
+  if (layout.kind === 'mapped') {
+    try {
+      await writeLeagueRosterConfig(args.leagueId, { templateKey: 'custom', slots: layout.slots }, { userId: args.userId, auditAction: 'import' })
+    } catch (error) {
+      refuse(`The roster spots could not be saved: ${error instanceof Error ? error.message : 'unknown error'}`)
+    }
+  }
+  await bootstrapLeagueWaiverSettings(args.leagueId)
+  await ensureLeagueSettingsRow(args.leagueId)
+  return layout.kind
+}
+
 async function convertInTransaction(
   tx: Tx,
-  args: { leagueId: string; userId: string; acceptWeeklyLineups?: boolean; now?: Date },
+  args: { leagueId: string; userId: string; acceptWeeklyLineups?: boolean; now?: Date; roster: 'mapped' | 'af_saved' | 'mlb' | 'none' },
 ): Promise<NativeConversionResult> {
   const { leagueId, userId } = args
   const now = args.now ?? new Date()
@@ -180,7 +243,7 @@ async function convertInTransaction(
 
   // 3. Plan: the shared translation, with the copy flow's refusals.
   const read = await readImportedSource(tx, leagueId)
-  checkImportedSource(read.source, { sport, acceptWeeklyLineups: args.acceptWeeklyLineups })
+  const source = checkImportedSource(read.source, { sport, acceptWeeklyLineups: args.acceptWeeklyLineups })
   const teams = orderTeamsForSeats(read.teams, userId)
   const plan = await planImportedPlayerIdentity(tx, { sport, platform: String(league.platform), teams, rosters: read.rosters })
   const seats = assignNativeSeats(leagueId, teams, plan.sourceRosters)
@@ -377,6 +440,43 @@ async function convertInTransaction(
     created.chatRoomIds.push(row.id)
   }
 
+  // 11b. Scoring the league actually plays by (Q8: a store the commissioner saved in AllFantasy wins), and the league's
+  //      invite link. The roster layout was written before this transaction (prepareNativeSettings).
+  const settings = asRecord(league.settings)
+  const settingsPatch: Record<string, unknown> = {}
+  let leagueColumns: Record<string, unknown> = {}
+  let scoring: 'converted' | 'kept_af' | 'default' = savedInAllFantasy(sportScoringStore(settings, sport)) ? 'kept_af' : 'default'
+  let mlbTablesBefore: NativeConversionSnapshotV1['mlbTablesBefore']
+  if (scoring !== 'kept_af' && sport === 'NFL' && source.nflScoring) {
+    Object.assign(settingsPatch, importedNflSettings(settings, source.nflScoring, userId))
+    scoring = 'converted'
+  }
+  if (sport === 'MLB' && source.mlbScoring) {
+    if (savedInAllFantasy(settings.mlb_scoring_config) || savedInAllFantasy(settings.mlb_roster_config)) {
+      scoring = 'kept_af'
+    } else {
+      mlbTablesBefore = {
+        rosterConfig: await tx.leagueRosterConfig.findUnique({ where: { leagueId } }),
+        scoringOverrides: await tx.leagueScoringOverride.findMany({ where: { leagueId } }),
+      }
+      await writeImportedMlbScoringTables(tx, leagueId, source.mlbScoring, source.mlbRoster)
+      Object.assign(settingsPatch, importedMlbSettings(settings, source.mlbScoring, source.mlbRoster, userId))
+      leagueColumns = importedMlbLeagueColumns(source.mlbScoring)
+      scoring = 'converted'
+    }
+  }
+  for (const [key, value] of Object.entries(importedGamesPerWeekSettings(settings))) {
+    if (settings[key] == null) settingsPatch[key] = value
+  }
+  const activeInvite = await tx.leagueInvite.findFirst({ where: { leagueId, isActive: true }, select: { id: true } })
+  if (!activeInvite) {
+    const invite = await tx.leagueInvite.create({
+      data: { leagueId, createdBy: userId, createdByRole: 'commissioner', maxUses: inviteMaxUsesFor(seats.length) },
+      select: { id: true },
+    })
+    created.inviteIds = [invite.id]
+  }
+
   // 12. The record, then the flip — last, so nothing above ran on a league the engines already treat as native.
   const snapshot: NativeConversionSnapshotV1 = {
     version: 1,
@@ -395,6 +495,7 @@ async function convertInTransaction(
       leagueSeasons: leagueSeasons.filter((r) => r.teamRecords != null),
     },
     created,
+    ...(mlbTablesBefore ? { mlbTablesBefore } : {}),
     entrySlotsBefore: entrySlotsBefore.map((s) => ({ id: s.id, rosterId: s.rosterId, status: String(s.status) })),
   }
   const record = {
@@ -417,9 +518,14 @@ async function convertInTransaction(
       platform: 'manual',
       platformLeagueId: `manual-${randomUUID()}`,
       syncStatus: 'manual',
-      settings: { ...asRecord(league.settings), nativeConversion: { conversionId: conversion.id, convertedAt: now.toISOString() } } as Prisma.InputJsonValue,
+      ...leagueColumns,
+      settings: { ...settings, ...settingsPatch, nativeConversion: { conversionId: conversion.id, convertedAt: now.toISOString() } } as Prisma.InputJsonValue,
     },
   })
 
-  return { kind: 'converted', conversionId: conversion.id, seats: seats.length, players: plan.idMap.size, seasonPlayersRewritten: playersRewritten, futurePicks: futurePicks.length }
+  return {
+    kind: 'converted', conversionId: conversion.id, seats: seats.length, players: plan.idMap.size,
+    seasonPlayersRewritten: playersRewritten, futurePicks: futurePicks.length, scoring,
+    roster: args.roster === 'none' ? 'af_saved' : args.roster,
+  }
 }

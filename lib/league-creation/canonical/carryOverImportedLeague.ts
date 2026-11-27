@@ -1,6 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import { GAMES_PER_WEEK_SETTINGS_KEY, readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
-import type { importedNflScoring } from './importedNflScoring'
+import { importedGamesPerWeekSettings, importedMlbLeagueColumns, importedMlbSettings, importedNflSettings, writeImportedMlbScoringTables } from './importedScoringSettings'
 import { copyImportedHistory } from './copyImportedHistory'
 import { isNativeFuturePickLeague, loadNativePickHorizonStart } from '@/lib/league-trade-engine/nativeFuturePicks'
 import {
@@ -199,33 +198,14 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     targetLeagueId: args.targetLeagueId,
     rosterIdByExternalId: new Map(orderedTeams.map((team, i) => [team.externalId, slots[i]!.rosterId!])),
   })
-  if (mlbScoring) {
-    const slots = mlbRoster!.config.sections[0]!.slots
-    await tx.leagueRosterConfig.upsert({ where: { leagueId: args.targetLeagueId }, create: { leagueId: args.targetLeagueId, templateId: `custom-MLB-${args.targetLeagueId}`, overrides: { customSlots: slots, customTemplateKey: 'imported', isCustom: true } }, update: { overrides: { customSlots: slots, customTemplateKey: 'imported', isCustom: true } } })
-    await tx.leagueScoringOverride.deleteMany({ where: { leagueId: args.targetLeagueId } })
-    await tx.leagueScoringOverride.createMany({ data: Object.entries(mlbScoring.templatePoints).map(([statKey, pointsValue]) => ({ leagueId: args.targetLeagueId, statKey, pointsValue, enabled: true })) })
-    await tx.scoringSettingsSnapshot.updateMany({ where: { leagueId: args.targetLeagueId }, data: { scoringMode: mlbScoring.scoringMode, scoringFormat: 'custom', effectiveRules: mlbScoring.scoringSettings as Prisma.InputJsonValue, overrides: mlbScoring.categoryPoints } })
-  }
+  if (mlbScoring) await writeImportedMlbScoringTables(tx, args.targetLeagueId, mlbScoring, mlbRoster)
   await tx.league.update({ where: { id: args.targetLeagueId }, data: {
-    ...(mlbScoring?.scoringMode === 'roto' ? {playoffTeams:0,playoffStartWeek:null} : {}),
+    ...importedMlbLeagueColumns(mlbScoring),
     settings: {
       ...asRecord(target.settings),
-      ...(mlbScoring ? {
-        roster: mlbRoster,
-        rosterSettings: mlbRoster,
-        starter_slots: mlbRoster?.starterSlots,
-        bench_slots: mlbRoster?.benchSlots,
-        mlb_roster_config: { templateKey: 'imported', templateLabel: 'Imported roster', slots: mlbRoster!.config.sections[0]!.slots, isCustom: true, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString() },
-        scoringSettings: mlbScoring.scoringSettings,
-        scoring_mode: mlbScoring.scoringMode,
-        category_preset_id: mlbScoring.categoryPresetId ?? null,
-        category_record_mode: mlbScoring.categoryRecordMode ?? null,
-        sportConfig: { ...asRecord(asRecord(target.settings).sportConfig), scoringMode: mlbScoring.scoringMode, categoryPoints: mlbScoring.categoryPoints, lineupLockType:'first_game_of_week' },
-        mlb_scoring_config: { presetKey: 'custom', source: 'CUSTOM', rules: mlbScoring.uiRules, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString() },
-      } : {}),
+      ...(mlbScoring ? importedMlbSettings(asRecord(target.settings), mlbScoring, mlbRoster, args.creatorUserId) : {}),
       ...(nflScoring ? importedNflSettings(asRecord(target.settings), nflScoring, args.creatorUserId) : {}),
-      // A league that played several games a week keeps doing so; the native schedule reads this setting.
-      ...(readGamesPerWeek(source.settings) > 1 ? { [GAMES_PER_WEEK_SETTINGS_KEY]: readGamesPerWeek(source.settings) } : {}),
+      ...importedGamesPerWeekSettings(source.settings),
       importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length,
         ...(nflScoring ? { scoring: { convertedCount: nflScoring.convertedCount, notScored: nflScoring.notScored, approximated: nflScoring.approximated } } : {}),
         ...(futurePicks ? { futurePickCount: futurePicks.copied, futurePicksSkipped: futurePicks.skippedUnmapped + futurePicks.skippedNotTraded + futurePicks.skippedPastSeason } : {}),
@@ -235,31 +215,3 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   return picks.length
 }
 
-/**
- * The settings keys an imported NFL rule set writes: the commissioner panel's store, marked
- * IMPORTED_MAPPED so post-create bootstrap does not re-seed the preset over it. Any engine-key
- * `categoryPoints` is removed because it outranks the panel store, and the imported rules must
- * be what scores.
- */
-function importedNflSettings(
-  target: Record<string, unknown>,
-  nfl: NonNullable<ReturnType<typeof importedNflScoring>>,
-  creatorUserId: string,
-): Record<string, unknown> {
-  const { categoryPoints: _replaced, ...sportConfig } = asRecord(target.sportConfig)
-  return {
-    nfl_scoring_config: {
-      presetKey: 'custom',
-      source: 'IMPORTED_MAPPED',
-      rules: nfl.rules,
-      matchesPreset: false,
-      premiumFeaturesUsed: false,
-      lastUpdatedAt: new Date().toISOString(),
-      lastUpdatedBy: creatorUserId,
-      warningFlags: nfl.notScored.length || nfl.approximated.length ? ['imported_rules_not_exact'] : [],
-      importNotScored: nfl.notScored,
-      importApproximated: nfl.approximated,
-    },
-    sportConfig: { ...sportConfig, ...(nfl.enableTEPremium ? { enableTEPremium: true } : {}) },
-  }
-}
