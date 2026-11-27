@@ -66,6 +66,7 @@
 .nls-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .nls-muted { color: var(--muted) !important; }
 .nls-empty { padding: 24px; color: var(--muted); font-size: 13px; text-align: center; }
+.nls-handoff { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent); border-radius: 8px; background: var(--bad-soft); color: var(--text); font-size: 13px; }
 .nls-error { padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent); border-radius: 8px; background: var(--bad-soft); color: var(--text); font-size: 13px; }
 
 /* Two-column body: main + 360px aside. */

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState } fro
 import type { ReactNode } from 'react'
 
 import type { PlayerCardData } from '@/lib/core-app/playerCard'
+import type { PlayerCardMore } from '@/lib/core-app/playerCardMore'
 import PlayerCardSheet from './PlayerCardSheet'
 import '@/components/core-app/af-player-card.css'
 
@@ -98,6 +99,7 @@ export default function PlayerCardProvider({
   const [ref, setRef] = useState<PlayerCardRef | null>(null)
   const [data, setData] = useState<PlayerCardData | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [more, setMore] = useState<PlayerCardMore | null>(null)
 
   /*
    * ⚠ EVERY FETCH IS SEQUENCED AND A STALE ONE IS DISCARDED. Clicking two names
@@ -111,6 +113,7 @@ export default function PlayerCardProvider({
     seq.current += 1
     setRef(null)
     setData(null)
+    setMore(null)
     setStatus('idle')
   }, [])
 
@@ -119,6 +122,7 @@ export default function PlayerCardProvider({
       const mine = ++seq.current
       setRef(next)
       setData(null)
+      setMore(null)
       setStatus('loading')
 
       const params = new URLSearchParams({ sport: next.sport })
@@ -133,6 +137,21 @@ export default function PlayerCardProvider({
           if (seq.current !== mine) return
           setData(json)
           setStatus('ready')
+          /*
+           * The Game log, Career and Depth chart tabs: a second read once the card has painted, under
+           * the same sequence guard, so a slow one never lands on the next player's card.
+           */
+          const mq = new URLSearchParams({ sport: json.player.sport, name: json.player.name })
+          if (json.player.position) mq.set('position', json.player.position)
+          if (json.player.team) mq.set('team', json.player.team)
+          if (json.player.sleeperId) mq.set('sleeperId', json.player.sleeperId)
+          if (json.player.externalId) mq.set('externalId', json.player.externalId)
+          fetch(`/api/core/player-card/more?${mq.toString()}`, { headers: { accept: 'application/json' } })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((m: PlayerCardMore | null) => {
+              if (seq.current === mine && m && Array.isArray(m.gameLog)) setMore(m)
+            })
+            .catch(() => {})
         })
         .catch(() => {
           if (seq.current !== mine) return
@@ -163,7 +182,7 @@ export default function PlayerCardProvider({
   return (
     <Ctx.Provider value={value}>
       {children}
-      {ref ? <PlayerCardSheet subject={ref} data={data} status={status} onClose={close} onOpen={open} /> : null}
+      {ref ? <PlayerCardSheet subject={ref} data={data} status={status} onClose={close} onOpen={open} more={more} /> : null}
     </Ctx.Provider>
   )
 }
