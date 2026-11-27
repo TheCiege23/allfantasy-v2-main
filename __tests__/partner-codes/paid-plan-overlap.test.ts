@@ -39,12 +39,13 @@ describe('stopPaidPlansCoveredBy', () => {
     expect(r.stopped).toEqual([{ subscriptionId: 'sub_1', planFamily: 'af_supreme', endsAt: FAR }])
   })
 
-  it('free Supreme also covers paid Pro and Commissioner, but never AF Legacy', async () => {
+  // Owner decision 2026-11-27: Supreme includes AF Legacy, so a free Supreme stops a paid Legacy renewal too.
+  it('free Supreme also covers paid Pro, Commissioner and AF Legacy', async () => {
     rows.push(row({ sku: 'af_pro_monthly', stripeSubscriptionId: 'sub_pro' }), row({ sku: 'af_commissioner_yearly', stripeSubscriptionId: 'sub_c' }), row({ sku: 'af_war_room_monthly', stripeSubscriptionId: 'sub_legacy' }))
     const stripe = stripeWith({})
     const { stopPaidPlansCoveredBy } = await import('@/lib/partner-codes/paidPlanOverlap')
     const r = await stopPaidPlansCoveredBy({ stripe, userId: 'u1', freePlan: 'supreme', partnerCodeId: 'pc1' })
-    expect(r.stopped.map((s) => s.subscriptionId).sort()).toEqual(['sub_c', 'sub_pro'])
+    expect(r.stopped.map((s) => s.subscriptionId).sort()).toEqual(['sub_c', 'sub_legacy', 'sub_pro'])
   })
 
   it('free Commissioner leaves a paid Supreme alone (Supreme is more than it)', async () => {
