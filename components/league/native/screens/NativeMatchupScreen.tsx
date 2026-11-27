@@ -82,7 +82,11 @@ function SlotCell({ p, side, sport }: { p: MatchupPlayerSlot | null; side: 'left
         {media ? <span className="nls-mavatar"><PlayerAvatar name={p.name} headshotUrl={p.headshotUrl} teamLogoUrl={o?.teamLogoUrl} team={p.team} sport={sport} /></span> : null}
         <span className="nls-pl-text">
           <strong title={p.name}>
-            <PlayerNameButton name={p.name} onOpen={() => openCard({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl })}>
+            <PlayerNameButton
+              name={p.name}
+              refAttrs={openCard.refAttrs({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl })}
+              onOpen={(el) => openCard({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl }, el)}
+            >
               <span className="nls-long">{p.name}</span>
               <span className="nls-short">{shortPlayerName(p.name)}</span>
             </PlayerNameButton>

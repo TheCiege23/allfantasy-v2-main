@@ -36,7 +36,9 @@ import { fmt1, formatRecord, optimalLineupListsRespectingLocks, ordinal, project
 import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
 import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupView'
 import { lockRowLabel } from '@/lib/league/native/lockRowLabel'
-import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
+import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, PlayerNameButton, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
+import { WeekByPlayerCard } from './WeekByPlayerCard'
+import { weekByPlayer } from '@/lib/league/native/weekByPlayer'
 import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
@@ -172,10 +174,10 @@ function SlotTapButton({ picked, label, disabled, onTap, children }: { picked: b
 }
 
 /** The player cell: a button while the lineup is editable, so a row is one tap target on a phone. */
-function PlayerCell({ tappable, picked, label, disabled, onTap, children }: { tappable: boolean; picked: boolean; label: string; disabled: boolean; onTap: () => void; children: ReactNode }) {
+function PlayerCell({ tappable, picked, label, disabled, onTap, refAttrs, children }: { tappable: boolean; picked: boolean; label: string; disabled: boolean; onTap: (origin: HTMLElement) => void; refAttrs?: Record<string, string>; children: ReactNode }) {
   if (!tappable) return <div className="nls-player">{children}</div>
   return (
-    <button type="button" className="nls-player nls-tap" aria-pressed={picked} aria-label={label} disabled={disabled} onClick={onTap} data-testid="lineup-tap">
+    <button type="button" className="nls-player nls-tap" aria-pressed={picked} aria-label={label} disabled={disabled} onClick={(e) => onTap(e.currentTarget)} data-testid="lineup-tap" {...refAttrs}>
       {children}
     </button>
   )
@@ -400,6 +402,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const offDay = useMemo(() => (rd && data?.dailyLineups ? dailyOffDayIds(data.unifiedRoster as Array<{ id: string; periodOpponent?: string | null }> | undefined) : new Set<string>()), [rd, data])
   const slots = useMemo(() => data?.starterSlots ?? [], [data])
   const daily = data?.dailyLineups ?? null
+  const weekRows = useMemo(() => weekByPlayer(daily), [daily])
   const weekLock = useMemo(
     () =>
       data?.leagueWeek
@@ -799,7 +802,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
           disabled={saving}
           // While a badge is selected, a tap anywhere on a row finishes the move. Otherwise the
           // name opens the player card (an empty slot has no card, so it is selected instead).
-          onTap={() => (editable && (picked || !p) ? onTap(tap) : openCard({ id: p?.id ?? id, name: p?.name, position: p?.position, team: p?.team, imageUrl: p?.headshotUrl ?? p?.imageUrl }))}
+          onTap={(el) => (editable && (picked || !p) ? onTap(tap) : openCard({ id: p?.id ?? id, name: p?.name, position: p?.position, team: p?.team, imageUrl: p?.headshotUrl ?? p?.imageUrl }, el))}
+          refAttrs={p ? openCard.refAttrs({ id: p.id ?? id, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl ?? p.imageUrl }) : undefined}
         >
           <span className="nls-pl" data-media={showMedia || undefined}>
             {showMedia ? <PlayerAvatar name={p?.name} headshotUrl={p?.headshotUrl ?? p?.imageUrl} teamLogoUrl={p?.teamLogoUrl} team={p?.team} sport={league.sport} empty={!p} /> : null}
@@ -1032,6 +1036,22 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                 />
                 <p className="nls-muted">Week {daily.week} so far: <strong>{fmt1(daily.weekPoints)}</strong> pts from each day&apos;s starters.</p>
               </div>
+            ) : null}
+
+            {tab === 'lineup' && weekRows ? (
+              <WeekByPlayerCard
+                data={weekRows}
+                renderName={(id) => {
+                  const p = players[id]
+                  if (!p?.name) return <span>Unknown player</span>
+                  const who = { id: p.id ?? id, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl ?? p.imageUrl }
+                  return (
+                    <PlayerNameButton name={p.name} refAttrs={openCard.refAttrs(who)} onOpen={(el) => openCard(who, el)}>
+                      {p.name}
+                    </PlayerNameButton>
+                  )
+                }}
+              />
             ) : null}
 
             {tab === 'lineup' && viewDay?.status === 'past' ? (

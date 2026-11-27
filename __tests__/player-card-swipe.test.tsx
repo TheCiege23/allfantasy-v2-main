@@ -181,3 +181,39 @@ describe('swipe between players', () => {
     expect(screen.getByTestId('player-card-nav').textContent).toContain('2 of 2')
   })
 })
+
+describe('swipe from the league screens (useNativePlayerCard + PlayerNameButton)', () => {
+  it('a league screen name joins the swipe list and opens with its origin', async () => {
+    const { useNativePlayerCard, PlayerNameButton } = await import('@/components/league/native/screens/NativeScreenParts')
+    function LeagueRows() {
+      const openCard = useNativePlayerCard('NHL')
+      return (
+        <ul>
+          {ROSTER.map((p) => {
+            const who = { id: p.id, name: p.name, position: 'C', team: 'SEA' }
+            return (
+              <li key={p.id}>
+                <PlayerNameButton name={p.name} refAttrs={openCard.refAttrs(who)} onOpen={(el) => openCard(who, el)}>
+                  {p.name}
+                </PlayerNameButton>
+              </li>
+            )
+          })}
+        </ul>
+      )
+    }
+    render(
+      <PlayerCardProvider>
+        <main>
+          <LeagueRows />
+        </main>
+      </PlayerCardProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Cal Defense player card' }))
+    await screen.findByTestId('player-card')
+    expect(screen.getByTestId('player-card-nav').textContent).toContain('3 of 3')
+    fireEvent.click(screen.getByTestId('player-card-prev'))
+    await waitFor(() => expect(heading()).toBe('Ben Wing'))
+    expect(cardCalls.at(-1)).toBe('102')
+  })
+})

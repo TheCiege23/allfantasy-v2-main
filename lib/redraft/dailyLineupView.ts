@@ -37,6 +37,11 @@ export type DailyLineupDay = {
   points: Record<string, number>
   /** Points the day's starters scored. */
   starterPoints: number
+  /**
+   * The players whose points COUNTED that day — the scorer's own starter rule (`isScoringStarterSlot`),
+   * so a screen never re-derives it from slot names. Optional: views built before it was added omit it.
+   */
+  startedIds?: string[]
 }
 
 export type DailyLineupView = {
@@ -89,6 +94,7 @@ export async function loadDailyLineupView(
     slots: {},
     points: {},
     starterPoints: 0,
+    startedIds: [],
   }))
   const byKey = new Map(out.map((d) => [d.day, d]))
   const startedPoints: Record<string, number> = {}
@@ -106,6 +112,7 @@ export async function loadDailyLineupView(
       entry.points[p.playerId] = round2(raw)
       if (isScoringStarterSlot(slot)) {
         entry.starterPoints = round2(entry.starterPoints + raw)
+        entry.startedIds!.push(p.playerId)
         startedPoints[p.playerId] = round2((startedPoints[p.playerId] ?? 0) + raw)
         // Summed unrounded and rounded once, as the matchup scorer does.
         weekPoints += raw

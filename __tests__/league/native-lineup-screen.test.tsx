@@ -1,6 +1,6 @@
 /** Native Lineup screen (handoff 2026-10-11 §3): optimise + per-game lock, against mocked routes. */
 import React from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { UserLeague } from '@/app/dashboard/types'
 
@@ -132,9 +132,13 @@ describe('NativeLineupScreen', () => {
       '/settings': {},
     })
     render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
-    await screen.findByText('Jalen Hurts')
+    // Each name shows on its lineup row AND in the week-by-player table below the day picker.
+    await screen.findAllByText('Jalen Hurts')
     expect(screen.getByTestId('daily-day-picker')).toBeTruthy()
     expect(screen.getByText(/Changes apply today/)).toBeTruthy()
+    // Week by player: Spears scored 4 on Tuesday from the bench — his bench total, not his week total.
+    const spears = within(screen.getByTestId('week-by-player-rb1')).getAllByRole('cell').map((c) => c.textContent)
+    expect(spears.slice(0, 2)).toEqual(['0.0', '4.0'])
     // The server's per-player lock wins: Spears' game today has started.
     expect((screen.getByRole('button', { name: 'Locked' }) as HTMLButtonElement).disabled).toBe(true)
 

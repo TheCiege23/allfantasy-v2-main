@@ -590,7 +590,11 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                           <PosPill label={p.position} />
                           <div className="nls-player">
                             <strong>
-                              <PlayerNameButton name={p.name} onOpen={() => openCard({ id: p.id, name: p.name, position: p.position, team: p.team, imageUrl: a.displayHeadshotUrl })}>{p.name}</PlayerNameButton>
+                              <PlayerNameButton
+                                name={p.name}
+                                refAttrs={openCard.refAttrs({ id: p.id, name: p.name, position: p.position, team: p.team, imageUrl: a.displayHeadshotUrl })}
+                                onOpen={(el) => openCard({ id: p.id, name: p.name, position: p.position, team: p.team, imageUrl: a.displayHeadshotUrl }, el)}
+                              >{p.name}</PlayerNameButton>
                               <InjuryFlag status={p.injuryStatus} />
                             </strong>
                             <small>
