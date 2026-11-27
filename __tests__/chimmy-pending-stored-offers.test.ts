@@ -84,6 +84,19 @@ beforeEach(() => {
   )
 })
 
+describe('Chimmy sees ESPN offers from the same ledger (2026-11-27)', () => {
+  it('hands an ESPN offer waiting on the user to the evaluator as an espn ref, and drops one past its stated expiry', async () => {
+    m.offers.mockResolvedValue([
+      { provider: 'espn', providerTradeId: 'espn-open', proposedByRosterId: '5', consentedRosterIds: ['5'], expiresAt: new Date(Date.now() + 3_600_000) },
+      { provider: 'espn', providerTradeId: 'espn-lapsed', proposedByRosterId: '5', consentedRosterIds: ['5'], expiresAt: new Date(Date.now() - 60_000) },
+    ])
+    await buildPendingTradeDecisionContext('L', 'me')
+    const refs = m.evaluate.mock.calls.map((c) => c[0].ref)
+    expect(refs).toContainEqual({ kind: 'provider', provider: 'espn', providerTradeId: 'espn-open' })
+    expect(refs).not.toContainEqual(expect.objectContaining({ providerTradeId: 'espn-lapsed' }))
+  })
+})
+
 describe('Chimmy sees native and Sleeper offers', () => {
   it('reads native offers where one of the user\'s rosters is the receiver', async () => {
     await buildPendingTradeDecisionContext('L', 'me')
@@ -98,7 +111,7 @@ describe('Chimmy sees native and Sleeper offers', () => {
 
   it('reads Sleeper offers on the unpadded provider id and keeps only the ones that need the user', async () => {
     const out = (await buildPendingTradeDecisionContext('L', 'me'))!
-    expect(m.offers.mock.calls[0]![0].where).toEqual({ leagueId: 'L', provider: 'sleeper', status: 'pending', rosterIds: { has: '3' } })
+    expect(m.offers.mock.calls[0]![0].where).toEqual({ leagueId: 'L', provider: { in: ['sleeper', 'espn'] }, status: 'pending', rosterIds: { has: '3' } })
     expect(out).toContain('Sleeper offer sl-needs-me from Sleeper Sharks')
     expect(out).not.toContain('sl-i-sent')
     expect(out).not.toContain('sl-i-agreed')
