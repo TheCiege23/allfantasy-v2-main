@@ -38,7 +38,11 @@ vi.mock('next-auth', () => ({ getServerSession: mockSession }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/hybrid-valuation', () => ({ pricePlayer: mockPricePlayer, pricePick: mockPricePick }))
 
+// The viewer holds AF Legacy: since 2026-11-27 the model only writes for `legacy_trade_lookback`
+// (gating-holes-2026-11-27.test.ts runs the other tiers).
+vi.mock('@/lib/subscription/EntitlementResolver', async () => (await import('../monetization/tierMatrixHarness')).resolverModule())
 import { POST } from '@/server/api-route-modules/legacy/trade-history/route'
+import { setTier } from '../monetization/tierMatrixHarness'
 import { proseNamesAGrade } from '@/lib/legacy/legacyPackageGrade'
 import { NOT_YOUR_LEAGUE_REASON } from '@/lib/decision-os/trade/evaluationLeague'
 
@@ -92,6 +96,7 @@ const llmSays = (brief: string, full: string) =>
 beforeEach(() => {
   for (const m of [mockResolveLeague, mockOneGrade, mockLoadFrozen, mockSession, mockPricePlayer, mockPricePick, mockLlm]) m.mockReset()
   mockSession.mockResolvedValue({ user: { id: 'af-user-1' } })
+  setTier('legacy')
   mockResolveLeague.mockResolvedValue('af-league-1')
   mockLoadFrozen.mockResolvedValue(new Map())
   mockOneGrade.mockResolvedValue(view('B', 6000, 7000, { letter: 'A', giveValue: 5000, getValue: 8000 }))
@@ -180,10 +185,11 @@ describe('/api/legacy/trade-history action:grade — the canonical completed-tra
   it('a league that is not the caller’s, or no session: withheld with that reason, grader never called', async () => {
     mockResolveLeague.mockResolvedValue(null)
     expect((await (await post(BODY)).json()).gradedTrade).toMatchObject({ graded: false, gradeWithheld: NOT_YOUR_LEAGUE_REASON })
+    // No session: refused outright since 2026-11-27 (it ran the model for anyone before).
     mockSession.mockResolvedValue(null)
-    const noSession = (await (await post(BODY)).json()).gradedTrade
-    expect(noSession.graded).toBe(false)
-    expect(noSession.gradeWithheld).toMatch(/sign in/i)
+    const noSession = await post(BODY)
+    expect(noSession.status).toBe(401)
+    expect(await noSession.json()).toMatchObject({ code: 'sign_in_required' })
     expect(mockOneGrade).not.toHaveBeenCalled()
     expect(mockPricePlayer).not.toHaveBeenCalled()
   })

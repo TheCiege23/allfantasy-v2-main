@@ -162,10 +162,39 @@ export function composePlayerIdentities(
     else groups.set(r.sleeperId, [r])
   }
   const out = new Map<string, ComposedPlayerIdentity>()
-  for (const [id, group] of groups) {
+  for (const [id, raw] of groups) {
+    const group = oneSportGroup(raw)
+    if (!group) continue
     out.set(id, group.some((r) => r.source === 'sleeper') ? fromSleeperRow(group) : blendVendorRows(group))
   }
   return out
+}
+
+/**
+ * 🛑 ONE SLEEPER ID, TWO PEOPLE: REFUSE RATHER THAN PICK.
+ *
+ * Sleeper numbers each sport's players separately, so `SportsPlayer` holds NFL 1466 Travis Kelce
+ * AND NBA 1466 JaVale McGee, both `source='sleeper'`. A read that reached this function without a
+ * sport filter hands both rows over under one id, and the freshness tie-break then labelled every
+ * NFL market book's Kelce "JaVale McGee / C" (#4298). Callers should scope their read by sport;
+ * this is the net under the ones that hold several sports' rosters in one id-keyed map.
+ *
+ * - Every row in one sport → the group as given.
+ * - Exactly one sport carries a Sleeper-sourced row → that sport's rows. A vendor row in another
+ *   sport (a college row stamped with the pro id) is not a second Sleeper identity.
+ * - Two or more sports with a Sleeper row, or several sports and no Sleeper row → `null`: the id
+ *   is unnamed, which reads as a gap. A wrong name reads as a fact.
+ *
+ * A row with no `sport` counts as its own unknown sport — it cannot vouch for agreeing.
+ */
+function oneSportGroup(group: PlayerIdentityRow[]): PlayerIdentityRow[] | null {
+  const sportOf = (r: PlayerIdentityRow) => String(r.sport ?? '').trim().toUpperCase()
+  const sports = new Set(group.map(sportOf))
+  if (sports.size <= 1) return group
+  const sleeperSports = new Set(group.filter((r) => r.source === 'sleeper').map(sportOf))
+  if (sleeperSports.size !== 1) return null
+  const [only] = sleeperSports
+  return group.filter((r) => sportOf(r) === only)
 }
 
 /**

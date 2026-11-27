@@ -52,17 +52,19 @@ function planFamilyToSubscriptionPlanId(
 /**
  * The plans AF Supreme includes for entitlement checks.
  *
- * ⚠ war_room (AF Legacy) WAS REMOVED FROM THIS LIST. Legacy now stands on its own
- * at $9.99/mo alongside Pro and Commissioner rather than sitting above Supreme,
- * so Supreme bundles the two general tiers and Legacy is bought separately.
+ * 🛑 AF SUPREME INCLUDES AF LEGACY AGAIN (owner's decision 2026-11-27). From 2026-10-25 to 2026-11-27
+ * this list was [pro, commissioner] and Legacy was sold on its own — which locked a $19.99 Supreme buyer
+ * out of draft-room help ($9.99 Legacy's `draft_prep`), the War Room and every AF Legacy tool (gating
+ * audit I2). Legacy is still sold on its own as well; Supreme simply includes all three paid plans.
  *
- * Owner approved preserving existing benefits on 2026-10-25. A production inventory
- * found no Supreme subscription rows or active Supreme grants. Any existing holder
- * found before rollout must receive an explicit preserved Legacy entitlement first.
+ * Everything that derives "what Supreme covers" reads this list or must agree with it:
+ * supremeSwitch's SUPREME_BUNDLED_FAMILIES, stripeCustomerForUser's SUPREME_INCLUDES, pricingAccount's
+ * SUPREME_INCLUDES and paidPlanOverlap's COVERED_BY.supreme (pinned in __tests__/supreme-includes-legacy).
  */
 export const SUPREME_INCLUDED_PLAN_IDS: readonly SubscriptionPlanId[] = [
   "pro",
   "commissioner",
+  "war_room",
 ]
 
 export function isActiveOrGraceStatus(status: EntitlementStatus): boolean {

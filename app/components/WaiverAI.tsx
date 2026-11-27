@@ -1,5 +1,6 @@
 'use client';
 
+import { readPlanRefusal } from '@/lib/monetization/planRefusal';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Loader2, ThumbsUp, ThumbsDown, AlertCircle, Link2, Zap } from 'lucide-react';
@@ -182,7 +183,8 @@ export default function WaiverAI() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to fetch suggestions');
+        // Sign-in + AF Pro since 2026-11-27 (`ai_waivers`): the server's sentence and its way forward.
+        throw new Error(readPlanRefusal(res.status, errData)?.message || errData.error || 'Failed to fetch suggestions');
       }
 
       const parsed = await res.json();

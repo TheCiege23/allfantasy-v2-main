@@ -278,3 +278,60 @@ describe('shares — another sport’s leagues', () => {
     for (const [a] of db.playerFindMany.mock.calls as any[]) if (a.where.sleeperId) expect(a.where.sport).toBe('NFL')
   })
 })
+
+/*
+ * A PASTED Yahoo league (2026-11-26): its resolved players are stored `sleeper:<id>` and its
+ * unmatched ones `yahoo-paste:…` (declaredSleeperId.ts). Its declared ids are its bridge — the league
+ * counts in your shares and its holders are named; the unmatched player is never given an id, and a
+ * bare Yahoo number (the `Y1` case above) still is never read.
+ */
+describe('shares — a pasted Yahoo league with declared Sleeper ids', () => {
+  const PASTED = { starters: ['sleeper:100'], players: ['sleeper:100', 'sleeper:300', 'sleeper:DAL', 'sleeper:600', 'yahoo-paste:nobody|wr|kc'] }
+
+  it('the all-leagues board counts its declared players, and only those', async () => {
+    db.teamFindMany.mockResolvedValue([{ leagueId: 'YP', platformUserId: 'me-yp', externalId: '3' }])
+    db.leagueFindMany.mockResolvedValue([{ id: 'YP', platform: 'yahoo', sport: 'NFL' }])
+    db.rosterFindMany.mockResolvedValue([{ leagueId: 'YP', platformUserId: 'me-yp', playerData: PASTED }])
+    db.playerFindMany.mockImplementation(async ({ where }: { where: { sleeperId: { in: string[] } } }) => where.sleeperId.in.map((id) => catalog(id, `Player ${id}`)))
+    const out = await loadPlayerShares('me', ['YP'])
+    if (!out.available) throw new Error(out.reason)
+    expect(out.data.leaguesRead).toBe(1)
+    expect(out.data.unsupportedLeagues).toBe(0)
+    const ids = out.data.rows.map((r) => r.player.sleeperId).sort()
+    expect(ids).toEqual(['100', '300', '600', 'DAL'])
+    expect(JSON.stringify(out.data.rows)).not.toContain('yahoo-paste')
+    expect(JSON.stringify(out.data.rows)).not.toContain('sleeper:')
+    // Declared ids need no registry read.
+    expect(db.identityFindMany.mock.calls.some(([a]: any[]) => 'declared' in (a?.where ?? {}))).toBe(false)
+  })
+
+  it('one league: names holders, and a miss is "free" once the league reads', async () => {
+    db.leagueFindUnique.mockResolvedValue({ id: 'YP', name: 'Pasted', platform: 'yahoo', sport: 'NFL', settings: {} })
+    db.rosterFindMany.mockResolvedValue([
+      { leagueId: 'YP', platformUserId: 'me-yp', playerData: PASTED },
+      { leagueId: 'YP', platformUserId: 'rival', playerData: { players: ['sleeper:700', 'sleeper:701', 'sleeper:702', 'sleeper:703', 'sleeper:704'] } },
+    ])
+    db.teamFindMany.mockResolvedValue([
+      { id: 't1', externalId: '3', platformUserId: 'me-yp', claimedByUserId: 'me', ownerName: 'guap', teamName: 'Cafe' },
+      { id: 't2', externalId: '5', platformUserId: 'rival', claimedByUserId: null, ownerName: 'tasha', teamName: 'Titans' },
+    ])
+    db.statFindMany.mockResolvedValue([])
+    mockValueMap.mockResolvedValue(new Map())
+    const rows = ['100', '700', '400'].map((id) => ({ player: { sport: 'NFL', externalId: `x-${id}`, sleeperId: id, name: `P${id}`, position: 'WR', team: 'NYG', imageUrl: null }, leagues: 1, starts: 1, ir: 0, leagueIds: [], status: null, description: null }))
+    const v = await loadLeagueShareView('me', 'YP', rows, { season: 2026 })
+    expect(v?.cells['100'].holder).toEqual({ kind: 'you', slot: 'STARTER' })
+    expect(v?.cells['700'].holder).toMatchObject({ kind: 'other' })
+    expect(v?.cells['400'].holder).toEqual({ kind: 'free' }) // 9 of 10 ids declared: a miss is trusted
+  })
+
+  it('CONTROL: a Yahoo league of bare ids stays unread — every answer "unknown"', async () => {
+    db.leagueFindUnique.mockResolvedValue({ id: 'YB', name: 'Bare', platform: 'yahoo', sport: 'NFL', settings: {} })
+    db.rosterFindMany.mockResolvedValue([{ leagueId: 'YB', platformUserId: 'me-yb', playerData: { starters: ['100'], players: ['100', '300'] } }])
+    db.teamFindMany.mockResolvedValue([])
+    db.statFindMany.mockResolvedValue([])
+    mockValueMap.mockResolvedValue(new Map())
+    const rows = ['100'].map((id) => ({ player: { sport: 'NFL', externalId: `x-${id}`, sleeperId: id, name: `P${id}`, position: 'WR', team: 'NYG', imageUrl: null }, leagues: 1, starts: 1, ir: 0, leagueIds: [], status: null, description: null }))
+    const v = await loadLeagueShareView('me', 'YB', rows, { season: 2026 })
+    expect(v?.cells['100'].holder).toEqual({ kind: 'unknown' })
+  })
+})

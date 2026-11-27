@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { computeKeeperEligibility } from './eligibilityEngine'
-import { placeTeamKeepers, placedKeeperLabel, resolveKeeperRules } from './keeperRules'
+import { isWaiverCostLabel, placeTeamKeepers, placedKeeperLabel, readWaiverStack, resolveKeeperRules } from './keeperRules'
 import { chooseBestValueKeepers, readMissedDeadlineRule, type BestValueCandidate } from './missedDeadline'
 import { loadKeeperMarketRanks } from './keeperMarketValues'
 
@@ -96,9 +96,10 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
           name: p.playerName,
           costRound: e.projectedCostRound,
           marketRank: rankOf({ playerId: e.playerId, name: p.playerName, position: p.position }),
+          waiver: isWaiverCostLabel(e.projectedCost),
         }
       })
-    const chosen = chooseBestValueKeepers({ candidates, maxKeepers, teams, rules, totalRounds })
+    const chosen = chooseBestValueKeepers({ candidates, maxKeepers, teams, rules, totalRounds, waiverStack: readWaiverStack(league.settings) })
     if (!chosen.length) continue
     const placement = placeTeamKeepers(rules, chosen.map((c) => ({ playerId: c.playerId, costRound: c.costRound })), { totalRounds })
     const spotById = new Map(placement.placed.map((s) => [s.playerId, s]))

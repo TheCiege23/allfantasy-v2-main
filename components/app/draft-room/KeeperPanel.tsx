@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { Shield, Trash2, Plus } from 'lucide-react'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
+import { readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
 type KeeperPanelProps = {
   leagueId: string
@@ -40,6 +41,8 @@ function KeeperPanel({
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [configSaving, setConfigSaving] = useState(false)
+  const [autoPlaceNote, setAutoPlaceNote] = useState<string | null>(null)
+  const [autoPlaceLock, setAutoPlaceLock] = useState<PlanRefusal | null>(null)
 
   const [addPlayerName, setAddPlayerName] = useState('')
   const [addPosition, setAddPosition] = useState('')
@@ -144,6 +147,37 @@ function KeeperPanel({
     }
   }, [leagueId, actionLoading, fetchKeepers, onSessionUpdate])
 
+  /** AF Commissioner / Supreme: put every LOCKED keeper on his team's pick (lib/keeper/keeperAutoBoard.ts). */
+  const handleAutoPlace = useCallback(async () => {
+    if (!isCommissioner || actionLoading) return
+    setActionLoading('auto')
+    setAutoPlaceNote(null)
+    setAutoPlaceLock(null)
+    try {
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/keepers/auto-place`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      const refusal = readPlanRefusal(res.status, json)
+      if (refusal) {
+        setAutoPlaceLock(refusal)
+        return
+      }
+      if (!res.ok) {
+        setError(json.error || 'Could not place keepers')
+        return
+      }
+      const s = json.summary as { placed: number; moved: number; flagged: unknown[] } | undefined
+      setAutoPlaceNote(
+        s
+          ? `Placed ${s.placed} keeper${s.placed === 1 ? '' : 's'}${s.moved ? `, ${s.moved} moved from the round they cost` : ''}${s.flagged.length ? `. ${s.flagged.length} need you to place them.` : '.'}`
+          : 'Keepers placed.',
+      )
+      await fetchKeepers()
+      onSessionUpdate?.()
+    } finally {
+      setActionLoading(null)
+    }
+  }, [leagueId, isCommissioner, actionLoading, fetchKeepers, onSessionUpdate])
+
   const handleSaveConfig = useCallback(async () => {
     if (!isCommissioner || configSaving) return
     setConfigSaving(true)
@@ -238,6 +272,33 @@ function KeeperPanel({
             </p>
           )}
           {error && <p className="mb-2 text-red-400 text-xs">{error}</p>}
+
+          {isCommissioner && isPreDraftStatus && (
+            <section className="mb-4 rounded-lg border border-white/10 bg-black/20 p-3" data-testid="draft-keeper-auto-place">
+              <h4 className="mb-1 font-medium text-white/90">Place locked keepers for me</h4>
+              <p className="mb-2 text-xs text-white/60">
+                Every locked keeper takes his team&apos;s pick in the round he costs, under the league&apos;s keeper rules.
+              </p>
+              <button
+                type="button"
+                onClick={handleAutoPlace}
+                disabled={actionLoading != null}
+                data-testid="draft-keeper-auto-place-button"
+                className="rounded bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+              >
+                {actionLoading === 'auto' ? 'Placing…' : 'Place keepers on the board'}
+              </button>
+              {autoPlaceNote ? <p className="mt-2 text-xs text-emerald-300" role="status">{autoPlaceNote}</p> : null}
+              {autoPlaceLock ? (
+                <p className="mt-2 text-xs text-amber-300" role="alert" data-testid="draft-keeper-auto-place-locked">
+                  {autoPlaceLock.message}{' '}
+                  {autoPlaceLock.actionHref ? (
+                    <a href={autoPlaceLock.actionHref} className="font-semibold underline">{autoPlaceLock.actionLabel ?? 'See plans'}</a>
+                  ) : null}
+                </p>
+              ) : null}
+            </section>
+          )}
 
           {isCommissioner && (
             <section className="mb-4 rounded-lg border border-white/10 bg-black/20 p-3">

@@ -48,3 +48,32 @@ describe('keeper value report: one player against his cost', () => {
     expect(keeperValue(5, null, 12)).toBeNull()
   })
 })
+
+describe('missed-deadline keepers: undrafted pickups stack like a manager’s save (owner, 2026-11-27)', () => {
+  const w = (playerId: string, marketRank: number, costRound = 15): BestValueCandidate => ({ playerId, name: playerId, costRound, marketRank, waiver: true })
+  const run = (candidates: BestValueCandidate[], over: { waiverStack?: boolean; maxKeepers?: number } = {}) =>
+    chooseBestValueKeepers({ candidates, maxKeepers: over.maxKeepers ?? 3, teams: 12, rules: rules(), totalRounds: 15, waiverStack: over.waiverStack })
+      .map((k) => [k.playerId, k.costRound])
+
+  it('two pickups: the first AF keeps costs the last round, the second the round before', () => {
+    // 12 teams: round 15 uses about pick 174, round 14 about 162
+    expect(run([w('w1', 100), w('w2', 120)])).toEqual([['w1', 15], ['w2', 14]])
+  })
+
+  it('a stacked pickup stepping onto a drafted keeper’s round moves earlier', () => {
+    expect(run([c('dr', 14, 50), w('w1', 100), w('w2', 120)])).toEqual([['dr', 14], ['w1', 15], ['w2', 13]])
+  })
+
+  it('a pickup whose STACKED cost leaves him worth less than the pick is not kept', () => {
+    // w3 is +19 at round 15, but stacked behind w1 and w2 he would cost round 13 (pick ~150): −5
+    expect(run([w('w1', 100), w('w2', 120), w('w3', 155)])).toEqual([['w1', 15], ['w2', 14]])
+  })
+
+  it('stacks from the commissioner’s fixed waiver round', () => {
+    expect(run([w('w1', 20, 10), w('w2', 30, 10)])).toEqual([['w1', 10], ['w2', 9]])
+  })
+
+  it('keeper_waiver_stack: false prices both at the waiver round, so the refusing rule keeps only one', () => {
+    expect(run([w('w1', 100), w('w2', 120)], { waiverStack: false })).toEqual([['w1', 15]])
+  })
+})

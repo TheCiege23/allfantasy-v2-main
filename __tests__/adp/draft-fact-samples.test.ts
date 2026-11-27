@@ -306,3 +306,56 @@ describe('rookie drafts and the QB format (2026-11-22)', () => {
     expect((await collectDraftFactSamples({ sport: 'NFL' })).picks[0]!.context.rosterFormat).toBe('standard')
   })
 })
+
+/*
+ * 🛑 THE SAME SLEEPER ID IS A DIFFERENT PERSON IN EACH SPORT, AND THE IDENTITY MAP KEEPS THEM IN
+ * DIFFERENT COLUMNS: `sleeperId` holds NFL ids, `sleeperNbaId` NBA ids. The fake table below is the
+ * real collisions, and the mock honours `where` as Postgres does — so an NBA draft read from
+ * `sleeperId` gets Travis Kelce, and read from `sleeperId` held to NBA gets nobody at all.
+ */
+describe('a Sleeper NBA draft reads the NBA Sleeper column', () => {
+  const PIM = [
+    { sport: 'NFL', sleeperId: '1466', sleeperNbaId: null, canonicalName: 'Travis Kelce', position: 'TE' },
+    { sport: 'NFL', sleeperId: '4866', sleeperNbaId: null, canonicalName: 'Saquon Barkley', position: 'RB' },
+    { sport: 'NFL', sleeperId: '4984', sleeperNbaId: null, canonicalName: 'Josh Allen', position: 'QB' },
+    { sport: 'NFL', sleeperId: '9999', sleeperNbaId: null, canonicalName: 'Some Receiver', position: 'WR' },
+    { sport: 'NBA', sleeperId: null, sleeperNbaId: '1466', canonicalName: 'JaVale McGee', position: 'C' },
+    { sport: 'NBA', sleeperId: null, sleeperNbaId: '4866', canonicalName: 'AJ Dybantsa', position: 'SF' },
+    { sport: 'NBA', sleeperId: null, sleeperNbaId: '4984', canonicalName: 'Cameron Corhen', position: 'PF' },
+    { sport: 'NBA', sleeperId: null, sleeperNbaId: '9999', canonicalName: 'Some Guard', position: 'PG' },
+  ]
+  const honour = (rows: Array<Record<string, unknown>>) => async ({ where }: { where: Record<string, unknown> }) =>
+    rows.filter((r) =>
+      Object.entries(where).every(([k, v]) =>
+        v && typeof v === 'object' && Array.isArray((v as { in?: unknown[] }).in) ? (v as { in: unknown[] }).in.includes(r[k]) : r[k] === v,
+      ),
+    )
+  const draft = (sport: string) =>
+    ['1466', '4866', '4984', '9999'].map((playerId, i) => ({ leagueId: 'lg1', sport, season: 2025, round: 1, pickNumber: i + 1, playerId }))
+
+  beforeEach(() => {
+    mockLeagueFindMany.mockResolvedValue([{ ...LEAGUE, platform: 'sleeper' }])
+    mockIdentityFindMany.mockImplementation(honour(PIM))
+    mockSportsPlayerFindMany.mockImplementation(honour([]))
+  })
+
+  it('🛑 names the NBA players, never their NFL namesakes', async () => {
+    mockDraftFactFindMany.mockResolvedValue(draft('NBA'))
+    const { picks } = await collectDraftFactSamples({ sport: 'NBA' })
+    expect(picks.map((p) => p.playerName)).toEqual(['JaVale McGee', 'AJ Dybantsa', 'Cameron Corhen', 'Some Guard'])
+    expect(mockIdentityFindMany.mock.calls[0]![0].where).toEqual({ sleeperNbaId: { in: ['1466', '4866', '4984', '9999'] }, sport: 'NBA' })
+  })
+
+  it('CONTROL: the same ids in an NFL draft are the NFL players', async () => {
+    mockDraftFactFindMany.mockResolvedValue(draft('NFL'))
+    const { picks } = await collectDraftFactSamples({ sport: 'NFL' })
+    expect(picks.map((p) => p.playerName)).toEqual(['Travis Kelce', 'Saquon Barkley', 'Josh Allen', 'Some Receiver'])
+  })
+
+  it('a sport with no Sleeper column skips the identity map rather than reading the NFL one', async () => {
+    mockDraftFactFindMany.mockResolvedValue(draft('MLB'))
+    const { picks } = await collectDraftFactSamples({ sport: 'MLB' })
+    expect(picks).toEqual([])
+    expect(mockIdentityFindMany).not.toHaveBeenCalled()
+  })
+})

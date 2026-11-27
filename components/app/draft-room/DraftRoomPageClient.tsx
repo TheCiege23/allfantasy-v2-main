@@ -5562,9 +5562,10 @@ export function DraftRoomPageClient({
         ) : null
       }
       keeperStrip={
-        !isDraftCompleted && (session as DraftSessionSnapshot).keeper?.locks?.length ? (
+        !isDraftCompleted && ((session as DraftSessionSnapshot).keeper?.locks?.length || (session as DraftSessionSnapshot).keeper?.autoPlacement?.flagged?.length) ? (
           <KeeperRollCall
             locks={(session as DraftSessionSnapshot).keeper!.locks}
+            autoPlacement={(session as DraftSessionSnapshot).keeper!.autoPlacement ?? null}
             teamCount={safeBoardTeamCount}
             currentUserRosterId={currentUserRosterId ?? null}
             teamNameByRosterId={Object.fromEntries(

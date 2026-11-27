@@ -14,7 +14,7 @@ export async function verifiedSGInactivePlayer(db: Prisma.TransactionClient, spo
   // Some old Sleeper retired profiles remain labelled Active. A sport-scoped,
   // name-checked crosswalk can supply RI's explicit inactive status, never the raw ID.
   if (sport !== 'NFL' || player.team) return null
-  const identity = await db.playerIdentityMap.findUnique({ where: { sleeperId: playerId }, select: { sport: true, rollingInsightsId: true, canonicalName: true } })
+  const identity = await db.playerIdentityMap.findUnique({ where: { sleeperId: playerId, sport }, select: { sport: true, rollingInsightsId: true, canonicalName: true } })
   if (identity?.sport !== sport || !identity.rollingInsightsId || canonicalName(identity.canonicalName) !== canonicalName(player.name)) return null
   const profile = await db.sportsPlayer.findUnique({ where: { sport_externalId_source: { sport, externalId: identity.rollingInsightsId, source: 'rolling_insights' } },
     select: { name: true, status: true } })

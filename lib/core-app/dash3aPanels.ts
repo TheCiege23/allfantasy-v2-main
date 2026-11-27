@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { sleeperIdsBySportWhere } from '@/lib/player-identity/externalIdNamespace'
 import { buildRosterIdMap } from './rosterIdMatch'
 import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { FOREIGN_IDS_UNREADABLE, FOREIGN_IDS_UNREADABLE_CLAUSE } from './foreignIdSpaceCopy'
@@ -197,7 +198,12 @@ export async function getCrossLeagueExposure(
   // One roster per league — a league should only produce one for a given user,
   // and overwriting on a duplicate would silently pick an arbitrary one.
   const seen = new Set<string>()
-  const held = new Map<string, { count: number; starts: number }>()
+  /*
+   * 🛑 KEYED BY SPORT AND ID, NOT ID. Sleeper reuses ids across sports — NFL 1466 Travis Kelce,
+   * NBA 1466 JaVale McGee — so an NFL and an NBA roster both holding `1466` are two people, not
+   * "one player on 2 of your rosters", and a bare-id read would name both after the fresher row.
+   */
+  const held = new Map<string, { sport: string; id: string; count: number; starts: number }>()
   let rostersRead = 0
   let foreignRead = 0
 
@@ -216,9 +222,11 @@ export async function getCrossLeagueExposure(
         isResolvableId,
       ),
     )
+    const sport = String(r.league?.sport ?? 'NFL').toUpperCase()
     for (const id of all) {
-      const prev = held.get(id) ?? { count: 0, starts: 0 }
-      held.set(id, { count: prev.count + 1, starts: prev.starts + (starters.has(id) ? 1 : 0) })
+      const key = `${sport}|${id}`
+      const prev = held.get(key) ?? { sport, id, count: 0, starts: 0 }
+      held.set(key, { ...prev, count: prev.count + 1, starts: prev.starts + (starters.has(id) ? 1 : 0) })
     }
   }
 
@@ -233,8 +241,7 @@ export async function getCrossLeagueExposure(
     return { available: false, reason: 'your rosters imported with no resolvable player ids' }
   }
 
-  const ranked = [...held.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, limit)
-  const ids = ranked.map(([id]) => id)
+  const ranked = [...held.values()].sort((a, b) => b.count - a.count).slice(0, limit)
 
   /*
    * `SportsPlayer.sleeperId` is the right join and it is populated — 99,290 rows,
@@ -249,14 +256,15 @@ export async function getCrossLeagueExposure(
    */
   const players = await prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: ids } },
-      select: { sleeperId: true, name: true, position: true, team: true },
+      where: sleeperIdsBySportWhere(ranked.map((h) => [h.sport, [h.id]] as const)),
+      select: { sleeperId: true, sport: true, name: true, position: true, team: true },
     })
     .catch(fellBack)
-  const byId = new Map(players.map((p) => [p.sleeperId, p]))
+  const byId = new Map(players.map((p) => [`${String(p.sport).toUpperCase()}|${p.sleeperId}`, p]))
 
-  const rows: ExposureRow[] = ranked.map(([id, agg]) => {
-    const p = byId.get(id)
+  const rows: ExposureRow[] = ranked.map((agg) => {
+    const id = agg.id
+    const p = byId.get(`${agg.sport}|${id}`)
     return {
       playerId: id,
       // An unresolved id still counts — dropping it would understate exposure.

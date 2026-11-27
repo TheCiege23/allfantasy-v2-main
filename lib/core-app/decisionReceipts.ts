@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { sleeperIdsBySportWhere } from '@/lib/player-identity/externalIdNamespace'
 import { TIE_BAND } from '@/lib/trade-intel/gradeScale'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import {
@@ -236,6 +237,20 @@ export type ReceiptsLeague = {
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
+
+/**
+ * Each league's sport, by `League.id`. 🛑 A Sleeper id names a player only within one sport — NFL
+ * 1466 is Travis Kelce, NBA 1466 is JaVale McGee — so the identity reads below are held to the
+ * sport of the league each id came from. `League.sport` is a non-null enum (default NFL).
+ */
+async function sportsByLeagueId(ids: readonly string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)]
+  if (!unique.length) return new Map()
+  const rows = await prisma.league
+    .findMany({ where: { id: { in: unique } }, select: { id: true, sport: true } })
+    .catch(() => [] as Array<{ id: string; sport: string | null }>)
+  return new Map(rows.map((r) => [r.id, String(r.sport ?? 'NFL').toUpperCase()]))
+}
 
 /** Points credited to one side's incoming / outgoing assets, across every graded season. */
 function sidePoints(side: TradeSideGrade): { got: number; gave: number } {
@@ -485,6 +500,7 @@ type AddCredit = { add: SeasonAdd; points: number; starts: number; weeksScored: 
 async function creditAdds(callable: readonly SeasonAdd[], mine: readonly ReceiptsLeague[]): Promise<Array<AddCredit | null>> {
   if (callable.length === 0) return []
   const playerIds = [...new Set(callable.map((a) => a.playerId))]
+  const sportOf = await sportsByLeagueId(callable.map((a) => a.league.id))
   const [scores, players] = await Promise.all([
     prisma.leaguePlayerWeeklyScore.findMany({
       where: {
@@ -501,13 +517,15 @@ async function creditAdds(callable: readonly SeasonAdd[], mine: readonly Receipt
       select: { leagueId: true, week: true, playerId: true, rosterId: true, isStarter: true, points: true },
     }),
     prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: playerIds } },
-      select: { sleeperId: true, name: true, position: true },
+      where: sleeperIdsBySportWhere(callable.map((a) => [sportOf.get(a.league.id), [a.playerId]] as const)),
+      select: { sleeperId: true, sport: true, name: true, position: true },
     }),
   ])
+  // Keyed by sport AND id: one Sleeper id is a different person in each sport.
   const nameOf = new Map<string, { name: string; position: string | null }>()
   for (const p of players) {
-    if (p.sleeperId && !nameOf.has(p.sleeperId)) nameOf.set(p.sleeperId, { name: p.name, position: p.position ?? null })
+    const key = `${String(p.sport).toUpperCase()}|${p.sleeperId}`
+    if (p.sleeperId && !nameOf.has(key)) nameOf.set(key, { name: p.name, position: p.position ?? null })
   }
 
   return callable.map((a) => {
@@ -522,7 +540,7 @@ async function creditAdds(callable: readonly SeasonAdd[], mine: readonly Receipt
     )
     const droppedBeforePlaying = a.leftWeek != null && a.leftWeek <= a.week
     if (inWindow.length === 0 && !droppedBeforePlaying) return null
-    const who = nameOf.get(a.playerId)
+    const who = nameOf.get(`${sportOf.get(a.league.id)}|${a.playerId}`)
     return {
       add: a,
       points: round1(inWindow.reduce((sum, s) => sum + s.points, 0)),
@@ -702,10 +720,13 @@ export async function getLineupReceipts(args: {
   }
 
   const ids = [...new Set(scores.map((s) => s.playerId))]
+  // Each score's id in its own league's sport (score rows carry the PLATFORM league id).
+  const sportOfLeague = await sportsByLeagueId(mine.map((l) => l.id))
+  const sportByPlatformId = new Map(mine.map((l) => [String(l.platformLeagueId), sportOfLeague.get(l.id) ?? null]))
   const identities = composePlayerIdentities(
     ids.length
       ? await prisma.sportsPlayer.findMany({
-          where: { sleeperId: { in: ids } },
+          where: sleeperIdsBySportWhere(scores.map((s) => [sportByPlatformId.get(String(s.leagueId)) ?? null, [s.playerId]] as const)),
           select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
         })
       : [],

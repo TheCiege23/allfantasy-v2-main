@@ -30,7 +30,11 @@ vi.mock('next-auth', () => ({ getServerSession: mockSession }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/hybrid-valuation', () => ({ computeDualModeTradeDelta: mockHybrid, pricePlayer: mockHybrid, pricePick: mockHybrid }))
 
+// The viewer holds AF Legacy: since 2026-11-27 the model only writes for `legacy_trade_lookback`
+// (gating-holes-2026-11-27.test.ts runs the other tiers).
+vi.mock('@/lib/subscription/EntitlementResolver', async () => (await import('../monetization/tierMatrixHarness')).resolverModule())
 import { POST } from '@/server/api-route-modules/legacy/trade-alternatives/route'
+import { setTier } from '../monetization/tierMatrixHarness'
 import { NOT_YOUR_LEAGUE_REASON } from '@/lib/decision-os/trade/evaluationLeague'
 
 type Letter = 'A' | 'B' | 'C' | 'D' | 'F'
@@ -66,6 +70,7 @@ const gradeByReceived = (table: Record<string, unknown>, fallback: unknown) =>
 beforeEach(() => {
   for (const m of [mockResolveLeague, mockOneGrade, mockLoadFrozen, mockSession, mockHybrid, mockLlm]) m.mockReset()
   mockSession.mockResolvedValue({ user: { id: 'af-user-1' } })
+  setTier('legacy')
   mockResolveLeague.mockResolvedValue('af-league-1')
   mockLoadFrozen.mockResolvedValue(new Map())
   mockHybrid.mockResolvedValue({ value: 5000, source: 'fantasycalc' })

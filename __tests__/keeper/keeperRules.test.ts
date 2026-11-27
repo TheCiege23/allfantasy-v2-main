@@ -130,6 +130,17 @@ describe('keeper rule settings gate', () => {
     expect(await keeperRuleSettingsRefusal('u', { keeperConflictRule: 'lose_round_after' }, cur)).toBeNull()
   })
 
+  it('automatic keeper placement: free/pro locked, AF Commissioner / Supreme allowed; turning it off is free', async () => {
+    mockEvaluate.mockResolvedValue({ allowed: false })
+    expect(await keeperRuleSettingsRefusal('u', { settingsMerge: { keeper_auto_place_board: true } }, cur)).toMatchObject({ status: 403 })
+    expect(mockEvaluate).toHaveBeenCalledWith('u', 'commissioner_automation')
+    expect(await keeperRuleSettingsRefusal('u', { settingsMerge: { keeper_auto_place_board: false } }, cur)).toBeNull()
+    expect(await keeperRuleSettingsRefusal('u', { settingsMerge: { keeper_auto_place_board: true } }, { ...cur, keeperAutoBoard: true })).toBeNull()
+    expect(await keeperRuleSettingsRefusal('u', { settingsMerge: { keeper_auto_place_board: 'yes' } }, cur)).toMatchObject({ status: 400 })
+    mockEvaluate.mockResolvedValue({ allowed: true })
+    expect(await keeperRuleSettingsRefusal('u', { settingsMerge: { keeper_auto_place_board: true } }, cur)).toBeNull()
+  })
+
   it('rejects bad values', async () => {
     expect(await keeperRuleSettingsRefusal('u', { keeperRoundPenalty: 9 }, cur)).toMatchObject({ status: 400 })
     expect(await keeperRuleSettingsRefusal('u', { settingsMerge: { keeper_min_cost_round: 0 } }, cur)).toMatchObject({ status: 400 })

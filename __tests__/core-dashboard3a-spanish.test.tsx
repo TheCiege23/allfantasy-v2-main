@@ -476,12 +476,12 @@ describe('League portfolio chart', () => {
 
 function exposureDb(platform: string, rosters: Array<{ players: string[]; starters: string[] }>, players = PLAYERS) {
   db.teams = rosters.map((_, i) => ({ leagueId: `L${i}`, platformUserId: 'me', externalId: String(i) }))
-  db.rosters = rosters.map((r, i) => ({ leagueId: `L${i}`, playerData: r, league: { platform } }))
+  db.rosters = rosters.map((r, i) => ({ leagueId: `L${i}`, playerData: r, league: { platform, sport: 'NFL' } }))
   db.players = players
 }
 const PLAYERS = [
-  { sleeperId: '4866', name: 'Saquon Barkley', position: 'RB', team: 'PHI' },
-  { sleeperId: '6794', name: 'Justin Jefferson', position: 'WR', team: 'MIN' },
+  { sleeperId: '4866', sport: 'NFL', name: 'Saquon Barkley', position: 'RB', team: 'PHI' },
+  { sleeperId: '6794', sport: 'NFL', name: 'Justin Jefferson', position: 'WR', team: 'MIN' },
 ]
 
 describe('Portfolio & exposure — getCrossLeagueExposure’s real output', () => {

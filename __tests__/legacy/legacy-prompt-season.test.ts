@@ -25,6 +25,14 @@ const m = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/telemetry/usage', () => ({ withApiUsage: () => (handler: unknown) => handler }))
+const transferPlan = vi.hoisted(() => ({ held: true }))
+// /api/legacy/transfer needs a session and, for its model calls, AF Legacy (2026-11-27). The plan holder's view.
+vi.mock('@/lib/legacy/legacyPlanGate', () => ({
+  legacySignedInUser: async () => ({ userId: 'u1', email: null }),
+  legacySignInResponse: () => new Response('{}', { status: 401 }),
+  hasLegacyPlan: async () => transferPlan.held,
+  requireLegacyPlan: async () => ({ ok: true, user: { userId: 'u1', email: null } }),
+}))
 vi.mock('@/lib/ai/openai-route-client', () => ({
   getOpenAIRouteClient: () => ({ chat: { completions: { create: m.openaiCreate } } }),
 }))
@@ -156,5 +164,18 @@ describe('the prompts carry the current season', () => {
     const out = JSON.stringify(await res.json())
     expect(out).toMatch(/enters 2027 with unfinished business/)
     expect(out).not.toMatch(/\b2025\b/)
+  })
+
+  it('league transfer without AF Legacy: the data-built storylines, no model call, aiLocked (2026-11-27)', async () => {
+    transferPlan.held = false
+    try {
+      const res = await (transfer as (r: unknown) => Promise<Response>)(json('http://localhost/api/legacy/transfer', { leagueId: 'L1' }))
+      expect(m.openaiCreate).not.toHaveBeenCalled()
+      const body = (await res.json()) as { preview: { aiLocked: boolean; storylines: unknown[] } }
+      expect(body.preview.aiLocked).toBe(true)
+      expect(JSON.stringify(body.preview.storylines)).toMatch(/enters 2027 with unfinished business/)
+    } finally {
+      transferPlan.held = true
+    }
   })
 })

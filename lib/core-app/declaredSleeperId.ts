@@ -25,3 +25,22 @@ export function declaredSleeperId(rosterId: unknown): string | null {
 export function toDeclaredSleeperId(sleeperId: string): string {
   return `${DECLARED_SLEEPER_PREFIX}${sleeperId.trim()}`
 }
+
+/**
+ * A FOREIGN league's lineup (its starters, in slot order) as a Sleeper-id reader may price it: a
+ * declared id becomes its bare Sleeper id, an empty slot (`'0'`, `''`) stays empty, and every other id
+ * stays IN ITS SLOT as `unbridged:<id>` — the placeholder `bridgedRosterIds.ts` uses — which no
+ * Sleeper-id read can match. So a pasted player nobody resolved is counted as unpriced, never dropped
+ * (a smaller total) or read raw (a stranger: a bare Yahoo number is in Sleeper's range).
+ *
+ * A lineup with NO declared id returns `[]`, exactly as a foreign lineup always read: only the
+ * pasted-Yahoo import writes declared ids, so every other foreign lineup is unchanged.
+ */
+export function declaredLineupIds(starters: readonly unknown[]): string[] {
+  if (!starters.some((x) => declaredSleeperId(x) !== null)) return []
+  return starters.map((x) => {
+    const raw = x == null ? '' : String(x)
+    if (raw === '' || raw === '0') return raw
+    return declaredSleeperId(raw) ?? `unbridged:${raw}`
+  })
+}

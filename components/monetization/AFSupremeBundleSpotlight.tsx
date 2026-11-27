@@ -1,16 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { CheckCircle2, Crown, Shield, WandSparkles } from 'lucide-react'
+import { CheckCircle2, Crown, Landmark, Shield, WandSparkles } from 'lucide-react'
 import { trackUpgradeEntryClicked } from '@/lib/monetization-analytics'
 import { getMonetizationCatalogItemBySku } from '@/lib/monetization/catalog'
 
 /*
- * ⚠ AF SUPREME IS AF PRO + AF COMMISSIONER. IT DOES NOT INCLUDE AF LEGACY.
- * SUPREME_INCLUDED_PLAN_IDS (lib/subscription/feature-access.ts) has been [pro, commissioner]
- * since Legacy was split out, but this spotlight — shown on /upgrade?plan=supreme — went on listing
- * Legacy under "Bundle inheritance", promising "all premium plan families", and offering a
- * "From AF Legacy" switch that would have cost a Legacy subscriber their draft tools.
+ * 🛑 AF SUPREME IS AF PRO + AF COMMISSIONER + AF LEGACY (owner's decision 2026-11-27;
+ * SUPREME_INCLUDED_PLAN_IDS in lib/subscription/feature-access.ts). From 2026-10-25 to 2026-11-27 it was
+ * Pro + Commissioner only, and this spotlight said so; it lists all three again, and offers the
+ * "From AF Legacy" switch, which no longer takes anything away.
  *
  * ⚠ AND ITS YEARLY PRICE WAS TYPED IN: "$199.99 yearly" while checkout charges the catalog's
  * figure. Both prices are now read from the catalog, the same source the charge uses.
@@ -35,12 +34,17 @@ const INCLUDED_PLANS = [
     copy: 'League governance, automation, and commissioner intelligence controls.',
     tone: 'border-amber-400/35 bg-amber-500/10 text-amber-100',
   },
+  {
+    title: 'AF Legacy',
+    icon: Landmark,
+    copy: 'Dynasty and long-horizon tools: the War Room, draft-room strategy and your league history.',
+    tone: 'border-violet-400/35 bg-violet-500/10 text-violet-100',
+  },
 ]
 
 const SIMPLE_VALUE_POINTS = [
-  'One subscription unlocks AF Pro and AF Commissioner.',
-  'Costs less than buying the two separately.',
-  'AF Legacy is not included — it is sold on its own.',
+  'One subscription unlocks AF Pro, AF Commissioner and AF Legacy.',
+  'Costs less than buying the three separately.',
 ]
 
 export function AFSupremeBundleSpotlight({ className = '' }: { className?: string }) {
@@ -78,7 +82,7 @@ export function AFSupremeBundleSpotlight({ className = '' }: { className?: strin
       </div>
 
       <p className="mt-1 text-xs text-white/70">
-        AF Pro and AF Commissioner in one subscription. AF Legacy is sold separately.
+        AF Pro, AF Commissioner and AF Legacy in one subscription.
       </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -173,7 +177,22 @@ export function AFSupremeBundleSpotlight({ className = '' }: { className?: strin
         >
           From AF Commissioner
         </Link>
-        {/* No "From AF Legacy": Supreme does not include Legacy, so that switch would take tools away. */}
+        {/* "From AF Legacy" since 2026-11-27: Supreme includes Legacy, so the switch takes nothing away. */}
+        <Link
+          href="/upgrade?plan=supreme&from=war_room"
+          onClick={() =>
+            trackUpgradeEntryClicked({
+              targetPlan: 'supreme',
+              sourcePlan: 'war_room',
+              surface: 'af_supreme_spotlight',
+              pagePath: window.location.pathname,
+            })
+          }
+          className="rounded-full border border-violet-400/35 bg-violet-500/10 px-2 py-0.5 text-violet-100 hover:bg-violet-500/20"
+          data-testid="af-supreme-switch-from-war-room"
+        >
+          From AF Legacy
+        </Link>
       </div>
     </section>
   )

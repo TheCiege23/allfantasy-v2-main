@@ -123,7 +123,7 @@ type ReadMaxPfInput = {
 export async function readMaxPfFreezeStatus(input: ReadMaxPfInput): Promise<ReadMaxPfFreezeResult> {
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
-    select: { id: true, platformLeagueId: true },
+    select: { id: true, platformLeagueId: true, sport: true },
   })
 
   const emptyProvenance: MaxPfDataProvenance = {
@@ -175,7 +175,8 @@ export async function readMaxPfFreezeStatus(input: ReadMaxPfInput): Promise<Read
   const sleeperIds = [...new Set(weeklyScores.map((r) => r.playerId))]
   const identityRows = sleeperIds.length
     ? await prisma.sportsPlayer.findMany({
-        where: { sleeperId: { in: sleeperIds } },
+        // The league's sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+        where: { sport: String(league.sport).toUpperCase(), sleeperId: { in: sleeperIds } },
         select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
       })
     : []

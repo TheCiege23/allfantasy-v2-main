@@ -179,8 +179,10 @@ export async function GET() {
   try {
     const players = await prisma.sportsPlayer.findMany({
       where: { sleeperId: { not: null }, team: { not: null }, position: { not: null } },
-      distinct: ['sleeperId'],
-      orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
+      // DISTINCT per SPORT and id: Sleeper reuses ids across sports, so NFL 1466 (Travis Kelce)
+      // and NBA 1466 (JaVale McGee) are two people — `distinct: ['sleeperId']` dropped one of them.
+      distinct: ['sport', 'sleeperId'],
+      orderBy: [{ sport: 'asc' }, { sleeperId: 'asc' }, { fetchedAt: 'desc' }],
       take: MAX_PLAYER_URLS,
       select: { name: true, sport: true, sleeperId: true },
     })

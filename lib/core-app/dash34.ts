@@ -1,4 +1,5 @@
 import { teamLoadTiming } from '@/lib/observability/teamLoadTiming'
+import { sleeperIdsBySportWhere } from '@/lib/player-identity/externalIdNamespace'
 import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import { leagueArtUrl } from '@/lib/core-app/leagueArt'
 import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
@@ -853,12 +854,21 @@ async function loadDash34Data(
   }
 
   const playerIds = [...everyPlayerId]
+  /*
+   * 🛑 EACH ID IN ITS OWN LEAGUE'S SPORT. Sleeper reuses ids across sports — NFL 1466 Travis Kelce,
+   * NBA 1466 JaVale McGee — so one `sleeperId IN (...)` over a user's NFL and NBA rosters returns
+   * both people per id. One arm per sport; an id rostered in both is refused by the composer.
+   * (A league with no sport is NFL, as everywhere else in this file — `String(l.sport ?? 'NFL')`.)
+   */
+  const playerWhere = sleeperIdsBySportWhere(
+    [...rosterByLeague].map(([leagueId, roster]) => [String(sportByLeague.get(leagueId) ?? 'NFL'), roster.all] as const),
+  )
 
   const [playerRows, injuryRows, nflFixtures] = await Promise.all([
     timing.read('players', () => playerIds.length
       ? prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: playerIds } },
+            where: playerWhere,
             /*
              * `sport` is selected only to gate the kickoff join below. Club codes
              * are NOT unique across sports — ATL, CHI, DET, MIA and PHI are all

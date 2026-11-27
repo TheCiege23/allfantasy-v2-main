@@ -1,5 +1,6 @@
 'use client';
 
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal';
 import { useState } from 'react';
 
 // Every letter and number here is THE one completed-trade grade (see /api/legacy/trade-alternatives).
@@ -50,6 +51,7 @@ export default function TradeAlternatives({ trade, userId, leagueId = null, isSu
   const [data, setData] = useState<AlternativeExplanation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locked, setLocked] = useState<PlanRefusal | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   const fetchAlternatives = async () => {
@@ -69,6 +71,13 @@ export default function TradeAlternatives({ trade, userId, leagueId = null, isSu
       });
 
       if (!response.ok) {
+        // Sign-in + AF Legacy since 2026-11-27 (`legacy_trade_lookback`): show the way forward, not a failure.
+        const body = await response.json().catch(() => null);
+        const refusal = readPlanRefusal(response.status, body, { returnTo: currentPathForReturn() });
+        if (refusal) {
+          setLocked(refusal);
+          return;
+        }
         throw new Error('Failed to generate alternatives');
       }
 
@@ -115,6 +124,15 @@ export default function TradeAlternatives({ trade, userId, leagueId = null, isSu
 
       {error && (
         <p className="text-red-400 text-sm mt-2">{error}</p>
+      )}
+
+      {locked && (
+        <p className="text-sm mt-2 text-white/70" data-testid="trade-alternatives-locked">
+          {locked.message}{' '}
+          {locked.actionHref && locked.actionLabel ? (
+            <a href={locked.actionHref} className="text-blue-400 hover:text-blue-300 underline">{locked.actionLabel}</a>
+          ) : null}
+        </p>
       )}
 
       {expanded && data && (

@@ -25,7 +25,7 @@ function matches(row: Row, where: Where): boolean {
   return true
 }
 
-const IDENTITY_MAP: Row[] = [{ espnId: '12483', sleeperId: '421' }] // Stafford translates
+const IDENTITY_MAP: Row[] = [{ sport: 'NFL', espnId: '12483', sleeperId: '421' }] // Stafford translates (an NFL row: the ESPN crosswalk is NFL)
 const ESPN_IDENTITIES: Row[] = [
   { provider: 'espn', providerPlayerId: '4262921', displayName: 'Justin Jefferson' },
   { provider: 'espn', providerPlayerId: '-16022', displayName: 'ARI D/ST' },

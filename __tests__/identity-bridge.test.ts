@@ -98,7 +98,7 @@ describe('bridgeIdentityMapFromFantasyCalcCache', () => {
     const { db, updates } = fakeDb()
     const res = await bridgeIdentityMapFromFantasyCalcCache({ prisma: db, readSources: sources })
     expect(res.written).toBe(4)
-    expect(updates[0]).toEqual({ where: { sleeperId: '4034', fleaflickerId: null }, data: { fleaflickerId: '9001' } })
+    expect(updates[0]).toEqual({ where: { sport: 'NFL', sleeperId: '4034', fleaflickerId: null }, data: { fleaflickerId: '9001' } })
     expect(updates.every((u) => Object.values(u.where).includes(null))).toBe(true)
   })
 

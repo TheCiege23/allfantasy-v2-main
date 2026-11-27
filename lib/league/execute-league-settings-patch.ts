@@ -56,6 +56,7 @@ import { parsePickTermsRule, PICK_TERMS_KEY, PICK_TERMS_RULE_KEY } from '@/lib/l
 import { parseTaxiStealingRule, readTaxiStealingRule, TAXI_STEAL_CLAIMS_KEY, TAXI_STEALING_KEY } from '@/lib/taxi/taxiStealing'
 import { parseTiebreakerOrder, TIEBREAKER_ORDER_KEY, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { keeperRuleSettingsRefusal } from '@/lib/keeper/keeperRuleGate'
+import { readKeeperAutoBoard } from '@/lib/keeper/keeperAutoBoardSetting'
 import {
   DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY,
   DAILY_WAIVER_SCHEDULE_SETTINGS_KEY,
@@ -548,7 +549,7 @@ export async function executeLeagueSettingsPatch(
     const k = Number(body.keeperCount)
     if (!Number.isFinite(k) || k < 0 || k > 10) return jsonError('keeperCount must be 0–10', 400)
   }
-  const keeperRefusal = await keeperRuleSettingsRefusal(userId, body, { keeperConflictRule: league.keeperConflictRule, keeperMissedDeadlineRule: league.keeperMissedDeadlineRule })
+  const keeperRefusal = await keeperRuleSettingsRefusal(userId, body, { keeperConflictRule: league.keeperConflictRule, keeperMissedDeadlineRule: league.keeperMissedDeadlineRule, keeperAutoBoard: readKeeperAutoBoard(league.settings) })
   if (keeperRefusal) return jsonError(keeperRefusal.message, keeperRefusal.status)
 
   const teamCount = body.leagueSize != null ? Number(body.leagueSize) : league.leagueSize ?? league.teams.length

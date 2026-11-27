@@ -146,7 +146,9 @@ async function resolveSleeperIds(
 
   const rows = await prisma.playerIdentityMap
     .findMany({
-      where: { espnId: { in: providerPlayerIds }, sleeperId: { not: null } },
+      // NFL: only NFL drafts reach here (the grade reads Sleeper's NFL season board), and ESPN numbers
+      // each sport separately — an NBA row sharing an ESPN id must not translate an NFL pick.
+      where: { sport: 'NFL', espnId: { in: providerPlayerIds }, sleeperId: { not: null } },
       select: { espnId: true, sleeperId: true },
     })
     .catch(() => [])

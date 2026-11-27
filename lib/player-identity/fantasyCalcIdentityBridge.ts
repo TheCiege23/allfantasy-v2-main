@@ -76,7 +76,8 @@ export async function bridgeIdentityMapFromFantasyCalcCache(opts: {
       break
     }
     const res = await db.playerIdentityMap.updateMany({
-      where: { sleeperId: w.sleeperId, [w.column]: null },
+      // NFL, as the rows it planned from are (`sport: 'NFL'` above): `sleeperId` is the NFL column.
+      where: { sport: 'NFL', sleeperId: w.sleeperId, [w.column]: null },
       data: { [w.column]: w.value },
     })
     written += res.count

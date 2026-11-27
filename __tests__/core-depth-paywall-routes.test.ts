@@ -244,16 +244,15 @@ describe('/api/trade-value/analyze — the verdict is free, the breakdown is AF 
   })
 })
 
-describe('/api/league/trade-finder — AF Pro, refused before any league read', () => {
+describe('/api/league/trade-finder — AF Pro, with a free taste', () => {
   // A NextRequest: the route reads `req.nextUrl`.
   const get = () => finderGET(new NextRequest('http://localhost/api/league/trade-finder?leagueId=L1'))
 
-  it('locked: 403 with the plan and the way to it, and the league is never read', async () => {
+  it('locked: no 403 since the free taste (2026-11-27) — it reads the league, and sends the top idea only', async () => {
     depthState.locked = true
     const res = await get()
-    expect(res.status).toBe(403)
-    expect(await res.json()).toMatchObject({ code: 'feature_not_entitled', upgradePath: '/upgrade?plan=pro' })
-    expect(leagueFindFirst).not.toHaveBeenCalled()
+    expect(res.status).toBe(404) // the league is absent here; the taste itself is pinned in free-tastes-2026-11-27
+    expect(leagueFindFirst).toHaveBeenCalledTimes(1)
   })
 
   it('[control] open: it goes on to the league (absent here, so 404)', async () => {

@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
+import { FeatureGate } from '@/components/subscription/FeatureGate'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type DynastyProjection = {
   projectionId: string
@@ -159,7 +161,7 @@ export function DynastyProjectionPanel({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setAiError(data?.error || "Chimmy couldn't generate dynasty advice")
+        setAiError(readPlanRefusal(res.status, data)?.message ?? (data?.error || "Chimmy couldn't generate dynasty advice"))
         return
       }
       setAiAdvice((data?.analysis ?? null) as DynastyAdvice | null)
@@ -253,6 +255,8 @@ export function DynastyProjectionPanel({
           >
             {refreshing ? 'Refreshing…' : 'Refresh projections'}
           </button>
+          {/* AF Legacy (`war_room_dynasty_projections`), the key /api/dynasty-outlook now enforces (2026-11-27). */}
+          <FeatureGate featureId="war_room_dynasty_projections" featureNameOverride="Chimmy's dynasty advice">
           <button
             type="button"
             aria-label="Get Chimmy's dynasty advice"
@@ -262,6 +266,7 @@ export function DynastyProjectionPanel({
           >
             {aiLoading ? 'Analyzing…' : "Chimmy's dynasty advice"}
           </button>
+          </FeatureGate>
           <Link
             href={`/trade-evaluator?leagueId=${encodeURIComponent(leagueId)}`}
             aria-label="Open trade analyzer with dynasty context"

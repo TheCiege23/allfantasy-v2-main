@@ -525,7 +525,8 @@ async function loadRosteredPlayers(
   })))
 
   const identities = await prisma.sportsPlayer.findMany({
-    where: { sleeperId: { in: [...new Set(current.map((r) => r.playerId))] } },
+    // Every league here is `sport` (filtered above), and Sleeper reuses ids across sports.
+    where: { sport: sport.toUpperCase(), sleeperId: { in: [...new Set(current.map((r) => r.playerId))] } },
     // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
     // club fold, and omitting it would silently leave every club unfolded.
     select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },

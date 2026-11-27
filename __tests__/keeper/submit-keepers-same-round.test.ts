@@ -175,3 +175,31 @@ describe('submitKeeperSelections — the saved list is the selection', () => {
     expect(m.sessionUpdateMany.mock.calls.at(-1)![0].data).toEqual({ teamsSubmitted: 2 })
   })
 })
+
+describe('submitKeeperSelections — undrafted pickups stack from the last round (owner, 2026-11-27)', () => {
+  const pickup = (playerId: string) => ({ ...elig(playerId, 15), projectedCost: 'Round 15 (not drafted)' })
+
+  it('two pickups cost 15 and 14 in the order the manager listed them, under the default (refusing) rule', async () => {
+    setup('player_chooses')
+    m.eligFindMany.mockResolvedValue([pickup('a'), pickup('b'), elig('c', 9)])
+    const out = await submitKeeperSelections('R', 'L', 'S', ['b', 'a', 'c'])
+    expect(out.conflicted).toEqual([])
+    expect(out.cost.map((c) => [c.playerId, c.costRound])).toEqual([['b', 15], ['a', 14], ['c', 9]])
+  })
+
+  it('a stacked pickup stepping onto a drafted keeper’s round moves to the next earlier free one', async () => {
+    setup('player_chooses')
+    m.eligFindMany.mockResolvedValue([pickup('a'), pickup('b'), elig('c', 14)])
+    const out = await submitKeeperSelections('R', 'L', 'S', ['a', 'b', 'c'])
+    expect(out.conflicted).toEqual([])
+    expect(out.cost.map((c) => [c.playerId, c.costRound])).toEqual([['a', 15], ['b', 13], ['c', 14]])
+  })
+
+  it('keeper_waiver_stack: false keeps the old behaviour (both cost 15 and clash)', async () => {
+    setup('player_chooses')
+    m.leagueFindFirst.mockResolvedValue({ id: 'L', keeperCount: 3, keeperConflictRule: 'player_chooses', keeperCostSystem: 'round_based', settings: { keeper_waiver_stack: false } })
+    m.eligFindMany.mockResolvedValue([pickup('a'), pickup('b'), elig('c', 9)])
+    const out = await submitKeeperSelections('R', 'L', 'S', ['a', 'b', 'c'])
+    expect(out.conflicted).toEqual([{ playerIds: ['a', 'b'], reason: 'duplicate_round_15' }])
+  })
+})

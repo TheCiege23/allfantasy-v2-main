@@ -1,5 +1,6 @@
 import { toImageUrl } from '@/lib/media/imageUrl'
 import { boundMap } from '@/lib/ttl-memo'
+import { identityMapSleeperWhere } from '@/lib/player-identity/identityMapSleeperColumn'
 import { buildHeadshotUrl, getTeamLogoUrl } from './player-media-urls'
 import { authoritativeRowsBySleeperId, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 
@@ -134,10 +135,12 @@ export async function attachPlayerMedia(player: {
 
   try {
     const prisma = await getPrismaClient()
-    const identity = await prisma.playerIdentityMap.findFirst({
-      where: { sleeperId: player.playerId },
-      select: { currentTeam: true },
-    })
+    // In the player's sport and that sport's Sleeper column (NFL `sleeperId`, NBA `sleeperNbaId`):
+    // Sleeper reuses ids across sports, so a bare-id read put an NFL player's team on an NBA player.
+    const identityWhere = identityMapSleeperWhere([player.playerId], sport)
+    const identity = identityWhere
+      ? await prisma.playerIdentityMap.findFirst({ where: identityWhere, select: { currentTeam: true } })
+      : null
 
     if (identity?.currentTeam) {
       dbTeamAbbr = identity.currentTeam
@@ -276,7 +279,7 @@ export async function attachPlayerMediaBatch(
     const nflIds = idsBySport.get('NFL') ?? []
     if (nflIds.length > 0) {
       const identities = await prisma.playerIdentityMap.findMany({
-        where: { sleeperId: { in: nflIds } },
+        where: { sport: 'NFL', sleeperId: { in: nflIds } },
         select: { sleeperId: true, currentTeam: true },
       })
       for (const id of identities) {

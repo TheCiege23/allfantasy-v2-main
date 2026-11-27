@@ -306,6 +306,38 @@ describe('getPlayerTradeVisual', () => {
     expect(mockCreateGrader).not.toHaveBeenCalled()
   })
 
+  /*
+   * A PASTED Yahoo league (2026-11-26): its resolved players are stored `sleeper:<id>`
+   * (declaredSleeperId.ts). Once most of the league is declared, its holder can be read and a trade
+   * built; a Yahoo league of BARE ids is still refused, because those numbers are in Sleeper's range.
+   */
+  it('builds a trade in a pasted Yahoo league whose players were resolved to declared ids', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'yahoo', sport: 'NFL' })
+    const declared = (r: typeof MY_ROSTER | typeof THEIR_ROSTER) => ({
+      ...r,
+      leagueId: 'L-gang',
+      league: { platform: 'yahoo', sport: 'NFL' },
+      playerData: Object.fromEntries(Object.entries(r.playerData).map(([k, ids]) => [k, ids.map((id) => `sleeper:${id}`)])),
+    })
+    mockRosterFindMany.mockResolvedValue([declared(MY_ROSTER), declared(THEIR_ROSTER)])
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    expect(state.available).toBe(true)
+    if (!state.available) return
+    expect(state.data.partner).toMatchObject({ teamName: "Tasha's Titans" })
+    expect(state.data.target).toMatchObject({ name: 'Dalton Kincaid' })
+    expect(JSON.stringify(state.data)).not.toContain('sleeper:')
+  })
+
+  it('🛑 [control] a Yahoo league of bare ids is still refused — never read as Sleeper ids', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'yahoo', sport: 'NFL' })
+    mockRosterFindMany.mockResolvedValue(
+      [MY_ROSTER, THEIR_ROSTER].map((r) => ({ ...r, leagueId: 'L-gang', league: { platform: 'yahoo', sport: 'NFL' } })),
+    )
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    expect(state).toMatchObject({ available: false, reason: expect.stringMatching(/can't tell who holds him/) })
+    expect(mockCreateGrader).not.toHaveBeenCalled()
+  })
+
   it('refuses rather than prices when no market values exist for the format', async () => {
     mockGetMarketValues.mockResolvedValue(null)
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')

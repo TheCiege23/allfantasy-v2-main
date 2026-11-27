@@ -112,7 +112,8 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
    * `legacy_trade_finder` in the browser only. It also starts a league pre-analysis in the background,
    * so a direct request spent real work for free. Sign-in and the plan now come first.
    */
-  const plan = await requireEntitlement('legacy_trade_finder')
+  // The /af-legacy finder tab's key since 2026-11-27: AF Pro, AF Legacy, AF Supreme.
+  const plan = await requireEntitlement('legacy_tab_trade_finder')
   if (typeof plan !== 'string') return plan
 
   const ip = getClientIp(req)

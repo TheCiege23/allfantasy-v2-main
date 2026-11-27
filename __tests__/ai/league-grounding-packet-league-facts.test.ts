@@ -110,7 +110,7 @@ function basePrisma(overrides: Record<string, any> = {}) {
       ]),
     },
     roster: {
-      findFirst: vi.fn(async () => ({ playerData: PLAYER_DATA, settings: {} })),
+      findFirst: vi.fn(async () => ({ playerData: PLAYER_DATA, settings: {}, league: { platform: 'sleeper', sport: 'NFL' } })),
     },
     sportsPlayer: {
       findMany: vi.fn(async (args: any) => {
@@ -233,7 +233,7 @@ describe('league grounding packet — viewer roster', () => {
 describe('league grounding packet — foreign roster ids', () => {
   const rosterFor = (platform: string) => ({
     roster: {
-      findFirst: vi.fn(async () => ({ playerData: PLAYER_DATA, settings: {}, league: { platform } })),
+      findFirst: vi.fn(async () => ({ playerData: PLAYER_DATA, settings: {}, league: { platform, sport: 'NFL' } })),
     },
   })
 

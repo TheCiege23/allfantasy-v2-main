@@ -159,6 +159,38 @@ describe('rail projections — a foreign-id league', () => {
     const result = await loadRailProjections(fixtures())
     expect(result.byLeague.get('L1')?.sides.get('team')?.projected).toBe(34)
   })
+
+  /*
+   * A PASTED Yahoo league stores its resolved players DECLARED (`sleeper:<id>`, declaredSleeperId.ts).
+   * Those starters are Sleeper ids by their own spelling and are priced; an unmatched pasted starter
+   * stays in its slot as an unpriceable placeholder, so the side reports as part-priced, never as a
+   * smaller total — and a bare Yahoo number is never looked up.
+   */
+  it('a pasted Yahoo league prices its declared starters, under their bare Sleeper ids', async () => {
+    h.raw.mockReset().mockResolvedValueOnce([{ ...meta('L1'), platform: 'yahoo' }])
+      .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters: starters.map((id) => `sleeper:${id}`) }])
+    const result = await loadRailProjections(fixtures())
+    expect(result.byLeague.get('L1')?.sides.get('team')?.projected).toBe(34)
+  })
+
+  it('🛑 an unmatched pasted starter is counted as unpriced, never looked up as a Sleeper id', async () => {
+    h.raw.mockReset().mockResolvedValueOnce([{ ...meta('L1'), platform: 'yahoo' }])
+      .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters: ['sleeper:healthy', 'yahoo-paste:nobody|wr|kc', 'healthy'] }])
+    const result = await loadRailProjections(fixtures())
+    const side = result.byLeague.get('L1')?.sides.get('team')
+    expect(side).toMatchObject({ projected: 15, pricedFrom: 1, starterCount: 3 })
+    const asked = h.projections.mock.calls.flatMap((c) => [...(c[0] as Iterable<string>)].map(String))
+    expect(asked).not.toContain('yahoo-paste:nobody|wr|kc')
+    expect(asked.filter((id) => id === 'healthy')).toHaveLength(1)
+  })
+
+  it('CONTROL: a Yahoo league of bare ids still prices nothing', async () => {
+    h.raw.mockReset().mockResolvedValueOnce([{ ...meta('L1'), platform: 'yahoo' }])
+      .mockResolvedValueOnce([{ leagueId: 'L1', platformUserId: 'user', starters }])
+    const result = await loadRailProjections(fixtures())
+    expect(result.byLeague.get('L1')?.sides.get('team')?.projected ?? null).toBeNull()
+    expect(h.projections).not.toHaveBeenCalled()
+  })
 })
 
 /*

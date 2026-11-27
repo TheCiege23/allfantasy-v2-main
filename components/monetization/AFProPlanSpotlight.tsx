@@ -16,7 +16,7 @@ import { PLAN_FAMILY_INCLUDES, PLAN_FAMILY_SHORT_TAGLINE } from '@/lib/monetizat
  */
 const AF_PRO_FEATURES = PLAN_FAMILY_INCLUDES.af_pro
 
-/* The three plans on sale. AF Legacy is not offered on the launch pricing, so it is not here. */
+/* The three plans on sale. AF Legacy is not offered on the launch pricing (AF Supreme includes it since 2026-11-27). */
 const DIFFERENTIATION = [
   {
     title: 'AF Pro',

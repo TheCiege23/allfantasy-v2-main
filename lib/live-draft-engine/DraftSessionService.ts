@@ -695,8 +695,12 @@ export async function buildSessionSnapshot(
         team: s.team ?? null,
         playerId: s.playerId ?? null,
         commissionerOverride: s.commissionerOverride,
+        ...(s.placementNote ? { placementNote: s.placementNote } : {}),
+        ...(s.autoPlaced ? { autoPlaced: true as const } : {}),
+        ...(s.pickSlot != null ? { pickSlot: s.pickSlot } : {}),
       })),
       locks,
+      ...(config.autoPlacement ? { autoPlacement: config.autoPlacement } : {}),
     }
   }
 

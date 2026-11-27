@@ -212,7 +212,8 @@ export async function createZombieNativeItemGrader(leagueId: string, previewSeas
           })
           if (schedule.length !== matchups.length) return
           const ids = [...new Set(players.map(player => player.playerId))]
-          const identities = await prisma.playerIdentityMap.findMany({ where: { OR: [{ id: { in: ids } }, { sleeperId: { in: ids } }] }, select: { id: true, sleeperId: true } })
+          // NFL (this grader returns early for any other zombie sport): `sleeperId` is the NFL Sleeper column.
+          const identities = await prisma.playerIdentityMap.findMany({ where: { sport: 'NFL', OR: [{ id: { in: ids } }, { sleeperId: { in: ids } }] }, select: { id: true, sleeperId: true } })
           const aliases = new Map<string, Set<string>>()
           for (const identity of identities) {
             for (const alias of [identity.id, identity.sleeperId]) {

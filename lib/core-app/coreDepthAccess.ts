@@ -34,6 +34,7 @@ export type CoreDepth =
   | 'competitive_edge'
   | 'af_intelligence'
   | 'decision_history'
+  | 'trade_finder'
 
 export type CoreDepthSpec = {
   /** The plan feature that unlocks it — resolved through the entitlement matrix, not by plan name. */
@@ -101,6 +102,19 @@ export const CORE_DEPTH: Record<CoreDepth, CoreDepthSpec> = {
     featureId: 'decision_log_history',
     planName: 'AF Pro',
     label: 'Your decision history',
+    upgradePath: '/upgrade?plan=pro',
+  },
+  /*
+   * 🛑 THE TRADE FINDER RULE (owner's decision 2026-11-27): player tools are AF Pro and AF Supreme ONLY —
+   * not AF Commissioner alone. `legacy_trade_finder` is the single-plan matrix key (requiredPlanId "pro";
+   * Supreme inherits it) that Partner Match and the AF Legacy finder buttons already read. The /core finder
+   * used `trade_depth` (`af_intelligence`, which Commissioner gets) while Partner Match locked Commissioner,
+   * and the redraft Trade Center finder had no gate — three states for one tool. All three read this now.
+   */
+  trade_finder: {
+    featureId: 'legacy_trade_finder',
+    planName: 'AF Pro',
+    label: 'Trade Finder',
     upgradePath: '/upgrade?plan=pro',
   },
 }

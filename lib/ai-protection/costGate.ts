@@ -33,6 +33,7 @@ import { buildAiLimit429 } from '@/lib/ai-protection/withAiProtection'
 import { FeatureGateService, type FeatureGateDecision } from '@/lib/subscription/FeatureGateService'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import { isPaywallLive } from '@/lib/monetization/paywallLaunch'
+import { getDisplayPlanName, getRequiredPlanForFeature } from '@/lib/subscription/feature-access'
 
 export type AiCostGateConfig = {
   /** Shown to people in limit messages. */
@@ -48,6 +49,11 @@ export type AiCostGateConfig = {
   /** Calls per UTC day for a plan holder. */
   dailyPaid: number | null
   /**
+   * Where the daily-cap refusal sends a caller WITHOUT the plan (a free taste's lock). Defaults to
+   * /pricing. The plan it names is read from `featureId`.
+   */
+  upgradePath?: string
+  /**
    * Signed-out callers allowed (keyed by IP) up to this many a day — ONLY while the feature
    * is free. Once a `paidFromLaunch` feature is live, a signed-out caller must sign in:
    * otherwise an anonymous visitor would get more than a free account.
@@ -59,13 +65,20 @@ export const AI_COST_GATES = {
   // ── Pro: player tools ────────────────────────────────────────────────────────
   chimmy_voice: { label: 'Chimmy voice', featureId: 'ai_chat', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
   legacy_chat: { label: 'Chimmy chat', featureId: 'ai_chat', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 100, dailyAnonymous: 5 },
-  start_sit_ai: { label: 'start/sit analysis', featureId: 'pro_start_sit', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
+  /*
+   * 🛑 FREE TASTE (owner's decision 2026-11-27): a free account gets ONE start/sit AI answer a UTC day — the
+   * durable cap below (ApiRateLimitRecord), not a lock — then the 429 sends them to AF Pro. It was a hard
+   * 403 from launch (`paidFromLaunch: true`). AF Pro / AF Supreme keep 200 a day; signed out stays refused.
+   */
+  start_sit_ai: { label: 'start/sit analysis', featureId: 'pro_start_sit', paidFromLaunch: false, perMinute: 10, dailyFree: 1, dailyPaid: 200, upgradePath: '/upgrade?plan=pro' },
   trade_ai: { label: 'Chimmy trade analysis', featureId: 'trade_analyzer', paidFromLaunch: true, perMinute: 10, dailyFree: 15, dailyPaid: 200 },
   // /api/trade-finder never required sign-in; a small anonymous allowance keeps any logged-out
   // use working until launch, after which it needs an account and the plan like its siblings.
   // The plan key is `legacy_trade_finder`, the same key the Trade Finder's buttons are locked to in the
   // browser. It names AF Pro since 2026-11-16 (owner: "Trade Finder = AF Pro everywhere"); it was AF Legacy.
-  trade_finder: { label: 'Trade Finder', featureId: 'legacy_trade_finder', paidFromLaunch: true, perMinute: 5, dailyFree: 10, dailyPaid: 100, dailyAnonymous: 3 },
+  // Since 2026-11-27 `legacy_tab_trade_finder`: this route is the /af-legacy finder tab, so AF Legacy opens it
+  // too (owner) — the Trade Finder rule (AF Pro, AF Supreme) plus Legacy.
+  trade_finder: { label: 'Trade Finder', featureId: 'legacy_tab_trade_finder', paidFromLaunch: true, perMinute: 5, dailyFree: 10, dailyPaid: 100, dailyAnonymous: 3 },
   draft_ai: { label: 'draft help', featureId: 'pro_draft_ai', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 300 },
   /**
    * The Trade Center's written "why". SOFT: callers use evaluateAiCostGate and fall back to the
@@ -97,6 +110,12 @@ export const AI_COST_GATES = {
   mock_trade_ai: { label: 'mock draft trade analysis', paidFromLaunch: false, perMinute: 10, dailyFree: 40, dailyPaid: 40 },
   mock_needs_ai: { label: 'mock draft needs analysis', paidFromLaunch: false, perMinute: 10, dailyFree: 60, dailyPaid: 60 },
   mock_weekly_ai: { label: 'mock draft weekly updates', paidFromLaunch: false, perMinute: 5, dailyFree: 10, dailyPaid: 10 },
+  /*
+   * League banter (`/api/ai/trash-talk`) is engagement content every member sees, so it is free and only
+   * capped (owner's decision 2026-11-27, following the gating audit). It sat on `pro_start_sit` by accident:
+   * the League Settings panel borrowed that key for its upgrade prompt.
+   */
+  trash_talk: { label: 'trash talk', paidFromLaunch: false, perMinute: 5, dailyFree: 10, dailyPaid: 10 },
 } as const satisfies Record<string, AiCostGateConfig>
 
 export type AiCostGateKey = keyof typeof AI_COST_GATES
@@ -108,6 +127,11 @@ export type AiCostGateOutcome =
       reason: 'sign_in' | 'rate' | 'plan' | 'daily'
       response: NextResponse
     }
+
+function planNameFor(featureId: SubscriptionFeatureId): string {
+  const plan = getRequiredPlanForFeature(featureId)
+  return plan ? getDisplayPlanName(plan) : 'a paid plan'
+}
 
 function hashSubject(subject: string): string {
   return createHash('sha256').update(subject).digest('hex').slice(0, 24)
@@ -225,14 +249,19 @@ export async function evaluateAiCostGate(
         callsLimit: dailyLimit,
       })
       if (!daily.success) {
-        const upgrade = !hasPlan && cfg.featureId ? ' Upgrade for a higher daily limit.' : ''
+        const upgrade = !hasPlan && cfg.featureId
+          ? cfg.upgradePath
+            ? ` More is part of ${planNameFor(cfg.featureId)}.`
+            : ' Upgrade for a higher daily limit.'
+          : ''
         const body = {
           error: 'Daily limit reached',
           code: 'daily_limit_reached',
           message: `You've reached today's limit for ${cfg.label}. It resets at midnight UTC.${upgrade}`,
           limit: dailyLimit,
           retryAfterSec: daily.retryAfterSec,
-          upgradePath: !hasPlan && cfg.featureId ? '/pricing?from=ai_daily_cap' : null,
+          upgradePath: !hasPlan && cfg.featureId ? cfg.upgradePath ?? '/pricing?from=ai_daily_cap' : null,
+          ...(!hasPlan && cfg.featureId && cfg.upgradePath ? { requiredPlan: planNameFor(cfg.featureId) } : {}),
           useDeterministicFallback: true,
         }
         return {

@@ -525,9 +525,12 @@ export async function gradeAllTradeOutcomes(opts: {
   return out
 }
 
+/** NFL positions by Sleeper id — NFL only; see the read. */
 async function positionsBySleeperId(db: Db, ids: readonly string[]): Promise<Map<string, string>> {
   if (!ids.length) return new Map()
-  const rows = await db.sportsPlayer.findMany({ where: { sleeperId: { in: [...ids] } }, select: { sleeperId: true, position: true } })
+  // NFL by construction: the only caller is the NFL points branch, and Sleeper reuses ids across
+  // sports (NBA 1466 McGee is not NFL 1466 Kelce), so the sport is part of the key.
+  const rows = await db.sportsPlayer.findMany({ where: { sport: 'NFL', sleeperId: { in: [...ids] } }, select: { sleeperId: true, position: true } })
   return new Map(rows.flatMap((r) => (r.sleeperId && r.position ? [[r.sleeperId, r.position] as const] : [])))
 }
 

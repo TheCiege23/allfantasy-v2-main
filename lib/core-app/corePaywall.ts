@@ -47,6 +47,7 @@ export async function resolveCorePaywall(
     competitive_edge: decide('competitive_edge'),
     af_intelligence: decide('af_intelligence'),
     decision_history: decide('decision_history'),
+    trade_finder: decide('trade_finder'),
   }
 }
 

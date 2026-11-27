@@ -10,7 +10,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 
-const db = vi.hoisted(() => ({ platform: 'fleaflicker' }))
+const db = vi.hoisted(() => ({
+  platform: 'fleaflicker',
+  playerData: { players: ['6038', '6039'], starters: ['6038'] } as Record<string, unknown>,
+}))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -27,7 +30,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     roster: {
       findMany: vi.fn(async () => [
-        { id: 'R1', leagueId: 'L1', platformUserId: 'me', playerData: { players: ['6038', '6039'], starters: ['6038'] } },
+        { id: 'R1', leagueId: 'L1', platformUserId: 'me', playerData: db.playerData },
       ]),
     },
     guillotineRosterState: { findMany: vi.fn(async () => []) },
@@ -62,6 +65,7 @@ const NOW = '2026-09-27T12:00:00.000Z'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  db.playerData = { players: ['6038', '6039'], starters: ['6038'] }
 })
 
 describe('loadGameDayTriage — foreign roster ids', () => {
@@ -84,5 +88,46 @@ describe('loadGameDayTriage — foreign roster ids', () => {
     expect(state.data.leaguesRead).toBe(1)
     expect(state.data.rows.map((r) => r.player.name)).toEqual(['Wrong Player'])
     expect(state.data.rows[0].status?.tone).toBe('bad')
+  })
+})
+
+/*
+ * A PASTED Yahoo league (2026-11-26) stores its resolved players DECLARED (`sleeper:<id>`,
+ * declaredSleeperId.ts). Those are Sleeper ids by their own spelling and are read; a bare Yahoo
+ * number is not, and stays the collision above.
+ */
+describe('loadGameDayTriage — a pasted Yahoo league', () => {
+  it('reads a declared starter: names and flags him', async () => {
+    db.platform = 'yahoo'
+    db.playerData = { players: ['sleeper:6038', 'sleeper:6039'], starters: ['sleeper:6038'] }
+    const state = await loadGameDayTriage('u1', ['L1'], NOW)
+    expect(state.available).toBe(true)
+    if (!state.available) return
+    expect(state.data.leaguesRead).toBe(1)
+    expect(state.data.rows.map((r) => r.player.name)).toEqual(['Wrong Player'])
+    expect(JSON.stringify(state.data)).not.toContain('sleeper:')
+  })
+
+  it('🛑 a bare Yahoo id is still never read as a Sleeper id', async () => {
+    db.platform = 'yahoo'
+    const state = await loadGameDayTriage('u1', ['L1'], NOW)
+    expect(state.available).toBe(true)
+    if (!state.available) return
+    expect(state.data.leaguesRead).toBe(0)
+    expect(JSON.stringify(state.data)).not.toContain('Wrong Player')
+    expect(prisma.sportsPlayer.findMany).not.toHaveBeenCalled()
+  })
+
+  it('🛑 an unmatched pasted starter is never given an id', async () => {
+    db.platform = 'yahoo'
+    db.playerData = {
+      players: ['sleeper:6039', 'sleeper:6040', 'sleeper:6041', 'sleeper:6042', 'yahoo-paste:wrong player|wr|nyj'],
+      starters: ['yahoo-paste:wrong player|wr|nyj'],
+    }
+    const state = await loadGameDayTriage('u1', ['L1'], NOW)
+    expect(state.available).toBe(true)
+    if (!state.available) return
+    expect(JSON.stringify(state.data)).not.toContain('Wrong Player')
+    expect(JSON.stringify(state.data)).not.toContain('yahoo-paste')
   })
 })

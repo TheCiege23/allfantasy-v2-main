@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { listInjuryFacts, type InjuryFactListItem } from '@/lib/injuries/injuryReadPort'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
-import { requireAuth } from '@/lib/auth-guard'
+import { requireLegacyPlan } from '@/lib/legacy/legacyPlanGate'
 
 const openai = getOpenAIRouteClient()
 
@@ -16,15 +16,16 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/community-insights", to
    * which it is not -- so it is spelled as what it is.
    *
    * `summarize=true` is different: it spends a paid model call per request, so it requires a
-   * real NextAuth session (cost abuse, not data exposure).
+   * real NextAuth session (cost abuse, not data exposure) and, since 2026-11-27, AF Legacy.
    */
   if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
 
   const { searchParams } = new URL(request.url)
   const summarize = searchParams?.get('summarize') === 'true'
   if (summarize) {
-    const session = await requireAuth()
-    if (!session.ok) return session.response
+    // AF Legacy since 2026-11-27 (owner; gating audit H2): sign in, then the plan, before the model.
+    const gate = await requireLegacyPlan('legacy_community_insights', "Chimmy's news summary")
+    if (!gate.ok) return gate.response
   }
 
   const sourcesUsed: string[] = []

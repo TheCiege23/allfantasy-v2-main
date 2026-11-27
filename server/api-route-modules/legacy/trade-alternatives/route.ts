@@ -2,7 +2,7 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { NextRequest, NextResponse } from 'next/server';
 import { isUserParty } from '@/lib/user-matching';
-import { legacySessionUserId } from '@/lib/legacy/legacyOneGrade';
+import { requireLegacyPlan } from '@/lib/legacy/legacyPlanGate';
 import { gradeLegacyCompletedTrades, type LegacyCompletedTrade, type LegacyTradeParty } from '@/lib/legacy/legacyCompletedTradeGrades';
 import { proseNamesAGrade } from '@/lib/legacy/legacyPackageGrade';
 import type { FrozenCompletedGrade } from '@/lib/decision-os/trade/frozenCompletedGrade';
@@ -101,6 +101,13 @@ Be coaching-focused, not judgmental. Focus on what could have been, not what was
 }
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade-alternatives", tool: "LegacyTradeAlternatives" })(async (req: NextRequest) => {
+  /*
+   * 🛑 SIGN-IN + AF LEGACY (owner's decision 2026-11-27; gating audit H1). "What could I have done
+   * instead?" graded every alternative and called OpenAI for anyone, the session optional. Refused before
+   * the body, the grader and the model.
+   */
+  const gate = await requireLegacyPlan('legacy_trade_lookback', 'trade alternatives');
+  if (!gate.ok) return gate.response;
   try {
     const body = await req.json();
     const { trade, userId, leagueId } = body as { trade?: LegacyCompletedTrade; userId?: string; leagueId?: string };
@@ -114,8 +121,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-alternatives", t
     }
 
     const isViewer = (p: LegacyTradeParty) => isUserParty(p, String(userId), String(userId));
-    const session = await legacySessionUserId();
-    const args = { suppliedLeagueId: leagueId, userId: session, isViewer };
+    const args = { suppliedLeagueId: leagueId, userId: gate.user.userId, isViewer };
 
     // THE trade's own grade — the letter its card shows.
     const [original] = await gradeLegacyCompletedTrades({ ...args, trades: [trade] });

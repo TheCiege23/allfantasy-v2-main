@@ -22,6 +22,8 @@ export interface KeeperConfig {
   draftRoundAdjustmentsEnabled?: boolean
   keptPlayerBudgetDeductionsEnabled?: boolean
   rosterNeedsAccountForKeepers?: boolean
+  /** Written by AF's automatic keeper placement (lib/keeper/keeperAutoBoard.ts). */
+  autoPlacement?: import('../types').KeeperAutoPlacementSummary
 }
 
 export interface KeeperSelection {
@@ -34,6 +36,15 @@ export interface KeeperSelection {
   playerId: string | null
   /** Set when commissioner overrides eligibility. */
   commissionerOverride?: boolean
+  /** AF placed him from a locked keeper record (lib/keeper/keeperAutoBoard.ts). */
+  autoPlaced?: true
+  /** Why he is not in the round he cost — shown on the board. */
+  placementNote?: string
+  /**
+   * The board slot (column) of the pick he occupies when it is NOT his team's own — a pick the team
+   * acquired by trade. Absent = his team's own pick in `roundCost`.
+   */
+  pickSlot?: number
 }
 
 export interface KeeperLock {
@@ -47,4 +58,5 @@ export interface KeeperLock {
   team: string | null
   playerId: string | null
   isKeeper: true
+  placementNote?: string
 }

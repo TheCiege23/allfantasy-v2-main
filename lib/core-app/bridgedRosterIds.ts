@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { reduceCrosswalk } from './crosswalkRules'
+import { declaredSleeperId } from './declaredSleeperId'
 import { collectRosterIds, ROSTER_KEYS } from './rosterIdSpace'
 
 /**
@@ -23,14 +24,45 @@ import { collectRosterIds, ROSTER_KEYS } from './rosterIdSpace'
  */
 
 export const BRIDGE_COLUMN_BY_PLATFORM = { fleaflicker: 'fleaflickerId', mfl: 'mflId' } as const
-type BridgeColumn = (typeof BRIDGE_COLUMN_BY_PLATFORM)[keyof typeof BRIDGE_COLUMN_BY_PLATFORM]
+type IdentityBridgeColumn = (typeof BRIDGE_COLUMN_BY_PLATFORM)[keyof typeof BRIDGE_COLUMN_BY_PLATFORM]
+
+/**
+ * 🛑 A PASTED YAHOO LEAGUE BRIDGES BY ITS OWN SPELLING, WITH NO READ (2026-11-26). The paste import
+ * resolves each player at import time and stores him DECLARED (`sleeper:<id>`, declaredSleeperId.ts);
+ * an unmatched player keeps a `yahoo-paste:` id. So the bridge for such a league is the roster itself:
+ * a declared id maps to its Sleeper id, anything else — a `yahoo-paste:` id, or a bare Yahoo number
+ * from any other import — is unbridged and DROPPED, exactly as an unbridged Fleaflicker id is. The
+ * same `BRIDGE_MIN_COVERAGE` rule then decides whether a miss can be trusted. Until this, every
+ * reader below treated the league as unreadable although most of its players carried a Sleeper id.
+ *
+ * `'declared'` is not a `PlayerIdentityMap` column. Anything that reads the registry by `column` must
+ * branch on `isDeclaredBridge` first.
+ */
+export const DECLARED_BRIDGE = 'declared' as const
+const DECLARED_BRIDGE_PLATFORMS = new Set(['yahoo'])
+type BridgeColumn = IdentityBridgeColumn | typeof DECLARED_BRIDGE
+
+export function isDeclaredBridge(column: string | null | undefined): column is typeof DECLARED_BRIDGE {
+  return column === DECLARED_BRIDGE
+}
 
 /** Share of a league's distinct roster ids that must translate before a miss can be trusted. */
 export const BRIDGE_MIN_COVERAGE = 0.8
 
 export function bridgeColumnFor(platform: string | null | undefined): BridgeColumn | null {
   const p = (platform ?? '').trim().toLowerCase() as keyof typeof BRIDGE_COLUMN_BY_PLATFORM
+  if (DECLARED_BRIDGE_PLATFORMS.has(p)) return DECLARED_BRIDGE
   return BRIDGE_COLUMN_BY_PLATFORM[p] ?? null
+}
+
+/** Declared id → its Sleeper id, for the declared ids among `ids`. Pure; no read. */
+export function declaredBridgeMap(ids: Iterable<string>): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const id of ids) {
+    const sid = declaredSleeperId(id)
+    if (sid) out.set(id, sid)
+  }
+  return out
 }
 
 export type BridgedLeague = {
@@ -133,6 +165,10 @@ export async function loadBridgedLeagues(
 
   const mapByColumn = new Map<BridgeColumn, Map<string, string>>()
   for (const [column, ids] of byColumn) {
+    if (isDeclaredBridge(column)) {
+      mapByColumn.set(column, declaredBridgeMap(ids))
+      continue
+    }
     if (ids.size === 0) {
       mapByColumn.set(column, new Map())
       continue
@@ -163,15 +199,32 @@ export async function loadBridgedLeagues(
   return out
 }
 
+/**
+ * Is this a pasted-Yahoo league whose DECLARED ids clear the coverage bar — so its rosters, read
+ * through `sleeperReadableRosters` (which keeps declared ids, unwrapped), can be trusted for a miss?
+ * False for every other league, with no query. For readers that refuse a foreign league outright.
+ */
+export async function isDeclaredReadableLeague(
+  league: { id: string; platform: string | null | undefined },
+  db: Pick<typeof prisma, 'roster' | 'playerIdentityMap'> = prisma,
+): Promise<boolean> {
+  if (!isDeclaredBridge(bridgeColumnFor(league.platform))) return false
+  const verdict = (await loadBridgedLeagues([league], db).catch(() => null))?.get(league.id)
+  return verdict?.readable === true
+}
+
 /** The searched player's own id on each bridged platform — to tell "not here" from "cannot see him". */
 export async function bridgeIdsForSleeperId(
   sleeperId: string,
   db: Pick<typeof prisma, 'playerIdentityMap'> = prisma,
 ): Promise<Partial<Record<BridgeColumn, string>>> {
+  // NFL, as the bridge itself is (`loadBridgedLeagues` reads `sport: 'NFL'`): `sleeperId` is the NFL
+  // Sleeper column, and an NBA id read here would hand back an NFL player's bridge ids.
   const row = await db.playerIdentityMap
-    .findUnique({ where: { sleeperId }, select: { fleaflickerId: true, mflId: true } })
+    .findUnique({ where: { sleeperId, sport: 'NFL' }, select: { fleaflickerId: true, mflId: true } })
     .catch(() => null)
-  const out: Partial<Record<BridgeColumn, string>> = {}
+  // Every player has a declared spelling (`sleeper:<his id>`): a declared league can always see him.
+  const out: Partial<Record<BridgeColumn, string>> = { [DECLARED_BRIDGE]: sleeperId }
   if (row?.fleaflickerId) out.fleaflickerId = row.fleaflickerId
   if (row?.mflId) out.mflId = row.mflId
   return out

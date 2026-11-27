@@ -241,7 +241,9 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
   const [playerRows, actual] = await Promise.all([
     args.prisma.sportsPlayer
       .findMany({
-        where: { sleeperId: { in: allIds } },
+        // NFL by construction (IDP; the stat reads above are `sportType: 'NFL'`). Sleeper reuses ids
+        // across sports, so the sport is part of the key.
+        where: { sport: 'NFL', sleeperId: { in: allIds } },
         select: { sleeperId: true, name: true, position: true, team: true, updatedAt: true },
         orderBy: { updatedAt: 'desc' },
       })

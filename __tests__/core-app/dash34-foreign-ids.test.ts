@@ -30,8 +30,9 @@ vi.mock('@/lib/prisma', () => ({
     sportsGame: rows([]),
     roster: rows([{ id: 'R1', leagueId: 'L1', playerData: { players: ['6038', '6039'], starters: ['6038'] } }]),
     sportsPlayer: {
-      findMany: vi.fn(async ({ where }: { where: { sleeperId: { in: string[] } } }) =>
-        where.sleeperId.in.includes('6038')
+      // The read is sport-scoped: `{ OR: [{ sport, sleeperId: { in } }, …] }`, one branch per league sport.
+      findMany: vi.fn(async ({ where }: { where: { OR: Array<{ sport: string; sleeperId: { in: string[] } }> } }) =>
+        where.OR.some((b) => b.sport === 'NFL' && b.sleeperId.in.includes('6038'))
           ? [{ sleeperId: '6038', name: 'Wrong Player', position: 'WR', team: 'NYJ', sport: 'NFL', imageUrl: null }]
           : [],
       ),
@@ -39,7 +40,7 @@ vi.mock('@/lib/prisma', () => ({
     sportsInjury: rows([
       { playerName: 'Wrong Player', status: 'Out', description: 'Hamstring', date: new Date(), position: 'WR', team: 'NYJ' },
     ]),
-    league: { findMany: vi.fn(async () => [{ id: 'L1', platform: db.platform, guillotineMode: db.guillotine }]) },
+    league: { findMany: vi.fn(async () => [{ id: 'L1', platform: db.platform, sport: 'NFL', guillotineMode: db.guillotine }]) },
     weeklyMatchup: rows([]),
   },
 }))

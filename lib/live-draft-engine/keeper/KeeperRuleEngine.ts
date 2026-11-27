@@ -111,9 +111,10 @@ export function validateRosterKeeperSelections(
     if (list.length > config.maxKeepers) {
       return { valid: false, error: `A roster has ${list.length} keepers (max ${config.maxKeepers})` }
     }
+    // One keeper per PICK: a team holding an acquired pick in a round can keep two there (pickSlot).
     const roundCosts = list.map((s) => s.roundCost)
-    const unique = new Set(roundCosts)
-    if (unique.size !== roundCosts.length) {
+    const picks = list.map((s) => `${s.roundCost}:${s.pickSlot ?? 'own'}`)
+    if (new Set(picks).size !== picks.length) {
       return { valid: false, error: 'Duplicate round cost on same roster' }
     }
     for (const r of roundCosts) {

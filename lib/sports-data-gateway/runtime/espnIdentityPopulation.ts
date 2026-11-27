@@ -111,7 +111,8 @@ async function defaultIdentityStore(): Promise<IdentityStore> {
   const { prisma } = await import('@/lib/prisma')
   return {
     async findExistingBySleeperIds(sleeperIds) {
-      const rows = await prisma.playerIdentityMap.findMany({ where: { sleeperId: { in: sleeperIds } }, select: { id: true, sleeperId: true, espnId: true } })
+      // NFL, as every row this store writes is (`createMappings`): `sleeperId` is the NFL Sleeper column.
+      const rows = await prisma.playerIdentityMap.findMany({ where: { sport: 'NFL', sleeperId: { in: sleeperIds } }, select: { id: true, sleeperId: true, espnId: true } })
       const m = new Map<string, { id: string; espnId: string | null }>()
       for (const r of rows) if (r.sleeperId) m.set(r.sleeperId, { id: r.id, espnId: r.espnId })
       return m
@@ -121,7 +122,7 @@ async function defaultIdentityStore(): Promise<IdentityStore> {
       return res.count
     },
     async updateEspnId(sleeperId, patch) {
-      await prisma.playerIdentityMap.updateMany({ where: { sleeperId }, data: { espnId: patch.espnId, canonicalName: patch.canonicalName, normalizedName: patch.normalizedName, position: patch.position, currentTeam: patch.currentTeam } })
+      await prisma.playerIdentityMap.updateMany({ where: { sport: 'NFL', sleeperId }, data: { espnId: patch.espnId, canonicalName: patch.canonicalName, normalizedName: patch.normalizedName, position: patch.position, currentTeam: patch.currentTeam } })
     },
     async coverage() {
       const [identityMapRows, withEspnId, withSleeperId] = await Promise.all([

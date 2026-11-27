@@ -542,6 +542,23 @@ export default function PlayerCardSheet({
                 </div>
               ) : null}
 
+              {/* Keeper leagues only (lib/keeper/keeperCardCost.ts): the cost under the league's rule and its value. */}
+              {data?.keeperCost ? (
+                <div className="af-pc-keeper" data-testid="player-card-keeper-cost">
+                  <div className="af-pc-keeper-h">{data.keeperCost.headline}</div>
+                  <div className="af-pc-faint">{data.keeperCost.detail}</div>
+                  {data.keeperCost.value ? (
+                    <div
+                      className="af-pc-keeper-v"
+                      data-surplus={data.keeperCost.value.surplus > 0 ? 'pos' : data.keeperCost.value.surplus < 0 ? 'neg' : 'even'}
+                      data-testid="player-card-keeper-value"
+                    >
+                      {data.keeperCost.value.sentence}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               {/*
                 The design's Propose Trade action.
 
