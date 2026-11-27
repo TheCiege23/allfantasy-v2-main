@@ -44,8 +44,8 @@ import { ensureLeagueSettingsRow } from '@/lib/draft-defaults/ensureLeagueSettin
  * PAST WEEKS (step 4b-2, copyProviderWeeklyScores.ts): the season's provider matchups and per-player points are copied
  * into AllFantasy's own tables (Q4), before the flip, while the provider league id still names their rows.
  *
- * ⚠ STILL TO COME, SO THE ROUTE STAYS ADMIN-GATED: per-seat invite links (Q7). The first conversions are supervised
- * (plan §8).
+ * UNDO (step 6, undoNativeConversion.ts) reads the snapshot written in step 12; anything this function changes must be
+ * recorded there, or undo cannot put it back. The first conversions are supervised (plan §8).
  *
  * What it keeps, by the owner's decisions (§13): team names, logos and the provider manager name on every seat,
  * claimed or not (Q3); carried players become ordinary drafted players (Q6).
@@ -59,13 +59,28 @@ export class NativeConversionRefusal extends Error {
   }
 }
 
-/** The pre-switch state of every row the switch changes, so undo (step 6) can put it back. Shape version 1. */
+/**
+ * The pre-switch state of every row the switch changes, so undo (step 6, undoNativeConversion.ts) can put it back.
+ * Shape version 1. Fields marked "step 6" were added with undo and are optional: a snapshot written before them still
+ * undoes, it just cannot put back what it did not record (undo says which).
+ */
 export type NativeConversionSnapshotV1 = {
   version: 1
-  league: { platform: string; platformLeagueId: string; syncStatus: string | null; settings: unknown }
-  teams: Array<{ id: string; externalId: string; platformUserId: string | null; isOrphan: boolean; role: string }>
+  league: {
+    platform: string; platformLeagueId: string; syncStatus: string | null; settings: unknown
+    /** Step 6: the columns a baseball roto conversion overwrites. */
+    columns?: { playoffTeams: number | null; playoffStartWeek: number | null }
+  }
+  /** Step 6: the season the switch converted. Undo closes once the league has a newer one (Q10). */
+  seasonAtSwitch?: { id: string; season: number } | null
+  teams: Array<{
+    id: string; externalId: string; platformUserId: string | null; isOrphan: boolean; role: string
+    /** Step 6: what claiming a seat after the switch overwrites. */
+    ownerName?: string | null; teamName?: string | null; avatarUrl?: string | null; claimedByUserId?: string | null
+    isCommissioner?: boolean; isCoCommissioner?: boolean
+  }>
   rosters: Array<{ id: string; platformUserId: string; managerUserId: string | null; redraftRosterId: string | null; playerData: unknown; settings: unknown }>
-  redraftRosters: Array<{ id: string; ownerId: string; managerUserId: string | null }>
+  redraftRosters: Array<{ id: string; ownerId: string; managerUserId: string | null; ownerName?: string | null; teamName?: string | null }>
   redraftPlayers: Array<{ id: string; playerId: string; acquisitionType: string }>
   futurePicks: Array<{ id: string; originalRosterId: string; currentOwnerId: string }>
   draftSessions: Array<{ id: string; sleeperDraftId: string | null; slotOrder: unknown }>
@@ -78,10 +93,17 @@ export type NativeConversionSnapshotV1 = {
   }
   /** Rows the switch created and undo must delete; plus slots it changed, with their old values. */
   created: { memberIds: string[]; chatRoomIds: string[]; entrySlotIds: string[]; inviteIds?: string[] }
-  /** Rows the past-week copy wrote, for undo: these matchups, and the native player rows for this season. */
-  copiedScores?: { matchupIds: string[]; playerScoresSeasonYear: number }
+  /**
+   * Rows the past-week copy wrote, for undo: these matchups, and the native player rows for this season. Step 6:
+   * `playerScoresPreexisted` says native rows for that season were already there, so undo must not delete by season.
+   */
+  copiedScores?: { matchupIds: string[]; playerScoresSeasonYear: number; playerScoresPreexisted?: boolean }
   /** Baseball only: the scoring tables the switch replaced, as they were (the copy flow's converter rewrites them). */
-  mlbTablesBefore?: { rosterConfig: unknown; scoringOverrides: unknown[] }
+  mlbTablesBefore?: {
+    rosterConfig: unknown; scoringOverrides: unknown[]
+    /** Step 6: the scoring snapshots the converter rewrites in place. */
+    scoringSnapshots?: Array<{ id: string; scoringMode: string; scoringFormat: string | null; effectiveRules: unknown; overrides: unknown }>
+  }
   entrySlotsBefore: Array<{ id: string; rosterId: string | null; status: string }>
 }
 
@@ -244,7 +266,7 @@ async function convertInTransaction(
 
   const league = await tx.league.findUnique({
     where: { id: leagueId },
-    select: { userId: true, platform: true, platformLeagueId: true, season: true, sport: true, settings: true, syncStatus: true },
+    select: { userId: true, platform: true, platformLeagueId: true, season: true, sport: true, settings: true, syncStatus: true, playoffTeams: true, playoffStartWeek: true },
   })
   if (!league) refuse('League not found.')
   const sport = String(league.sport)
@@ -269,11 +291,15 @@ async function convertInTransaction(
     select: { id: true, platformUserId: true, managerUserId: true, redraftRosterId: true, playerData: true, settings: true },
   })
   const teamRows = await tx.leagueTeam.findMany({
-    where: { leagueId }, select: { id: true, externalId: true, platformUserId: true, isOrphan: true, role: true },
+    where: { leagueId },
+    select: {
+      id: true, externalId: true, platformUserId: true, isOrphan: true, role: true,
+      ownerName: true, teamName: true, avatarUrl: true, claimedByUserId: true, isCommissioner: true, isCoCommissioner: true,
+    },
   })
   const season = await tx.redraftSeason.findFirst({ where: { leagueId }, orderBy: [{ season: 'desc' }, { createdAt: 'desc' }], select: { id: true, season: true, playoffStartWeek: true } })
   const redraftRosters = season
-    ? await tx.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, ownerId: true, managerUserId: true } })
+    ? await tx.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, ownerId: true, managerUserId: true, ownerName: true, teamName: true } })
     : []
   const redraftPlayers = redraftRosters.length
     ? await tx.redraftRosterPlayer.findMany({
@@ -469,6 +495,9 @@ async function convertInTransaction(
       mlbTablesBefore = {
         rosterConfig: await tx.leagueRosterConfig.findUnique({ where: { leagueId } }),
         scoringOverrides: await tx.leagueScoringOverride.findMany({ where: { leagueId } }),
+        scoringSnapshots: await tx.scoringSettingsSnapshot.findMany({
+          where: { leagueId }, select: { id: true, scoringMode: true, scoringFormat: true, effectiveRules: true, overrides: true },
+        }),
       }
       await writeImportedMlbScoringTables(tx, leagueId, source.mlbScoring, source.mlbRoster)
       Object.assign(settingsPatch, importedMlbSettings(settings, source.mlbScoring, source.mlbRoster, userId))
@@ -489,6 +518,9 @@ async function convertInTransaction(
   }
 
   // 11c. The provider's past weeks into native tables (Q4), keyed by the provider league id the flip is about to replace.
+  const playerScoresPreexisted = season
+    ? (await tx.leaguePlayerWeeklyScore.count({ where: { leagueId, seasonYear: season.season, source: 'allfantasy' } })) > 0
+    : false
   const pastScores = season
     ? await copyProviderWeeklyScores(tx, {
         leagueId,
@@ -506,8 +538,12 @@ async function convertInTransaction(
   // 12. The record, then the flip — last, so nothing above ran on a league the engines already treat as native.
   const snapshot: NativeConversionSnapshotV1 = {
     version: 1,
-    league: { platform: String(league.platform), platformLeagueId: league.platformLeagueId, syncStatus: league.syncStatus ?? null, settings: league.settings },
-    teams: teamRows.map((t) => ({ id: t.id, externalId: t.externalId, platformUserId: t.platformUserId, isOrphan: t.isOrphan, role: t.role })),
+    league: {
+      platform: String(league.platform), platformLeagueId: league.platformLeagueId, syncStatus: league.syncStatus ?? null, settings: league.settings,
+      columns: { playoffTeams: league.playoffTeams ?? null, playoffStartWeek: league.playoffStartWeek ?? null },
+    },
+    seasonAtSwitch: season ? { id: season.id, season: season.season } : null,
+    teams: teamRows,
     rosters: rosterRows,
     redraftRosters,
     redraftPlayers,
@@ -522,7 +558,7 @@ async function convertInTransaction(
     },
     created,
     ...(mlbTablesBefore ? { mlbTablesBefore } : {}),
-    ...(pastScores && season ? { copiedScores: { matchupIds: pastScores.matchupIds, playerScoresSeasonYear: season.season } } : {}),
+    ...(pastScores && season ? { copiedScores: { matchupIds: pastScores.matchupIds, playerScoresSeasonYear: season.season, playerScoresPreexisted } } : {}),
     entrySlotsBefore: entrySlotsBefore.map((s) => ({ id: s.id, rosterId: s.rosterId, status: String(s.status) })),
   }
   const record = {
