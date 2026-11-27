@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireAdmin } from '@/lib/adminAuth'
 import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { convertImportedLeagueInPlace, NativeConversionRefusal } from '@/lib/league/convertImportedLeagueInPlace'
 
@@ -14,10 +13,10 @@ export const dynamic = 'force-dynamic'
  *
  * Body: `{ "acceptWeeklyLineups": true }` is required for a baseball league (native scoring is one lineup a week).
  *
- * 🛑 ADMIN-GATED ON PURPOSE (step 4a). The switch rewrites every id in the league and stops its sync; settings and
- * scoring scaffolding, the past-score copy and per-seat invites arrive in 4b. Until then a conversion is a supervised
- * pilot (plan §8): the caller must be the league's head commissioner AND an AllFantasy admin. Remove the admin check
- * only together with 4b, never on its own.
+ * The league's head commissioner only (the one commissioner rule, 'head'). This was also AllFantasy-admin-only while
+ * the switch was incomplete; that gate came off in step 4b-3, once native settings (4b-1), the past-week copy (4b-2)
+ * and per-seat invite links (4b-3) were all in. No button calls this yet: "Make it a native league" is pointed here
+ * in step 7, after the re-import refusal (step 5) and undo (step 6) land.
  *
  * 409 = refused, with the blockers the readiness card would show; nothing was written.
  */
@@ -30,8 +29,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const refused = await commissionerAccessResponse(leagueId, userId, 'head')
   if (refused) return refused
-  const admin = await requireAdmin()
-  if (!admin.ok) return NextResponse.json({ error: 'Switching a league to AllFantasy is in a supervised pilot. Contact AllFantasy support.' }, { status: 403 })
 
   const body = (await req.json().catch(() => ({}))) as { acceptWeeklyLineups?: unknown }
   try {

@@ -37,6 +37,7 @@ function rewardReferredJoin(userId: string): void {
 import { resolveGuillotineSeatSummary } from '@/lib/guillotine/lateStartSeats'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
+import { assignLeagueSeat } from '@/lib/league/leagueSeats'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
@@ -365,7 +366,26 @@ export async function POST(req: NextRequest) {
     const userEmail = await tx.appUser
       .findUnique({ where: { id: userId }, select: { email: true } })
       .then((u: { email: string | null } | null) => u?.email ?? null)
-    const claim = await claimPlaceholderRoster({
+    /*
+     * A seat-specific invite link (`/join?code=…&team=<Roster.id>`, built by the invite panel for each open team) names
+     * the team this person was invited to take: the case is a league switched to AllFantasy whose open seats belong to
+     * provider managers who never joined (docs/league-import/IN_PLACE_NATIVE_CONVERSION_PLAN.md, step 4b-3, Q7). It
+     * grants nothing new — anyone with the league's code can already take any open team — it only names which one, so
+     * the automatic match below cannot hand them a different seat. A team someone has taken since is refused by name
+     * rather than swapped for another.
+     */
+    const requestedSeat = typeof body.rosterId === 'string' ? body.rosterId.trim() : ''
+    if (requestedSeat) {
+      const seat = await assignLeagueSeat(tx as Prisma.TransactionClient, { leagueId: result.leagueId, rosterId: requestedSeat, userId })
+      if (!seat.ok) {
+        return {
+          success: false as const,
+          status: seat.code === 'ROSTER_NOT_FOUND' ? 404 : 409,
+          error: seat.code === 'ROSTER_TAKEN' ? 'That team has already been claimed. Ask your commissioner for a new link.' : seat.message,
+        }
+      }
+    }
+    const claim = requestedSeat ? { claimed: true, rosterId: requestedSeat } : await claimPlaceholderRoster({
       tx: tx as Prisma.TransactionClient,
       leagueId: result.leagueId,
       candidate: {
