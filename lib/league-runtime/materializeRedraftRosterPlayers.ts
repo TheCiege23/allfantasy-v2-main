@@ -16,6 +16,7 @@ import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerDa
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { platformOnlyAuthority, resolveWriteAuthority } from '@/lib/league/write-authority'
 import { loadTeamsRunOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer'
+import { tellCommissionerOfDoubleClaims, type DoubleClaim } from '@/lib/league/switching/doubleClaimNotice'
 import { reconcileRosterRedraftLinks } from './reconcileRosterRedraftLinks'
 // The projection rule, shared with the lineup engine's save-path sync so the two cannot disagree.
 import { idsOnAnyRosterList, slotTypeFor } from './redraftSlotType'
@@ -72,6 +73,11 @@ export interface MaterializeResult {
    * (lib/league/switching). Its `playerData` is the old platform's last word, frozen since the switch.
    */
   rostersRunOnAllFantasy?: number
+  /**
+   * Players the old platform puts on a team that has not switched, left off it here because a switched
+   * team already has them on AllFantasy (rule 1 of a switching league). The commissioner is told.
+   */
+  playersKeptOnSwitchedTeam?: number
   /** Imported rows retired because the player is no longer on the platform's roster. */
   playersDropped: number
 }
@@ -143,6 +149,28 @@ export async function materializeRedraftRosterPlayersForLeague(
    */
   const platformOwnsRoster = league != null && resolveWriteAuthority(platformOnlyAuthority(league.platform)) !== 'NATIVE'
   const runOnAllFantasy = await loadTeamsRunOnAllFantasy(leagueId)
+
+  /*
+   * RULE 1 OF A SWITCHING LEAGUE: A PLAYER CLAIMED ON BOTH SIDES STAYS WITH THE TEAM THAT SWITCHED.
+   * A switched manager adds a player here while a manager still on the old platform adds the same player
+   * there. Once the league is official AllFantasy is the league of record, so its claim stands: the old
+   * platform's copy of that player is not put on the other team here, and the commissioner is told
+   * (lib/league/switching/doubleClaimNotice.ts). Empty for every league that is not official.
+   */
+  const heldBySwitchedTeam = new Map<string, string>()
+  const doubleClaims: DoubleClaim[] = []
+  if (runOnAllFantasy.externalIds.size > 0) {
+    const switchedRosterIds = rosters
+      .filter((r) => r.redraftRosterId && runOnAllFantasy.externalIds.has(sourceTeamIdOf(r.playerData)))
+      .map((r) => r.redraftRosterId as string)
+    if (switchedRosterIds.length > 0) {
+      const held = await prisma.redraftRosterPlayer.findMany({
+        where: { rosterId: { in: switchedRosterIds }, droppedAt: null },
+        select: { playerId: true, rosterId: true },
+      })
+      for (const h of held) heldBySwitchedTeam.set(h.playerId, h.rosterId)
+    }
+  }
 
   /*
    * The bye is a property of the TEAM and this table has a real `Int?` column for it that
@@ -293,6 +321,25 @@ export async function materializeRedraftRosterPlayersForLeague(
       const dto = imported ? { name: imported.name, position: imported.position ?? canonical?.position ?? null, team: imported.team ?? canonical?.team ?? null, sport } : canonical
       const extra = byUnifiedId.get(playerId)
 
+      const switchedHolder = heldBySwitchedTeam.get(playerId)
+      if (switchedHolder && switchedHolder !== r.redraftRosterId) {
+        // Rule 1 (see where heldBySwitchedTeam is built). A copy already here from before is retired too.
+        if (have.has(playerId)) {
+          await prisma.redraftRosterPlayer.updateMany({
+            where: { rosterId: r.redraftRosterId, playerId, droppedAt: null, acquisitionType: 'imported' },
+            data: { droppedAt: new Date() },
+          })
+        }
+        doubleClaims.push({
+          playerId,
+          playerName: dto?.name ?? null,
+          platformRedraftRosterId: r.redraftRosterId,
+          allFantasyRedraftRosterId: switchedHolder,
+        })
+        result.playersKeptOnSwitchedTeam = (result.playersKeptOnSwitchedTeam ?? 0) + 1
+        continue
+      }
+
       if (have.has(playerId)) {
         /*
          * 🛑 ALREADY PRESENT IS NOT ALREADY CORRECT, WHICH IS WHY THIS IS NOT A `continue`. The
@@ -362,6 +409,9 @@ export async function materializeRedraftRosterPlayersForLeague(
       result.playersCreated += 1
     }
   }
+
+  // Best-effort: the rosters are already right, and a notice that fails is retried on the next copy.
+  if (doubleClaims.length > 0) await tellCommissionerOfDoubleClaims(leagueId, doubleClaims).catch(() => 0)
 
   return result
 }
