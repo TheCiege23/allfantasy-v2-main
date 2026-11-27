@@ -39,6 +39,7 @@ import { isDynastyForWrite } from '@/lib/league-import/leagueTypeWrite'
 import type { ApplyScopeResult, SleeperSyncScope } from './types'
 import { persistLiveTrades } from './persistLiveTrades'
 import { emptyApplyResult } from './types'
+import { loadTeamsRunOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer'
 
 export interface ApplyLeagueSyncOptions {
   /** Reconcile removals only when the provider returns a complete authoritative collection. Default true. */
@@ -339,6 +340,11 @@ async function applyTeamsRosters(
   // REUSE the canonical, claim-preserving upsert (LeagueTeam by [leagueId,externalId] never nulls a
   // claim; Roster keyed by platformUserId with rebuilt lineup_sections; TeamPerformance by [teamId,season,week]).
   await bootstrapLeagueFromNormalizedImport(leagueId, normalized)
+  // Switched teams in an official league are AllFantasy's: no record, lineup or removal below touches them.
+  const runOnAllFantasy = await loadTeamsRunOnAllFantasy(leagueId)
+  if (runOnAllFantasy.teamIds.size > 0) {
+    out.notes.push(`teams_rosters: left ${runOnAllFantasy.teamIds.size} switched team(s) to AllFantasy`)
+  }
   if (normalized.source?.source_provider === 'fantrax') {
     const updated = await syncFantraxRedraftLineups(leagueId)
     out.notes.push(`teams_rosters: synchronized ${updated} Fantrax scoring lineup slot(s)`)
@@ -366,7 +372,7 @@ async function applyTeamsRosters(
     let written = 0
     for (const row of standings) {
       const externalId = String(row.source_team_id ?? '').trim()
-      if (!externalId) continue
+      if (!externalId || runOnAllFantasy.externalIds.has(externalId)) continue
       const res = await prisma.leagueTeam
         .updateMany({
           where: { leagueId, externalId },
@@ -412,7 +418,9 @@ async function applyTeamsRosters(
     normalized.rosters.length > 0
   if (authoritative) {
     const liveTeamIds = new Set(normalized.rosters.map((r) => r.source_team_id))
-    const staleTeams = await prisma.leagueTeam.findMany({
+    // A switched team in an official league is never archived, orphaned or deleted by the old platform
+    // dropping it: its manager plays it here.
+    const staleTeams = (await prisma.leagueTeam.findMany({
       where: { leagueId, externalId: { notIn: Array.from(liveTeamIds) } },
       select: {
         id: true,
@@ -423,7 +431,7 @@ async function applyTeamsRosters(
         // Needed so an already-archived team is skipped rather than re-stamped every sync.
         archivedAt: true,
       },
-    })
+    })).filter((t) => !runOnAllFantasy.teamIds.has(t.id))
     // Index the league's rosters by their canonical source team id (stable across the raw→resolved
     // platformUserId change) so a removed team's roster is found even when Roster.platformUserId holds
     // a RESOLVED AllFantasy id rather than the raw Sleeper manager id.

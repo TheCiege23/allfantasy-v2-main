@@ -87,3 +87,17 @@ describe('who is in charge of one team', () => {
     expect(resolveTeamWriteAuthority({ platform: 'native', settings: null }, 'team-b')).toBe('NATIVE')
   })
 })
+
+describe('which teams a re-sync must leave alone', () => {
+  const teams = [
+    { id: 'team-a', externalId: '1' },
+    { id: 'team-b', externalId: '2' },
+  ]
+  it('only switched teams, and only once the league is official', async () => {
+    const { teamsRunOnAllFantasy } = await import('@/lib/league/switching/switchingLeague')
+    expect([...teamsRunOnAllFantasy(officialWithTeam, teams)]).toEqual(['1'])
+    expect(teamsRunOnAllFantasy(switchedNotOfficial, teams).size).toBe(0)
+    expect(teamsRunOnAllFantasy(official, teams).size).toBe(0)
+    expect(teamsRunOnAllFantasy({ scoring: 'ppr' }, teams).size).toBe(0)
+  })
+})

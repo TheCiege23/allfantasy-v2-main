@@ -75,3 +75,27 @@ export function withTeamSwitched(settings: unknown, leagueTeamId: string, stamp:
   if (current.teams[leagueTeamId]) return current
   return { ...current, teams: { ...current.teams, [leagueTeamId]: stamp } }
 }
+
+/**
+ * The teams AllFantasy runs, so a re-sync from the old platform must leave them alone: switched teams in
+ * an official league. Empty for every league that is not official, which is every league today, so a
+ * re-sync behaves exactly as before until a commissioner makes the league official.
+ *
+ * Before the league is official a switched team is practice only, and the re-sync still overwrites it:
+ * the old platform is the league of record until then.
+ *
+ * Returns the teams' platform ids (`LeagueTeam.externalId`, the import's `source_team_id`), because that
+ * is the id every re-sync writer has in hand.
+ */
+export function teamsRunOnAllFantasy(
+  settings: unknown,
+  teams: ReadonlyArray<{ id: string; externalId: string | null }>,
+): Set<string> {
+  const state = readSwitchingState(settings)
+  const out = new Set<string>()
+  if (!state?.official) return out
+  for (const t of teams) {
+    if (t.externalId && state.teams[t.id]) out.add(t.externalId)
+  }
+  return out
+}
