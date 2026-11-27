@@ -41,6 +41,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import GamesCountWeekPanel from './GamesCountWeekPanel'
 import { DynastyMarkerChips } from '@/components/core-app/screens/DynastyRosterMarkers'
 import { isGamesCountSport } from '@/lib/redraft/gamesCount'
+import PlayerGameLogTable, { gameLogSupported } from '@/components/player-game-log/PlayerGameLogTable'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -894,6 +895,23 @@ export default function PlayerCardSheet({
           {/* "Which games count" (NBA/NHL/MLB): renders nothing unless the league uses best-N or lock-in. */}
           {data && league?.isYours && isGamesCountSport(p?.sport ?? subject.sport) ? (
             <GamesCountWeekPanel leagueId={league.leagueId} playerIds={[followExternalId, followSleeperId]} />
+          ) : null}
+
+          {/*
+            Per-game log for the daily sports, ABOVE the two columns: last night's line, the score
+            and time on ice are what a hockey manager opens the card for (2026-11-27).
+          */}
+          {data && p && gameLogSupported(p.sport) && (p.source === 'rolling_insights' || p.sleeperId) ? (
+            <section className="af-pc-gamelog" aria-label="Game log">
+              <Label>Game log</Label>
+              <PlayerGameLogTable
+                key={`${p.sport}:${p.source}:${p.externalId}`}
+                compact
+                sport={p.sport}
+                playerName={p.name}
+                playerKey={{ externalId: p.externalId, source: p.source ?? null, sleeperId: p.sleeperId }}
+              />
+            </section>
           ) : null}
 
           {/* two columns ───────────────────────────────────────── */}

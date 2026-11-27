@@ -586,6 +586,14 @@
 
 /* ── two columns ─────────────────────────────────────────────────────────── */
 
+/* Per-game log (components/player-game-log), full width above the two columns. */
+.af-pc-gamelog {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
 .af-pc-cols {
   display: flex;
   gap: 28px;
