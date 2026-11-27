@@ -2,6 +2,11 @@
  * POST /api/leagues/[leagueId]/hall-of-fame/tell-story
  * Body: { type: 'entry' | 'moment', id: string }
  * Returns narrative for "Tell me why this matters" button.
+ *
+ * 🛑 THE MODEL WRITE-UP IS AF COMMISSIONER (owner, 2026-11-27): it runs only when the league's commissioner
+ * holds AF Commissioner or AF Supreme, and at most LEAGUE_STORY_AI_DAILY_LIMITS.hall_of_fame times a league a
+ * day (lib/league-story-ai/leagueStoryAiGate.ts). Otherwise the fact-built narrative below is served, free,
+ * with `aiLocked` saying why (the standard paywall body), and no model is called.
  */
 import { NextResponse } from "next/server"
 import {
@@ -16,6 +21,7 @@ import {
 import { runUnifiedOrchestration } from "@/lib/ai-orchestration"
 import { buildEnvelopeForTool, formatToolResult, validateToolOutput } from "@/lib/ai-tool-layer"
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
+import { checkLeagueStoryAiGate } from '@/lib/league-story-ai/leagueStoryAiGate'
 
 export const dynamic = "force-dynamic"
 
@@ -87,11 +93,14 @@ export async function POST(
         userMessage:
           "In 3-5 concise sentences, explain why this Hall of Fame induction matters and which deterministic evidence most supports it.",
       })
-      const orchestration = await runUnifiedOrchestration({
-        envelope,
-        mode: "consensus",
-        options: { timeoutMs: 20_000, maxRetries: 1 },
-      })
+      const aiGate = await checkLeagueStoryAiGate({ leagueId: gate.leagueId, kind: "hall_of_fame", lang: body.lang })
+      const orchestration = aiGate.ok
+        ? await runUnifiedOrchestration({
+            envelope,
+            mode: "consensus",
+            options: { timeoutMs: 20_000, maxRetries: 1 },
+          })
+        : null
 
       let narrative = fallback
       let source: "ai" | "template" = "template"
@@ -106,7 +115,7 @@ export async function POST(
         | undefined
       let factGuardWarnings: string[] | undefined
 
-      if (orchestration.ok) {
+      if (orchestration?.ok) {
         const formatted = formatToolResult({
           toolKey: "legacy_score",
           primaryAnswer: orchestration.response.primaryAnswer || fallback,
@@ -142,6 +151,7 @@ export async function POST(
         verdict,
         sections,
         factGuardWarnings,
+        aiLocked: aiGate.ok ? null : aiGate.body,
       })
     }
 
@@ -175,11 +185,14 @@ export async function POST(
       userMessage:
         "In 3-5 concise sentences, explain why this Hall of Fame moment matters and its long-term impact, grounded in deterministic context.",
     })
-    const orchestration = await runUnifiedOrchestration({
-      envelope,
-      mode: "consensus",
-      options: { timeoutMs: 20_000, maxRetries: 1 },
-    })
+    const aiGate = await checkLeagueStoryAiGate({ leagueId: gate.leagueId, kind: "hall_of_fame", lang: body.lang })
+    const orchestration = aiGate.ok
+      ? await runUnifiedOrchestration({
+          envelope,
+          mode: "consensus",
+          options: { timeoutMs: 20_000, maxRetries: 1 },
+        })
+      : null
 
     let narrative = fallback
     let source: "ai" | "template" = "template"
@@ -194,7 +207,7 @@ export async function POST(
       | undefined
     let factGuardWarnings: string[] | undefined
 
-    if (orchestration.ok) {
+    if (orchestration?.ok) {
       const formatted = formatToolResult({
         toolKey: "legacy_score",
         primaryAnswer: orchestration.response.primaryAnswer || fallback,
@@ -230,6 +243,7 @@ export async function POST(
       verdict,
       sections,
       factGuardWarnings,
+      aiLocked: aiGate.ok ? null : aiGate.body,
     })
   } catch (e) {
     console.error("[hall-of-fame/tell-story POST]", e instanceof Error ? e.message : e)

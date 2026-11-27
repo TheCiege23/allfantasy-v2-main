@@ -52,10 +52,10 @@ describe('⚠ a missing table is a null, not a 500', () => {
   })
 
   it('returns the draft on every branch of the panel', () => {
-    // Three branches — Sleeper, Yahoo, everything else. A branch that omitted it
+    // Four branches — Sleeper, Yahoo, ESPN, everything else. A branch that omitted it
     // would look to the client like "no draft" rather than "not asked".
     const responseKeys = ROUTE.split('\n').filter((l) => l.trim() === 'draft,')
-    expect(responseKeys).toHaveLength(3)
+    expect(responseKeys).toHaveLength(4)
   })
 
   it('reports a failed save as a failure, not as a save', () => {

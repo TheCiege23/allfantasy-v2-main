@@ -274,6 +274,8 @@ export type LeagueTradeHistoryItem = {
      */
     leagueGrade?: TradeGradeView | null
     leagueGradeSide?: 'viewer' | 'proposer'
+    /** An ESPN offer's conditional drop, already worded ("and they drop Marvin Harrison Jr."). */
+    dropNote?: string | null
   }
 
 export type LeagueTradeBlockItem = {

@@ -118,7 +118,8 @@ export function checkRosters(
     const ids = rosterIds !== undefined ? rosterIds?.get(s.rosterId!) : world.rosters.find((r) => r.rosterId === s.rosterId)?.playerIds
     if (!ids) return { check: 'unverified', moved: [] }
     const held = new Set(ids)
-    for (const g of s.gives) if (g.kind === 'player' && !held.has(g.playerId)) moved.push(g.name)
+    // A conditional drop must still be on the dropping roster too, or the offer cannot execute as written.
+    for (const g of [...s.gives, ...(s.drops ?? [])]) if (g.kind === 'player' && !held.has(g.playerId)) moved.push(g.name)
   }
   return { check: moved.length ? 'unverified' : 'passed', moved }
 }
@@ -221,7 +222,11 @@ export async function evaluateStoredTrade(
       surface: args.surface ?? 'stored-trade',
       leagueId: trade.leagueId,
       userId: args.userId,
-      give: gradeInputsOf(me.gives),
+      /*
+       * The viewer's own conditional drops are part of what they give up (a released player is lost
+       * for nothing). The partner's drops reach nobody, so they never enter `get`.
+       */
+      give: gradeInputsOf([...me.gives, ...(me.drops ?? [])]),
       get: gradeInputsOf(them.gives),
       viewerSide: viewerInTrade,
       canonical,

@@ -287,16 +287,25 @@ async function findStoredPendingOffers(leagueId: string, userId: string, limit: 
     if (!team?.externalId) return []
     // The ledger stores the plain provider id ("1"), and an `externalId` can be zero-padded ("0001").
     const me = rosterIdMapKeys(team.externalId).slice(-1)[0]!
+    /*
+     * Sleeper and ESPN (2026-11-27): the ESPN offer sweep (`lib/provider-trades/syncEspnTradeOffers.ts`)
+     * writes the same ledger, holding only offers this user's own team sent or received. An ESPN offer
+     * past its stated expiry is gone on ESPN even before the sweep marks it.
+     */
     const rows = await prisma.providerTradeOffer.findMany({
-      where: { leagueId, provider: 'sleeper', status: 'pending', rosterIds: { has: me } },
+      where: { leagueId, provider: { in: ['sleeper', 'espn'] }, status: 'pending', rosterIds: { has: me } },
       orderBy: [{ proposedAt: 'desc' }, { firstSeenAt: 'desc' }],
       take: limit * 2,
-      select: { providerTradeId: true, proposedByRosterId: true, consentedRosterIds: true, expiresAt: true },
+      select: { provider: true, providerTradeId: true, proposedByRosterId: true, consentedRosterIds: true, expiresAt: true },
     })
-    const needsMe = rows.filter((o) => o.proposedByRosterId !== me && !o.consentedRosterIds.includes(me)).slice(0, limit)
+    const nowMs = Date.now()
+    const needsMe = rows
+      .filter((o) => o.proposedByRosterId !== me && !o.consentedRosterIds.includes(me))
+      .filter((o) => !o.expiresAt || o.expiresAt.getTime() > nowMs)
+      .slice(0, limit)
     return Promise.all(
       needsMe.map(async (o) => ({
-        ref: { kind: 'provider', provider: 'sleeper', providerTradeId: o.providerTradeId } as TradeRef,
+        ref: { kind: 'provider', provider: o.provider === 'espn' ? 'espn' : 'sleeper', providerTradeId: o.providerTradeId } as TradeRef,
         from: await teamName(o.proposedByRosterId),
         expiresAt: o.expiresAt,
       })),
@@ -344,7 +353,12 @@ function describeLoadedTrade(trade: LoadedTrade, perspectiveTeamId: string): str
   const mine = trade.sideA.teamId === perspectiveTeamId ? trade.sideA : trade.sideB
   const theirs = mine === trade.sideA ? trade.sideB : trade.sideA
   const list = (assets: LoadedTradeAsset[]) => assets.map(loadedAssetLabel).join(', ') || 'nothing'
-  return `you receive [${list(theirs.gives)}], you send [${list(mine.gives)}]`
+  // An ESPN conditional drop: released when the trade executes, received by nobody. Named, never folded into a side.
+  const drops = [
+    ...(theirs.drops?.length ? [`they drop [${list(theirs.drops)}]`] : []),
+    ...(mine.drops?.length ? [`you drop [${list(mine.drops)}] (counted in what you give up)`] : []),
+  ]
+  return `you receive [${list(theirs.gives)}], you send [${list(mine.gives)}]${drops.length ? `, and ${drops.join(', and ')}` : ''}`
 }
 
 /**

@@ -1597,4 +1597,44 @@ export async function fetchEspnActivityForSync(
   }
 }
 
+/**
+ * The league's pending trade offers as the connected user sees them — `view=mPendingTransactions`,
+ * confirmed by the owner's capture (`contracts/espn/fixtures/fantasy-pending.NFL.2026.json`). For the
+ * scheduled offer sweep (`lib/provider-trades/syncEspnTradeOffers.ts`), never a request path.
+ *
+ * 🛑 COOKIES ONLY, NO COOKIELESS FALLBACK. Every other read here retries without cookies, which is
+ * right for a public league's rosters and wrong for this: a pending offer is visible to the teams in
+ * it, so an anonymous read of a public league can answer 200 with no offers in it — and that empty
+ * list would retire every stored offer as gone. With no stored cookies, or cookies ESPN refuses, the
+ * sweep is told it did not read anything.
+ *
+ * Football only: an MLB-coded league id is never read as NFL (#4322).
+ */
+export async function fetchEspnPendingTradeOffersForSync(
+  userId: string,
+  leagueId: string,
+  season: number,
+): Promise<{ ok: true; raw: unknown; swid: string | null } | { ok: false; reason: string }> {
+  if (isEspnMlbSource(leagueId)) return { ok: false, reason: 'not a football league' }
+  const auth = await getEspnAuthForUser(userId)
+  const cookieHeader = buildEspnCookieHeader(auth)
+  if (!cookieHeader) return { ok: false, reason: 'no ESPN cookies stored for the connected user' }
+  try {
+    const raw = await fetchEspnJson(leagueId, season, cookieHeader, ['mPendingTransactions'])
+    void recordEspnCookiesAccepted(userId)
+    return { ok: true, raw, swid: auth.swid }
+  } catch (error) {
+    if (error instanceof EspnApiResponseError) {
+      if (error.status === 401 || error.status === 403) {
+        void recordEspnCookiesRejected(userId)
+        return { ok: false, reason: 'ESPN refused the stored cookies' }
+      }
+      return { ok: false, reason: `ESPN answered ${error.status}` }
+    }
+    // Error text from the client is secret-safe by construction (`espnFantasyClient`), but only the
+    // class name leaves here, so no URL or cookie can ride along.
+    return { ok: false, reason: error instanceof Error ? error.name : 'ESPN read failed' }
+  }
+}
+
 export { buildEspnMemberDirectory, resolveEspnOwners, resolveEspnCommissionerTeamIds, parseEspnSettings }

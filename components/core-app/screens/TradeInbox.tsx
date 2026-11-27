@@ -78,8 +78,12 @@ type OfferAsset = {
 }
 
 type Offer = {
-  provider?: 'sleeper' | 'yahoo'
+  provider?: 'sleeper' | 'yahoo' | 'espn'
   transactionId: string
+  /** ESPN conditional drop, already worded: "and they drop Marvin Harrison Jr." */
+  dropNote?: string | null
+  /** When ESPN says the offer lapses. */
+  expiresAt?: string | null
   direction: 'incoming' | 'outgoing'
   partnerName: string
   proposedAt: string | null
@@ -516,8 +520,10 @@ export function TradeInbox(props: {
 
   const loadOffer = useCallback(
     (o: Offer) => {
-      const g = toPickedAssets(o.give, o.provider)
-      const k = toPickedAssets(o.get, o.provider)
+      // ESPN ids are not a provider identity the builder resolves; ESPN offers reload by name.
+      const provider = o.provider === 'espn' ? undefined : o.provider
+      const g = toPickedAssets(o.give, provider)
+      const k = toPickedAssets(o.get, provider)
       const dropped = [...g.dropped, ...k.dropped]
       onLoad(
         g.picked,
@@ -692,6 +698,7 @@ export function TradeInbox(props: {
                 )}
               </div>
             </div>
+            {o.dropNote ? <p className="af-tc-row-sub af-tc-offer-drop">{copy(o.dropNote)}</p> : null}
 
             <div className="af-tc-offer-actions">
               <button type="button" className="af-btn af-btn--ghost" onClick={() => loadOffer(o)}>
@@ -708,7 +715,7 @@ export function TradeInbox(props: {
                   target="_blank"
                   rel="noreferrer noopener"
                 >
-                  {copy('Act on it in Sleeper')}
+                  {copy(o.provider === 'espn' ? 'Act on it in ESPN' : o.provider === 'yahoo' ? 'Act on it in Yahoo' : 'Act on it in Sleeper')}
                 </a>
               ) : null}
             </div>

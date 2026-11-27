@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { LeagueStoryCard, LEAGUE_STORY_CARD_ID } from './LeagueStoryCard'
 import { postWithTokenConfirm } from '@/lib/tokens/clientTokenConfirm'
+import { StoryAiLockNotice, isStoryAiLock, type StoryAiLock } from '@/components/league-story-ai/StoryAiLockNotice'
 import type { LeagueStoryPayload, LeagueStoryType } from '@/lib/league-story-engine/types'
 import type {
   StoryOutput,
@@ -74,6 +75,7 @@ export function LeagueStoryModal({
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [aiLock, setAiLock] = useState<StoryAiLock>(null)
   const [shareUrl, setShareUrl] = useState('')
   const [payload, setPayload] = useState<LeagueStoryPayload | null>(initialPayload ?? null)
   const [story, setStory] = useState<StoryOutput | null>(null)
@@ -145,6 +147,7 @@ export function LeagueStoryModal({
   const generateStory = useCallback(async () => {
     setIsGenerating(true)
     setError(null)
+    setAiLock(null)
     setFactGuardWarnings([])
     setFactGuardErrors([])
     try {
@@ -161,6 +164,11 @@ export function LeagueStoryModal({
       if (declined) return
       const data = (await res.json().catch(() => ({}))) as StoryCreateResponse & { error?: string }
       if (!res.ok) {
+        // The league's commissioner lacks AF Commissioner, or the league used today's stories: the lock card.
+        if (isStoryAiLock(data)) {
+          setAiLock(data)
+          return
+        }
         const gateMessage =
           typeof (data as { message?: unknown }).message === 'string'
             ? ((data as { message?: string }).message ?? '')
@@ -337,6 +345,7 @@ export function LeagueStoryModal({
         </div>
 
         {error && <p data-testid="league-story-error-state" className="my-3 text-sm text-red-400">{error}</p>}
+        <StoryAiLockNotice lock={aiLock} featureName="Chimmy league stories" className="my-3" />
         {factGuardWarnings.length > 0 && (
           <div data-testid="league-story-fact-guard-warnings" className="my-3 rounded-lg border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-100">
             {factGuardWarnings.map((warning, index) => (
