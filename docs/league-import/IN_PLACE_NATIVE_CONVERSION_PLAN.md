@@ -562,6 +562,10 @@ so, because the build follows the answer.
      copy (Q4: `RedraftMatchup` rows plus `LeaguePlayerWeeklyScore` re-keyed to `League.id`, `source='allfantasy'`),
      and per-seat invite links (Q7, which needs new plumbing: `LeagueInvite` has no seat). The admin gate comes off
      with 4b, not before.
-5. The re-import refusal at every import entry point (§6.2).
+5. The re-import refusal at every import entry point (§6.2): `lib/league/nativeConversionLookup.ts`, checked by the
+   import commit (also against the league's provider history, so next season's Sleeper league is refused too), the
+   two legacy re-syncs, and every Sleeper bulk writer (`processImportJob`, the batch route, `sleeper-import-process`,
+   `sleeper-ranking-import`). Routes answer 409 `LEAGUE_NOW_ON_ALLFANTASY` with the league id. Fails open, like the
+   deleted-league check beside it. The renewal follower needs nothing: it only reads `platform: 'sleeper'` rows.
 6. Undo.
 7. Repoint the "Make it native" button. Retire or relabel the copy flow per Q9.

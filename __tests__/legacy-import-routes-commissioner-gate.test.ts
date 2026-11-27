@@ -69,6 +69,7 @@ vi.mock('@/lib/league-import/ImportedLeagueNormalizationPipeline', () => ({
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   persistImportedLeagueFromNormalization: persistMock,
   ImportedLeagueConflictError: class extends Error {},
+  ImportedLeagueConvertedError: class ImportedLeagueConvertedError extends Error {},
 }))
 
 vi.mock('@/lib/prisma', () => ({

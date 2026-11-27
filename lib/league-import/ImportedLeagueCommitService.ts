@@ -13,6 +13,7 @@ import { resolveSeasonPlacement, seasonPlacementTeamIds } from '@/lib/league-imp
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { clearLeagueTombstone, tombstoneKeyFor } from '@/lib/league-delete/leagueTombstones'
+import { convertedLeagueMessage, findConvertedLeague } from '@/lib/league/nativeConversionLookup'
 import { persistProviderTransactionFacts, type ProviderTransactionFactInput } from '@/lib/league-import/persistProviderTransactionFacts'
 import type { ImportWarningRecord } from '@/lib/league-import/types'
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
@@ -31,6 +32,16 @@ import type {
 } from './types'
 
 export class ImportedLeagueConflictError extends Error {}
+
+/**
+ * The provider league was switched to AllFantasy in place (lib/league/nativeConversionLookup.ts). A conflict, so every
+ * route that already answers ImportedLeagueConflictError with a 409 refuses it too; routes that know it name the league.
+ */
+export class ImportedLeagueConvertedError extends ImportedLeagueConflictError {
+  constructor(readonly leagueId: string, leagueName: string) {
+    super(convertedLeagueMessage(leagueName))
+  }
+}
 
 /**
  * Another account already holds this league, and this importer could not be placed in it (the provider
@@ -1048,6 +1059,17 @@ export async function persistImportedLeagueFromNormalization(
     typeof normalized.league.season === 'number' && Number.isFinite(normalized.league.season)
       ? normalized.league.season
       : new Date().getFullYear()
+
+  /*
+   * 🛑 A league already switched to AllFantasy is not imported again beside itself (IN_PLACE_NATIVE_CONVERSION_PLAN.md
+   * step 5). Checked against the league's whole provider chain: a Sleeper renewal is a new id whose previous seasons
+   * include the switched one, and that season now belongs to the AllFantasy league.
+   */
+  const converted = await findConvertedLeague({
+    platform: provider,
+    platformLeagueIds: [platformLeagueId, ...(normalized.previous_seasons ?? []).map((s) => s.source_league_id)],
+  })
+  if (converted) throw new ImportedLeagueConvertedError(converted.leagueId, converted.leagueName)
 
   const exact = await (prisma as any).league.findFirst({
     where: {

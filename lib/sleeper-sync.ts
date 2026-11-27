@@ -9,6 +9,7 @@ import {
   isLeagueTombstoned,
   LeagueDeletedByUserError,
 } from '@/lib/league-delete/leagueTombstones';
+import { ConvertedLeagueError, findConvertedLeague } from '@/lib/league/nativeConversionLookup';
 
 interface SleeperSyncResult {
   success: boolean;
@@ -220,6 +221,9 @@ export async function syncSleeperLeague(
       'This league was removed from your account. Re-import it to bring it back.'
     );
   }
+  // Switched to AllFantasy in place: re-syncing would recreate it as an imported copy (conversion plan, step 5).
+  const converted = await findConvertedLeague({ platform: 'sleeper', platformLeagueIds: [sleeperLeagueId] });
+  if (converted) throw new ConvertedLeagueError(converted);
 
   const [leagueRes, rostersRes, usersRes] = await Promise.all([
     fetch(`https://api.sleeper.app/v1/league/${sleeperLeagueId}`),

@@ -10,6 +10,7 @@ import {
   isLeagueTombstoned,
   LeagueDeletedByUserError,
 } from '@/lib/league-delete/leagueTombstones';
+import { ConvertedLeagueError, findConvertedLeague } from '@/lib/league/nativeConversionLookup';
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings';
 import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity';
 import { XMLParser } from 'fast-xml-parser';
@@ -537,6 +538,9 @@ export async function syncLeague(
       'This league was removed from your account. Re-import it to bring it back.'
     );
   }
+  // Switched to AllFantasy in place: re-syncing would recreate it as an imported copy (conversion plan, step 5).
+  const converted = await findConvertedLeague({ platform, platformLeagueIds: [platformLeagueId] });
+  if (converted) throw new ConvertedLeagueError(converted);
 
   const leaguePayload = await fetchLeaguePayload(userId, platform, platformLeagueId);
   const season = leaguePayload.season;

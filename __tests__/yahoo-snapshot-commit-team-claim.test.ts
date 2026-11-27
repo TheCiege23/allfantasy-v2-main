@@ -38,6 +38,7 @@ vi.mock('@/lib/league-import/importPersistenceService', () => ({
 }))
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   ImportedLeagueConflictError: class ImportedLeagueConflictError extends Error {},
+  ImportedLeagueConvertedError: class ImportedLeagueConvertedError extends Error {},
   ImportedLeagueTombstonedError: class ImportedLeagueTombstonedError extends Error {},
   ImportedLeagueAlreadyHereError: class ImportedLeagueAlreadyHereError extends Error {},
 }))

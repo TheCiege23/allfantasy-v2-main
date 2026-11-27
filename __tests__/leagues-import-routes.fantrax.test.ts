@@ -45,6 +45,8 @@ vi.mock('@/lib/league-import/ImportedLeaguePreviewBuilder', () => ({
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   ImportedLeagueConflictError: ImportedLeagueConflictErrorMock,
   ImportedLeagueAlreadyHereError: class ImportedLeagueAlreadyHereErrorMock extends Error {},
+  // The route names a switched-to-AllFantasy league (conversion plan, step 5); the mock must export it too.
+  ImportedLeagueConvertedError: class ImportedLeagueConvertedErrorMock extends Error {},
 }))
 
 vi.mock('@/lib/league-import/importPersistenceService', () => ({

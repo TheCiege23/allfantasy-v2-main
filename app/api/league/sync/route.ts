@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { syncLeague, getDecryptedAuth } from '@/lib/league-sync-core';
+import { ConvertedLeagueError } from '@/lib/league/nativeConversionLookup';
 import { getResendClient } from '@/lib/resend-client';
 import { OUTSIDER_RESYNC_ERROR, resolveLeagueCopyTarget } from '@/lib/league-import/existingLeagueCopy';
 
@@ -114,6 +115,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error: any) {
+    if (error instanceof ConvertedLeagueError) {
+      // Switched to AllFantasy in place: a refusal, not a failure — nothing was written (conversion plan, step 5).
+      return NextResponse.json({ error: error.message, code: 'LEAGUE_NOW_ON_ALLFANTASY', leagueId: error.converted.leagueId }, { status: 409 });
+    }
     console.error('[League Sync]', error);
 
     try {
