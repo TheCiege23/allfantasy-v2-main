@@ -105,8 +105,20 @@ const OFFENSE = new Set(['QB', 'RB', 'HB', 'FB', 'WR', 'TE', 'OL', 'OT', 'OG', '
 const DEFENSE = new Set(['DL', 'DE', 'DT', 'NT', 'EDGE', 'LB', 'ILB', 'OLB', 'MLB', 'DB', 'CB', 'S', 'SS', 'FS', 'SAF'])
 const SPECIAL = new Set(['K', 'PK', 'P', 'LS'])
 
+/**
+ * "Mitch" for "Mitchell", "Matt" for "Matthew": one given name a prefix (3+ letters) of the other.
+ * Pure on already-normalized given names. Measured 2026-11-19: Mitch Marner and Matt Coronato were
+ * unlinked for exactly this (`lib/player-identity/proFantraxIdentityPlan.ts`, which reads it from here).
+ * A KEY relation, not an identity: callers still bind on surname plus team/role, or use it only to hide.
+ * Not a nickname table — "Bob"/"Robert" and "Bub"/"Carlton" are not prefixes and do not match.
+ */
+export function givenNameNicknameOf(a: string, b: string): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a]
+  return short.length >= 3 && short !== long && long.startsWith(short)
+}
+
 /** Offense / defense / special teams, or null when the label is unknown (no claim either way). */
-function sideOfBall(position: string | null | undefined): 'O' | 'D' | 'ST' | null {
+export function sideOfBall(position: string | null | undefined): 'O' | 'D' | 'ST' | null {
   const p = normalizeToken(position)
   if (!p) return null
   if (OFFENSE.has(p)) return 'O'
