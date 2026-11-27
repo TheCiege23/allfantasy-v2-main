@@ -492,6 +492,10 @@
   font-size: 13px;
   color: var(--text2);
 }
+/* A recent win's face sits before its name; the price stays pinned right. */
+.af-dr-won .af-dr-row > [data-testid$='-root'] {
+  flex: none;
+}
 
 .af-dr-row-name {
   min-width: 0;

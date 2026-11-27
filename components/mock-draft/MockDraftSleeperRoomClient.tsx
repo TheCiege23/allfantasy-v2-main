@@ -1513,6 +1513,9 @@ export default function MockDraftSleeperRoomClient({
       timerRemainingSeconds: deadline != null && !paused ? remainingMockSeconds(deadline, auctionNow) : null,
       timerStatus: paused ? 'paused' : deadline != null ? 'running' : 'none',
       bidClockSeconds: lot ? Math.round(mockAuctionTiming(draftState.settings.speed).bidWindowMs / 1000) : null,
+      // The player on the block's photo and crest, from the mock's own pool (sport-aware `mockPlayerAssetUrls`).
+      nominationMedia: lotPlayer ? { headshotUrl: lotPlayer.headshotUrl ?? null, teamLogoUrl: lotPlayer.teamLogoUrl ?? null } : null,
+      sport: draftState.settings.sport,
       rosterSize: draftState.settings.rounds,
       picks,
       minimumBid: auction.minBid,

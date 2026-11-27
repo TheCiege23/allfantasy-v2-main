@@ -99,8 +99,12 @@ describe('trades-panel trade block, Sleeper league', () => {
     expect(status).toBe(200)
     expect(readTradeBlock).toHaveBeenCalledWith('l-1')
     expect(body.tradeBlock).toEqual([
-      { id: '1:10213', playerId: '10213', name: 'Tre Tucker', position: 'WR', team: 'LV', ownerName: 'Ice Kings' },
-      { id: '7:10229', playerId: '10229', name: 'Rashee Rice', position: 'FLEX', team: null, ownerName: 'Jordan' },
+      // Each row carries the face and crest the block draws (2026-11-26): the NFL headshot by Sleeper id,
+      // the club's crest by its code, and no crest when the listing names no club.
+      { id: '1:10213', playerId: '10213', name: 'Tre Tucker', position: 'WR', team: 'LV', ownerName: 'Ice Kings',
+        headshotUrl: 'https://sleepercdn.com/content/nfl/players/10213.jpg', teamLogoUrl: 'https://a.espncdn.com/i/teamlogos/nfl/500/lv.png' },
+      { id: '7:10229', playerId: '10229', name: 'Rashee Rice', position: 'FLEX', team: null, ownerName: 'Jordan',
+        headshotUrl: 'https://sleepercdn.com/content/nfl/players/10229.jpg', teamLogoUrl: null },
     ])
     expect(body.tradeBlockNote).toBe(tradeBlockSupport('sleeper').note)
     expect(body.tradeBlockReadable).toBe(true)

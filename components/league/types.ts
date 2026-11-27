@@ -294,6 +294,10 @@ export type LeagueTradeBlockPanelItem = {
   position: string
   team: string | null
   ownerName: string
+  /** The player's photo: the Sleeper CDN for an NFL league only (elsewhere the id is not a Sleeper NFL id). */
+  headshotUrl?: string | null
+  /** His club's crest for the league's sport, or null for a club the registry and stored logos do not know. */
+  teamLogoUrl?: string | null
 }
 
 export type LeagueTradesData = {

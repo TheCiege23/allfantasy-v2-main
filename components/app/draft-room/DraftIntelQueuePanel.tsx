@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import type { DraftIntelQueueEntry } from '@/lib/draft-intelligence'
 import { DraftRoomAccordion } from '@/components/app/draft-room/DraftRoomAccordion'
+import { DraftPlayerFace } from './DraftPlayerFace'
 
 interface DraftIntelQueuePanelProps {
   loading: boolean
@@ -15,6 +16,8 @@ interface DraftIntelQueuePanelProps {
   presentationVariant?: 'default' | 'redraft_snake'
   /** One-tap queue add when the intel row resolves to the live pool */
   onAddIntelSuggestion?: (entry: DraftIntelQueueEntry) => void
+  /** The draft's sport, for each suggestion's crest when the pool row has none (registry crest, else the abbreviation). */
+  sport?: string | null
 }
 
 function availabilityColor(probability: number) {
@@ -33,6 +36,7 @@ export function DraftIntelQueuePanel({
   onDraftTopChoice,
   presentationVariant = 'default',
   onAddIntelSuggestion,
+  sport,
 }: DraftIntelQueuePanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const topAvailable = queue.find((entry) => !entry.isTaken) ?? null
@@ -70,6 +74,7 @@ export function DraftIntelQueuePanel({
                     <span className="rounded-md bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-200">
                       #{entry.rank}
                     </span>
+                    <DraftPlayerFace name={entry.playerName} headshotUrl={entry.headshotUrl} teamLogoUrl={entry.teamLogoUrl} team={entry.team} position={entry.position} sport={sport} size={24} testIdBase="intel-queue-face" />
                     <span
                       className={`truncate text-sm font-semibold ${entry.isTaken ? 'line-through opacity-50' : 'text-white'}`}
                     >

@@ -3142,9 +3142,11 @@ export function DraftRoomPageClient({
     () =>
       (draftIntel?.queue ?? []).map((entry) => ({
         ...entry,
+        // The pool's photo and crest for the face beside each suggestion (by id, then name + position).
+        ...(auctionNominationMedia(entry, players) ?? {}),
         isTaken: draftedNames.has(normalizeDraftedPlayerName(entry.playerName)),
       })),
-    [draftIntel?.queue, draftedNames]
+    [draftIntel?.queue, draftedNames, players]
   )
   const slotOrder = session?.slotOrder ?? []
   const aiManagedRosterIds = useMemo(() => {
@@ -3279,6 +3281,8 @@ export function DraftRoomPageClient({
         position: p.position,
         overall: p.overall,
         rosterId: p.rosterId,
+        team: p.team ?? null,
+        headshotUrl: p.playerImageUrl ?? null,
         // Commit S — flow byeWeek through so the war room can detect
         // bye-week clusters in the focus team's drafted starters.
         byeWeek: (p as { byeWeek?: number | null }).byeWeek ?? null,
@@ -4501,6 +4505,7 @@ export function DraftRoomPageClient({
           leagueId,
           queue: queue.map((q) => ({ playerName: q.playerName, position: q.position, team: q.team ?? null })),
           nominationMedia: auctionNominationMedia(auctionSnapshot?.state?.currentNomination ?? null, players),
+          sport: typeof effectiveDraftSport === 'string' ? effectiveDraftSport : String(sport),
         }
       : null
   const postDraftViewNode = isDraftCompleted ? (
@@ -4805,6 +4810,7 @@ export function DraftRoomPageClient({
           }
           presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
           onAddIntelSuggestion={presentationVariant === 'redraft_snake' ? handleAddIntelQueueSuggestion : undefined}
+          sport={typeof effectiveDraftSport === 'string' ? effectiveDraftSport : String(sport)}
         />
     </div>
   )
@@ -4882,6 +4888,7 @@ export function DraftRoomPageClient({
       currentUserRosterId={currentUserRosterId ?? null}
       rounds={session.rounds}
       onSessionUpdate={fetchSession}
+      sport={typeof effectiveDraftSport === 'string' ? effectiveDraftSport : String(sport)}
     />
   ) : undefined
 

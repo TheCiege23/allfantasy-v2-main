@@ -5,6 +5,7 @@ import { Shield, Trash2, Plus } from 'lucide-react'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 import { readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
+import { DraftPlayerFace } from './DraftPlayerFace'
 
 type KeeperPanelProps = {
   leagueId: string
@@ -13,6 +14,8 @@ type KeeperPanelProps = {
   currentUserRosterId: string | null
   rounds: number
   onSessionUpdate?: () => void
+  /** The draft's sport, for each keeper's crest (registry crest, else the abbreviation). */
+  sport?: string | null
 }
 
 type KeeperApiState = {
@@ -34,6 +37,7 @@ function KeeperPanel({
   currentUserRosterId,
   rounds,
   onSessionUpdate,
+  sport,
 }: KeeperPanelProps) {
   const { formatInTimezone } = useUserTimezone()
   const [data, setData] = useState<KeeperApiState | null>(null)
@@ -364,9 +368,12 @@ function KeeperPanel({
                     className="flex items-center justify-between gap-2 rounded bg-white/5 py-1.5 px-2"
                     data-testid={`draft-keeper-row-${i}`}
                   >
-                    <span className="truncate text-white">
-                      {s.playerName} · Rd{s.roundCost} · {s.position}
-                      {s.team ? ` · ${s.team}` : ''}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <DraftPlayerFace name={s.playerName} team={s.team} position={s.position} sport={sport} size={24} testIdBase={`draft-keeper-face-${i}`} />
+                      <span className="truncate text-white">
+                        {s.playerName} · Rd{s.roundCost} · {s.position}
+                        {s.team ? ` · ${s.team}` : ''}
+                      </span>
                     </span>
                     {canEdit && (s.rosterId === currentUserRosterId || isCommissioner) && (
                       <button

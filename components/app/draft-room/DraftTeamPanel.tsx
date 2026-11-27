@@ -4,6 +4,7 @@ import { Bot, User, TrendingUp, AlertTriangle } from 'lucide-react'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import type { RedraftStarterHint } from '@/lib/draft-room/redraftPlanningHints'
 import { DraftRosterStrip } from './DraftRosterStrip'
+import { DraftPlayerFace } from './DraftPlayerFace'
 import { computeStarterNeedsForDisplay, detectByeWeekClusters } from '@/lib/draft-room/teamNeeds'
 
 export type DraftTeamPanelProps = {
@@ -23,6 +24,10 @@ export type DraftTeamPanelProps = {
     byeWeek?: number | null
     isDevy?: boolean
     isTaxi?: boolean
+    /** The pick's club and photo, for the face beside each of my picks (initials / abbreviation when absent). */
+    team?: string | null
+    headshotUrl?: string | null
+    teamLogoUrl?: string | null
   }>
   teamCount: number
   rounds: number
@@ -275,7 +280,10 @@ export function DraftTeamPanel({
                   key={`${p.overall}-${p.playerName}`}
                   className="flex items-center justify-between gap-2 rounded border border-white/8 bg-black/20 px-2 py-1 text-[11px]"
                 >
-                  <span className="truncate font-medium text-white/90">{p.playerName}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <DraftPlayerFace name={p.playerName} headshotUrl={p.headshotUrl} teamLogoUrl={p.teamLogoUrl} team={p.team} position={p.position} sport={sport} size={24} testIdBase="my-pick-face" />
+                    <span className="truncate font-medium text-white/90">{p.playerName}</span>
+                  </span>
                   <span className="shrink-0 text-white/45">
                     {p.position} · #{p.overall}
                   </span>
