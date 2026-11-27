@@ -1,0 +1,50 @@
+# The in-place imported -> native switch (lib/league/convertImportedLeagueInPlace.ts) against a real, disposable
+# PostgreSQL. Modelled on guillotine-chop-week-db.yml: a service container, `db push` of this commit's schema, then the
+# gated spec. Never production: the spec refuses any DATABASE_URL that is not 127.0.0.1/nativeconv.
+name: Native conversion integration
+on:
+  pull_request:
+    paths:
+      - 'lib/league/convertImportedLeagueInPlace.ts'
+      - 'lib/league/nativeReadiness.ts'
+      - 'lib/league-creation/canonical/importedIdentityPlan.ts'
+      - 'prisma/schema.prisma'
+      - '__tests__/league/convert-in-place-db.test.ts'
+      - '.github/workflows/native-conversion-db.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-conversion-db-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration:
+    name: In-place native switch real database
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: nativeconv
+          POSTGRES_PASSWORD: nativeconv-test-only
+          POSTGRES_DB: nativeconv
+        ports: ['55492:5432']
+        options: >-
+          --health-cmd "pg_isready -U nativeconv -d nativeconv"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://nativeconv:nativeconv-test-only@127.0.0.1:55492/nativeconv
+      DIRECT_URL: postgresql://nativeconv:nativeconv-test-only@127.0.0.1:55492/nativeconv
+      RUN_NATIVE_CONVERSION_DB: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Create isolated test schema
+        run: node scripts/prisma-cli-guard.cjs db push --skip-generate
+      - name: Switch a seeded imported league in place, and a refusal that writes nothing
+        run: npx vitest run __tests__/league/convert-in-place-db.test.ts

@@ -550,7 +550,14 @@ so, because the build follows the answer.
 3. Migration for `LeagueNativeConversion` (owner applies). The model in `prisma/schema.prisma`
    supersedes the §6.1 sketch: it adds `status`, `snapshotVersion`, `undoClosedAt` and
    `undoneByUserId` for the undo window decided in Q10.
-4. The in-place applier and DB integration suite.
+4. The in-place applier, split in two:
+   - **4a** — `lib/league/convertImportedLeagueInPlace.ts` and `POST /api/leagues/[leagueId]/convert-to-native`:
+     the one-transaction switch (lock, re-check, snapshot, two-phase id rewrites, flip last), admin-gated as a
+     supervised pilot, with a real-Postgres suite in `.github/workflows/native-conversion-db.yml`.
+   - **4b** — native settings and scoring scaffolding (§7 step 3.10, AF edits win per Q8), the past-weekly-score
+     copy (Q4: `RedraftMatchup` rows plus `LeaguePlayerWeeklyScore` re-keyed to `League.id`, `source='allfantasy'`),
+     and per-seat invite links (Q7, which needs new plumbing: `LeagueInvite` has no seat). The admin gate comes off
+     with 4b, not before.
 5. The re-import refusal at every import entry point (§6.2).
 6. Undo.
 7. Repoint the "Make it native" button. Retire or relabel the copy flow per Q9.
