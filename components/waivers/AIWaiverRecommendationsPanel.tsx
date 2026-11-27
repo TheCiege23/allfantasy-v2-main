@@ -9,6 +9,7 @@ import { adviceRecordMessages } from '@/lib/core-app/messages/adviceRecord'
 import { pickupRecord } from '@/lib/chimmy-outcomes/engineRecord'
 import { useAdviceRecord } from '@/components/core-app/useAdviceRecord'
 import { EvidenceLine } from '@/components/core-app/primitives'
+import { availabilityUnverifiedSentence, unmatchedRosteredNote } from '@/lib/core-app/foreignIdSpaceCopy'
 
 const recommendationSchema = z.object({
   addPlayerId: z.string().min(1), addPlayerName: z.string().min(1),
@@ -38,6 +39,8 @@ type RecommendResponse = {
   recommendations?: Recommendation[]
   generatedAt?: string
   leagueContext?: { sport?: string | null }
+  /** A pasted Yahoo league only: whether who-is-available could be verified, and what could not be seen. */
+  availability?: { verified: boolean; unmatchedRostered: number } | null
 }
 
 type LockedResponse = {
@@ -129,6 +132,7 @@ function LeagueWaiverRecommendationsPanel({
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [sport, setSport] = useState('')
+  const [availability, setAvailability] = useState<RecommendResponse['availability']>(null)
   const [remindersEnabled, setRemindersEnabled] = useState(false)
   const mounted = useRef(true)
   const busy = useRef(false)
@@ -158,6 +162,7 @@ function LeagueWaiverRecommendationsPanel({
     setLoading(true)
     setError('')
     setLocked(null)
+    setAvailability(null)
     try {
       const response = await fetch('/api/ai/waivers/recommend', {
         method: 'POST',
@@ -189,6 +194,9 @@ function LeagueWaiverRecommendationsPanel({
         return
       }
       setRecommendations(payload.recommendations)
+      setAvailability(
+        payload.availability && typeof payload.availability.unmatchedRostered === 'number' ? payload.availability : null,
+      )
       setGeneratedAt(payload.generatedAt ?? null)
       setSport(typeof payload.leagueContext?.sport === 'string' ? payload.leagueContext.sport : '')
     } catch {
@@ -244,12 +252,27 @@ function LeagueWaiverRecommendationsPanel({
         </p>
       )}
 
+      {/*
+        A pasted Yahoo league below the coverage bar: one plain sentence, never a list of false free
+        agents. Above it, the list below carries the count of players it could not see.
+      */}
+      {availability && !availability.verified ? (
+        <p className={cx.sub} data-testid="ai-waiver-recommendations-unverified">
+          {availabilityUnverifiedSentence(availability.unmatchedRostered)}
+        </p>
+      ) : null}
+
       {hasResults && (
         <div className={cx.results} data-testid="ai-waiver-recommendations-results">
           <div className={cx.meta}>
             <span>{summary}</span>
             {generatedAt ? <span>Updated: {new Date(generatedAt).toLocaleString()}</span> : null}
           </div>
+          {availability?.verified && availability.unmatchedRostered > 0 ? (
+            <p className={cx.sub} data-testid="ai-waiver-recommendations-unmatched">
+              {unmatchedRosteredNote(availability.unmatchedRostered)}
+            </p>
+          ) : null}
 
           {record && surface === 'core' ? (
             /* /core: the shared measured line (primitives/EvidenceLine.tsx), as under a trade grade and a bench swap. */

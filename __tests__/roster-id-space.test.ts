@@ -223,7 +223,11 @@ describe('a native league of another sport', () => {
 
   it('leaves a SLEEPER league of another sport alone — its ids ARE Sleeper ids, read by sport downstream', () => {
     expect(rosterIdSpaceOf('sleeper', 'NBA')).toBe('sleeper')
-    expect(rosterIdSpaceOf('espn', 'NHL')).toBe('espn')
+    // This pinned ESPN NHL as 'espn' — i.e. put through the NFL ESPN → Sleeper crosswalk, where its
+    // ids come out as NFL players. A known non-NFL ESPN league is foreign now; see
+    // __tests__/core-app/espn-non-nfl-id-space.test.ts. NFL and an unknown sport keep 'espn'.
+    expect(rosterIdSpaceOf('espn', 'NHL')).toBe('other')
+    expect(rosterIdSpaceOf('espn', 'NFL')).toBe('espn')
     expect(rosterIdSpaceOf('fleaflicker', 'NFL')).toBe('other')
     // No league row at all: no platform to call native.
     expect(rosterIdSpaceOf('', 'NHL')).toBe('sleeper')

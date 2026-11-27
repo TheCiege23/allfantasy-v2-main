@@ -96,3 +96,47 @@ describe("who's available, on the league's chart", () => {
     expect(h.valueFindMany).toHaveBeenCalled()
   })
 })
+
+/*
+ * A PASTED Yahoo league (lib/core-app/declaredAvailability.ts): resolved players stored `sleeper:<id>`,
+ * the unmatched as `yahoo-paste:<name>|<pos>|<team>`. Above the 80% coverage bar the chart list stands
+ * with the unmatched player hidden by name and the count said; below it, nobody is named.
+ */
+describe("who's available — a pasted Yahoo league", () => {
+  const yahoo = () => {
+    h.leagueFind.mockResolvedValue({ name: 'Paste League', sport: 'NFL', platform: 'yahoo', isDynasty: false, leagueType: 'redraft', settings: {} })
+    // One more free player, so the chart still answers with Free Agent One hidden.
+    h.chartMany.mockResolvedValue([...CHART, chartRow('505', 'Free Agent Six', 'RB', 2200)])
+  }
+  const declared = (n: number) => Array.from({ length: n }, (_, i) => `sleeper:${800 + i}`)
+
+  it('above the bar: lists the chart, minus the declared players, and counts the unmatched one', async () => {
+    yahoo()
+    h.rosterFindMany.mockResolvedValue([
+      { playerData: { players: ['sleeper:9488', 'sleeper:12527', ...declared(7), 'yahoo-paste:free agent one|WR|KC'] } },
+    ])
+    const out = await buildAvailablePlayersContext('L1', 'U1')
+    expect(out).toContain("highest value on this league's chart")
+    expect(out).toContain('Free Agent Two (RB) — value 3900')
+    expect(out).not.toContain('Jaxon Smith-Njigba')
+    expect(out).toContain("1 player on rosters in this league couldn't be matched to ours")
+  })
+
+  it('🛑 the unmatched pasted player is never listed as available', async () => {
+    yahoo()
+    h.rosterFindMany.mockResolvedValue([
+      { playerData: { players: ['sleeper:9488', 'sleeper:12527', ...declared(7), 'yahoo-paste:free agent one|WR|KC'] } },
+    ])
+    expect(await buildAvailablePlayersContext('L1', 'U1')).not.toContain('Free Agent One')
+  })
+
+  it('below the bar: names nobody, and says how many could not be matched', async () => {
+    yahoo()
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['sleeper:9488', 'yahoo-paste:free agent one|WR|KC', 'yahoo-paste:x|RB|KC'] } }])
+    const out = await buildAvailablePlayersContext('L1', 'U1')
+    expect(out).toContain(`2 players on the rosters in "Paste League" couldn't be matched to ours`)
+    expect(out).toContain('do NOT name anyone as available')
+    expect(out).not.toContain('Free Agent')
+    expect(h.chartMany).not.toHaveBeenCalled()
+  })
+})

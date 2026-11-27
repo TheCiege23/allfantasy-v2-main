@@ -62,7 +62,8 @@ import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
 import { resolveViewerLeagueRoster } from './viewerLeagueRoster'
 import { sleeperReadablePlayerDataOf, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
-import { FOREIGN_IDS_UNREADABLE_CLAUSE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { FOREIGN_IDS_UNREADABLE_CLAUSE, leagueUnverifiedClause } from '@/lib/core-app/foreignIdSpaceCopy'
+import { loadDeclaredAvailability } from '@/lib/core-app/declaredAvailability'
 import {
   byeCollisionDelta,
   computeRosterNeed,
@@ -267,6 +268,17 @@ export async function buildTradeContextNotes(args: {
    * and the reason travels as `contextGap`.
    * The same league's opponent roster (`buildLeverageNotes`) is never reached past this return.
    */
+  /*
+   * ⚠ A PASTED YAHOO LEAGUE is read through its declared Sleeper ids — the translation below keeps exactly
+   * those — but only above the coverage bar (declaredAvailability.ts). Below it a roster reads short and
+   * the notes would describe a team that is not the real one, so the gap is named with the count.
+   */
+  if (rosterIdSpaceOf(league.platform, league.sport) === 'other') {
+    const declared = await loadDeclaredAvailability({ id: league.id, platform: league.platform }).catch(() => null)
+    if (declared && !declared.verified) {
+      return { ...EMPTY, contextGap: `your roster in this league — ${leagueUnverifiedClause(declared.unmatched)}` }
+    }
+  }
   // An ESPN roster is translated into Sleeper ids (raw, ESPN 12483 Stafford is Sleeper's Jack Bech).
   const pd = ((await sleeperReadablePlayerDataOf(league.platform, roster.playerData, league.sport)) ?? {}) as Record<string, unknown>
   const rosterIds = Array.isArray(pd.players)

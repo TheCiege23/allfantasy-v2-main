@@ -426,13 +426,13 @@ async function resolvePlayerIndex(
    * are somebody else's Sleeper id. `leagueIdentityColumns` owns the column rule.
    */
   const identityLookups = leagueIdentityColumns(uniqueIds, sport, platform)
-  const espn = rosterIdSpaceOf(platform) === 'espn'
+  const espn = rosterIdSpaceOf(platform, sport) === 'espn'
   /** League id → the Sleeper id its Sleeper-keyed reads use. Empty for a foreign league. */
   const sleeperIdOf = new Map<string, string>(
     foreign
       ? []
       : espn
-        ? [...(await loadEspnToSleeperMap(uniqueIds))]
+        ? [...(await loadEspnToSleeperMap(uniqueIds, sport))]
         : uniqueIds.map((id) => [id, id] as [string, string])
   )
   const sleeperIds = [...new Set(sleeperIdOf.values())]

@@ -9,6 +9,8 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { ourIdOrSleeperIdWhere, playerRowKeys } from "@/lib/player-identity/externalIdNamespace"
 import { isForeignIdSpace } from "@/lib/core-app/rosterIdSpace"
+import { loadDeclaredAvailability } from "@/lib/core-app/declaredAvailability"
+import { declaredSleeperId } from "@/lib/core-app/declaredSleeperId"
 import { isBestBallLeagueRow } from "@/lib/core-app/leagueBestBall"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
@@ -234,7 +236,19 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
   })
   // A foreign platform's player ids collide with Sleeper's; a stranger's name in an accusation is
   // worse than the bare id, so those are left unresolved (the same rule as nativeLineupScan).
-  const resolvableIds = !isForeignIdSpace(league?.platform)
+  const foreignIds = isForeignIdSpace(league?.platform)
+  /*
+   * ⚠ EXCEPT A PASTED YAHOO LEAGUE above the coverage bar (declaredAvailability.ts): an id that DECLARES
+   * itself a Sleeper id (`sleeper:<id>`) is named as that player. Any other id in it stays the bare id,
+   * exactly as below the bar — an accusation never names a guess.
+   */
+  const declaredNames =
+    foreignIds && league
+      ? (await loadDeclaredAvailability({ id: leagueId, platform: league.platform }).catch(() => null))?.verified === true
+      : false
+  const resolvableIds = !foreignIds || declaredNames
+  /** The id a name is looked up by: a foreign league's declared id unwrapped, anything else of it never. */
+  const lookupId = (id: string): string | null => (foreignIds ? declaredSleeperId(id) : id)
   const sport = String(league?.sport ?? "NFL")
   const playoffWeek = league?.playoffStartWeek ?? 15
   const weeksUntilPlayoffs = Math.max(0, playoffWeek - weekNumber)
@@ -436,14 +450,22 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number, s
       // The bench alternative is a player id on every path now, so it resolves too.
       const nameById = resolvableIds
         ? await resolvePlayerNames(
-            suspicious.flatMap((x) => [x.startedPlayerName, x.benchedBetterOption ?? ""]).filter(Boolean),
+            suspicious
+              .flatMap((x) => [x.startedPlayerName, x.benchedBetterOption ?? ""])
+              .filter(Boolean)
+              .map((id) => lookupId(id) ?? "")
+              .filter(Boolean),
             sport,
           )
         : new Map<string, string>()
+      const nameOf = (id: string) => {
+        const key = lookupId(id)
+        return key ? nameById.get(key) : undefined
+      }
       for (const row of suspicious) {
-        const resolved = nameById.get(row.startedPlayerName)
+        const resolved = nameOf(row.startedPlayerName)
         if (resolved) row.startedPlayerName = resolved
-        const bench = row.benchedBetterOption ? nameById.get(row.benchedBetterOption) : undefined
+        const bench = row.benchedBetterOption ? nameOf(row.benchedBetterOption) : undefined
         if (bench) row.benchedBetterOption = bench
       }
 

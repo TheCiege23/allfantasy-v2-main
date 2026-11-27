@@ -11,7 +11,13 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const state = { platform: 'fleaflicker', players: ['6038'], sleeperIdsAsked: [] as string[][] }
+const state = {
+  platform: 'fleaflicker',
+  players: ['6038'],
+  sleeperIdsAsked: [] as string[][],
+  /** Every roster in the league, for a pasted Yahoo league's coverage read. */
+  leagueRosters: [] as Array<{ playerData: unknown }>,
+}
 
 vi.mock('@/lib/prisma', () => {
   const emptyDelegate = new Proxy(
@@ -47,7 +53,7 @@ vi.mock('@/lib/prisma', () => {
     },
     roster: {
       findFirst: async () => ({ id: 'r1', playerData: { players: state.players, starters: state.players } }),
-      findMany: async () => [],
+      findMany: async () => state.leagueRosters,
     },
     sportsPlayer: {
       findMany: async (arg: { where?: { sleeperId?: { in?: string[] } } }) => {
@@ -88,6 +94,7 @@ beforeEach(() => {
   state.platform = 'fleaflicker'
   state.players = ['6038']
   state.sleeperIdsAsked = []
+  state.leagueRosters = []
 })
 
 describe('buildTradeContextNotes — a foreign league’s roster ids', () => {
@@ -125,5 +132,41 @@ describe('buildTradeContextNotes — a foreign league’s roster ids', () => {
     const buildTradeContextNotes = await load()
     await buildTradeContextNotes(ARGS)
     expect(askedFor6038()).toBe(true)
+  })
+})
+
+/*
+ * A PASTED Yahoo league (lib/core-app/declaredAvailability.ts): resolved players stored `sleeper:<id>`,
+ * the unmatched as `yahoo-paste:`. Above the 80% coverage bar the notes read the declared ids; below
+ * it the roster would read short, so the gap is named with the count.
+ */
+describe('buildTradeContextNotes — a pasted Yahoo league', () => {
+  const declared = (n: number) => Array.from({ length: n }, (_, i) => `sleeper:${100 + i}`)
+  const mine = ['sleeper:6038', 'yahoo-paste:some guy|WR|KC']
+
+  it('above the bar: the declared player IS looked up, and no gap is named', async () => {
+    state.platform = 'yahoo'
+    state.players = mine
+    state.leagueRosters = [{ playerData: { players: [...mine, ...declared(8)] } }]
+    const out = await (await load())(ARGS)
+    expect(askedFor6038()).toBe(true)
+    expect(out.contextGap ?? null).toBeNull()
+  })
+
+  it('🛑 the unmatched pasted player is never looked up as anyone', async () => {
+    state.platform = 'yahoo'
+    state.players = mine
+    state.leagueRosters = [{ playerData: { players: [...mine, ...declared(8)] } }]
+    await (await load())(ARGS)
+    expect(state.sleeperIdsAsked.flat().some((id) => id.includes('yahoo-paste') || id.includes('some guy'))).toBe(false)
+  })
+
+  it('below the bar: nothing is read, and the gap names how many could not be matched', async () => {
+    state.platform = 'yahoo'
+    state.players = mine
+    state.leagueRosters = [{ playerData: { players: [...mine, 'yahoo-paste:a|RB|KC', 'yahoo-paste:b|QB|KC'] } }]
+    const out = await (await load())(ARGS)
+    expect(askedFor6038()).toBe(false)
+    expect(out.contextGap).toBe("your roster in this league — 3 players on its rosters couldn't be matched to ours")
   })
 })

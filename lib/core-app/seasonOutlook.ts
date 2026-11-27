@@ -1152,6 +1152,8 @@ export async function getSeasonOutlook(
               injuryFeedNote: loaded.injuryFeedNote,
             })
           : { drivers: [], moves: [], durability: null, branchIterations: BRANCH_ITERATIONS, notes: [] }
+        // A pasted Yahoo league: the free agents shown leave out players it could not match — say how many.
+        if (loaded.unmatchedNote) insights.notes = [...insights.notes, loaded.unmatchedNote]
         league.focus = { scenario: loaded.model, ...insights }
       }
     }

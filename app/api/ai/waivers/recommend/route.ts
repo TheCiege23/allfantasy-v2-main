@@ -5,6 +5,7 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { getUserAfProStatus, AfProRequiredError } from "@/lib/entitlements/afAccess"
 import { rosterIdSpaceOf } from "@/lib/core-app/rosterIdSpace"
+import { loadDeclaredAvailability } from "@/lib/core-app/declaredAvailability"
 import { runWaiverClaimDecision } from "@/lib/decision-os/waiver"
 import { worldInputFromFacts } from "@/lib/decision-os/waiver/loader"
 import { createWaiverOsLoaders } from "@/lib/decision-os/waiver-os"
@@ -65,7 +66,11 @@ export async function POST(request: Request) {
 
   const generatedAt = new Date().toISOString()
   /** An empty answer with its reason — `insufficientData` tells the panel it is a fault, not a picked-over wire. */
-  const empty = (dataGaps: string[], context?: { waiverType: string; faabBudget: number | null; faabRemaining: number | null }) =>
+  const empty = (
+    dataGaps: string[],
+    context?: { waiverType: string; faabBudget: number | null; faabRemaining: number | null },
+    availability?: { verified: boolean; unmatchedRostered: number } | null,
+  ) =>
     NextResponse.json({
       ok: true,
       insufficientData: true,
@@ -74,6 +79,7 @@ export async function POST(request: Request) {
       leagueContext: { leagueId, ...(context ?? { waiverType: "unknown", faabBudget: null, faabRemaining: null }) },
       generatedAt,
       meta: { dataGaps, mode },
+      ...(availability ? { availability } : {}),
     })
 
   try {
@@ -89,7 +95,18 @@ export async function POST(request: Request) {
     const league = await prisma.league
       .findUnique({ where: { id: leagueId }, select: { platform: true } })
       .catch(() => null)
-    if (rosterIdSpaceOf(league?.platform) !== "sleeper") {
+    /*
+     * 🛑 EXCEPT A PASTED YAHOO LEAGUE, AND ONLY ABOVE THE COVERAGE BAR (declaredAvailability.ts). Its
+     * matched players carry declared Sleeper ids the pool subtracts; its unmatched ones are hidden by
+     * name and counted. Below the bar nobody can be called available, and the panel says so with the
+     * count. A Yahoo league with no declared id at all keeps the refusal above.
+     */
+    const declared = league ? await loadDeclaredAvailability({ id: leagueId, platform: league.platform }).catch(() => null) : null
+    const availability = declared ? { verified: declared.verified, unmatchedRostered: declared.unmatched } : null
+    if (declared && !declared.verified) {
+      return empty(["availability_unverified"], undefined, availability)
+    }
+    if (!declared && rosterIdSpaceOf(league?.platform) !== "sleeper") {
       return empty(["roster_ids_not_readable_for_platform"])
     }
 
@@ -129,7 +146,7 @@ export async function POST(request: Request) {
       loadWaiverCalibrationForLeague(leagueId),
     ])
     if (pool.availablePlayers.length === 0) {
-      return empty([pool.leagueRosterCount === 0 ? "league_rosters_not_loaded" : "free_agent_pool_empty"], context)
+      return empty([pool.leagueRosterCount === 0 ? "league_rosters_not_loaded" : "free_agent_pool_empty"], context, availability)
     }
 
     const result = await runWaiverClaimDecision(
@@ -178,6 +195,8 @@ export async function POST(request: Request) {
       leagueContext: { leagueId, sport: facts.sport, ...context },
       generatedAt,
       meta: { dataGaps, mode },
+      // A pasted Yahoo league: how many rostered players the list could not see.
+      ...(availability ? { availability } : {}),
     })
   } catch (error) {
     console.error("[api/ai/waivers/recommend]", error)

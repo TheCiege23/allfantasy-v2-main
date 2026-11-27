@@ -3,7 +3,7 @@ import 'server-only'
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { projectionSportScope } from '@/lib/core-app/playerProjections'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { espnSportOf, isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { extractPlayerNameCandidates } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import {
   defaultLeagueWeekPricingDeps,
@@ -215,7 +215,7 @@ async function loadLeague(
    * silently never fires. `provenance.provider` is the league's platform; it decides only this
    * refusal, never a number.
    */
-  if (isForeignIdSpace(world.provenance?.provider)) return 'roster_ids_unreadable'
+  if (isForeignIdSpace(world.provenance?.provider, espnSportOf(world.provenance?.provider, world.league.sport))) return 'roster_ids_unreadable'
   const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(world)).catch(() => new Map() as PlayerNames)
   return { world, roster, byName: indexRosterNames(world, names), names }
 }

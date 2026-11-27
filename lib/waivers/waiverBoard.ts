@@ -2,7 +2,8 @@ import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { sleeperReadableRosters, sleeperReadablePlayerDataOf, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
-import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { FOREIGN_IDS_UNREADABLE, availabilityUnverifiedSentence } from '@/lib/core-app/foreignIdSpaceCopy'
+import { declaredAvailability } from '@/lib/core-app/declaredAvailability'
 import { canFillSlot, startingSlots } from '@/lib/core-app/slotEligibility'
 import { loadAfNflWeek } from '@/lib/af-projections/nflLeagueWeek'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
@@ -86,6 +87,11 @@ export type WaiverBoardState =
   | 'no_roster'
   /** A foreign-id league (Fleaflicker, MFL, …): its roster is on file but cannot be read as ours. */
   | 'ids_unreadable'
+  /**
+   * A pasted Yahoo league below the coverage bar (declaredAvailability.ts): too many rostered players
+   * could not be matched, so nobody can be called available. `unmatchedRostered` says how many.
+   */
+  | 'availability_unverified'
   | 'no_scoring_settings'
   | 'no_slots'
   | 'no_projections'
@@ -123,6 +129,12 @@ export interface WaiverBoard {
    * for the whole board; absent for every other league, and for a candidate with nothing agreed on file.
    */
   dynastyMarkers?: Record<string, DynastyRosterMarker>
+  /**
+   * A pasted Yahoo league only: rostered players no Sleeper-id read can see. On an `ok` board the list
+   * stands (each one's own wire row hidden by name) and the screen says how many; on
+   * `availability_unverified` it is why there is no list. Absent for every other league.
+   */
+  unmatchedRostered?: number
 }
 
 const EMPTY = (state: WaiverBoardState, notes: string[] = []): WaiverBoard => ({
@@ -222,6 +234,19 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
 
   const mine = await findMyRoster(args.prisma, league.id, args.userId)
   if (!mine.found) return EMPTY(mine.reason === 'no_team_claimed' ? 'no_team_claimed' : 'no_roster')
+
+  const rawRosters = await args.prisma.roster
+    .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
+    .catch(() => [] as Array<{ playerData: unknown }>)
+  /*
+   * 🛑 A PASTED YAHOO LEAGUE: "NOT ON ANY ROSTER" IS NOT "AVAILABLE" UNTIL ITS COVERAGE SAYS SO. Its
+   * unmatched players are dropped by the read below, so each would be offered as a free agent. Below
+   * the bar there is no board; above it, each one's own wire row is hidden and the count travels.
+   */
+  const declared = declaredAvailability(league.platform, [...rawRosters.map((r) => r.playerData), mine.playerData])
+  if (declared && !declared.verified) {
+    return { ...EMPTY('availability_unverified', [availabilityUnverifiedSentence(declared.unmatched)]), unmatchedRostered: declared.unmatched }
+  }
   /*
    * A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one it prices
    * (and names as "displaced") a stranger, and strikes a real free agent off the board. An ESPN
@@ -239,13 +264,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   }
 
   /* Everyone rostered anywhere in the league is off the board. */
-  const allRosters = await sleeperReadableRosters(
-    await args.prisma.roster
-      .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
-      .catch(() => [] as Array<{ playerData: unknown }>),
-    league.platform,
-    league.sport,
-  )
+  const allRosters = await sleeperReadableRosters(rawRosters, league.platform, league.sport)
   const rostered = new Set<string>()
   for (const r of allRosters) for (const id of rosterPlayerIds(r.playerData)) rostered.add(id)
   for (const id of myIds) rostered.add(id)
@@ -339,12 +358,21 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   }
 
   const poolIds = new Set<string>()
+  let hiddenUnmatched = 0
   for (const id of activeIds) {
+    // A pasted Yahoo league's unmatched rostered player is somebody's, not a free agent.
+    if (declared) {
+      const meta = metaOf.get(id)
+      if (declared.hides({ name: meta?.name, position: meta?.position ?? positionOf.get(id), team: meta?.team })) {
+        hiddenUnmatched += 1
+        continue
+      }
+    }
     const pos = positionOf.get(id)
     // `canFillSlot` normalises, so a cache row spelling the position out in full still matches.
     if (pos && slots.some((slot) => canFillSlot(slot, pos))) poolIds.add(id)
   }
-  const ineligible = activeIds.size - poolIds.size
+  const ineligible = activeIds.size - poolIds.size - hiddenUnmatched
   if (poolIds.size === 0) {
     return EMPTY('no_projections', ['No available player can fill a starting slot in this league.'])
   }
@@ -633,6 +661,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     notes,
     ...(needs ? { needs } : {}),
     ...(dynastyMarkers && Object.keys(dynastyMarkers).length > 0 ? { dynastyMarkers } : {}),
+    ...(declared ? { unmatchedRostered: declared.unmatched } : {}),
   }
 }
 
