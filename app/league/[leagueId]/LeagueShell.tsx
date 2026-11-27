@@ -2028,7 +2028,7 @@ export function LeagueShell({
               Embedded views have no workspace navigation, so keep their hosting disclosure.
             */}
             <div className="px-4 pt-3 empty:hidden">
-              {embedMode ? <ShadowLeagueBanner platform={league.platform} /> : null}
+              {embedMode ? <ShadowLeagueBanner platform={league.platform} settings={league.settings} /> : null}
             </div>
 
             {/* Renew League banner - shown to commissioner when season ends */}

@@ -104,7 +104,7 @@ export async function GET(
   // schedule). Without one it cannot score days, and the panel and the tab say so rather than nothing.
   // Only for a league we score ourselves, and never for a tournament (always weekly).
   const dailySchedule =
-    resolveWriteAuthority(league.platform) === 'NATIVE' && bestBallSettings.contestStructure !== 'tournament'
+    resolveWriteAuthority(league) === 'NATIVE' && bestBallSettings.contestStructure !== 'tournament'
       ? await loadDailyBestBallScheduleStatus(
           { sport: String(league.sport), season: native ? native.season : league.season },
           { db: prisma as never },
@@ -117,7 +117,7 @@ export async function GET(
   // one. Either way, say so.
   let draftNotice: string | null = null
   if (
-    resolveWriteAuthority(league.platform) === 'NATIVE' &&
+    resolveWriteAuthority(league) === 'NATIVE' &&
     currentSeasonAwaitsDraft(league.season, native ? native.season : null)
   ) {
     try {
@@ -163,7 +163,7 @@ export async function GET(
    * An imported league: the legacy tables above hold nothing for it, but its weekly team scores are
    * stored (lib/bestball/importedBestBallTab.ts). Any failure falls through to the tab as it was.
    */
-  if (weeksAvailable.length === 0 && resolveWriteAuthority(league.platform) !== 'NATIVE') {
+  if (weeksAvailable.length === 0 && resolveWriteAuthority(league) !== 'NATIVE') {
     try {
       const [teamWeeks, importedTeams] = await Promise.all([
         league.platformLeagueId && league.season != null

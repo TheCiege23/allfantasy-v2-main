@@ -352,7 +352,7 @@ export async function GET(req: NextRequest) {
 
     // Daily-lineup leagues: the week day by day, for the lineup screen's day picker (null otherwise).
     let dailyLineups: DailyLineupView | null = null
-    if (resolveWriteAuthority(league.platform) === 'NATIVE' && roster.redraftRosterId) {
+    if (resolveWriteAuthority(league) === 'NATIVE' && roster.redraftRosterId) {
       const redraftRosterId = roster.redraftRosterId
       // The scoring calendar's week and year, the ones the matchup is scored under.
       dailyLineups = await prisma.redraftRoster
@@ -377,7 +377,7 @@ export async function GET(req: NextRequest) {
     // dynasty-family leagues with a taxi squad only; a load failure leaves the badges off.
     let taxiTenure: TaxiTenureView | null = null
     if (
-      resolveWriteAuthority(league.platform) === 'NATIVE' &&
+      resolveWriteAuthority(league) === 'NATIVE' &&
       isDynastyFamilyLeague(league) &&
       (slotLimits?.taxi ?? 0) > 0 &&
       unifiedRoster.length > 0
@@ -442,7 +442,7 @@ export async function GET(req: NextRequest) {
       },
       // Lets the client label the save control ("Save shadow lineup") before the user commits,
       // rather than only correcting the story in the success toast afterwards.
-      writeAuthority: buildWriteAuthorityEnvelope('lineup', league.platform),
+      writeAuthority: buildWriteAuthorityEnvelope('lineup', league),
     })
   }
 
@@ -627,7 +627,7 @@ export async function GET(req: NextRequest) {
     // of Sleeper's own roster rather than the AF twin, so shadow lineup editing is not offered
     // here. See `docs/league/SHADOW_LEAGUES.md` — closing that gap is follow-up work, not a
     // write-back feature.
-    writeAuthority: buildWriteAuthorityEnvelope('lineup', league.platform),
+    writeAuthority: buildWriteAuthorityEnvelope('lineup', league),
   })
 }
 

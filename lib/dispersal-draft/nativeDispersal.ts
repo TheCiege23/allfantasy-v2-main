@@ -35,8 +35,8 @@ type Db = Prisma.TransactionClient
 
 /** A league AllFantasy runs: its rosters are RedraftRosterPlayer rows, not the lineup JSON. */
 export async function isNativeDispersalLeague(db: Db, leagueId: string): Promise<boolean> {
-  const league = await db.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
-  return Boolean(league) && resolveWriteAuthority(league!.platform) === 'NATIVE'
+  const league = await db.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
+  return league != null && resolveWriteAuthority(league) === 'NATIVE'
 }
 
 /** Each draft roster's team in the league's current season. Rosters with none are absent. */

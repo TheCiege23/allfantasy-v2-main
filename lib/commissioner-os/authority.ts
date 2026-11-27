@@ -73,6 +73,8 @@ export type ActionAuthority = {
 type ResolveActionAuthorityInput = {
   /** Raw `League.platform`. Untrusted text — no DB enum backs it. */
   platform: string | null | undefined
+  /** `League.settings`: an imported league made official on AllFantasy is run here (lib/league/switching). */
+  settings: unknown
   scope: EffectScope
   /**
    * Whether a later import/sync of this league could observe that the effect landed.
@@ -101,7 +103,7 @@ type ResolveActionAuthorityInput = {
  * not prohibition, which is exactly what `lib/league/write-authority.ts` documents.
  */
 export function resolveActionAuthority(input: ResolveActionAuthorityInput): ActionAuthority {
-  const mode = resolveWriteAuthority(input.platform)
+  const mode = resolveWriteAuthority(input)
   const sourceLabel = sourcePlatformLabel(input.platform)
   const preparable = input.preparable !== false
 

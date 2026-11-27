@@ -1084,8 +1084,8 @@ export function TeamTab({
   const isSleeper = league.platform === 'sleeper'
   // Write Authority for this league. SHADOW (any imported league) means a saved lineup lands in
   // AllFantasy's twin and never reaches the source platform — the copy below says exactly that.
-  const lineupWriteCopy = useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
-  const shadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
+  const lineupWriteCopy = useMemo(() => writeAuthorityCopy('lineup', { platform: league.platform, settings: league.settings ?? null }), [league.platform, league.settings])
+  const shadowNotice = useMemo(() => shadowDisclosure({ platform: league.platform, settings: league.settings ?? null }), [league.platform, league.settings])
   const [week, setWeek] = useState(1)
   const [weekMenuOpen, setWeekMenuOpen] = useState(false)
   const [dbRosterMeta, setDbRosterMeta] = useState<{

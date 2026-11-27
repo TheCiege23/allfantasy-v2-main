@@ -149,7 +149,7 @@ export async function startScheduledRedraftDrafts(now: Date = new Date()): Promi
       draftDateUtc: true,
       league: {
         select: {
-          platform: true, sport: true, leagueType: true, isDynasty: true,
+          platform: true, settings: true, sport: true, leagueType: true, isDynasty: true,
           survivorMode: true, guillotineMode: true, leagueVariant: true,
         },
       },
@@ -201,14 +201,14 @@ export async function startScheduledDynastyDrafts(now: Date = new Date()): Promi
     select: {
       leagueId: true,
       draftDateUtc: true,
-      league: { select: { platform: true, sport: true, survivorMode: true, guillotineMode: true, leagueVariant: true } },
+      league: { select: { platform: true, settings: true, sport: true, survivorMode: true, guillotineMode: true, leagueVariant: true } },
     },
     orderBy: { draftDateUtc: 'asc' },
     take: 100,
   })
   const due = rows.filter(
     ({ league }) =>
-      league.survivorMode !== true && league.guillotineMode !== true && league.leagueVariant !== 'guillotine' && resolveWriteAuthority(league.platform) === 'NATIVE',
+      league.survivorMode !== true && league.guillotineMode !== true && league.leagueVariant !== 'guillotine' && resolveWriteAuthority(league) === 'NATIVE',
   )
   const summary: ScheduledRedraftDraftSummary = { scanned: due.length, started: 0, skipped: 0, skips: [], errors: [] }
   for (const { leagueId, draftDateUtc, league } of due) {

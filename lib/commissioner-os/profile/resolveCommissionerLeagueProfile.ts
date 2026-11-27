@@ -42,7 +42,8 @@ export type CommissionerLeagueRow = {
   leagueType?: string | null
   leagueVariant?: string | null
   isDynasty?: boolean | null
-  settings?: Prisma.JsonValue | unknown
+  /** Required: it also says whether an imported league was made official on AllFantasy (lib/league/switching). */
+  settings: Prisma.JsonValue | unknown
   keeperCount?: number | null
   keeperCostSystem?: string | null
   keeperRoundPenalty?: number | null
@@ -267,7 +268,7 @@ export function resolveCommissionerLeagueProfile(
 
     commissionerRole: input.commissionerRole,
     platform: league.platform ?? null,
-    writeAuthority: resolveWriteAuthority(league.platform),
+    writeAuthority: resolveWriteAuthority(league),
     networkMembership: input.networkMembership ?? null,
 
     lifecycleState: league.lifecycleState ?? null,

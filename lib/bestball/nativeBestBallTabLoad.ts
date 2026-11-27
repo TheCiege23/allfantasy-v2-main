@@ -38,7 +38,7 @@ export async function loadNativeBestBallTab(args: {
   /** The signed-in viewer, to mark their own rosters. */
   viewerUserId?: string | null
 }): Promise<{ season: number; body: NativeBestBallTabBody } | null> {
-  if (resolveWriteAuthority(args.platform) !== 'NATIVE') return null
+  if (resolveWriteAuthority(args) !== 'NATIVE') return null
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId: args.leagueId },
     orderBy: [{ season: 'desc' }, { createdAt: 'desc' }],
@@ -74,6 +74,7 @@ export async function loadNativeBestBallTab(args: {
     season: season.season,
     week: selectedWeek,
     platform: args.platform,
+    settings: args.settings,
   })
   const rowsByRoster = new Map<string, typeof weekRows>()
   for (const row of weekRows) {

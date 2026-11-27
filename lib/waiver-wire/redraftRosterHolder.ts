@@ -22,8 +22,8 @@ export async function redraftHolderOtherThan(
   input: { leagueId: string; genericRosterId: string; playerId: string },
 ): Promise<string | null> {
   try {
-    const league = await db.league.findUnique({ where: { id: input.leagueId }, select: { platform: true } })
-    if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return null
+    const league = await db.league.findUnique({ where: { id: input.leagueId }, select: { platform: true, settings: true } })
+    if (!league || resolveWriteAuthority(league) !== 'NATIVE') return null
     const newest = await db.redraftSeason.findFirst({
       where: { leagueId: input.leagueId },
       orderBy: { createdAt: 'desc' },

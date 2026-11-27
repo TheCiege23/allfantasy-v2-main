@@ -274,7 +274,7 @@ async function formatRefusal(season: SeasonRow, sport: string, week: number, dep
   const league = season.league
   if (!league) return 'league_not_found'
   if (sport === 'NFL') return 'nfl_preview_needs_provider_pull'
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return 'not_native_league'
+  if (resolveWriteAuthority(league) !== 'NATIVE') return 'not_native_league'
   if (leagueIsBestBall(league)) return 'best_ball'
   if (gamesCountActive(league.settings, sport)) return 'games_count_scoring'
   // Daily lineups are previewed (`previewDailyWeekRescore`), but not their games limits: the caps read

@@ -30,7 +30,7 @@ export async function readSideContestsView(leagueId: string, userId: string | nu
   if (!league) return { ok: false, status: 404 }
   const config = readSideContests(league.settings)
   const empty = { ok: true as const, canEdit, config, season: null, weeks: [], totals: [] }
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ...empty, native: false }
+  if (resolveWriteAuthority(league) !== 'NATIVE') return { ...empty, native: false }
   if (!CONTEST_KINDS.some((k) => config[k].enabled)) return { ...empty, native: true }
 
   const season = await prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { season: 'desc' }, select: { id: true, season: true } })

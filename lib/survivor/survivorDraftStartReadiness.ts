@@ -67,7 +67,7 @@ export async function getSurvivorDraftStartReadiness(
     where: { id: leagueId },
     select: { platform: true, sport: true, survivorMode: true, leagueVariant: true, userId: true, settings: true },
   })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE' ||
+  if (!league || resolveWriteAuthority(league) !== 'NATIVE' ||
       (!league.survivorMode && league.leagueVariant !== 'survivor')) return { ready: true }
 
   const rosters = await prisma.roster.findMany({

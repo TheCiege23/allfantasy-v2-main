@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   if (!league) {
     return NextResponse.json({ error: 'League not found' }, { status: 404 })
   }
-  const writeAuthority = buildWriteAuthorityEnvelope('lineup', league.platform)
+  const writeAuthority = buildWriteAuthorityEnvelope('lineup', league)
 
   const editingWeekRaw = (body as Record<string, unknown>)?.week
   const editingWeek =

@@ -27,8 +27,8 @@ export async function repairAiManagerSeats(opts?: { limit?: number }): Promise<A
   })
   result.found = rows.length
   for (const row of rows) {
-    const league = await prisma.league.findUnique({ where: { id: row.leagueId }, select: { platform: true, userId: true } })
-    if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') continue
+    const league = await prisma.league.findUnique({ where: { id: row.leagueId }, select: { platform: true, settings: true, userId: true } })
+    if (!league || resolveWriteAuthority(league) !== 'NATIVE') continue
     const oldOwner = row.platformUserId
     const seat = repairedSeatOwner(row.id)
     const moved = await prisma.$transaction(async (tx) => {

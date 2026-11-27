@@ -36,9 +36,9 @@ export type AutomaticChangeRow = {
 type Access = { ok: true; commissioner: boolean; ownRosterIds: string[] } | { ok: false; status: 403 | 404 | 409 }
 
 async function access(leagueId: string, userId: string): Promise<Access> {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
   if (!league) return { ok: false, status: 404 }
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409 }
+  if (resolveWriteAuthority(league) !== 'NATIVE') return { ok: false, status: 409 }
   const [commissioner, own] = await Promise.all([
     isElevatedCommissioner(leagueId, userId),
     listHeldTeams(leagueId, userId),

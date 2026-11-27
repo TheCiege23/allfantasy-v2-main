@@ -597,7 +597,7 @@ export async function getCommissionerHub(input: {
 
   const platform = String(league.platform ?? 'manual').toLowerCase()
   const sport = String(league.sport ?? 'NFL')
-  const native = resolveWriteAuthority(platform) === 'NATIVE'
+  const native = resolveWriteAuthority({ platform, settings: league.settings }) === 'NATIVE'
   const platformName = platformLabel(platform)
   const seasonStatus = (league.status ?? '').toLowerCase()
   // Dynasty-family leagues get the dynasty health signals; nothing else changes for anyone else.

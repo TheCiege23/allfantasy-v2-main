@@ -1,4 +1,4 @@
-import { resolveWriteAuthority, sourcePlatformLabel } from '@/lib/league/write-authority'
+import { asAuthoritySource, resolveWriteAuthority, sourcePlatformLabel, type LeagueAuthoritySource } from '@/lib/league/write-authority'
 
 /** Stable entry points: onboarding flags must never be needed to reopen a league. */
 export function leagueWorkspaceHref(leagueId: string): string {
@@ -12,9 +12,9 @@ export function leagueDashboardHref(leagueId: string): string {
 /** Explicitly bypass the optional last-league landing when returning to all leagues. */
 export const ALL_LEAGUES_DASHBOARD_HREF = '/core?view=all'
 
-export function leagueWorkspaceMode(platform: string | null | undefined, language = 'en') {
-  const authority = resolveWriteAuthority(platform)
-  const source = sourcePlatformLabel(platform) ?? (language === 'es' ? 'tu plataforma' : 'your host platform')
+export function leagueWorkspaceMode(league: LeagueAuthoritySource, language = 'en') {
+  const authority = resolveWriteAuthority(league)
+  const source = sourcePlatformLabel(asAuthoritySource(league).platform) ?? (language === 'es' ? 'tu plataforma' : 'your host platform')
   const es = language === 'es'
   if (authority === 'SHADOW') return {
     authority,

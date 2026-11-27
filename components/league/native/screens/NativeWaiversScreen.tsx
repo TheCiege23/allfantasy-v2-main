@@ -630,6 +630,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
           leagueId={league.id}
           teams={[]}
           platform={league.platform}
+          leagueSettings={league.settings}
           sport={league.sport}
           initialPartnerRosterId={tradeFor?.rosterId ?? null}
           initialGetPlayerId={tradeFor?.playerId ?? null}

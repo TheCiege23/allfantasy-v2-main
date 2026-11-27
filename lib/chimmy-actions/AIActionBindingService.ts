@@ -343,7 +343,7 @@ export async function executeAIAction(
 
   const writeScope = getAIActionWriteScope(enriched.type)
   const writeAuthority =
-    writeScope !== null && leagueWrite ? buildStagedWriteAuthority(leagueWrite.platform) : null
+    writeScope !== null && leagueWrite ? buildStagedWriteAuthority(leagueWrite) : null
 
   return {
     success: true,

@@ -146,10 +146,12 @@ export async function loadWarRoomWeeklyScores(args: {
   leagueId: string
   season: number
   platform: string | null | undefined
+  /** `League.settings`: an imported league made official on AllFantasy scores like a native one (lib/league/switching). */
+  settings: unknown
   playerIds: string[]
 }): Promise<WarRoomWeeklyScoreRow[]> {
   if (!args.playerIds.length) return []
-  if (resolveWriteAuthority(args.platform) === 'NATIVE') {
+  if (resolveWriteAuthority(args) === 'NATIVE') {
     const rows = (await prisma.leaguePlayerWeeklyScore
       .findMany({
         where: {
@@ -256,7 +258,7 @@ export async function buildBestBallWarRoomContext(
   const injuryNews = await fetchRedraftInjuryNews(sport)
 
   // --- weekly scores → spike-week ceiling (real, when present) ---
-  const wsRows = await loadWarRoomWeeklyScores({ leagueId, season, platform: league.platform, playerIds: allIds })
+  const wsRows = await loadWarRoomWeeklyScores({ leagueId, season, platform: league.platform, settings: league.settings, playerIds: allIds })
   const wsAgg = new Map<string, { sum: number; n: number; max: number; started: number }>()
   let scoresAsOf: Date | null = null
   for (const row of wsRows) {

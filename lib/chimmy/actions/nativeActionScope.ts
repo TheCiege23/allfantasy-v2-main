@@ -62,7 +62,7 @@ export async function loadActionScope(leagueId: string, userId: string, action: 
   const league = await prisma.league.findUnique({ where: { id: leagueId } }).catch(() => null)
   if (!league) return { ok: false, message: 'The league could not be loaded, so nothing can be prepared. Say so; do not offer the move.' }
 
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') {
+  if (resolveWriteAuthority(league) !== 'NATIVE') {
     return { ok: false, message: importedLeagueRefusal({ leagueName: league.name ?? null, platform: league.platform ?? null, action }) }
   }
 

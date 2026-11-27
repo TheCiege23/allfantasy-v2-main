@@ -57,12 +57,12 @@ export async function recordBestBallDraftsUnfinishedAtSeasonStart(deps: Deps = {
   // At most one open draft per league (partial unique index), so each row is that league's current draft.
   const sessions = await db.draftSession.findMany({
     where: { status: { in: [...OPEN_DRAFT_SESSION_STATUSES] }, league: { bestBallMode: true } },
-    select: { id: true, leagueId: true, status: true, league: { select: { sport: true, season: true, platform: true } } },
+    select: { id: true, leagueId: true, status: true, league: { select: { sport: true, season: true, platform: true, settings: true } } },
     orderBy: { createdAt: 'asc' },
     take: Math.max(1, Math.min(500, deps.limit ?? 200)),
   })
   const candidates = sessions.filter(
-    (s) => s.league && resolveWriteAuthority(s.league.platform) === 'NATIVE' && Number.isInteger(Number(s.league.season)),
+    (s) => s.league && resolveWriteAuthority(s.league) === 'NATIVE' && Number.isInteger(Number(s.league.season)),
   )
   result.scanned = candidates.length
   if (!candidates.length) return result

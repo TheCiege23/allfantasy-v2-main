@@ -23,7 +23,8 @@ type FormatFields = {
   isDynasty: boolean | null
   bestBallMode: boolean | null
   guillotineMode: boolean | null
-  settings?: unknown
+  /** Required: an imported league made official on AllFantasy gets the native checklist (lib/league/switching). */
+  settings: unknown
 }
 
 /**
@@ -35,7 +36,7 @@ const COVERED_TYPES = new Set(['redraft', 'keeper', 'dynasty', 'guillotine', ...
 const COVERED_VARIANTS = new Set(['', 'redraft', 'keeper', 'dynasty', 'guillotine', ...BESTBALL_VARIANTS])
 
 export function checklistFormat(league: FormatFields): ChecklistFormat | null {
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return null
+  if (resolveWriteAuthority(league) !== 'NATIVE') return null
   const type = String(league.leagueType ?? '').trim().toLowerCase()
   const variant = String(league.leagueVariant ?? '').trim().toLowerCase()
   if (!COVERED_TYPES.has(type) || !COVERED_VARIANTS.has(variant)) return null
@@ -85,7 +86,7 @@ export async function readWeeklyChecklist(leagueId: string, now = new Date()): P
   })
   if (!league) return null
   // A zombie week runs on the zombie engine's own tables, not the redraft season this checklist reads below.
-  if (resolveWriteAuthority(league.platform) === 'NATIVE' && String(league.leagueVariant ?? '').trim().toLowerCase() === ZOMBIE_VARIANT) {
+  if (resolveWriteAuthority(league) === 'NATIVE' && String(league.leagueVariant ?? '').trim().toLowerCase() === ZOMBIE_VARIANT) {
     return readZombieChecklist(leagueId)
   }
   const format = checklistFormat(league)

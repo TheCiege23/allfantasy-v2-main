@@ -102,7 +102,7 @@ export async function buildWaiverStatusContext(args: { leagueId: string; userId:
   if (!league) return 'The league could not be loaded, so waivers were not read. Say so; do not describe any.'
 
   try {
-    return resolveWriteAuthority(league.platform) === 'NATIVE'
+    return resolveWriteAuthority(league) === 'NATIVE'
       ? await nativeWaivers(league, args.userId, now, args.rosterId)
       : await importedWaivers(league, args.userId, args.rosterId)
   } catch {

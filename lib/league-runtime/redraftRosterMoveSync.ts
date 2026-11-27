@@ -128,9 +128,9 @@ export async function planRedraftRosterMoveWrites(
 
   const league = await db.league.findUnique({
     where: { id: input.leagueId },
-    select: { platform: true, sport: true, leagueType: true, isDynasty: true },
+    select: { platform: true, settings: true, sport: true, leagueType: true, isDynasty: true },
   })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return []
+  if (!league || resolveWriteAuthority(league) !== 'NATIVE') return []
   const sport = String(league.sport ?? 'NFL')
 
   const rosterIds = [...new Set(moves.flatMap((m) => [m.fromRosterId, m.toRosterId]).filter(Boolean))] as string[]

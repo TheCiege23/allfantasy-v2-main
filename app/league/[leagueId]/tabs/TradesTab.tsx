@@ -1113,7 +1113,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const dynastyEra = usesDynastyBackground(league)
   // Non-null only for imported (SHADOW) leagues, where a trade built here never reaches the
   // partner on their own platform. Drives every "Propose"→"Build a shadow trade" relabel.
-  const tradeShadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
+  const tradeShadowNotice = useMemo(() => shadowDisclosure({ platform: league.platform, settings: league.settings ?? null }), [league.platform, league.settings])
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
   const [tradeBlockNote, setTradeBlockNote] = useState<string | null>(null)
   const [tradeBlockReadable, setTradeBlockReadable] = useState(true)
@@ -2058,6 +2058,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         leagueId={league.id}
         teams={teams}
         platform={league.platform}
+        leagueSettings={league.settings}
         sport={league.sport}
         initialPartnerRosterId={proposeFor?.rosterId ?? null}
         initialGetPlayerId={proposeFor?.playerId ?? null}

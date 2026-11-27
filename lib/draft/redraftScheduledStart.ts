@@ -39,6 +39,8 @@ export type ScheduledStartLeague = {
   leagueType?: string | null
   isDynasty?: boolean | null
   platform?: string | null
+  /** `League.settings`, required: an imported league made official on AllFantasy runs its own draft (lib/league/switching). */
+  settings: unknown
   survivorMode?: boolean | null
   guillotineMode?: boolean | null
   leagueVariant?: string | null
@@ -57,5 +59,5 @@ export function startsAtScheduledTimeRegardlessOfAutostart(league: ScheduledStar
   if (!(SCHEDULED_SEASONAL_LEAGUE_TYPES as readonly string[]).includes(String(league.leagueType ?? '')) || league.isDynasty !== false) return false
   if (!(SCHEDULED_REDRAFT_SPORTS as readonly string[]).includes(String(league.sport ?? ''))) return false
   if (league.survivorMode === true || league.guillotineMode === true || league.leagueVariant === 'guillotine') return false
-  return resolveWriteAuthority(league.platform) === 'NATIVE'
+  return resolveWriteAuthority(league) === 'NATIVE'
 }

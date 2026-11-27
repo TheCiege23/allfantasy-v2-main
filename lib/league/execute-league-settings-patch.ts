@@ -1716,7 +1716,7 @@ export async function executeLeagueSettingsPatch(
     updatedFields: [...new Set(updatedFieldNames)],
     // Commissioner edits on an imported league rewrite AllFantasy's twin only. The source
     // league's real settings on ESPN/Yahoo/Sleeper are unchanged, and the response says so.
-    writeAuthority: buildWriteAuthorityEnvelope('settings', league.platform),
+    writeAuthority: buildWriteAuthorityEnvelope('settings', league),
     bestBallPoolWarnings,
     settings: lsOut
       ? {

@@ -56,7 +56,7 @@ const loadLeague = (leagueId: string, db: Db = prisma) =>
   })
 type LeagueRow = NonNullable<Awaited<ReturnType<typeof loadLeague>>>
 
-const applies = (league: LeagueRow) => resolveWriteAuthority(league.platform) === 'NATIVE' && isDynastyFamilyLeague(league)
+const applies = (league: LeagueRow) => resolveWriteAuthority(league) === 'NATIVE' && isDynastyFamilyLeague(league)
 
 const currentSeason = (leagueId: string) =>
   prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { id: true, season: true, currentWeek: true } })

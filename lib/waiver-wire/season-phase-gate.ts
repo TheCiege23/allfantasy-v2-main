@@ -51,6 +51,8 @@ export function resolveBestBallRosterPolicy(league: {
   guillotineMode?: boolean | null
   bbWaiversEnabled?: boolean | null
   bbFaEnabled?: boolean | null
+  /** `League.settings`: an imported league made official on AllFantasy keeps its own policy (lib/league/switching). */
+  settings: unknown
 }): BestBallRosterPolicy | null {
   // Read through the one best ball read model (lib/bestball/bestBallLeagueState.ts), which applies
   // exactly the rules above: Classic shape only, never a guillotine row, native only.
@@ -76,7 +78,7 @@ export async function loadWaiverPhaseContext(leagueId: string): Promise<WaiverPh
         select: {
           lifecycleState: true, status: true, leagueType: true, isDynasty: true,
           platform: true, bestBallMode: true, leagueVariant: true, guillotineMode: true,
-          bbWaiversEnabled: true, bbFaEnabled: true,
+          bbWaiversEnabled: true, bbFaEnabled: true, settings: true,
         },
       }),
       prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } }),
