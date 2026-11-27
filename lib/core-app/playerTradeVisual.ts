@@ -686,7 +686,7 @@ export async function getPlayerTradeVisual(
   // A foreign league's rosters are stripped (readLeagueTradeRows), so "no holder" there means we cannot
   // read them — not that he is free to claim. EXCEPT a pasted Yahoo league most of whose players were
   // resolved to DECLARED Sleeper ids (kept by the strip): there a miss is trusted, as the Finder trusts it.
-  if (isForeignIdSpace(league.platform, league.sport) && !(await isDeclaredReadableLeague({ id: leagueId, platform: league.platform }))) {
+  if (isForeignIdSpace(league.platform, league.sport) && !(await isDeclaredReadableLeague({ id: leagueId, platform: league.platform, sport: league.sport }))) {
     return { available: false, reason: `${FOREIGN_IDS_UNREADABLE.toLowerCase()}, so we can't tell who holds him` }
   }
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, targetSleeperId)) ?? null

@@ -3,7 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { reduceCrosswalk } from './crosswalkRules'
 import { declaredSleeperId } from './declaredSleeperId'
-import { collectRosterIds, ROSTER_KEYS } from './rosterIdSpace'
+import { collectRosterIds, isKnownNonNflSport, ROSTER_KEYS, type RosterIdSport } from './rosterIdSpace'
 
 /**
  * Reading a Fleaflicker or MFL roster in Sleeper ids — or not reading it at all.
@@ -49,7 +49,21 @@ export function isDeclaredBridge(column: string | null | undefined): column is t
 /** Share of a league's distinct roster ids that must translate before a miss can be trusted. */
 export const BRIDGE_MIN_COVERAGE = 0.8
 
-export function bridgeColumnFor(platform: string | null | undefined): BridgeColumn | null {
+/**
+ * 🛑 THE BRIDGE IS AN NFL BRIDGE, SO A LEAGUE OF ANOTHER SPORT HAS NONE (2026-11-27). Every column it
+ * reads is an NFL one: `loadBridgedLeagues` reads `PlayerIdentityMap` with `sport: 'NFL'`, and a
+ * declared `sleeper:<id>` was resolved by the NFL paste matcher. So a Fleaflicker NBA league read
+ * through it would turn basketball ids into NFL Sleeper ids. Until now only the coverage rule happened
+ * to stop that — nothing in the bridge looked at the sport, and `decision-os/world/port.ts` did not
+ * either (`resolveAiTeamContext` checked on its own). A KNOWN non-NFL sport therefore gets no column
+ * here, so every caller reads such a league as unreadable ("can't verify") — the `espnSportOf` rule
+ * for ESPN, applied to this bridge.
+ *
+ * ⚠ AN UNKNOWN SPORT KEEPS THE PLATFORM-ONLY ANSWER, as `isKnownNonNflSport` does everywhere else.
+ * `League.sport` is NOT NULL (default NFL), so a caller holding a league row always has one to pass.
+ */
+export function bridgeColumnFor(platform: string | null | undefined, sport?: RosterIdSport): BridgeColumn | null {
+  if (isKnownNonNflSport(sport)) return null
   const p = (platform ?? '').trim().toLowerCase() as keyof typeof BRIDGE_COLUMN_BY_PLATFORM
   if (DECLARED_BRIDGE_PLATFORMS.has(p)) return DECLARED_BRIDGE
   return BRIDGE_COLUMN_BY_PLATFORM[p] ?? null
@@ -147,15 +161,18 @@ export function applyBridgeKeepingSlots(playerData: unknown, map: ReadonlyMap<st
 
 /**
  * For the bridged-platform leagues among `leagues`: every roster read once, the bridge loaded once
- * per platform, and a readability verdict per league. Leagues on other platforms are absent from
- * the result, and a call with none of them makes no query.
+ * per platform, and a readability verdict per league. Leagues on other platforms, AND leagues of a
+ * known non-NFL sport (`bridgeColumnFor`), are absent from the result — which every caller reads as
+ * "not readable" — and a call with none of them makes no query.
+ *
+ * `sport` is a REQUIRED key so that every caller has to say it; pass the league row's `sport`.
  */
 export async function loadBridgedLeagues(
-  leagues: ReadonlyArray<{ id: string; platform: string | null | undefined }>,
+  leagues: ReadonlyArray<{ id: string; platform: string | null | undefined; sport: RosterIdSport }>,
   db: Pick<typeof prisma, 'roster' | 'playerIdentityMap'> = prisma,
 ): Promise<Map<string, BridgedLeague>> {
   const out = new Map<string, BridgedLeague>()
-  const bridged = leagues.filter((l) => bridgeColumnFor(l.platform))
+  const bridged = leagues.filter((l) => bridgeColumnFor(l.platform, l.sport))
   if (bridged.length === 0) return out
 
   const rosters = await db.roster
@@ -209,10 +226,10 @@ export async function loadBridgedLeagues(
  * False for every other league, with no query. For readers that refuse a foreign league outright.
  */
 export async function isDeclaredReadableLeague(
-  league: { id: string; platform: string | null | undefined },
+  league: { id: string; platform: string | null | undefined; sport: RosterIdSport },
   db: Pick<typeof prisma, 'roster' | 'playerIdentityMap'> = prisma,
 ): Promise<boolean> {
-  if (!isDeclaredBridge(bridgeColumnFor(league.platform))) return false
+  if (!isDeclaredBridge(bridgeColumnFor(league.platform, league.sport))) return false
   const verdict = (await loadBridgedLeagues([league], db).catch(() => null))?.get(league.id)
   return verdict?.readable === true
 }

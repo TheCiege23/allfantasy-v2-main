@@ -81,7 +81,7 @@ export async function loadLeagueShareView(
    * (bridgedRosterIds.ts), an unbridged id dropped. A player with no bridge id of his own could be
    * on a roster we cannot see, so for him a miss stays `unknown` — never "free agent".
    */
-  const bridgeColumn = idSpace === 'other' ? bridgeColumnFor(league.platform) : null
+  const bridgeColumn = idSpace === 'other' ? bridgeColumnFor(league.platform, league.sport) : null
   const bridge = bridgeColumn ? (await loadBridgedLeagues([league])).get(league.id) ?? null : null
   const bridgeReadable = bridge?.readable === true
   const bridgedPlayers = new Set<string>()
