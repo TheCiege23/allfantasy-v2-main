@@ -10,7 +10,7 @@ const photo = (id: string) => `https://a.espncdn.com/i/headshots/mens-college-ba
 describe('espnIdOfNcaabHeadshot', () => {
   it('reads the id from an ESPN college basketball headshot only', () => {
     expect(espnIdOfNcaabHeadshot(photo('5174955'))).toBe('5174955')
-    expect(espnIdOfNcaabHeadshot('https://r2.thesportsdb.com/x/5174955.png')).toBeNull()
+    expect(espnIdOfNcaabHeadshot('https://example.com/players/full/5174955.png')).toBeNull()
     expect(espnIdOfNcaabHeadshot(null)).toBeNull()
   })
 })
