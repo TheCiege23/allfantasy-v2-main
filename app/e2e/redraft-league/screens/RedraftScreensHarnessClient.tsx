@@ -24,6 +24,7 @@ import { guillotineSummaryResponse,
   standingsResponse,
   teamPlayers,
   tradesResponse,
+  tradeRostersResponse,
   waiverClaimsResponse,
   waiverHistoryResponse,
   waiverPlayersResponse,
@@ -65,8 +66,11 @@ function installFixtureFetch(sport: HarnessSport, stage: HarnessStage) {
     const [s, st] = String(w.__rdHarnessKey).split(':') as [HarnessSport, HarnessStage]
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
     const method = String(init?.method ?? 'GET').toUpperCase()
-    if (method !== 'GET' && !url.includes('rolling-insights/batch')) return json({ error: 'Harness: writes are disabled.' }, 409)
+    if (method !== 'GET' && !url.includes('rolling-insights/batch') && !url.includes('/trades/grade-preview')) return json({ error: 'Harness: writes are disabled.' }, 409)
     const path = url.split('?')[0]
+    // The trade builder's grade preview is a read that happens to POST.
+    if (path.endsWith('/trades/grade-preview')) return json({ grade: { graded: true, letter: 'B+', partnerLetter: 'B', label: 'Fair for both', giveValue: 1200, getValue: 1300 } })
+    if (path.endsWith('/trades/rosters')) return json(tradeRostersResponse(s))
     if (path === '/api/league/roster') return json(rosterResponse(s))
     if (path.endsWith('/guillotine/summary')) return json(guillotineSummaryResponse())
     if (path.endsWith('/matchup-center')) return json(matchupResponse(s))

@@ -8,9 +8,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 
 vi.mock('next-auth/react', () => ({ useSession: () => ({ data: { user: { id: 'u1' } } }) }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
-vi.mock('@/components/ui/AppModal', () => ({ AppModal: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null }))
-vi.mock('@/app/components/PlayerImage', () => ({ PlayerImage: () => null }))
-vi.mock('@/app/components/TeamLogo', () => ({ TeamLogo: () => null }))
+vi.mock('@/components/ui/AppModal', () => ({ AppModal: ({ open, title, children, footer }: { open: boolean; title?: string; children: React.ReactNode; footer?: React.ReactNode }) => open ? <div><h2>{title}</h2>{children}{footer}</div> : null }))
 
 import { ProposeTradeModal } from '@/app/league/[leagueId]/tabs/ProposeTradeModal'
 
@@ -33,20 +31,22 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 describe('trade builder opened on a player', () => {
   it('finds the team that holds him and ticks him, with no roster id given', async () => {
     open({ initialGetPlayerId: 'p3' })
-    const gamma = await screen.findByRole('checkbox', { name: /Gamma/ }) as HTMLInputElement
-    expect(gamma.checked).toBe(true)
-    expect((screen.getByTestId('propose-trade-partner-select') as HTMLSelectElement).value).toBe('r3')
+    const gamma = await screen.findByRole('button', { name: /^Gamma/ }, { timeout: 30000 })
+    expect(gamma.getAttribute('aria-pressed')).toBe('true')
+    // It skips the partner step: the builder opens on both rosters, Third's beside yours.
+    expect(screen.getByTestId('propose-trade-step-assets')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Third roster' })).toBeTruthy()
   })
 
   it("does not pick the viewer's own team for a player the viewer holds", async () => {
     open({ initialGetPlayerId: 'p1' })
-    const select = await screen.findByTestId('propose-trade-partner-select') as HTMLSelectElement
-    expect(select.value).toBe('')
+    await screen.findByTestId('propose-trade-step-partner')
+    expect(screen.queryAllByRole('button', { pressed: true })).toHaveLength(0)
   })
 
   it('falls back to the player when the roster id given matches no team', async () => {
     open({ initialGetPlayerId: 'p2', initialPartnerRosterId: 'gone' })
-    const beta = await screen.findByRole('checkbox', { name: /Beta/ }) as HTMLInputElement
-    expect(beta.checked).toBe(true)
+    const beta = await screen.findByRole('button', { name: /^Beta/ })
+    expect(beta.getAttribute('aria-pressed')).toBe('true')
   })
 })
