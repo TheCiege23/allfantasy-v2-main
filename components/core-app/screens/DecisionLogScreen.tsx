@@ -6,6 +6,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
 import { decideCoreDepth } from '@/lib/core-app/coreDepthAccess'
 import { decisionLogCopy, type DecisionLogCopy } from '@/lib/core-app/messages/decisionLog'
+import { getIntlLocale } from '@/lib/i18n/constants'
 import {
   decisionDetail,
   decisionHeadline,
@@ -75,7 +76,7 @@ export const loadDecisionLog: DecisionLogLoader = async (leagueId) => {
 function formatDay(iso: string, language: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  return new Intl.DateTimeFormat(language === 'es' ? 'es-US' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(d)
+  return new Intl.DateTimeFormat(getIntlLocale(language), { month: 'short', day: 'numeric', year: 'numeric' }).format(d)
 }
 
 function GradePills({ row, c }: { row: DecisionLogRow; c: DecisionLogCopy }) {

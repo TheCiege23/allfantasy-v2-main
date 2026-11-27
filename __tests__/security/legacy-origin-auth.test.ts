@@ -57,6 +57,12 @@ vi.mock('@/lib/prisma', () => ({
     aIInsight: { findUnique: (a: unknown) => m.aIInsightFindUnique(a) },
   },
 }))
+// The decision-log GET is AF Pro / AF Supreme (`decision_log_history`); the plan read is not what this
+// file tests, so every caller here holds the plan. The auth checks below run before and after it.
+vi.mock('@/lib/subscription/entitlement-middleware', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/subscription/entitlement-middleware')>()),
+  requireFeatureEntitlement: async () => ({ ok: true }),
+}))
 vi.mock('@/lib/decision-log', () => ({
   logDecision: (a: unknown) => m.logDecision(a),
   resolveDecision: (a: unknown) => m.resolveDecision(a),

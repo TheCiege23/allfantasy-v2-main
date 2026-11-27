@@ -143,5 +143,5 @@ export const decisionLogMessages = defineMessages<DecisionLogCopy>({
 
 /** The copy in the reader's language; anything that is not Spanish reads English. */
 export function decisionLogCopy(language: string | null | undefined): DecisionLogCopy {
-  return messagesFor(decisionLogMessages, language === 'es' ? 'es' : 'en')
+  return messagesFor(decisionLogMessages, language)
 }
