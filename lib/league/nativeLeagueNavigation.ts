@@ -197,14 +197,26 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
    * History links to the draft results page. The League overview stays reachable, last.
    */
   if (options.draftDone) used.add('draft')
-  const leagueChildren = [
-    // Survivor and guillotine seasons end with the last team standing: neither has playoffs to name here.
-    ...(isSurvivor || guilly ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')),
-    ...item('league.nav.leagueHistory', 'League history', 'legacy', 'legacy', 'history'),
-    ...item('league.nav.activity', 'Activity', 'more', 'activity'),
-    ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
-    ...overview,
-  ]
+  // Survivor and guillotine seasons end with the last team standing: neither has playoffs to name here.
+  const standingsItem = isSurvivor || guilly ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')
+  /*
+   * A league hosted here: League is ONE page (owner, 2026-11-27: "those 3 things are the only things on the
+   * league page") — this week's matchups, the standings and the activity, as Sleeper's League tab. History
+   * is a link at the bottom of that page, chat is in the bottom bar, and the old overview is retired from
+   * the nav. They are marked used so none of them comes back as a leftover sub-tab; each still opens by its
+   * id. An imported league keeps its sub-tabs: its standings tab is a different screen.
+   */
+  const onePage = nativeOverview.length > 0 && standingsItem.length > 0
+  if (onePage) for (const id of ['legacy', 'history', 'activity', 'league_chat', 'native_home', 'home']) used.add(id)
+  const leagueChildren = onePage
+    ? standingsItem
+    : [
+        ...standingsItem,
+        ...item('league.nav.leagueHistory', 'League history', 'legacy', 'legacy', 'history'),
+        ...item('league.nav.activity', 'Activity', 'more', 'activity'),
+        ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
+        ...overview,
+      ]
   const trade = top('league.nav.tab.trade', 'Trade', 'trades', [
     ...item('league.nav.trades', 'Trades', 'trades', 'trades', 'transfers'),
     ...(used.has('decide') ? [] : item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide')),

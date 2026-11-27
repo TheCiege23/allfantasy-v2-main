@@ -551,3 +551,43 @@
 .nls-survivor-starter { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .nls-survivor-pts { display: grid; justify-items: end; gap: 2px; font-family: var(--nl-mono); font-variant-numeric: tabular-nums; }
 .nls-survivor-pts strong { font-size: 15px; color: var(--text); }
+
+/* ── League page (2026-11-27): Matchups · Standings · Activity, Sleeper's League tab ───────────── */
+.nls-lp-head { margin: 0 0 12px; color: var(--text); font-size: 18px; font-weight: 800; }
+.nls-lp-headrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.nls-lp-headrow .nls-lp-head { margin: 0; }
+.nls-lp-week { display: inline-flex; align-items: center; gap: 8px; color: var(--text2); font: 700 12px/1 var(--nl-mono); }
+.nls-lp-week .nls-btn { min-width: 32px; padding: 4px 10px; }
+.nls-lp-cards { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.nls-lp-card { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.nls-lp-card[data-mine] { border-color: var(--accent-line); }
+.nls-lp-label { margin-bottom: 8px; color: var(--faint); font: 700 11px/1.2 var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
+.nls-lp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 12px; }
+.nls-lp-vs { align-self: center; color: var(--faint); font: 700 11px/1 var(--nl-mono); text-transform: uppercase; }
+.nls-lp-side { display: grid; gap: 8px; min-width: 0; }
+.nls-lp-top { display: flex; align-items: center; gap: 12px; }
+.nls-lp-side[data-align=right] .nls-lp-top { flex-direction: row-reverse; }
+.nls-lp-avatar { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 999px; background: var(--surface2); color: var(--accent); font-size: 14px; font-weight: 700; object-fit: cover; }
+.nls-lp-score { display: grid; min-width: 0; }
+.nls-lp-side[data-align=right] .nls-lp-score { text-align: right; }
+.nls-lp-score strong { color: var(--text); font: 800 24px/1.1 var(--nl-mono); }
+.nls-lp-score small { color: var(--muted); font: 600 11px/1.3 var(--nl-mono); }
+.nls-lp-side[data-won=false] .nls-lp-score strong { color: var(--muted); }
+.nls-lp-win { display: flex; align-items: center; gap: 8px; color: var(--bad); }
+.nls-lp-win[data-lead] { color: #22d3ee; }
+.nls-lp-side[data-align=right] .nls-lp-win { flex-direction: row-reverse; }
+.nls-lp-bar { flex: 1; height: 6px; overflow: hidden; border-radius: 999px; background: var(--line2); }
+.nls-lp-bar > span { display: block; height: 100%; border-radius: inherit; background: currentColor; }
+.nls-lp-side[data-align=right] .nls-lp-bar { transform: scaleX(-1); }
+.nls-lp-pct { flex: none; font: 700 12px/1 var(--nl-mono); }
+.nls-lp-name { display: grid; min-width: 0; }
+.nls-lp-side[data-align=right] .nls-lp-name { text-align: right; }
+.nls-lp-name > span { overflow: hidden; color: var(--text); font-size: 14px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.nls-lp-name small { color: var(--muted); font-size: 12px; }
+.nls-lp-bye { align-self: center; }
+.nls-lp-more { display: flex; justify-content: center; }
+@media (max-width: 560px) {
+  .nls-lp-card { padding: 12px; }
+  .nls-lp-avatar { width: 36px; height: 36px; font-size: 12px; }
+  .nls-lp-score strong { font-size: 20px; }
+}

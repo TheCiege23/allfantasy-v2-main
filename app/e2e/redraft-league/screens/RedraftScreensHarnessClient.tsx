@@ -8,7 +8,7 @@ import { NativeLineupScreen } from '@/components/league/native/screens/NativeLin
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
 import { NativeTradesScreen } from '@/components/league/native/screens/NativeTradesScreen'
-import { NativeStandingsScreen } from '@/components/league/native/screens/NativeStandingsScreen'
+import { NativeLeaguePageScreen } from '@/components/league/native/screens/NativeLeaguePageScreen'
 import { PlayersTab } from '@/app/league/[leagueId]/tabs/PlayersTab'
 // LeagueShell loads /core's palette itself (the workspace does not), so the harness must too.
 import '@/components/core-app/af-core.css'
@@ -22,6 +22,8 @@ import { guillotineSummaryResponse,
   scoreboardResponse,
   seedsResponse,
   standingsResponse,
+  weekCardsResponse,
+  activityResponse,
   teamPlayers,
   tradesResponse,
   tradeRostersResponse,
@@ -76,6 +78,8 @@ function installFixtureFetch(sport: HarnessSport, stage: HarnessStage) {
     if (path.endsWith('/matchup-center')) return json(matchupResponse(s))
     if (path.endsWith('/scoring/matchups')) return json(scoreboardResponse(s))
     if (path.endsWith('/scoring/standings')) return json(standingsResponse(s))
+    if (path.endsWith('/week-cards')) return json(weekCardsResponse(s))
+    if (path.endsWith('/chat/moves')) return json(activityResponse(s))
     if (path.endsWith('/season-forecast')) return json(forecastResponse())
     if (path.endsWith('/scoring/playoff-seeds')) return json(seedsResponse())
     if (path === '/api/redraft/playoff-runtime') return json(playoffRuntimeResponse(s, st))
@@ -152,7 +156,7 @@ export default function RedraftScreensHarnessClient(props: Props) {
   else if (activeTab === 'matchups') body = <NativeMatchupScreen league={league} onSelectTab={go} />
   else if (activeTab === 'waivers') body = <NativeWaiversScreen league={league} />
   else if (activeTab === 'trades') body = <NativeTradesScreen league={league} teams={teams} />
-  else if (activeTab === 'standings') body = <NativeStandingsScreen league={league} isCommissioner onSelectTab={go} />
+  else if (activeTab === 'standings') body = <NativeLeaguePageScreen league={league} isCommissioner onSelectTab={go} />
   else if (activeTab === 'players') body = <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6"><PlayersTab league={league} onPlayerClick={() => {}} sport={sport} /></div>
   return (
     <NativeLeagueWorkspace
