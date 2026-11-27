@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   draft: vi.fn(),
   evaluate: vi.fn(),
   ranks: vi.fn(),
+  facts: vi.fn(),
 }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
@@ -15,6 +16,7 @@ vi.mock('@/lib/prisma', () => ({
     keeperRecord: { findMany: m.keeps },
     draftPick: { findMany: m.picks },
     draftSession: { findFirst: m.draft },
+    draftFact: { findMany: m.facts },
   },
 }))
 vi.mock('@/lib/subscription/FeatureGateService', () => ({
@@ -106,5 +108,68 @@ describe('player card keeper line — when it shows', () => {
     m.keeps.mockResolvedValue([{ playerId: '4034', playerName: 'Christian McCaffrey', position: 'RB', costRound: 5 }])
     const line = await loadPlayerKeeperCardCost(subject)
     expect(line).toMatchObject({ costRound: 4, detail: 'Kept at Round 5 last season · league rule: 1 round earlier' })
+  })
+})
+
+describe('player card keeper line — imported keeper leagues (draft history the import stored)', () => {
+  const imported = (over: Record<string, unknown> = {}) => ({
+    userId: 'commish', sport: 'NFL', settings: {}, leagueType: 'keeper', leagueSize: 12, scoringPresetId: null,
+    keeperCostSystem: 'round_based', keeperRoundPenalty: 1, keeperInflationRate: 1, keeperConflictRule: 'player_chooses',
+    platform: 'sleeper', season: 2027, keeperWaiverAllowed: true, keeperMaxYears: null, ...over,
+  })
+  const fact = (playerId: string, season: number, round: number, isKeeper = false) => ({ playerId, season, round, metadata: { isKeeper } })
+  const filler = Array.from({ length: 15 }, (_, i) => fact(`f${i}`, 2026, i + 1))
+  const subject = { leagueId: 'L', sleeperId: '4034', externalId: null, name: 'Christian McCaffrey', position: 'RB' }
+  beforeEach(() => {
+    vi.clearAllMocks()
+    m.evaluate.mockResolvedValue({ allowed: true })
+    m.ranks.mockResolvedValue(() => 14)
+    m.league.mockResolvedValue(imported())
+    m.facts.mockResolvedValue([...filler, fact('4034', 2026, 6)])
+  })
+
+  it('Sleeper: drafted R6 in the imported 2026 draft, league rule 1 round earlier → Round 5, with its value', async () => {
+    const line = await loadPlayerKeeperCardCost(subject)
+    expect(line).toMatchObject({ costRound: 5, headline: 'Keeper cost: Round 5' })
+    expect(line?.detail).toBe("Drafted Round 6 last season · league rule: 1 round earlier · from the league's imported 2026 draft")
+    expect(line?.value).toMatchObject({ surplus: 40 })
+    expect(m.picks).not.toHaveBeenCalled() // native draft tables are not read for an imported league
+  })
+
+  it('a player kept in the imported draft walks from his keeper round', async () => {
+    m.facts.mockResolvedValue([...filler, fact('4034', 2025, 7), fact('4034', 2026, 6, true)])
+    expect(await loadPlayerKeeperCardCost(subject)).toMatchObject({ costRound: 5, detail: expect.stringMatching(/^Kept at Round 6 last season/) })
+  })
+
+  it('a Sleeper player absent from last season’s draft is a pickup: the last round', async () => {
+    m.facts.mockResolvedValue(filler)
+    expect(await loadPlayerKeeperCardCost(subject)).toMatchObject({ costRound: 15, detail: expect.stringMatching(/^Not drafted last season/) })
+  })
+
+  it('no line rather than a guess: no draft on file, or only an older draft', async () => {
+    m.facts.mockResolvedValue([])
+    expect(await loadPlayerKeeperCardCost(subject)).toBeNull()
+    m.facts.mockResolvedValue([fact('4034', 2024, 6), ...filler.map((f) => ({ ...f, season: 2024 }))])
+    expect(await loadPlayerKeeperCardCost(subject)).toBeNull()
+  })
+
+  it('outside Sleeper, a player the imported history does not name gets no line (ids may be the provider’s)', async () => {
+    m.league.mockResolvedValue(imported({ platform: 'espn' }))
+    m.facts.mockResolvedValue(filler)
+    expect(await loadPlayerKeeperCardCost(subject)).toBeNull()
+    m.facts.mockResolvedValue([...filler, fact('4034', 2026, 9)])
+    expect(await loadPlayerKeeperCardCost(subject)).toMatchObject({ costRound: 8 })
+  })
+
+  it('the same gate: the commissioner’s plan', async () => {
+    m.evaluate.mockResolvedValue({ allowed: false })
+    expect(await loadPlayerKeeperCardCost(subject)).toBeNull()
+    expect(m.facts).not.toHaveBeenCalled()
+  })
+
+  it('pickups not allowed as keepers: the card says he can’t be kept', async () => {
+    m.league.mockResolvedValue(imported({ keeperWaiverAllowed: false }))
+    m.facts.mockResolvedValue(filler)
+    expect(await loadPlayerKeeperCardCost(subject)).toMatchObject({ canKeep: false, headline: 'Can’t be kept' })
   })
 })
