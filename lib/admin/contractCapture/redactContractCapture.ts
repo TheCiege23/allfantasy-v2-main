@@ -47,9 +47,12 @@ export type RedactCaptureInput = {
 }
 
 export class ContractCaptureRedactionError extends Error {
-  constructor(readonly survivingCount: number) {
-    // Count only — naming a surviving value would put it in a log or a response.
-    super(`Refusing to return the capture: ${survivingCount} identifying value(s) survived redaction.`)
+  constructor(readonly survivingCount: number, readonly survivingKinds: string[] = []) {
+    // Count and KIND only (e.g. "person, 3 chars") — naming a surviving value would put it in a log or a response.
+    super(
+      `Refusing to return the capture: ${survivingCount} identifying value(s) survived redaction` +
+        (survivingKinds.length ? ` (${survivingKinds.join('; ')}).` : '.'),
+    )
     this.name = 'ContractCaptureRedactionError'
   }
 }
@@ -93,11 +96,13 @@ function escapeRegExp(text: string): string {
 
 class SyntheticValues {
   private readonly map = new Map<string, string>()
+  private readonly kinds = new Map<string, string>()
   private readonly counters = new Map<string, number>()
 
   label(original: string, kind: string): string {
     const existing = this.map.get(original)
     if (existing) return existing
+    this.kinds.set(original, kind)
     const n = (this.counters.get(kind) ?? 0) + 1
     this.counters.set(kind, n)
     const value =
@@ -119,6 +124,10 @@ class SyntheticValues {
 
   originals(): string[] {
     return [...this.map.keys()]
+  }
+
+  kindOf(original: string): string {
+    return this.kinds.get(original) ?? 'value'
   }
 }
 
@@ -257,23 +266,40 @@ export function countSurvivingSensitiveValues(
   text: string,
   args: { originals: string[]; leagueOriginals: string[]; credentialValues: string[] },
 ): number {
-  let found = 0
+  return surviving(text, args).length
+}
+
+/**
+ * Short originals (under 4 characters) are only ever replaced where they are a WHOLE field value —
+ * `searchable()` will not rewrite them inside other strings, because "Rob" sits inside "Bijan Robinson"
+ * and "Al" inside every "Allen". So a short original counts as surviving only where it still stands as
+ * a whole JSON string. Searching for it anywhere refused every real ESPN league whose members include a
+ * three-letter first name or team abbreviation (owner capture, 2026-11-27). Longer originals, league ids
+ * and credentials are still searched for anywhere.
+ */
+function surviving(
+  text: string,
+  args: { originals: string[]; leagueOriginals: string[]; credentialValues: string[]; kindOf?: (v: string) => string },
+): string[] {
+  const out: string[] = []
   const lower = text.toLowerCase()
   for (const value of args.originals) {
-    if (value.length >= 3 && text.includes(value)) found++
+    if (value.length < 3) continue
+    const hit = value.length >= 4 ? text.includes(value) : text.includes(JSON.stringify(value))
+    if (hit) out.push(`${args.kindOf?.(value) ?? 'value'}, ${value.length} chars`)
   }
   for (const id of args.leagueOriginals) {
-    if (new RegExp(`(?<!\\d)${escapeRegExp(id)}(?!\\d)`).test(text)) found++
+    if (new RegExp(`(?<!\\d)${escapeRegExp(id)}(?!\\d)`).test(text)) out.push('league id')
   }
   for (const secret of args.credentialValues) {
     const s = String(secret ?? '').trim()
     if (s.length < 6) continue
     const forms = new Set([s, encodeURIComponent(s), JSON.stringify(s).slice(1, -1)])
-    for (const form of forms) if (lower.includes(form.toLowerCase())) found++
+    for (const form of forms) if (lower.includes(form.toLowerCase())) out.push('credential')
   }
-  found += (text.match(BRACED_GUID) ?? []).length
-  for (const shape of CREDENTIAL_SHAPES) if (shape.test(text)) found++
-  return found
+  for (const _ of text.match(BRACED_GUID) ?? []) out.push('member id')
+  for (const shape of CREDENTIAL_SHAPES) if (shape.test(text)) out.push('credential shape')
+  return out
 }
 
 /**
@@ -323,11 +349,12 @@ export function buildRedactedCaptureDocument(input: RedactCaptureInput): { json:
   }
 
   const json = `${JSON.stringify(document, null, 2)}\n`
-  const surviving = countSurvivingSensitiveValues(json, {
+  const survivors = surviving(json, {
     originals: values.originals(),
     leagueOriginals,
     credentialValues: input.credentialValues,
+    kindOf: (v) => values.kindOf(v),
   })
-  if (surviving > 0) throw new ContractCaptureRedactionError(surviving)
+  if (survivors.length > 0) throw new ContractCaptureRedactionError(survivors.length, [...new Set(survivors)])
   return { json, summary: { ...document.redaction, requests: requests.length } }
 }
