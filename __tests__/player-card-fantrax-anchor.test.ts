@@ -202,3 +202,66 @@ describe('control: every other caller reads exactly as before', () => {
     await expect(anchorLookupFor({ sport: 'NHL', externalId: '1114', sleeperId: '04yla', leagueId: 'L1' })).resolves.toEqual({ externalId: '1114' })
   })
 })
+
+/*
+ * 🛑 A NATIVE NBA/MLB/NHL LEAGUE (2026-11-27). Its lineup opens the card with the roster's own id as
+ * `externalId` (useNativePlayerCard), and its rosters hold that same provider id. Before the fix the
+ * card never read those rosters (a native non-NFL league is a foreign id space), so a manager's own
+ * starter came back UNREADABLE — no owner, no Drop. Live on the owner's native NBA league after #4330.
+ */
+describe('player card in a native non-NFL league — the lineup entry point', () => {
+  const GARLAND = { ...SORO, externalId: '4396907', sport: 'NBA', name: 'Darius Garland', position: 'PG', team: 'LAC', number: 10 }
+
+  function nativeNba() {
+    overrides.league = { findUnique: async () => ({ id: 'L9', name: 'The Ciege NBA Redraft', platform: 'allfantasy', sport: 'NBA', settings: {}, leagueType: 'redraft' }) }
+    overrides.sportsPlayer = { findFirst: async (args: { where: Record<string, unknown> }) => (args.where.externalId === '4396907' ? GARLAND : null), findMany: async () => [] }
+    overrides.roster = {
+      findMany: async () => [
+        { id: 'r-mine', platformUserId: 'owner-1', playerData: { players: ['4396907', '1966'], starters: ['4396907'] } },
+        { id: 'r-them', platformUserId: 'other-2', playerData: { players: ['3112335'], starters: ['3112335'] } },
+      ],
+    }
+    overrides.leagueTeam = {
+      findMany: async () => [
+        { id: 't1', externalId: 'r-mine', platformUserId: 'owner-1', claimedByUserId: 'owner-1', ownerName: 'TheCiege24', teamName: 'Ciege' },
+        { id: 't2', externalId: 'r-them', platformUserId: 'other-2', claimedByUserId: 'other-2', ownerName: 'KBI', teamName: 'Smoke' },
+      ],
+    }
+  }
+
+  it('the anchor carries the league id as the roster id, only for a native non-NFL league', async () => {
+    nativeNba()
+    await expect(anchorLookupFor({ sport: 'NBA', externalId: '4396907', leagueId: 'L9' })).resolves.toEqual({ externalId: '4396907', rosterId: '4396907' })
+    // Native NFL rosters hold Sleeper ids: unchanged.
+    leagueOn('allfantasy', 'NFL')
+    await expect(anchorLookupFor({ sport: 'NFL', externalId: 'sleeper:4984', leagueId: 'L1' })).resolves.toEqual({ externalId: 'sleeper:4984' })
+    // An imported league: unchanged.
+    leagueOn('sleeper', 'NBA')
+    await expect(anchorLookupFor({ sport: 'NBA', externalId: '4396907', leagueId: 'L1' })).resolves.toEqual({ externalId: '4396907' })
+  })
+
+  it("your own starter reads as yours, with the id a Drop must name — and the card offers Drop", async () => {
+    nativeNba()
+    // What NativeScreenParts.useNativePlayerCard sends for a non-NFL player: externalId = the roster id.
+    const card = await getPlayerCard({ sport: 'NBA', externalId: '4396907', leagueId: 'L9', userId: 'owner-1' })
+    expect(card?.league?.slot).toBe('STARTER')
+    expect(card?.league?.isYours).toBe(true)
+    expect(card?.league?.rosterPlayerId).toBe('4396907')
+    const { playerCardActions } = await import('@/lib/core-app/playerCardActions')
+    const actions = playerCardActions(card!.league, { externalId: '4396907', sleeperId: null, name: 'Darius Garland' })
+    expect(actions.drop?.href).toBe('/league/L9?view=waivers&drop=4396907')
+  })
+
+  it("another manager's player offers Propose trade; an unrostered one offers Add", async () => {
+    nativeNba()
+    const theirs = await getPlayerCard({ sport: 'NBA', externalId: '4396907', leagueId: 'L9', userId: 'other-2' })
+    expect(theirs?.league?.isYours).toBe(false)
+    const { playerCardActions } = await import('@/lib/core-app/playerCardActions')
+    expect(playerCardActions(theirs!.league, { externalId: '4396907', name: 'Darius Garland' }).trade?.href).toBe('/league/L9?view=trades')
+
+    overrides.roster = { findMany: async () => [{ id: 'r-mine', platformUserId: 'owner-1', playerData: { players: ['1966'] } }] }
+    const fa = await getPlayerCard({ sport: 'NBA', externalId: '4396907', leagueId: 'L9', userId: 'owner-1' })
+    expect(fa?.league?.slot).toBe('NOT ROSTERED')
+    expect(playerCardActions(fa!.league, { externalId: '4396907', name: 'Darius Garland' }).add?.href).toContain('view=waivers&add=4396907')
+  })
+})
