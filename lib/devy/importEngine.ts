@@ -27,7 +27,8 @@ type SleeperNameDeps = {
 const defaultSleeperNameDeps: SleeperNameDeps = {
   findIdentities: (sleeperIds) =>
     prisma.playerIdentityMap.findMany({
-      where: { sleeperId: { in: sleeperIds } },
+      // NFL, like the Sleeper universe below: `sleeperId` is the NFL Sleeper column.
+      where: { sport: 'NFL', sleeperId: { in: sleeperIds } },
       select: { sleeperId: true, canonicalName: true },
     }),
   loadSleeperPlayers: () => getPlayersBySport('nfl'),

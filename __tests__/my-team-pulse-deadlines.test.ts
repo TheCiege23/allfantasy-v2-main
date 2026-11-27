@@ -149,7 +149,7 @@ it('batches selected ESPN lineups without translating paused or opponent rosters
  identities.mockResolvedValueOnce([{espnId:'10',sleeperId:'healthy'},{espnId:'11',sleeperId:'out'}] as any)
  const pulse=await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'),new Set(['L2']))
  expect(identities).toHaveBeenCalledTimes(1)
- expect(identities).toHaveBeenCalledWith(expect.objectContaining({where:{espnId:{in:['10','11']},sleeperId:{not:null}}}))
+ expect(identities).toHaveBeenCalledWith(expect.objectContaining({where:{sport:'NFL',espnId:{in:['10','11']},sleeperId:{not:null}}}))
  expect(pulse).toMatchObject({checked:2,paused:1,needsTotal:1})
  expect(pulse.needs[0]).toMatchObject({leagueId:'L1',out:1})
 })

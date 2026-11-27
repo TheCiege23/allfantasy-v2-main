@@ -20,13 +20,20 @@
  * file. A `where` the guard cannot read at all is reported as UNREADABLE rather than passed —
  * an unreadable clause is how a check that cannot fail gets written.
  *
- * WHAT IS NOT CHECKED, said so rather than implied: raw SQL (`$queryRaw` with `"sleeperId"`),
- * and reads of OTHER tables keyed by a Sleeper id. `PlayerIdentityMap.sleeperId` is globally
- * `@unique` and NBA ids live in `sleeperNbaId`, so it cannot return two people.
+ * `PlayerIdentityMap` IS CHECKED TOO, for a different failure. There `sleeperId` is globally
+ * `@unique` and is the NFL column — NBA Sleeper ids live in `sleeperNbaId` — so a read cannot return
+ * two people; it returns the WRONG one when a non-NFL caller hands its ids to the NFL column (an NBA
+ * draft's 1466 read as NFL Kelce). So a read keyed by `sleeperId` or `sleeperNbaId` must name the
+ * sport too, or go through `identityMapSleeperWhere(ids, sport)`, which picks the sport's column.
+ *
+ * WHAT IS NOT CHECKED, said so rather than implied: raw SQL (`$queryRaw` with `"sleeperId"`), and
+ * reads of other tables keyed by a Sleeper id.
  *
  * Usage:
  *   node scripts/check-sleeper-id-sport-scope.mjs          # exit 1 on any unallowlisted site
  *   node scripts/check-sleeper-id-sport-scope.mjs --list   # also print allowlisted sites
+ *
+ * Both tables are scanned; each has its own allowlist below.
  *
  * The test `__tests__/player-identity/sleeper-id-sport-scope-guard.test.ts` runs this on every `npm test`
  * and proves it fires on a planted violation.
@@ -50,6 +57,32 @@ export const ALLOWLIST = {
    * so NFL 1466 and NBA 1466 stay two URLs. Adding a sport would drop a sport from the sitemap.
    */
   'app/sitemap.xml/route.ts': { count: 1, reason: 'enumerates all sports; distinct is (sport, sleeperId)' },
+}
+
+/** `PlayerIdentityMap` sites allowed a Sleeper-column filter with no sport. Same rules as above. */
+export const IDENTITY_MAP_ALLOWLIST = {
+  /*
+   * Coverage COUNTS (`sleeperId: { not: null }`), not lookups by id: they return a number for an
+   * admin/diagnostic panel and name nobody.
+   */
+  'server/api-route-modules/legacy/identity-sync/route.ts': { count: 2, reason: 'coverage counts; names nobody' },
+  'lib/sports-data-gateway/runtime/espnIdentityPopulation.ts': { count: 1, reason: 'coverage count; names nobody' },
+}
+
+/** Per table: the Sleeper-id columns, the helpers that scope them, and the allowlist. */
+export const TABLES = {
+  sportsPlayer: {
+    keys: ['sleeperId'],
+    helpers: ['sleeperIdWhere', 'ourIdOrSleeperIdWhere'],
+    allowlist: ALLOWLIST,
+    label: 'SportsPlayer',
+  },
+  playerIdentityMap: {
+    keys: ['sleeperId', 'sleeperNbaId'],
+    helpers: ['identityMapSleeperWhere'],
+    allowlist: IDENTITY_MAP_ALLOWLIST,
+    label: 'PlayerIdentityMap',
+  },
 }
 
 export const ROOTS = ['lib', 'app', 'server', 'components', 'scripts']
@@ -177,6 +210,8 @@ function topLevelWhere(masked, open) {
   if (close < 0) return { kind: 'unreadable' }
   const inner = masked.slice(open + 1, close - 1)
   const lead = inner.length - inner.trimStart().length
+  // `count()` — no argument, so no where: nothing is looked up by any id.
+  if (inner.trim() === '') return { kind: 'none' }
   if (inner.trimStart()[0] !== '{') {
     // findMany(args) — the whole argument is a variable.
     const ident = inner.trim().match(/^([A-Za-z_$][\w$]*)\s*$/)
@@ -234,9 +269,9 @@ function resolveIdent(masked, name, before) {
   return masked.slice(best, closeOf(masked, best))
 }
 
-const SLEEPER_KEY = /(?:^|[{,\s])sleeperId\s*[:,}]/
 const SPORT_KEY = /(?:^|[{,\s])sport\s*[:,}]/
-const HELPER_RE = /\b(sleeperIdWhere|ourIdOrSleeperIdWhere)\s*\(/g
+const keyRe = (keys) => new RegExp(`(?:^|[{,\\s])(?:${keys.join('|')})\\s*[:,}]`)
+const helperRe = (helpers) => new RegExp(`\\b(${helpers.join('|')})\\s*\\(`, 'g')
 /** A sport argument that is really "no sport". */
 const NO_SPORT_ARG = /^undefined$|\?\?\s*undefined$/
 
@@ -276,7 +311,10 @@ function declaredExpr(masked, name, before) {
  * is a non-null enum, so `league.sport ? …` is always taken). That is a stated limit, not a gap
  * nobody noticed.
  */
-function classifyWhereText(text, masked = '', before = 0) {
+function classifyWhereText(text, masked = '', before = 0, table = 'sportsPlayer') {
+  const spec = TABLES[table] ?? TABLES.sportsPlayer
+  const SLEEPER_KEY = keyRe(spec.keys)
+  const HELPER_RE = helperRe(spec.helpers)
   let full = text
   for (const sm of text.matchAll(/\.\.\.\s*([A-Za-z_$][\w$]*)\b(?!\s*[.(\[])/g)) {
     const expr = declaredExpr(masked, sm[1], before)
@@ -295,7 +333,7 @@ function classifyWhereText(text, masked = '', before = 0) {
   }
   // `sleeperIdsBySportWhere` builds one (sport, sleeperId) arm per sport and drops sport-less ones:
   // scoped by construction.
-  if (/\bsleeperIdsBySportWhere\s*\(/.test(full) && !SLEEPER_KEY.test(text)) return 'scoped'
+  if (table === 'sportsPlayer' && /\bsleeperIdsBySportWhere\s*\(/.test(full) && !SLEEPER_KEY.test(text)) return 'scoped'
   const literal = SLEEPER_KEY.test(full)
   if (!literal && !helperSleeper) return 'not-sleeper'
   if (SPORT_KEY.test(full)) return 'scoped'
@@ -328,12 +366,12 @@ export function scanSource(src, file = '<memory>', table = 'sportsPlayer') {
     }
     let status
     if (w.kind === 'none') continue
-    if (w.kind === 'object' || w.kind === 'expr') status = classifyWhereText(w.text, masked, m.index)
+    if (w.kind === 'object' || w.kind === 'expr') status = classifyWhereText(w.text, masked, m.index, table)
     else if (w.kind === 'ident') {
       const expr = declaredExpr(masked, w.name, m.index)
       // A where handed in from elsewhere: unreadable only if this file filters on sleeperId at all.
-      if (expr == null) status = /[{,\s]sleeperId\s*:/.test(masked) ? 'unreadable' : 'not-sleeper'
-      else status = classifyWhereText(expr, masked, m.index)
+      if (expr == null) status = keyRe(TABLES[table]?.keys ?? ['sleeperId']).test(masked) ? 'unreadable' : 'not-sleeper'
+      else status = classifyWhereText(expr, masked, m.index, table)
     } else status = 'unreadable'
     if (status === 'unscoped' || status === 'unreadable') found.push({ file, line, method, status })
   }
@@ -384,28 +422,35 @@ export function applyAllowlist(findings, allowlist = ALLOWLIST) {
 
 function main() {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const findings = scanRepo(repoRoot)
-  const { allowed, violations, stale } = applyAllowlist(findings)
-  const header = `sleeperId sport-scope guard: ${violations.length} violation(s), ${allowed.length} allowlisted`
-  if (process.argv.includes('--list')) {
-    console.log(header)
-    for (const a of allowed) console.log(`  allowed  ${a.file}:${a.line}  ${a.method}`)
-  }
-  if (stale.length) {
+  let failed = false
+  let staleAny = false
+  for (const [table, spec] of Object.entries(TABLES)) {
+    const { allowed, violations, stale } = applyAllowlist(scanRepo(repoRoot, table), spec.allowlist)
+    const header = `sleeperId sport-scope guard [${spec.label}]: ${violations.length} violation(s), ${allowed.length} allowlisted`
+    if (process.argv.includes('--list')) {
+      console.log(header)
+      for (const a of allowed) console.log(`  allowed  ${a.file}:${a.line}  ${a.method}`)
+    }
     for (const s of stale) console.log(`  stale allowlist: ${s.file} allows ${s.allowed}, found ${s.found} — lower it`)
+    staleAny ||= stale.length > 0
+    if (violations.length) {
+      failed = true
+      console.error(header)
+      console.error('')
+      if (table === 'sportsPlayer') {
+        console.error('A SportsPlayer read keyed by sleeperId with no `sport` can return another sport\'s player')
+        console.error('under the same id (NFL 1466 Travis Kelce / NBA 1466 JaVale McGee). Add the sport the caller')
+        console.error('means — sleeperIdWhere(ids, sport) — or justify an ALLOWLIST entry.')
+      } else {
+        console.error('A PlayerIdentityMap read by a Sleeper column with no `sport` reads NFL\'s column for any')
+        console.error('caller\'s ids (an NBA 1466 becomes NFL Travis Kelce). Use identityMapSleeperWhere(ids, sport),')
+        console.error('which picks sleeperId / sleeperNbaId by sport, or justify an IDENTITY_MAP_ALLOWLIST entry.')
+      }
+      console.error('')
+      for (const v of violations) console.error(`  ${v.status.padEnd(10)} ${v.file}:${v.line}  ${v.method}`)
+    } else if (!process.argv.includes('--list')) console.log(header)
   }
-  if (violations.length) {
-    console.error(header)
-    console.error('')
-    console.error('A SportsPlayer read keyed by sleeperId with no `sport` can return another sport\'s player')
-    console.error('under the same id (NFL 1466 Travis Kelce / NBA 1466 JaVale McGee). Add the sport the caller')
-    console.error('means — sleeperIdWhere(ids, sport) — or justify an ALLOWLIST entry.')
-    console.error('')
-    for (const v of violations) console.error(`  ${v.status.padEnd(10)} ${v.file}:${v.line}  ${v.method}`)
-    process.exit(1)
-  }
-  if (!process.argv.includes('--list')) console.log(header)
-  process.exit(stale.length ? 1 : 0)
+  process.exit(failed || staleAny ? 1 : 0)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()

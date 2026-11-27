@@ -218,8 +218,10 @@ export async function bridgeIdsForSleeperId(
   sleeperId: string,
   db: Pick<typeof prisma, 'playerIdentityMap'> = prisma,
 ): Promise<Partial<Record<BridgeColumn, string>>> {
+  // NFL, as the bridge itself is (`loadBridgedLeagues` reads `sport: 'NFL'`): `sleeperId` is the NFL
+  // Sleeper column, and an NBA id read here would hand back an NFL player's bridge ids.
   const row = await db.playerIdentityMap
-    .findUnique({ where: { sleeperId }, select: { fleaflickerId: true, mflId: true } })
+    .findUnique({ where: { sleeperId, sport: 'NFL' }, select: { fleaflickerId: true, mflId: true } })
     .catch(() => null)
   // Every player has a declared spelling (`sleeper:<his id>`): a declared league can always see him.
   const out: Partial<Record<BridgeColumn, string>> = { [DECLARED_BRIDGE]: sleeperId }

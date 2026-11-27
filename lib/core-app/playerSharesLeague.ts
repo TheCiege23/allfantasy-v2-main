@@ -90,7 +90,7 @@ export async function loadLeagueShareView(
     for (const id of sleeperIds) bridgedPlayers.add(id)
   } else if (bridgeReadable && bridgeColumn && sleeperIds.length > 0) {
     const idRows = await prisma.playerIdentityMap
-      .findMany({ where: { sleeperId: { in: sleeperIds }, [bridgeColumn]: { not: null } }, select: { sleeperId: true } })
+      .findMany({ where: { sport: 'NFL', sleeperId: { in: sleeperIds }, [bridgeColumn]: { not: null } }, select: { sleeperId: true } })
       .catch(() => [] as Array<{ sleeperId: string | null }>)
     for (const r of idRows) if (r.sleeperId) bridgedPlayers.add(r.sleeperId)
   }

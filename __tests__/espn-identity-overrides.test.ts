@@ -112,11 +112,11 @@ describe('applyEspnIdentityOverrides', () => {
 
     expect(updateMany).toHaveBeenCalledTimes(2)
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: 'r11', espnId: null, sleeperId: '11' },
+      where: { id: 'r11', sport: 'NFL', espnId: null, sleeperId: '11' },
       data: { espnId: '1' },
     })
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: 'bk', espnId: null, sleeperId: null },
+      where: { id: 'bk', sport: 'NFL', espnId: null, sleeperId: null },
       data: { espnId: '3', sleeperId: '33' },
     })
     expect(summary).toEqual({ already: 1, written: 2, refused: [{ espnId: '4', why: 'no identity row holds Sleeper 44' }] })

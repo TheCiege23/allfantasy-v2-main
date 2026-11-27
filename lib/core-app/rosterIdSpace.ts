@@ -258,14 +258,20 @@ export function translatePlayerData(playerData: unknown, map: ReadonlyMap<string
   return out
 }
 
-/** `espnId → sleeperId` for the ids given, from rows that carry both. One indexed read. */
+/**
+ * `espnId → sleeperId` for the ids given, from rows that carry both. One indexed read.
+ *
+ * NFL only, and says so in the query: ESPN translation exists for NFL leagues (ESPN 12483 Stafford IS
+ * Sleeper's 12483), `sleeperId` is the NFL Sleeper column, and ESPN numbers its sports separately too —
+ * an NBA row sharing the ESPN number must never translate an NFL roster.
+ */
 export async function loadEspnToSleeperMap(espnIds: readonly string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>()
   const ids = [...new Set(espnIds.filter(Boolean))]
   if (ids.length === 0) return out
   const rows = await prisma.playerIdentityMap
     .findMany({
-      where: { espnId: { in: ids }, sleeperId: { not: null } },
+      where: { sport: 'NFL', espnId: { in: ids }, sleeperId: { not: null } },
       select: { espnId: true, sleeperId: true },
     })
     .catch(() => [] as Array<{ espnId: string | null; sleeperId: string | null }>)

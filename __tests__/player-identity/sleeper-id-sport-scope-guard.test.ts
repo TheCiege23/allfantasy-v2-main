@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 // A plain .mjs module (the same file `node scripts/check-sleeper-id-sport-scope.mjs` runs).
-import { scanRepo, scanSource, applyAllowlist, ALLOWLIST } from '../../scripts/check-sleeper-id-sport-scope.mjs'
+import { scanRepo, scanSource, applyAllowlist, ALLOWLIST, IDENTITY_MAP_ALLOWLIST } from '../../scripts/check-sleeper-id-sport-scope.mjs'
 
 type Finding = { file: string; line: number; method: string; status: string }
 const ROOT = path.resolve(__dirname, '../..')
@@ -112,5 +112,54 @@ describe('sleeperId sport-scope guard — the detector', () => {
 
   it('fires on an unscoped updateMany keyed by sleeperId — it would write the other sport\'s row', () => {
     expect(flagged('await prisma.sportsPlayer.updateMany({ where: { sleeperId: id }, data: { team } })')).toHaveLength(1)
+  })
+})
+
+/*
+ * PlayerIdentityMap: `sleeperId` is the NFL column (globally unique) and NBA ids live in
+ * `sleeperNbaId`, so an unscoped read returns ONE row — the wrong sport's, for a non-NFL caller's id.
+ */
+describe('sleeperId sport-scope guard — PlayerIdentityMap', () => {
+  const flaggedPim = (src: string): Finding[] => scanSource(src, 'planted.ts', 'playerIdentityMap')
+
+  it('the repo has no unallowlisted, unscoped identity-map read by a Sleeper column', () => {
+    const { violations, stale } = applyAllowlist(scanRepo(ROOT, 'playerIdentityMap'), IDENTITY_MAP_ALLOWLIST)
+    expect(violations.map((v: Finding) => `${v.status} ${v.file}:${v.line}`)).toEqual([])
+    expect(stale).toEqual([])
+    for (const [file, entry] of Object.entries(IDENTITY_MAP_ALLOWLIST as Record<string, { count: number; reason: string }>)) {
+      expect(entry.reason?.length ?? 0, file).toBeGreaterThan(20)
+    }
+  })
+
+  it('POSITIVE CONTROL: un-scoping the career-history name read is caught', () => {
+    const real = readFileSync(path.join(ROOT, 'lib/core-app/careerHistory.ts'), 'utf8')
+    expect(scanSource(real, 'lib/core-app/careerHistory.ts', 'playerIdentityMap')).toEqual([])
+    const reverted = real.replace(
+      'const where = identityMapSleeperWhere([...ids], sport)',
+      'const where = { sleeperId: { in: [...ids] } }',
+    )
+    expect(reverted).not.toBe(real)
+    expect(scanSource(reverted, 'lib/core-app/careerHistory.ts', 'playerIdentityMap')).toHaveLength(1)
+  })
+
+  it('fires on either Sleeper column without a sport, and not with one', () => {
+    expect(flaggedPim('await prisma.playerIdentityMap.findMany({ where: { sleeperId: { in: ids } } })')).toHaveLength(1)
+    expect(flaggedPim('await prisma.playerIdentityMap.findUnique({ where: { sleeperId } })')).toHaveLength(1)
+    expect(flaggedPim('await prisma.playerIdentityMap.findMany({ where: { sleeperNbaId: { in: ids } } })')).toHaveLength(1)
+    expect(flaggedPim('await prisma.playerIdentityMap.findMany({ where: { espnId: { in: ids }, sleeperId: { not: null } } })')).toHaveLength(1)
+    expect(flaggedPim("await prisma.playerIdentityMap.findMany({ where: { sport: 'NFL', sleeperId: { in: ids } } })")).toHaveLength(0)
+    expect(flaggedPim("await prisma.playerIdentityMap.findUnique({ where: { sleeperId, sport: 'NFL' } })")).toHaveLength(0)
+    expect(flaggedPim("await prisma.playerIdentityMap.findMany({ where: { sport: 'NBA', sleeperNbaId: { in: ids } } })")).toHaveLength(0)
+  })
+
+  it('treats identityMapSleeperWhere as scoped only with a sport argument', () => {
+    expect(flaggedPim('await prisma.playerIdentityMap.findMany({ where: identityMapSleeperWhere(ids, sport) })')).toHaveLength(0)
+    expect(flaggedPim('const where = identityMapSleeperWhere(ids, sport)\nawait prisma.playerIdentityMap.findMany({ where })')).toHaveLength(0)
+    expect(flaggedPim('await prisma.playerIdentityMap.findMany({ where: identityMapSleeperWhere(ids) })')).toHaveLength(1)
+  })
+
+  it('a no-argument count is not a lookup, on either table', () => {
+    expect(flaggedPim('await prisma.playerIdentityMap.count()')).toHaveLength(0)
+    expect(flagged('await prisma.sportsPlayer.count()')).toHaveLength(0)
   })
 })

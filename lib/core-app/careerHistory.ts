@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { IDENTITY_SLEEPER_SELECT, identityMapSleeperIdOf, identityMapSleeperWhere } from '@/lib/player-identity/identityMapSleeperColumn'
 import { leagueDisplayName } from './leagueHome'
 import { NO_CAREER_FILTER, normalizeCareerSport, type CareerFilter } from './careerModel'
 import type { DraftCardFact, DraftStealFact, GradedTradeFact } from './careerRecordBook'
@@ -91,14 +92,33 @@ function sideAssets(side: TradeSideGrade, dir: 'in' | 'out'): string[] {
   return [...players.map((p) => p.name), ...picks.map((p) => p.label)].filter(Boolean)
 }
 
-async function playerNames(ids: string[]): Promise<Map<string, string>> {
-  const unique = [...new Set(ids.filter(Boolean))]
+/**
+ * Canonical names for Sleeper ids, EACH IN ITS OWN SPORT, keyed `<SPORT>|<id>`.
+ *
+ * 🛑 Sleeper reuses ids across sports (NFL 1466 Travis Kelce / NBA 1466 JaVale McGee) and the identity
+ * map keeps them in different columns (`sleeperId` NFL, `sleeperNbaId` NBA), so an NBA trade's `1466`
+ * read from `sleeperId` was named Travis Kelce. An id whose sport has no Sleeper column (or is unknown)
+ * stays unnamed — the trade line then counts it as unresolved rather than naming a stranger.
+ */
+async function playerNames(entries: ReadonlyArray<readonly [string | null | undefined, string]>): Promise<Map<string, string>> {
   const out = new Map<string, string>()
-  if (unique.length === 0) return out
-  const rows = await prisma.playerIdentityMap
-    .findMany({ where: { sleeperId: { in: unique } }, select: { sleeperId: true, canonicalName: true } })
-    .catch(() => [] as Array<{ sleeperId: string | null; canonicalName: string }>)
-  for (const r of rows) if (r.sleeperId) out.set(r.sleeperId, r.canonicalName)
+  const bySport = new Map<string, Set<string>>()
+  for (const [rawSport, id] of entries) {
+    const sport = String(rawSport ?? '').trim().toUpperCase()
+    if (!sport || !id) continue
+    bySport.set(sport, (bySport.get(sport) ?? new Set<string>()).add(id))
+  }
+  for (const [sport, ids] of bySport) {
+    const where = identityMapSleeperWhere([...ids], sport)
+    if (!where) continue
+    const rows = await prisma.playerIdentityMap
+      .findMany({ where, select: { ...IDENTITY_SLEEPER_SELECT, canonicalName: true } })
+      .catch(() => [] as Array<{ sleeperId: string | null; sleeperNbaId: string | null; canonicalName: string }>)
+    for (const r of rows) {
+      const sid = identityMapSleeperIdOf(r, sport)
+      if (sid) out.set(`${sport}|${sid}`, r.canonicalName)
+    }
+  }
   return out
 }
 
@@ -190,7 +210,7 @@ export async function loadCareerHistory(
                 .filter((l) => l.slots.size > 0)
                 .map((l) => ({ leagueId: l.id, managerId: { in: [...l.slots] } })),
             },
-            select: { leagueId: true, season: true, round: true, pickNumber: true, playerId: true, managerId: true },
+            select: { leagueId: true, sport: true, season: true, round: true, pickNumber: true, playerId: true, managerId: true },
             take: 50_000,
           })
           .catch(() => [])
@@ -201,6 +221,7 @@ export async function loadCareerHistory(
             where: { history: { sleeperUsername: { in: opts.tradeKeys } } },
             select: {
               transactionId: true,
+              sport: true,
               season: true,
               week: true,
               tradeDate: true,
@@ -288,19 +309,24 @@ export async function loadCareerHistory(
     if (filter.sport && !league) return false
     return true
   })
+  // A trade's players are named in its league's sport (`LeagueTrade.sport` when the league is not one of yours).
+  const tradeSport = (t: (typeof ungradedTrades)[number]) =>
+    String(opts.leagueByProvider.get(t.history.sleeperLeagueId)?.sport ?? t.sport ?? '').toUpperCase() || null
   const names = await playerNames(
-    ungradedTrades.slice(0, MAX_TRADE_EVENTS).flatMap((t) => [...playerIds(t.playersGiven), ...playerIds(t.playersReceived)]),
+    ungradedTrades
+      .slice(0, MAX_TRADE_EVENTS)
+      .flatMap((t) => [...playerIds(t.playersGiven), ...playerIds(t.playersReceived)].map((id) => [tradeSport(t), id] as const)),
   )
-  const label = (ids: string[], picks: unknown) => {
-    const known = ids.map((id) => names.get(id)).filter((n): n is string => !!n)
+  const label = (sport: string | null, ids: string[], picks: unknown) => {
+    const known = ids.map((id) => names.get(`${sport}|${id}`)).filter((n): n is string => !!n)
     const pickLabels = (Array.isArray(picks) ? picks : []).map(pickLabel).filter((p): p is string => !!p)
     return { list: [...known, ...pickLabels], unresolved: ids.length - known.length }
   }
   const listable = Math.max(0, MAX_TRADE_EVENTS - trades.length)
   for (const t of ungradedTrades.slice(0, listable)) {
     const league = opts.leagueByProvider.get(t.history.sleeperLeagueId)
-    const gave = label(playerIds(t.playersGiven), t.picksGiven)
-    const got = label(playerIds(t.playersReceived), t.picksReceived)
+    const gave = label(tradeSport(t), playerIds(t.playersGiven), t.picksGiven)
+    const got = label(tradeSport(t), playerIds(t.playersReceived), t.picksReceived)
     trades.push({
       id: `${t.history.sleeperLeagueId}:${t.transactionId}`,
       season: t.season,
@@ -332,7 +358,7 @@ export async function loadCareerHistory(
     seenPicks.add(k)
     return true
   })
-  const draftNames = await playerNames(mine.map((d) => d.playerId))
+  const draftNames = await playerNames(mine.map((d) => [d.sport, d.playerId] as const))
   const byDraft = new Map<string, typeof mine>()
   for (const d of mine) {
     const k = `${providerKey(d.leagueId)}:${d.season}`
@@ -388,7 +414,7 @@ export async function loadCareerHistory(
         ? {
             round: first.round,
             pickNumber: first.pickNumber,
-            player: draftNames.get(first.playerId) ?? 'a player we could not name',
+            player: draftNames.get(`${String(first.sport ?? '').toUpperCase()}|${first.playerId}`) ?? 'a player we could not name',
           }
         : null,
       picks: picks.length,

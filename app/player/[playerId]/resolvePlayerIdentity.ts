@@ -1,5 +1,6 @@
 import type { PlayerIdentityMap } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { identityMapSleeperWhere } from '@/lib/player-identity/identityMapSleeperColumn'
 import { foldInjuryTeam } from '@/lib/injuries/matchInjuryRows'
 import { buildNameIndex, resolveVerifiedMatch, type NameMatchReason } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -112,7 +113,9 @@ export async function resolvePlayerPageIdentity(
 ): Promise<PlayerPageResolution> {
   const byId = await prisma.playerIdentityMap.findFirst({ where: { id: playerId } }).catch(() => null)
   if (byId) return { identity: byId, reason: 'id' }
-  const bySleeper = await prisma.playerIdentityMap.findFirst({ where: { sleeperId: playerId } }).catch(() => null)
+  // In the page's sport and its Sleeper column: NFL 1466 is Travis Kelce, NBA 1466 JaVale McGee.
+  const sleeperWhere = identityMapSleeperWhere([playerId], lookup.sport)
+  const bySleeper = sleeperWhere ? await prisma.playerIdentityMap.findFirst({ where: sleeperWhere }).catch(() => null) : null
   if (bySleeper) return { identity: bySleeper, reason: 'sleeper_id' }
 
   const name = playerId.toLowerCase().replace(/-/g, ' ')

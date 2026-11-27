@@ -2,6 +2,7 @@ import { buildDraftContext } from '@/lib/adp/draftContextKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { identitySleeperColumn } from '@/lib/player-identity/identityMapSleeperColumn'
 import type { AggregatablePick } from '@/lib/adp/computeAllFantasyAdp'
 
 /**
@@ -143,16 +144,19 @@ async function resolvePlayers(
     const ids = Array.from(idSet)
     if (ids.length === 0) continue
 
-    const rows = (await prisma.playerIdentityMap.findMany({
-      where: {
-        [column]: { in: ids },
-        // Every column is held to the sport, `sleeperId` included: it is unique in this table only
-        // because NBA Sleeper ids live in `sleeperNbaId`, so an NBA draft's `1466` read here is NFL
-        // Travis Kelce. Scoped, an NBA id finds nothing and falls through to `SportsPlayer` below.
-        sport: sport.toUpperCase(),
-      },
-      select: { [column]: true, canonicalName: true, position: true },
-    } as any)) as unknown as Array<Record<string, string | null>>
+    /*
+     * Every column is held to the sport, and a Sleeper id is asked of THAT SPORT'S Sleeper column:
+     * `sleeperId` is NFL, NBA Sleeper ids live in `sleeperNbaId` (NFL 1466 is Travis Kelce, NBA 1466
+     * JaVale McGee). A sport with no Sleeper column skips the identity map and falls through to the
+     * sport-scoped `SportsPlayer` read below.
+     */
+    const dbColumn = column === 'sleeperId' ? identitySleeperColumn(sport) : column
+    const rows = dbColumn
+      ? ((await prisma.playerIdentityMap.findMany({
+          where: { [dbColumn]: { in: ids }, sport: sport.toUpperCase() },
+          select: { [dbColumn]: true, canonicalName: true, position: true },
+        } as any)) as unknown as Array<Record<string, string | null>>).map((r) => ({ ...r, [column]: r[dbColumn] ?? null }))
+      : []
 
     const seen = new Map<string, number>()
     for (const row of rows) {
@@ -186,6 +190,20 @@ async function resolvePlayers(
     }
   }
 
+  return out
+}
+
+/**
+ * The FIXED, sport-scoped resolution of Sleeper-id draft picks, by id — exported for
+ * `scripts/measure-cross-sport-sleeper-mislabels.ts`, which compares it with the pre-fix read.
+ */
+export async function resolveDraftFactSleeperPlayers(ids: readonly string[], sport: string): Promise<Map<string, ResolvedPlayer>> {
+  const resolved = await resolvePlayers(new Map([['sleeperId' as IdColumn, new Set(ids)]]), sport)
+  const out = new Map<string, ResolvedPlayer>()
+  for (const id of ids) {
+    const hit = resolved.get(resolutionKey('sleeperId', id))
+    if (hit) out.set(id, hit)
+  }
   return out
 }
 
