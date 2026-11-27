@@ -35,7 +35,7 @@ import { projectRosterSlots } from './derive'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
-import { sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
+import { espnSportOf, sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
 import { applyBridgeKeepingSlots, bridgeColumnFor, isDeclaredBridge, loadBridgedLeagues } from '@/lib/core-app/bridgedRosterIds'
 import { nonSleeperExternalIdWhere } from '@/lib/player-identity/externalIdNamespace'
 
@@ -183,7 +183,7 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
         faabRemaining: true,
         waiverPriority: true,
         settings: true,
-        league: { select: { platform: true } },
+        league: { select: { platform: true, sport: true } },
       },
     })
     /*
@@ -214,6 +214,10 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
       prepared,
       // Bridged rows are already in Sleeper's space; anything else goes through the one translator.
       (row: { league: { platform: string | null } | null }) => (bridgedMap ? 'sleeper' : row.league?.platform),
+      // An ESPN league of another sport is stripped, never put through the NFL crosswalk (rosterIdSpace.ts).
+      // ESPN's sport only: a native league of another sport keeps its catalog ids, which the other-sport
+      // readers of this world (start/sit, lineup builder) read by sport.
+      (row: { league: { platform: string | null; sport?: string | null } | null }) => espnSportOf(row.league?.platform, row.league?.sport),
     )
     const canonical: RawRosterRow[] = rows.map((row: {
       id: string

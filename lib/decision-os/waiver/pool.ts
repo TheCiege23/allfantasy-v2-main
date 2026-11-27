@@ -39,7 +39,7 @@ import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForSport } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
-import { sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
+import { espnSportOf, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeTeamNeeds, type TeamNeedsMap } from '@/lib/waiver-engine/team-needs'
@@ -192,6 +192,9 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
   const { rosters: leagueRosters, untranslatedEspnIds } = await sleeperReadableRostersWithGaps(
     rosterRows as RosterRow[],
     league?.platform,
+    // An ESPN league of another sport is stripped, never put through the NFL crosswalk; a native one
+    // keeps its catalog ids for this sport's pool, as before.
+    espnSportOf(league?.platform, sport),
   )
 
   /*

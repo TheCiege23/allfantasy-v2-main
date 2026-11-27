@@ -3,7 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import type { FantasyCalcSettings } from '@/lib/fantasycalc'
-import { isForeignIdSpace, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
+import { espnSportOf, isForeignIdSpace, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
 import { excludeUntranslatedEspn } from '@/lib/decision-os/waiver/pool'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
 import { valueBookFor, type ValueBook } from '@/lib/core-app/valueBook'
@@ -269,7 +269,8 @@ async function rosteredPlayerIds(leagueId: string, platform: string | null, spor
   const raw = await prisma.roster
     .findMany({ where: { leagueId }, select: { playerData: true } })
     .catch(() => [] as Array<{ playerData: unknown }>)
-  const { rosters, untranslatedEspnIds } = await sleeperReadableRostersWithGaps(raw, platform)
+  // ESPN's sport only: a native league of another sport is read by the sport pool as it always was.
+  const { rosters, untranslatedEspnIds } = await sleeperReadableRostersWithGaps(raw, platform, espnSportOf(platform, sport))
   const hide =
     untranslatedEspnIds.length > 0
       ? await excludeUntranslatedEspn(untranslatedEspnIds, sport).catch(() => null)
@@ -378,7 +379,9 @@ export async function buildAvailablePlayersContext(
    * it anyway listed their own rostered players as "available". Refused, the same way the lineup
    * optimizer refuses — with the real reason, not "the rosters have not synced".
    */
-  if (isForeignIdSpace(league.platform)) {
+  // An ESPN league of another sport is refused here too: its ids would otherwise be read through the
+  // NFL crosswalk (ESPN 15847 → Sleeper 1466, which is NFL Travis Kelce and NBA JaVale McGee).
+  if (isForeignIdSpace(league.platform, espnSportOf(league.platform, sportCode))) {
     return [
       `"${leagueName}" is a ${league.platform} league, and AllFantasy cannot yet match ${league.platform} roster entries to players,`,
       'so we cannot tell who is taken and who is free there. Say that plainly and suggest checking free agents',

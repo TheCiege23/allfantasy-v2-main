@@ -2,7 +2,7 @@ import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { espnSportOf, isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { bridgeColumnFor, isUnbridgedId } from '@/lib/core-app/bridgedRosterIds'
 import {
   defaultLeagueWeekPricingDeps,
@@ -191,7 +191,7 @@ export async function buildLineupOptimization(
    * someone to bench a player. One unidentified ACTIVE player refuses, with the count.
    */
   const provider = world.provenance?.provider
-  if (isForeignIdSpace(provider)) {
+  if (isForeignIdSpace(provider, espnSportOf(provider, world.league.sport))) {
     if (!bridgeColumnFor(provider) || roster.playerIds.length === 0) {
       return unresolved('roster_ids_unreadable', `${FOREIGN_IDS_UNREADABLE}, so your roster cannot be read to build a lineup.`)
     }
