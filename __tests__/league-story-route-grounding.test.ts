@@ -51,6 +51,11 @@ vi.mock('@/lib/injuries', () => ({ getInjuries: (...a: unknown[]) => getInjuries
 vi.mock('@/lib/scoring-engine/resolveTeamLabels', () => ({
   buildRosterLabelMap: (...a: unknown[]) => buildRosterLabelMapMock(...a),
 }))
+// The AF Commissioner gate and daily cap have their own suite (__tests__/league-story-ai); open here.
+vi.mock('@/lib/league-story-ai/leagueStoryAiGate', () => ({
+  checkLeagueStoryAiGate: async () => ({ ok: true, commissionerUserId: 'c1' }),
+  leagueStoryAiRefusal: () => new Response(null, { status: 403 }),
+}))
 
 async function post(body: unknown) {
   const { POST } = await import('@/app/api/league-story/route')

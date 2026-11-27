@@ -7,6 +7,7 @@ import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration'
 import { buildEnvelopeForTool, formatToolResult, validateToolOutput } from '@/lib/ai-tool-layer'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
+import { checkLeagueStoryAiGate } from '@/lib/league-story-ai/leagueStoryAiGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +44,7 @@ export async function POST(
     const gate = await requireLeagueApiAccess(leagueId)
     if (!gate.ok) return gate.response
 
-    let body: { rivalryId?: string } = {}
+    let body: { rivalryId?: string; lang?: unknown } = {}
     try {
       body = await req.json()
     } catch {
@@ -118,11 +119,15 @@ export async function POST(
       userMessage:
         'Explain why this rivalry matters now, what deterministic evidence supports it, and what to watch next.',
     })
-    const orchestration = await runUnifiedOrchestration({
-      envelope,
-      mode: 'consensus',
-      options: { timeoutMs: 20_000, maxRetries: 1 },
-    })
+    // AF Commissioner write-up (owner, 2026-11-27): locked or capped → the fact-built narrative, no model.
+    const aiGate = await checkLeagueStoryAiGate({ leagueId: gate.leagueId, kind: 'rivalry', lang: body.lang })
+    const orchestration = aiGate.ok
+      ? await runUnifiedOrchestration({
+          envelope,
+          mode: 'consensus',
+          options: { timeoutMs: 20_000, maxRetries: 1 },
+        })
+      : null
 
     let narrative = fallbackNarrative
     let verdict: string | null = null
@@ -136,7 +141,7 @@ export async function POST(
       | undefined
     let factGuardWarnings: string[] | undefined
 
-    if (orchestration.ok) {
+    if (orchestration?.ok) {
       const formatted = formatToolResult({
         toolKey: 'rivalries',
         primaryAnswer: orchestration.response.primaryAnswer || fallbackNarrative,
@@ -169,6 +174,8 @@ export async function POST(
       score: rivalry.rivalryScore,
       eventCount: rivalry.eventCount,
       timelinePreview: timeline.slice(0, 5),
+      source: orchestration?.ok ? 'ai' : 'template',
+      aiLocked: aiGate.ok ? null : aiGate.body,
     })
   } catch (e) {
     console.error('[rivalries/explain POST]', e)

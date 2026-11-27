@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   event: vi.fn(),
   narrative: vi.fn(),
   createStory: vi.fn(),
+  leagueGate: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: async () => ({ user: { id: 'u1', email: 'u1@example.test' } }) }))
@@ -25,6 +26,12 @@ vi.mock('@/lib/tokens/storylineSpendRefund', () => ({ refundStorylineSpend: h.re
 vi.mock('@/lib/drama-engine/DramaQueryService', () => ({ getDramaEventById: h.event }))
 vi.mock('@/lib/drama-engine/AIDramaNarrativeAdapter', () => ({ buildDramaNarrative: h.narrative }))
 vi.mock('@/lib/relationship-insights', () => ({ buildAIRelationshipContext: async () => null }))
+// story/create left token billing on 2026-11-27: the league's commissioner's AF Commissioner plan unlocks
+// it (lib/league-story-ai/leagueStoryAiGate.ts, suite __tests__/league-story-ai). Open here.
+vi.mock('@/lib/league-story-ai/leagueStoryAiGate', () => ({
+  checkLeagueStoryAiGate: h.leagueGate,
+  leagueStoryAiRefusal: (o: { status: number; body: unknown }) => new Response(JSON.stringify(o.body), { status: o.status }),
+}))
 vi.mock('@/lib/league-story-creator', () => ({
   createLeagueStory: h.createStory,
   getStoryVariant: () => null,
@@ -50,6 +57,7 @@ beforeEach(() => {
   h.event.mockReset().mockResolvedValue(EVENT)
   h.narrative.mockReset().mockResolvedValue({ narrative: 'Once upon a time', source: 'ai' })
   h.createStory.mockReset().mockResolvedValue({ ok: true, story: null, sections: [] })
+  h.leagueGate.mockReset().mockResolvedValue({ ok: true, commissionerUserId: 'c1' })
   vi.spyOn(console, 'error').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
@@ -103,34 +111,36 @@ describe('POST drama/tell-story', () => {
   })
 })
 
-describe('POST story/create', () => {
-  it('an invalid storyType is refused BEFORE the gate — nothing is charged', async () => {
+describe('POST story/create — no longer token-billed (owner, 2026-11-27)', () => {
+  it('an invalid storyType is refused BEFORE the league gate — no cap is used', async () => {
     const res = await createStory(post({ storyType: 'nope' }), ctx)
     expect(res.status).toBe(400)
-    expect(h.gate).not.toHaveBeenCalled()
+    expect(h.leagueGate).not.toHaveBeenCalled()
   })
 
-  it('without the client’s confirmation the gate is told NOT to spend', async () => {
+  it('the caller-billed token gate is never asked, confirmed or not', async () => {
     await createStory(post({ storyType: 'rivalry' }), ctx)
-    expect(h.gate).toHaveBeenCalledWith(expect.objectContaining({ confirmTokenSpend: false }))
+    await createStory(post({ storyType: 'rivalry', confirmTokenSpend: true }), ctx)
+    expect(h.gate).not.toHaveBeenCalled()
+    expect(h.leagueGate).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L1', kind: 'league_story' }))
   })
 
-  it('a story the creator could not write is refunded', async () => {
+  it('a locked league gets the gate\'s answer and no story is written', async () => {
+    h.leagueGate.mockResolvedValue({ ok: false, reason: 'plan', status: 403, body: { code: 'feature_not_entitled' } })
+    const res = await createStory(post({ storyType: 'rivalry' }), ctx)
+    expect(res.status).toBe(403)
+    expect(h.createStory).not.toHaveBeenCalled()
+  })
+
+  it('a story the creator could not write is a 500, and nothing is refunded because nothing was charged', async () => {
     h.createStory.mockResolvedValue({ ok: false, error: 'no data' })
-    const res = await createStory(post({ storyType: 'rivalry', confirmTokenSpend: true }), ctx)
+    const res = await createStory(post({ storyType: 'rivalry' }), ctx)
     expect(res.status).toBe(500)
-    expect(h.refund).toHaveBeenCalledWith({ userId: 'u1', ledgerId: 'ledger-1', surface: 'league_story_create' })
+    expect(h.refund).not.toHaveBeenCalled()
   })
 
-  it('a creator that throws is refunded too', async () => {
-    h.createStory.mockRejectedValue(new Error('boom'))
-    const res = await createStory(post({ storyType: 'rivalry', confirmTokenSpend: true }), ctx)
-    expect(res.status).toBe(500)
-    expect(h.refund).toHaveBeenCalledTimes(1)
-  })
-
-  it('[control] a written story is not refunded', async () => {
-    const res = await createStory(post({ storyType: 'rivalry', confirmTokenSpend: true }), ctx)
+  it('[control] a written story is 200', async () => {
+    const res = await createStory(post({ storyType: 'rivalry' }), ctx)
     expect(res.status).toBe(200)
     expect(h.refund).not.toHaveBeenCalled()
   })

@@ -7,6 +7,7 @@ import { ingest, storylineGenerated } from '@/lib/notification-engine'
 import { getInjuries } from '@/lib/injuries'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
+import { checkLeagueStoryAiGate, leagueStoryAiRefusal } from '@/lib/league-story-ai/leagueStoryAiGate'
 
 /**
  * /api/league-story — the weekly league storyline.
@@ -174,6 +175,15 @@ export async function POST(req: NextRequest) {
       `Story type: ${storyType}`,
       'Write 2-3 short paragraphs recapping THIS week for THIS league. Be lively and specific.',
     ].join('\n')
+
+    /*
+     * 🛑 AF COMMISSIONER, CHECKED HERE ON THE SERVER (owner, 2026-11-27). The whole product of this route is
+     * the model's text, so a league whose commissioner lacks AF Commissioner / AF Supreme gets the standard
+     * 403 paywall body, and a league past today's cap gets a 429 — in both cases before any model call.
+     * Checked after the "no results" refusal so an unplayed week costs no cap.
+     */
+    const aiGate = await checkLeagueStoryAiGate({ leagueId, kind: 'league_story', lang: (body as { lang?: unknown }).lang })
+    if (!aiGate.ok) return leagueStoryAiRefusal(aiGate)
 
     const result = await openaiChatText({
       messages: [

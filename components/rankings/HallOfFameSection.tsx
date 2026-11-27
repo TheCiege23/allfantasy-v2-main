@@ -8,6 +8,7 @@ import { HallOfFameCard } from "@/components/HallOfFameCard"
 import { SeasonLeaderboardCard } from "@/components/rankings/SeasonLeaderboardCard"
 import type { HallOfFameEntryRow, HallOfFameMomentRow } from "@/hooks/useHallOfFameEntriesAndMoments"
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from "@/lib/sport-scope"
+import { StoryAiLockNotice, type StoryAiLock } from "@/components/league-story-ai/StoryAiLockNotice"
 
 const HOF_SPORTS = [...SUPPORTED_SPORTS]
 const HOF_CATEGORIES = [
@@ -61,6 +62,7 @@ export function HallOfFameSection(props: {
   const [storyNarrative, setStoryNarrative] = useState<string | null>(null)
   const [storyLoading, setStoryLoading] = useState<string | null>(null)
   const [storyError, setStoryError] = useState<string | null>(null)
+  const [storyAiLock, setStoryAiLock] = useState<StoryAiLock>(null)
   const [syncMomentsLoading, setSyncMomentsLoading] = useState(false)
   const [engineLoading, setEngineLoading] = useState(false)
   const [engineSummary, setEngineSummary] = useState<string | null>(null)
@@ -121,6 +123,8 @@ export function HallOfFameSection(props: {
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data?.error ?? "Could not build Hall of Fame story")
         setStoryNarrative(data?.narrative ?? "No explanation available.")
+        // The fact-built narrative is shown either way; `aiLocked` says why Chimmy did not write it.
+        setStoryAiLock(data?.aiLocked ?? null)
       } catch (e: any) {
         setStoryNarrative("Could not load explanation.")
         setStoryError(e?.message ?? "Could not load explanation.")
@@ -405,6 +409,7 @@ export function HallOfFameSection(props: {
             and record seasons from league history.
           </p>
         )}
+        {storyId && <StoryAiLockNotice lock={storyAiLock} featureName="Chimmy Hall of Fame write-ups" />}
         {storyError && storyId && (
           <p className="text-xs text-red-300">Story error: {storyError}</p>
         )}

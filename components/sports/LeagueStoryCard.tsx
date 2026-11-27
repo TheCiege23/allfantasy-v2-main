@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { BookOpen, Loader2, RefreshCw } from 'lucide-react'
+import { StoryAiLockNotice, isStoryAiLock, type StoryAiLock } from '@/components/league-story-ai/StoryAiLockNotice'
 
 type StoryData = {
   id: string
@@ -13,10 +14,12 @@ export function LeagueStoryCard({ leagueId, sport, week }: { leagueId: string; s
   const [story, setStory] = useState<StoryData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lock, setLock] = useState<StoryAiLock>(null)
 
   async function generate() {
     setLoading(true)
     setError(null)
+    setLock(null)
     try {
       const res = await fetch('/api/league-story', {
         method: 'POST',
@@ -25,6 +28,11 @@ export function LeagueStoryCard({ leagueId, sport, week }: { leagueId: string; s
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+        // AF Commissioner lock or today's cap (lib/league-story-ai/leagueStoryAiGate.ts): the lock card, not an error.
+        if (isStoryAiLock(err)) {
+          setLock(err)
+          return
+        }
         // The route's `detail` is the readable reason ("No week has been scored yet…"); `error` is a code.
         setError(err.detail ?? err.error ?? 'Failed to generate')
         return
@@ -46,6 +54,7 @@ export function LeagueStoryCard({ leagueId, sport, week }: { leagueId: string; s
         </div>
         <p className="mt-2 text-xs text-white/40">Generate a Chimmy-powered recap of this week&apos;s league action.</p>
         {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+        <StoryAiLockNotice lock={lock} featureName="Chimmy weekly storyline" className="mt-3" />
         <button
           type="button"
           onClick={generate}

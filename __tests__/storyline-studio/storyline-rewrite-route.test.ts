@@ -5,6 +5,7 @@ const getLeagueRoleMock = vi.fn()
 const entitledMock = vi.fn()
 const readStudioViewMock = vi.fn()
 const requireFeatureEntitlementMock = vi.fn()
+const leagueGateMock = vi.fn()
 const rewriteMock = vi.fn()
 const refundMock = vi.fn()
 
@@ -18,6 +19,7 @@ vi.mock('@/lib/tokens/paidToolBilling', () => ({
 }))
 vi.mock('@/lib/tokens/storylineSpendRefund', () => ({ refundStorylineSpend: refundMock }))
 vi.mock('@/lib/league-story-creator/OneBrainNarrativeComposer', () => ({ rewriteHookInTone: rewriteMock }))
+vi.mock('@/lib/league-story-ai/leagueStoryAiGate', () => ({ checkLeagueStoryAiGate: leagueGateMock }))
 vi.mock('@/lib/storyline-studio/storylineService', () => ({ storylineEntitled: entitledMock, readStudioView: readStudioViewMock }))
 // Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
 vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
@@ -43,6 +45,7 @@ beforeEach(() => {
   entitledMock.mockResolvedValue(true)
   readStudioViewMock.mockResolvedValue({ hooks: { byMatchup: [{ hooks: [HOOK] }], league: [] } })
   requireFeatureEntitlementMock.mockResolvedValue({ ok: true, tokenSpend: { id: 'ledger1', balanceAfter: 10 } })
+  leagueGateMock.mockResolvedValue({ ok: true, commissionerUserId: 'u1' })
 })
 
 describe('storyline tone rewrite', () => {
@@ -53,31 +56,35 @@ describe('storyline tone rewrite', () => {
     expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
   })
 
-  it('is billed like story/create: storyline_creation with token fallback and confirm-before-spend', async () => {
+  it('is gated like story/create: the league commissioner\'s plan and cap, never a token charge (2026-11-27)', async () => {
     const { POST } = await import(ROUTE)
     rewriteMock.mockResolvedValue('Hawks over Owls, 2-1 all-time!')
-    const body = await (await POST(post({ hookId: 'h1', tone: 'trash_talk', confirmTokenSpend: true }), ctx)).json()
-    expect(requireFeatureEntitlementMock.mock.calls[0][0]).toMatchObject({
-      featureId: 'storyline_creation',
-      allowTokenFallback: true,
-      confirmTokenSpend: true,
-      tokenRuleCode: 'ai_storyline_creation',
-    })
+    const body = await (await POST(post({ hookId: 'h1', tone: 'trash_talk', lang: 'es', confirmTokenSpend: true }), ctx)).json()
+    expect(leagueGateMock).toHaveBeenCalledWith({ leagueId: 'l1', kind: 'league_story', lang: 'es' })
+    expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
     expect(body).toMatchObject({ source: 'ai', text: 'Hawks over Owls, 2-1 all-time!' })
   })
 
-  it('a rewrite that invents a number is discarded, the template returned, and the spend refunded', async () => {
+  it('a locked league gets the template and the reason, and the model is not called', async () => {
+    const { POST } = await import(ROUTE)
+    leagueGateMock.mockResolvedValue({ ok: false, reason: 'plan', status: 403, body: { code: 'feature_not_entitled', message: 'locked' } })
+    const body = await (await POST(post({ hookId: 'h1', tone: 'announcer' }), ctx)).json()
+    expect(body).toMatchObject({ source: 'template', text: HOOK.text, message: 'locked' })
+    expect(rewriteMock).not.toHaveBeenCalled()
+  })
+
+  it('a rewrite that invents a number is discarded and the template returned', async () => {
     const { POST } = await import(ROUTE)
     rewriteMock.mockResolvedValue('Hawks lead Owls 7-1!')
     const body = await (await POST(post({ hookId: 'h1', tone: 'announcer' }), ctx)).json()
-    expect(body).toMatchObject({ source: 'template', text: HOOK.text, refunded: true })
-    expect(refundMock).toHaveBeenCalledOnce()
+    expect(body).toMatchObject({ source: 'template', text: HOOK.text })
+    expect(refundMock).not.toHaveBeenCalled()
   })
 
   it('a bad request costs nothing', async () => {
     const { POST } = await import(ROUTE)
     expect((await POST(post({ hookId: 'h1', tone: 'roast' }), ctx)).status).toBe(400)
     expect((await POST(post({ hookId: 'nope', tone: 'neutral' }), ctx)).status).toBe(404)
-    expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
+    expect(leagueGateMock).not.toHaveBeenCalled()
   })
 })
