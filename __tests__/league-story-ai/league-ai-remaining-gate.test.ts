@@ -7,6 +7,8 @@
  *   POST /relationship-insights/explain   relationship_explain  10   (had no plan and no cap)
  *   POST /graph-insight  (every type)     graph_insight         20   (had no plan, no cap, no membership)
  *   POST /drama/tell-story                drama                 10   (was per-CALLER with a token fallback)
+ *   POST /forecast-summary                forecast_summary      10   (membership only; no fact-built
+ *                                                                     summary, so 403 paywall / 429 instead)
  *
  * Each already had a fact-built version, so locked or capped serves THAT with `aiLocked` (200), never a model
  * call. Same harness as league-story-ai-gate.test.ts: real routes, model mocked at its call site, the plan
@@ -113,6 +115,7 @@ vi.mock('@/lib/league-intelligence-graph', () => ({
   }),
 }))
 vi.mock('@/lib/prestige-governance/AIPrestigeContextResolver', () => ({ buildAIPrestigeContext: async () => null }))
+vi.mock('@/lib/ai-simulation-integration', () => ({ getInsightBundle: async () => null }))
 const EVENT = {
   id: 'd1', leagueId: 'L1', sport: 'NFL', season: 2026, headline: 'The Week 9 Heist', summary: 'A 0.4-point win.',
   dramaType: 'upset', dramaScore: 80, relatedManagerIds: ['m1'], relatedTeamIds: [], relatedMatchupId: null,
@@ -124,6 +127,7 @@ vi.mock('@/lib/drama-engine/DramaQueryService', () => ({
 import { POST as relationshipExplain } from '@/app/api/leagues/[leagueId]/relationship-insights/explain/route'
 import { POST as graphInsight } from '@/app/api/leagues/[leagueId]/graph-insight/handler'
 import { POST as dramaTellStory } from '@/app/api/leagues/[leagueId]/drama/tell-story/route'
+import { POST as forecastSummary } from '@/app/api/leagues/[leagueId]/forecast-summary/handler'
 
 const ctx = { params: Promise.resolve({ leagueId: 'L1' }) }
 const req = (body: unknown) =>
@@ -300,5 +304,79 @@ describe('caps are per kind and per league', () => {
     })
     expect((await (await relationshipExplain(req({}), ctx)).json()).source).toBe('ai')
     expect((await (await dramaTellStory(req({ eventId: 'd1' }), ctx)).json()).source).toBe('ai')
+  })
+})
+
+describe('POST /forecast-summary — no fact-built summary, so the standard 403 / 429', () => {
+  const FORECASTS = [
+    { teamId: 't1', teamName: 'Hawks', playoffProbability: 90, firstPlaceProbability: 40, championshipProbability: 30,
+      expectedWins: 10, expectedFinalSeed: 1, finishRange: { min: 1, max: 3 }, eliminationRisk: 5, confidenceScore: 80 },
+    { teamId: 't2', teamName: 'Owls', playoffProbability: 50, firstPlaceProbability: 10, championshipProbability: 8,
+      expectedWins: 7, expectedFinalSeed: 5, finishRange: { min: 3, max: 8 }, eliminationRisk: 40, confidenceScore: 70 },
+  ]
+  const call = (b: Record<string, unknown> = {}) =>
+    forecastSummary(req({ season: 2026, week: 9, teamForecasts: FORECASTS, ...b }) as never, ctx)
+
+  it.each(['free-c', 'pro-c'])("a %s commissioner's league: no model call, the standard paywall (403)", async (commish) => {
+    h.commissioner = commish
+    const res = await call()
+    const body = await res.json()
+    expect(h.openaiChatText).not.toHaveBeenCalled()
+    expect(res.status).toBe(403)
+    expect(body).toMatchObject({ code: 'feature_not_entitled', requiredPlan: 'AF Commissioner', featureId: 'storyline_creation' })
+    expect(h.counterCalls).toHaveLength(0)
+  })
+
+  it('a league with no commissioner on record is locked too (fails closed)', async () => {
+    h.commissioner = null
+    expect((await call()).status).toBe(403)
+    expect(h.openaiChatText).not.toHaveBeenCalled()
+  })
+
+  it.each(['comm-c', 'sup-c'])("an %s commissioner's league gets the summary (200)", async (commish) => {
+    h.commissioner = commish
+    const res = await call()
+    expect(res.status).toBe(200)
+    expect((await res.json()).summary).toBe('AI WRITE-UP')
+    expect(h.openaiChatText).toHaveBeenCalledTimes(1)
+    expect(h.counterCalls[0]).toMatchObject({ provider: 'league_story_ai', endpoint: 'forecast_summary:L1', callsLimit: 10 })
+  })
+
+  it("a member with no plan of their own, in an entitled league, gets it (200)", async () => {
+    h.session = { user: { id: 'member-u' } }
+    h.commissioner = 'sup-c'
+    expect((await call()).status).toBe(200)
+    expect(h.openaiChatText).toHaveBeenCalledTimes(1)
+  })
+
+  it('a non-member is refused before any model call or counter', async () => {
+    h.member = false
+    expect((await call()).status).toBe(403)
+    expect(h.openaiChatText).not.toHaveBeenCalled()
+    expect(h.counterCalls).toHaveLength(0)
+  })
+
+  it('the daily cap holds at 10 for the league: then 429 with Retry-After', async () => {
+    for (let i = 0; i < 10; i++) expect((await call()).status).toBe(200)
+    const res = await call()
+    const body = await res.json()
+    expect(h.openaiChatText).toHaveBeenCalledTimes(10)
+    expect(res.status).toBe(429)
+    expect(body).toMatchObject({ code: 'daily_limit_reached', limit: 10 })
+    expect(res.headers.get('Retry-After')).toBe('3600')
+  })
+
+  it('a bad request (no teamForecasts) costs no cap', async () => {
+    expect((await forecastSummary(req({ season: 2026 }) as never, ctx)).status).toBe(400)
+    expect(h.counterCalls).toHaveLength(0)
+  })
+
+  it('Spanish copy when asked, for the lock and for the cap', async () => {
+    h.commissioner = 'free-c'
+    expect(String((await (await call({ lang: 'es' })).json()).message)).toContain('comisionado')
+    h.commissioner = 'comm-c'
+    for (let i = 0; i < 10; i++) await call()
+    const capped = await (await call({ lang: 'es' })).json()
+    expect(String(capped.message)).toMatch(/resúmenes del pronóstico de playoffs.*medianoche UTC/)
   })
 })

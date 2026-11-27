@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { LeagueForecastDashboard } from './LeagueForecastDashboard'
 import type { TeamSeasonForecastDisplay } from './TeamForecastCard'
+import { StoryAiLockNotice, isStoryAiLock, type StoryAiLock } from '@/components/league-story-ai/StoryAiLockNotice'
 
 const currentYear = new Date().getFullYear()
 const defaultWeek = 1
@@ -43,6 +44,8 @@ export function LeagueForecastSection({
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+  // The league's commissioner lacks AF Commissioner, or the league used today's summaries (403 / 429).
+  const [aiLock, setAiLock] = useState<StoryAiLock>(null)
   const [compareA, setCompareA] = useState<string>('')
   const [compareB, setCompareB] = useState<string>('')
 
@@ -50,6 +53,7 @@ export function LeagueForecastSection({
     if (!leagueId) return
     setError(null)
     setAiError(null)
+    setAiLock(null)
     setAiSummary(null)
     try {
       const res = await fetch(
@@ -121,6 +125,7 @@ export function LeagueForecastSection({
     if (!forecasts?.length) return
     setAiLoading(true)
     setAiError(null)
+    setAiLock(null)
     try {
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/forecast-summary`, {
         method: 'POST',
@@ -133,6 +138,10 @@ export function LeagueForecastSection({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        if (isStoryAiLock(data)) {
+          setAiLock(data)
+          return
+        }
         setAiError(data?.error || "Chimmy couldn't generate an explanation")
         return
       }
@@ -150,9 +159,11 @@ export function LeagueForecastSection({
   }, [load])
 
   useEffect(() => {
-    if (!forecasts?.length || aiSummary != null || aiLoading) return
+    // Auto-generate once. A refusal (lock, cap) or an error stops it: without this the effect re-fired every
+    // time aiLoading went back to false, re-requesting a 403/429 in a loop. The button still retries by hand.
+    if (!forecasts?.length || aiSummary != null || aiLoading || aiError != null || aiLock) return
     void generateAiSummary()
-  }, [aiLoading, aiSummary, forecasts, generateAiSummary])
+  }, [aiLoading, aiSummary, aiError, aiLock, forecasts, generateAiSummary])
 
   useEffect(() => {
     if (!forecasts?.length) {
@@ -311,6 +322,7 @@ export function LeagueForecastSection({
         </div>
       </div>
       {aiError && <p className="mb-3 text-xs text-rose-400">{aiError}</p>}
+      <StoryAiLockNotice lock={aiLock} featureName="Chimmy playoff forecast summaries" className="mb-3" />
 
       <div className="mb-4 rounded-lg border border-white/10 bg-white/[0.02] p-3">
         <div className="flex flex-wrap items-center gap-2">

@@ -1,7 +1,7 @@
 /**
  * One gate for Chimmy's league WRITE-UPS: the Hall of Fame "why this matters", the league story, the
  * rivalry explainer, the relationship-insights explainer, the League Intelligence Graph insight, and the
- * drama "tell me the story" narration.
+ * drama "tell me the story" narration, and the playoff forecast summary (owner approved 2026-11-27).
  *
  * The last three joined on the owner's 2026-11-27 follow-up decision ("the remaining ungated league AI, same
  * rule"): relationship explain and graph insight had no plan and no cap; drama was gated per CALLER with a
@@ -43,6 +43,7 @@ export type LeagueStoryAiKind =
   | 'relationship_explain'
   | 'graph_insight'
   | 'drama'
+  | 'forecast_summary'
 
 /** Model write-ups per league per UTC day. Tune here and nowhere else. */
 export const LEAGUE_STORY_AI_DAILY_LIMITS: Readonly<Record<LeagueStoryAiKind, number>> = {
@@ -54,6 +55,7 @@ export const LEAGUE_STORY_AI_DAILY_LIMITS: Readonly<Record<LeagueStoryAiKind, nu
   // same three-model consensus call.
   graph_insight: 20,
   drama: 10,
+  forecast_summary: 10,
 }
 
 const COUNTER_PROVIDER = 'league_story_ai'
@@ -68,6 +70,7 @@ const LABELS: Record<LeagueStoryAiKind, Record<Lang, string>> = {
   relationship_explain: { en: 'relationship explainers', es: 'textos sobre las relaciones de la liga' },
   graph_insight: { en: 'league graph insights', es: 'análisis del grafo de la liga' },
   drama: { en: 'drama stories', es: 'relatos del drama de la liga' },
+  forecast_summary: { en: 'playoff forecast summaries', es: 'resúmenes del pronóstico de playoffs' },
 }
 
 export type LeagueStoryAiGateOutcome =
