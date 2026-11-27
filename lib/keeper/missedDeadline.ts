@@ -16,7 +16,7 @@
  * Pure.
  */
 
-import { placeTeamKeepers, type KeeperRules } from './keeperRules'
+import { placeTeamKeepers, stackWaiverKeeperCosts, type KeeperRules } from './keeperRules'
 
 export const MISSED_DEADLINE_RULES = ['auto_no_keepers', 'auto_best_value'] as const
 export type MissedDeadlineRule = (typeof MISSED_DEADLINE_RULES)[number]
@@ -32,6 +32,8 @@ export type BestValueCandidate = {
   costRound: number | null
   /** Market overall rank (1 = most valuable); null = no market price. */
   marketRank: number | null
+  /** An undrafted pickup ("Round N (not drafted)") — stacks with the team's other pickups. */
+  waiver?: boolean
 }
 
 export type AutoKeeper = BestValueCandidate & { costRound: number; marketRank: number; surplus: number; pickRound: number }
@@ -53,31 +55,47 @@ export function keeperValue(costRound: number | null, marketRank: number | null,
   return { marketRank, pickSlot, surplus: pickSlot - marketRank }
 }
 
+/**
+ * AF's keepers for a team that missed the deadline. Undrafted pickups stack exactly as on a manager's
+ * save (./keeperRules `stackWaiverKeeperCosts`, owner 2026-11-27): in the order AF chooses them (most
+ * surplus first), the first costs the waiver round, the next the round before, stepping past rounds a
+ * drafted keeper costs. A pickup is only kept while his STACKED cost still leaves him worth more than
+ * the pick; `waiverStack: false` (League.settings `keeper_waiver_stack`) prices each at the waiver round.
+ */
 export function chooseBestValueKeepers(input: {
   candidates: readonly BestValueCandidate[]
   maxKeepers: number
   teams: number
   rules: KeeperRules
   totalRounds: number
+  waiverStack?: boolean
 }): AutoKeeper[] {
   const teams = Math.max(1, input.teams)
+  const stack = input.waiverStack !== false
   const ranked = input.candidates
-    .flatMap((c) => (c.costRound != null && c.marketRank != null ? [{ ...c, costRound: c.costRound, marketRank: c.marketRank }] : []))
+    .flatMap((c) => (c.costRound != null && c.marketRank != null ? [{ ...c, costRound: c.costRound, marketRank: c.marketRank, waiver: c.waiver === true }] : []))
     .map((c) => ({ ...c, surplus: pickSlotForRound(c.costRound, teams) - c.marketRank }))
     .filter((c) => c.surplus > 0)
     // Most surplus first; a tie goes to the more valuable player, then the id for a stable answer.
     .sort((a, b) => b.surplus - a.surplus || a.marketRank - b.marketRank || a.playerId.localeCompare(b.playerId))
 
-  const chosen: AutoKeeper[] = []
+  // `picked` keeps each keeper's PRICED cost; stacking is recomputed over the whole set every time.
+  let picked: typeof ranked = []
+  let chosen: AutoKeeper[] = []
   for (const c of ranked) {
     if (chosen.length >= input.maxKeepers) break
+    const trialBase = [...picked, c]
+    const stacked = stack ? stackWaiverKeeperCosts(trialBase, { totalRounds: input.totalRounds }) : trialBase
+    const priced = stacked.map((t) => ({ ...t, surplus: pickSlotForRound(t.costRound, teams) - t.marketRank }))
+    // A stacked pickup that now costs more than he is worth is not kept (nor is anyone he would displace).
+    if (priced.some((t) => t.surplus <= 0)) continue
     // Keep the set legal under the league's same-round rule: a candidate the placement would
     // refuse is skipped, never forced in.
-    const trial = [...chosen, { ...c, pickRound: c.costRound }]
-    const placement = placeTeamKeepers(input.rules, trial.map((t) => ({ playerId: t.playerId, costRound: t.costRound })), { totalRounds: input.totalRounds })
+    const placement = placeTeamKeepers(input.rules, priced.map((t) => ({ playerId: t.playerId, costRound: t.costRound })), { totalRounds: input.totalRounds })
     if (placement.refused.length) continue
     const byId = new Map(placement.placed.map((p) => [p.playerId, p.round]))
-    chosen.splice(0, chosen.length, ...trial.map((t) => ({ ...t, pickRound: byId.get(t.playerId) ?? t.costRound })))
+    picked = trialBase
+    chosen = priced.map((t) => ({ ...t, pickRound: byId.get(t.playerId) ?? t.costRound }))
   }
   return chosen
 }
