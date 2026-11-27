@@ -67,6 +67,7 @@ const DEPTH_LABEL_ES: Record<CoreDepth, string> = {
   competitive_edge: 'Competitive Edge',
   af_intelligence: 'Proyecciones y ADP de AF',
   decision_history: 'Tu historial de decisiones',
+  trade_finder: 'Buscador de cambios',
 }
 
 export function depthLabelText(depth: CoreDepth, english: string, language: string | null | undefined): string {

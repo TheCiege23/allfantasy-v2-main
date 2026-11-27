@@ -6,6 +6,7 @@ import { assertLeagueMember } from '@/lib/league/league-access'
 import { assembleDiscoveryLeague } from '@/lib/trade-discovery/assembleRosters'
 import { findPackages } from '@/lib/trade-discovery/redraftTradeDiscovery'
 import { discoverySignals } from '@/lib/trade-block/redraftTradeBlockService'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { attachPackageGrades } from '@/lib/trade-discovery/packageGrades'
 
@@ -23,9 +24,28 @@ function isCommissionerOrOwner(leagueId: string, userId: string): Promise<boolea
 }
 
 export async function POST(req: NextRequest) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string; email?: string | null } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized', code: 'unauthorized' }, { status: 401 })
+
+  /*
+   * 🛑 THE TRADE FINDER RULE (owner's decision 2026-11-27; gating audit H3): AF Pro and AF Supreme, read
+   * from the same `trade_finder` depth as the /core finder and Partner Match. The redraft Trade Center's
+   * partner search and package finder were free to any league member. Refused before any league read.
+   */
+  const finderAccess = await resolveCoreDepth(userId, 'trade_finder', { email: session?.user?.email ?? null })
+  if (!finderAccess.unlocked) {
+    return NextResponse.json(
+      {
+        error: 'Premium feature',
+        code: 'feature_not_entitled',
+        message: `The trade finder is part of ${finderAccess.planName}.`,
+        requiredPlan: finderAccess.planName,
+        upgradePath: finderAccess.upgradePath,
+      },
+      { status: 403 },
+    )
+  }
 
   const body = (await req.json().catch(() => ({}))) as {
     leagueId?: string

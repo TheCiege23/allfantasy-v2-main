@@ -20,15 +20,20 @@ export async function GET(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Trade depth (AF Pro, lib/core-app/coreDepthAccess.ts). Refused before any league read.
-  const tradeDepth = await resolveCoreDepth(userId, 'trade_depth', { email: session?.user?.email ?? null })
-  if (!tradeDepth.unlocked) {
+  /*
+   * The Trade Finder rule (AF Pro and AF Supreme — not AF Commissioner alone; owner 2026-11-27): the
+   * `trade_finder` depth, the same key Partner Match reads. It was `trade_depth` (`af_intelligence`), which
+   * opened this finder to Commissioner while Partner Match stayed locked. Refused before any league read.
+   */
+  const finderAccess = await resolveCoreDepth(userId, 'trade_finder', { email: session?.user?.email ?? null })
+  if (!finderAccess.unlocked) {
     return NextResponse.json(
       {
         error: 'Premium feature',
         code: 'feature_not_entitled',
-        message: `The trade finder is part of ${tradeDepth.planName}.`,
-        upgradePath: tradeDepth.upgradePath,
+        message: `The trade finder is part of ${finderAccess.planName}.`,
+        requiredPlan: finderAccess.planName,
+        upgradePath: finderAccess.upgradePath,
       },
       { status: 403 },
     )

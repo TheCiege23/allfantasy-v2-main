@@ -789,7 +789,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "pro",
     tokenRuleCode: null,
     lockedReason: "Finding real trade opportunities against your roster is part of AF Pro.",
-    backendEnforcement: "Server: aiCostGate trade_finder (POST /api/trade-finder) and requireFeatureEntitlement on POST /api/trade-finder/matchmaking. Client FeatureGate in components/TradeFinderV2.tsx (the AF Legacy finder tab). /trade-finder redirects to the Trades screen finder.",
+    backendEnforcement: "Server: aiCostGate trade_finder (POST /api/trade-finder) and requireFeatureEntitlement on POST /api/trade-finder/matchmaking. Since 2026-11-27 also the /core finder (GET /api/league/trade-finder) and the redraft Trade Center's partner search and package finder (/api/redraft/trades/discovery, /package-finder), through the `trade_finder` core depth (lib/core-app/coreDepthAccess.ts) — AF Pro and AF Supreme, not AF Commissioner alone. Client FeatureGate in components/TradeFinderV2.tsx (the AF Legacy finder tab). /trade-finder redirects to the Trades screen finder.",
     frontendGateBehavior: "FeatureGate around the 'Find Trades' / 'Find Best Partners' buttons.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {

@@ -14,6 +14,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const session = vi.fn(async () => ({ user: { id: 'u-me' } }))
 vi.mock('next-auth', () => ({ getServerSession: () => session() }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+// An AF Pro viewer: the package finder follows the Trade Finder rule since 2026-11-27
+// (__tests__/monetization/player-tool-tier-2026-11-27.test.ts runs the other tiers).
+vi.mock('@/lib/core-app/corePaywall', () => ({
+  resolveCoreDepth: async () => ({ depth: 'trade_finder', unlocked: true, hasPlan: true, preLaunchFree: false, startsAt: '2026-10-15T04:00:00.000Z', planName: 'AF Pro', label: 'Trade Finder', upgradePath: '/upgrade?plan=pro' }),
+}))
 vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: vi.fn(async () => ({ ok: true })) }))
 const commish = vi.fn(async () => false)
 vi.mock('@/lib/league/permissions', () => ({ hasLeagueCommissionerRights: () => commish() }))
