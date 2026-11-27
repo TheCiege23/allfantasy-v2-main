@@ -1,6 +1,7 @@
 'use client'
 
 import { usePlayerCard, usePlayerCardLeague, type PlayerCardRef } from './PlayerCardProvider'
+import { PC_REF_ATTR, encodePlayerRef } from './playerCardSiblings'
 import '@/components/core-app/af-player-card.css'
 
 /**
@@ -38,10 +39,14 @@ export default function PlayerName({
     return <span className={className}>{name}</span>
   }
 
+  const ref: PlayerCardRef = { sport, externalId, sleeperId, name, position, team, imageUrl, leagueId: inLeague }
+
   return (
     <button
       type="button"
       className={`af-pc-trigger${className ? ` ${className}` : ''}`}
+      // Read back by the card to swipe through the names on this screen (playerCardSiblings.ts).
+      {...{ [PC_REF_ATTR]: encodePlayerRef(ref) }}
       onClick={(e) => {
         e.stopPropagation()
         /*
@@ -60,7 +65,7 @@ export default function PlayerName({
          * sheet cannot know which control asked for it.
          */
         e.currentTarget.focus()
-        open({ sport, externalId, sleeperId, name, position, team, imageUrl, leagueId: inLeague })
+        open(ref, { origin: e.currentTarget })
       }}
     >
       {name}

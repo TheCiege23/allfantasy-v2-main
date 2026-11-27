@@ -36,6 +36,11 @@ export type PlayerCardLayoutCopy = {
   colGames: string
   colPerGame: string
   lastGames: (season: number) => string
+  /** Swipe between players: the arrows' labels and "3 of 15". */
+  prevPlayer: (name: string) => string
+  nextPlayer: (name: string) => string
+  playerOf: (index: number, total: number) => string
+  swipeHint: string
   depthAt: (position: string) => string
   starter: string
 }
@@ -79,6 +84,10 @@ const en: PlayerCardLayoutCopy = {
   colGames: 'GP',
   colPerGame: 'Pts/G',
   lastGames: (season) => `${season} games`,
+  prevPlayer: (name) => `Previous player: ${name}`,
+  nextPlayer: (name) => `Next player: ${name}`,
+  playerOf: (index, total) => `${index} of ${total}`,
+  swipeHint: 'Swipe or use the arrow keys to move between players',
   depthAt: (position) => `${position} depth chart`,
   starter: 'Starter',
 }
@@ -122,6 +131,10 @@ const es: PlayerCardLayoutCopy = {
   colGames: 'PJ',
   colPerGame: 'Pts/P',
   lastGames: (season) => `Partidos ${season}`,
+  prevPlayer: (name) => `Jugador anterior: ${name}`,
+  nextPlayer: (name) => `Siguiente jugador: ${name}`,
+  playerOf: (index, total) => `${index} de ${total}`,
+  swipeHint: 'Desliza o usa las flechas para pasar de un jugador a otro',
   depthAt: (position) => `Profundidad ${position}`,
   starter: 'Titular',
 }

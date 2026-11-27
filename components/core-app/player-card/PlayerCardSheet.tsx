@@ -11,7 +11,8 @@ import type {
   PlayerCardTrade,
   PlayerCardWeek,
 } from '@/lib/core-app/playerCard'
-import type { PlayerCardRef } from './PlayerCardProvider'
+import type { PlayerCardNav, PlayerCardRef } from './PlayerCardProvider'
+import { PC_PANEL_ATTR, startsInHorizontalScroller } from './playerCardSiblings'
 import { useOverlayContainment } from '../useOverlayContainment'
 import PlayerHighlights from './PlayerHighlights'
 import PlayerRecentClips from '../highlights/PlayerRecentClips'
@@ -313,6 +314,7 @@ export default function PlayerCardSheet({
   onClose,
   onOpen,
   more = null,
+  nav = null,
 }: {
   subject: PlayerCardRef
   data: PlayerCardData | null
@@ -321,6 +323,8 @@ export default function PlayerCardSheet({
   onOpen: (ref: PlayerCardRef) => void
   /** Game log, Career and Depth chart (PlayerCardProvider reads them after the card). Null hides those tabs. */
   more?: PlayerCardMore | null
+  /** The list the card was opened from — previous / next player. Null: a lone card, no arrows. */
+  nav?: PlayerCardNav | null
 }) {
   const { language } = useOptionalLanguage()
   const c = playerCardCopy(language)
@@ -353,15 +357,61 @@ export default function PlayerCardSheet({
     initialFocusRef: closeRef,
   })
 
+  /*
+   * Swiping keeps the TAB: flipping through a roster on Game log is comparing players, and snapping
+   * back to the first tab on every step would defeat it. Everything else is the player's own.
+   */
+  const keepTabRef = useRef(false)
+  const step = (dir: -1 | 1) => {
+    if (!nav || confirmDrop) return
+    if (dir === -1 ? !nav.prev : !nav.next) return
+    keepTabRef.current = true
+    nav.go(dir)
+  }
+
   // A comp opened from inside the card must not inherit the previous player's tab, star or sheet.
   useEffect(() => {
     setInsightOpen(false)
     setWatchOverride(null)
     setBlockOverride(null)
     setBlockError(null)
-    setTab(null)
+    if (!keepTabRef.current) setTab(null)
+    keepTabRef.current = false
     setConfirmDrop(false)
   }, [subject.externalId, subject.sleeperId])
+
+  /*
+   * A horizontal swipe on the card moves to the previous / next player. Not when it starts on
+   * something that scrolls sideways (the game log table), not a mostly-vertical drag (reading the
+   * card), and not a slow drag.
+   */
+  const touchRef = useRef<{ x: number; y: number; t: number } | null>(null)
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    touchRef.current =
+      nav && e.touches.length === 1 && t && !startsInHorizontalScroller(e.target, panelRef.current)
+        ? { x: t.clientX, y: t.clientY, t: Date.now() }
+        : null
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchRef.current
+    touchRef.current = null
+    const t = e.changedTouches[0]
+    if (!start || !t) return
+    const dx = t.clientX - start.x
+    const dy = t.clientY - start.y
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - start.t > 800) return
+    step(dx < 0 ? 1 : -1)
+  }
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!nav || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+    const target = e.target as HTMLElement
+    // Arrow keys belong to whatever is editing or choosing: a field, a select, the tab strip.
+    if (target.closest('input, textarea, select, [contenteditable="true"], [role="tablist"]')) return
+    e.preventDefault()
+    step(e.key === 'ArrowRight' ? 1 : -1)
+  }
 
   const p = data?.player
   const name = p?.name ?? subject.name
@@ -536,13 +586,51 @@ export default function PlayerCardSheet({
 
   return (
     <div className="af-pc-scrim" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="af-pc-panel" role="dialog" aria-modal="true" aria-label={c.dialogLabel(name)} ref={panelRef} data-testid="player-card">
+      <div
+        className="af-pc-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={c.dialogLabel(name)}
+        ref={panelRef}
+        data-testid="player-card"
+        {...{ [PC_PANEL_ATTR]: '' }}
+        onTouchStart={nav ? onTouchStart : undefined}
+        onTouchEnd={nav ? onTouchEnd : undefined}
+        onKeyDown={nav ? onKeyDown : undefined}
+      >
         {/* bar ─────────────────────────────────────────────────── */}
         <div className="af-pc-bar">
           <button type="button" className="af-pc-back" onClick={onClose}>
             <span>{league ? `‹ ${league.leagueName}` : c.back}</span>
           </button>
           <span className="af-pc-bar-sp" />
+          {nav ? (
+            <div className="af-pc-nav" role="group" aria-label={l.swipeHint} data-testid="player-card-nav">
+              <button
+                type="button"
+                className="af-pc-nav-btn"
+                onClick={() => step(-1)}
+                disabled={!nav.prev}
+                aria-label={nav.prev ? l.prevPlayer(nav.prev.name) : undefined}
+                data-testid="player-card-prev"
+              >
+                <span aria-hidden>‹</span>
+              </button>
+              <span className="af-pc-nav-pos af-num" aria-live="polite">
+                {l.playerOf(nav.index + 1, nav.total)}
+              </span>
+              <button
+                type="button"
+                className="af-pc-nav-btn"
+                onClick={() => step(1)}
+                disabled={!nav.next}
+                aria-label={nav.next ? l.nextPlayer(nav.next.name) : undefined}
+                data-testid="player-card-next"
+              >
+                <span aria-hidden>›</span>
+              </button>
+            </div>
+          ) : null}
           {useFollow || (league && watchId) ? (
             <button
               type="button"
