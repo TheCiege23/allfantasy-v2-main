@@ -372,6 +372,8 @@ export type PlayerCardLeague = {
    */
   slot: string
   isYours: boolean
+  /** The id his roster row carries in this league, when he is on one. What a drop must name. */
+  rosterPlayerId?: string
   owner: { teamName: string | null; ownerName: string | null } | null
   /** Priced under THIS league's variant/scoring/teams, via the DB-first market value service. NFL only. */
   price: SectionState<{ value: number; mode: string; numQbs: 1 | 2; teams: number }>
@@ -1517,6 +1519,8 @@ async function loadLeague(
   const declaredReadable = foreign && (await isDeclaredReadableLeague(league))
   let slot = foreign && !declaredReadable ? 'UNREADABLE' : 'NOT ROSTERED'
   let holder: (typeof rosters)[number] | null = null
+  /* The id his roster row actually carries — what a roster move (the drop hand-off) has to name. */
+  let heldAs: string | null = null
   /*
    * ⚠ A FOREIGN LEAGUE IS READ IN ITS OWN ID SPACE (2026-11-06). The stripped rosters above can never
    * hold his Sleeper id, so every Fantrax card said UNREADABLE. `rosterPlayerId` is set only when the
@@ -1533,6 +1537,7 @@ async function loadLeague(
       if (found) {
         slot = found
         holder = r as (typeof rosters)[number]
+        heldAs = rosterPlayerId
         break
       }
     }
@@ -1543,6 +1548,7 @@ async function loadLeague(
       if (found) {
         slot = found
         holder = r
+        heldAs = sleeperId
         break
       }
     }
@@ -1757,6 +1763,7 @@ async function loadLeague(
     platform: league.platform,
     slot,
     isYours,
+    ...(heldAs ? { rosterPlayerId: heldAs } : {}),
     owner: team ? { teamName: team.teamName, ownerName: team.ownerName } : null,
     price,
     yourRoster,

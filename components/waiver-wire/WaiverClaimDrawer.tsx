@@ -34,6 +34,8 @@ type DrawerProps = {
   conditionalClaims?: boolean
   /** Set to offer Chimmy bid help (AF Pro) on a FAAB claim; the route checks the plan. */
   bidHelpLeagueId?: string | null
+  /** A drop already chosen (the player card's Drop hand-off): picked when the sheet opens, still changeable. */
+  initialDropId?: string | null
 }
 
 type BidHelpState =
@@ -55,6 +57,7 @@ export default function WaiverClaimDrawer({
   immediate = false,
   conditionalClaims = false,
   bidHelpLeagueId = null,
+  initialDropId = null,
 }: DrawerProps) {
   const dropOptions = rosterPlayers?.length ? rosterPlayers : rosterPlayerIds.map((id) => ({ id, name: null }))
   // The name alone: a roster id means nothing to a manager. The id is the fallback when no name is known.
@@ -65,6 +68,11 @@ export default function WaiverClaimDrawer({
   const [submitting, setSubmitting] = useState(false)
   const [group, setGroup] = useState<string>("")
   const [bidHelp, setBidHelp] = useState<BidHelpState>({ kind: 'idle' })
+
+  useEffect(() => {
+    if (open && initialDropId && rosterPlayerIds.includes(initialDropId)) setDropId(initialDropId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialDropId])
 
   useEffect(() => {
     if (!open) {

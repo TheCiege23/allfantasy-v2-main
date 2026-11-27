@@ -30,7 +30,6 @@ import {
   pickLabelText,
   playerCardCopy,
   playerCardReasonText,
-  slotText,
   withheldGradeText,
 } from '@/lib/core-app/playerCardCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
@@ -41,6 +40,11 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import GamesCountWeekPanel from './GamesCountWeekPanel'
 import { DynastyMarkerChips } from '@/components/core-app/screens/DynastyRosterMarkers'
 import { isGamesCountSport } from '@/lib/redraft/gamesCount'
+import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import type { PlayerCardMore } from '@/lib/core-app/playerCardMore'
+import { playerCardLayoutCopy, type CardTabId } from '@/lib/core-app/playerCardLayoutCopy'
+import { playerCardRankChips, playerCardTabs } from '@/lib/core-app/playerCardTabs'
+import { playerCardActions } from '@/lib/core-app/playerCardActions'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -56,10 +60,12 @@ import { isGamesCountSport } from '@/lib/redraft/gamesCount'
  * with one media query rather than this file branching on a width it would have
  * to measure (and would get wrong on first paint).
  *
- * ⚠ NOTHING HERE INVENTS A NUMBER. Every section is a `SectionState`; when one
- * is unavailable the card prints its REASON rather than a dash, because "—" and
- * "we have never priced kickers" look identical and only one of them tells the
- * reader whether to go looking elsewhere.
+ * ⚠ NOTHING HERE INVENTS A NUMBER, AND NOTHING PRINTS WHY ONE IS MISSING (owner, 2026-11-26). The
+ * header follows Sleeper's: a big headshot on a club-tinted band, the owner, name, bio, rank chips and
+ * the roster actions. Below it, tabs (lib/core-app/playerCardTabs.ts) show only what this sport and
+ * player actually have; a section with no data loses its tab rather than explaining itself. News sits
+ * in a side column on a wide screen and is a tab on a phone. Drop opens a confirm sheet that hands off
+ * to the league's Players & waivers screen (lib/core-app/playerCardActions.ts) — no new roster rules.
  *
  * SPANISH (2026-10-06): the card's own words come from lib/core-app/playerCardCopy.ts in the
  * reader's language (`useOptionalLanguage`, English on the server and the first client render), and
@@ -71,35 +77,6 @@ function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return '?'
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts.at(-1)?.[0] ?? '') : '')).toUpperCase()
-}
-
-/** A section that has no data prints why, quietly, in place of the content. */
-function Absent({ reason }: { reason: string }) {
-  return <p className="af-pc-absent">{reason}</p>
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <div className="af-pc-label">{children}</div>
-}
-
-function Tile({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string
-  value: string
-  sub?: React.ReactNode
-  tone?: 'accent' | 'good' | 'bad' | 'plain'
-}) {
-  return (
-    <div className="af-pc-tile">
-      <Label>{label}</Label>
-      <div className={`af-pc-tile-v af-num${tone && tone !== 'plain' ? ` af-pc-tile-v--${tone}` : ''}`}>{value}</div>
-      {sub ? <div className="af-pc-tile-sub">{sub}</div> : null}
-    </div>
-  )
 }
 
 function ScheduleRows({ weeks, language }: { weeks: PlayerCardWeek[]; language: string }) {
@@ -232,63 +209,153 @@ function NewsRows({ items, language }: { items: PlayerCardNews[]; language: stri
   )
 }
 
+/** Football's fantasy weeks; every other sport's game log is keyed by date. */
+const isWeeklySport = (sport: string) => ['NFL', 'NCAAF'].includes(sport.toUpperCase())
+
+/** One number with its label, used in the Outlook tab. */
+function Stat({ label, value, sub }: { label: string; value: string; sub?: React.ReactNode }) {
+  return (
+    <div className="af-pc-stat">
+      <div className="af-pc-stat-l">{label}</div>
+      <div className="af-pc-stat-v af-num">{value}</div>
+      {sub ? <div className="af-pc-stat-s">{sub}</div> : null}
+    </div>
+  )
+}
+
+/** A stable, dark band colour per club: the header's tint behind the crest. */
+function bandColour(sport: string, team: string | null): string {
+  const key = `${sport}:${(team ?? '').toUpperCase()}`
+  let h = 0
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0
+  return `hsl(${h % 360} 45% 24%)`
+}
+
+/**
+ * Sleeper's "Confirm Transaction" sheet for a Drop. It makes no move itself: Confirm hands off to the
+ * league's Players & waivers screen with him picked as the drop (lib/core-app/playerCardActions.ts),
+ * where the add or claim that goes with it runs through the existing routes and their rules.
+ */
+export function DropConfirmSheet({
+  name,
+  position,
+  team,
+  sport,
+  image,
+  href,
+  language,
+  onCancel,
+}: {
+  name: string
+  position: string | null
+  team: string | null
+  sport: string
+  image: string | null
+  href: string
+  language: string
+  onCancel: () => void
+}) {
+  const l = playerCardLayoutCopy(language)
+  const crest = team && !isNoTeam(team) ? teamLogoUrl(sport, team) : null
+  return (
+    <div className="af-pc-confirm-scrim" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
+      <div className="af-pc-confirm" role="alertdialog" aria-modal="true" aria-labelledby="af-pc-confirm-t" data-testid="player-card-drop-confirm">
+        <div className="af-pc-confirm-h">
+          <div>
+            <h3 id="af-pc-confirm-t">{l.confirmTitle}</h3>
+            <p>{l.confirmSub}</p>
+          </div>
+          <button type="button" className="af-pc-x" onClick={onCancel} aria-label={l.cancel}>
+            ✕
+          </button>
+        </div>
+        <div className="af-pc-confirm-box">
+          <div className="af-pc-confirm-kind">{l.confirmDrop}</div>
+          <div className="af-pc-confirm-tag">{l.dropTag}</div>
+          <div className="af-pc-confirm-row">
+            <span className="af-pc-confirm-face" aria-hidden>
+              {image ? (
+                <FallbackImg src={image} alt="" width={44} height={44} fallback={<span>{initials(name)}</span>} />
+              ) : (
+                <span>{initials(name)}</span>
+              )}
+              {crest ? <FallbackImg className="af-pc-confirm-crest" src={crest} alt="" width={18} height={18} fallback={null} /> : null}
+            </span>
+            <span>
+              <b>{name}</b>
+              <span className="af-pc-faint">{[position?.toUpperCase(), team].filter(Boolean).join(' · ')}</span>
+            </span>
+          </div>
+          <p className="af-pc-confirm-next">{l.confirmNext}</p>
+        </div>
+        <div className="af-pc-confirm-a">
+          <button type="button" className="af-pc-btn af-pc-btn--ghost" onClick={onCancel}>
+            {l.cancel}
+          </button>
+          <a className="af-pc-btn af-pc-btn--go" href={href} data-testid="player-card-drop-go">
+            {l.confirm}
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PlayerCardSheet({
   subject,
   data,
   status,
   onClose,
   onOpen,
+  more = null,
 }: {
   subject: PlayerCardRef
   data: PlayerCardData | null
   status: 'idle' | 'loading' | 'ready' | 'error'
   onClose: () => void
   onOpen: (ref: PlayerCardRef) => void
+  /** Game log, Career and Depth chart (PlayerCardProvider reads them after the card). Null hides those tabs. */
+  more?: PlayerCardMore | null
 }) {
   const { language } = useOptionalLanguage()
   const c = playerCardCopy(language)
+  const l = playerCardLayoutCopy(language)
   const reason = (text: string) => playerCardReasonText(text, language)
   const ago = (iso: string | null) => cardAgo(iso, language)
   const afProjection = data?.afLeagueProjection
   const projectionUnit = afProjection?.unit === 'category score' ? c.afCategory : c.afPoints
-  const projectionNumber = (points: number) => points.toLocaleString(getAppIntlLocale(), { maximumFractionDigits: 2 })
+  const projectionNumber = (points: number) => points.toLocaleString(getAppIntlLocale(), { maximumFractionDigits: 1 })
   const [insightOpen, setInsightOpen] = useState(false)
-  /* The ☆'s optimistic value; null means "defer to the payload". Declared here,
-     beside its sibling, because the reset effect below closes over it. */
+  /* The ☆'s optimistic value; null means "defer to the payload". */
   const [watchOverride, setWatchOverride] = useState<boolean | null>(null)
   /* The trade-block toggle's optimistic value, the same way; plus a refusal to show. */
   const [blockOverride, setBlockOverride] = useState<boolean | null>(null)
   const [blockBusy, setBlockBusy] = useState(false)
   const [blockError, setBlockError] = useState<string | null>(null)
+  const [tab, setTab] = useState<CardTabId | null>(null)
+  const [confirmDrop, setConfirmDrop] = useState(false)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const closeRef = useRef<HTMLButtonElement | null>(null)
 
   /*
-   * Focus lands inside the sheet AND stays there, the page behind stops
-   * scrolling, Escape closes, and focus returns to the row that opened it.
-   *
-   * Containment did not exist before: Tab walked straight out of the sheet into
-   * the roster behind the scrim. The scroll lock and Escape used to live in
-   * PlayerCardProvider; both now come from the shared hook, which reference-counts
-   * the lock — so opening Comms on top of this sheet and closing THIS one first
-   * no longer unlocks the page underneath a still-open drawer.
+   * Focus lands inside the sheet AND stays there, the page behind stops scrolling, Escape closes,
+   * and focus returns to the row that opened it (the shared, reference-counted hook).
    */
   useOverlayContainment({
     active: true,
     containerRef: panelRef,
-    onClose,
+    onClose: confirmDrop ? () => setConfirmDrop(false) : onClose,
     initialFocusRef: closeRef,
   })
 
-  // Collapse the expander whenever the subject changes — a comp opened from
-  // inside the card must not inherit the previous player's expanded state.
-  // ...and so must the star's optimistic override, or a player you starred
-  // hands his lit ☆ to whoever you open next.
+  // A comp opened from inside the card must not inherit the previous player's tab, star or sheet.
   useEffect(() => {
     setInsightOpen(false)
     setWatchOverride(null)
     setBlockOverride(null)
     setBlockError(null)
+    setTab(null)
+    setConfirmDrop(false)
   }, [subject.externalId, subject.sleeperId])
 
   const p = data?.player
@@ -296,31 +363,23 @@ export default function PlayerCardSheet({
   const position = p?.position ?? subject.position ?? null
   const team = p?.team ?? subject.team ?? null
   const image = p?.imageUrl ?? subject.imageUrl ?? null
+  const sport = String(p?.sport ?? subject.sport ?? 'NFL')
   const league = data?.league ?? null
   const market = data?.market
   const bio = data?.bio
-  // Player depth (AF Pro). Locked, the route withheld the price move, trades, comps and insight.
   const depth = data?.depth ?? null
   const depthLocked = depth?.unlocked === false
-  // The derived sentence, in the reader's language from its parts (English whole when it has none).
   const insight = data?.insight ? insightText(data.insight, language) : null
 
+  const tabs = playerCardTabs(data, more)
+  const activeTab: CardTabId | null = tab && tabs.includes(tab) ? tab : (tabs.find((t) => t !== 'news') ?? tabs[0] ?? null)
+  const chips = playerCardRankChips(data, l)
+  const actions = playerCardActions(league, { sleeperId: p?.sleeperId ?? subject.sleeperId, externalId: p?.externalId ?? subject.externalId, name })
+
   /*
-   * The ☆.
-   *
-   * ⚠ THE OVERRIDE IS SEPARATE FROM THE PAYLOAD, RATHER THAN SEEDED FROM IT.
-   * Seeding `useState(league?.watched)` would freeze the first render's value:
-   * the card is re-used across subjects, so the second player opened would show
-   * the FIRST one's star until something else forced a remount. Holding the
-   * optimistic value as an override that falls back to the payload means a new
-   * payload is authoritative the moment it lands.
-   */
-  /*
-   * ⚠ FOLLOW FIRST, LEAGUE WATCHLIST AS THE FALLBACK (user decisions, 2026-09-14). When the
-   * payload carries `follow`, the star is a cross-league follow and renders on EVERY card,
-   * league or not. `follow` is absent when follows are unavailable (signed out, or the
-   * `player_follows` migration not applied) — then the star is the league watchlist exactly
-   * as before, and still only on the league flavour.
+   * ⚠ FOLLOW FIRST, LEAGUE WATCHLIST AS THE FALLBACK (user decisions, 2026-09-14). With `follow` on
+   * the payload the star is a cross-league follow on EVERY card; without it (signed out, or the
+   * migration not applied) it is this league's watchlist, and only on the league flavour.
    */
   const follow = data?.follow ?? null
   const followSleeperId = p?.sleeperId ?? subject.sleeperId ?? null
@@ -332,8 +391,7 @@ export default function PlayerCardSheet({
   const toggleWatch = async () => {
     if (!useFollow && (!league || !watchId)) return
     const next = !watched
-    // Flip first: this is a pop-up, and a star that waits for a round-trip
-    // reads as a dropped click.
+    // Flip first: a star that waits for a round-trip reads as a dropped click.
     setWatchOverride(next)
     try {
       const res = await fetch('/api/core/player-card/watch', {
@@ -343,31 +401,21 @@ export default function PlayerCardSheet({
         body: JSON.stringify(
           useFollow
             ? {
-                sport: p?.sport ?? subject.sport,
+                sport,
                 ...(followSleeperId ? { sleeperId: followSleeperId } : {}),
                 ...(followExternalId ? { externalId: followExternalId } : {}),
               }
-            : {
-                leagueId: league!.leagueId,
-                sleeperId: watchId,
-                sport: p?.sport ?? subject.sport,
-              },
+            : { leagueId: league!.leagueId, sleeperId: watchId, sport },
         ),
       })
-      // ⚠ REVERT ON A REFUSAL, NOT ONLY ON A THROW. A 401 or 404 resolves
-      // successfully; leaving the star lit there would tell the reader something
-      // was saved when nothing was, which is worse than the click not landing.
+      // Revert on a refusal too: a 401 resolves, and a lit star over nothing saved is worse.
       if (!res?.ok) setWatchOverride(!next)
     } catch {
       setWatchOverride(!next)
     }
   }
 
-  /*
-   * The trade block. Only YOUR players can be put on it, and only where AllFantasy can hold the
-   * listing (Sleeper leagues today) — the server proves both; this only decides what to offer.
-   * Someone else's listed player shows a tag instead.
-   */
+  /* The trade block: only YOUR players, only where AllFantasy can hold the listing (the server proves both). */
   const block = league?.tradeBlock ?? null
   const onBlock = blockOverride ?? Boolean(block?.listed && block?.byYou)
   const canMarkBlock = Boolean(league?.isYours && block?.supported && watchId)
@@ -383,12 +431,7 @@ export default function PlayerCardSheet({
         method: next ? 'POST' : 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          leagueId: league.leagueId,
-          sleeperId: watchId,
-          sport: p?.sport ?? subject.sport,
-          list: 'trade-block',
-        }),
+        body: JSON.stringify({ leagueId: league.leagueId, sleeperId: watchId, sport, list: 'trade-block' }),
       })
       if (!res?.ok) {
         setBlockOverride(!next)
@@ -403,64 +446,79 @@ export default function PlayerCardSheet({
     }
   }
 
-  const openComp = (c: PlayerCardComp) => {
-    onOpen({
-      sport: subject.sport,
-      sleeperId: c.sleeperId,
-      name: c.name,
-      position: c.position,
-      leagueId: subject.leagueId,
-    })
+  const openComp = (comp: PlayerCardComp) => {
+    onOpen({ sport: subject.sport, sleeperId: comp.sleeperId, name: comp.name, position: comp.position, leagueId: subject.leagueId })
   }
+
+  const crest = team && !isNoTeam(team) ? teamLogoUrl(sport, team) : null
+
+  /* The owner line above the name: who holds him here. Nothing when it is not known. */
+  const ownerLine = !league
+    ? null
+    : league.slot === 'UNREADABLE'
+      ? null
+      : league.slot === 'NOT ROSTERED'
+        ? c.freeAgent
+        : league.isYours
+          ? c.onYourRoster
+          : c.ownedBy(league.owner?.ownerName ?? null)
+
+  /* Outlook's value: the league's own value when it has one, the market's otherwise — said once. */
+  const value: { label: string; value: string; sub?: string } | null = league?.boardValue?.available
+    ? {
+        label: c.leagueValue,
+        value: Math.round(league.boardValue.data.value).toLocaleString(getAppIntlLocale()),
+        sub: c.leagueValueSub(
+          league.boardValue.data.perGame.toFixed(1),
+          league.boardValue.data.unit,
+          league.boardValue.data.gamesRemaining,
+          league.boardValue.data.scheduleKnown,
+        ),
+      }
+    : league?.price.available
+      ? {
+          label: c.leaguePrice,
+          value: league.price.data.value.toLocaleString(getAppIntlLocale()),
+          sub: c.leaguePriceSub(league.price.data.mode, league.price.data.numQbs, league.price.data.teams),
+        }
+      : market?.available
+        ? {
+            label: c.tradePrice,
+            value: market.data.value.toLocaleString(getAppIntlLocale()),
+            sub: market.data.delta
+              ? `${market.data.delta.change >= 0 ? '+' : ''}${market.data.delta.change.toLocaleString(getAppIntlLocale())} · ${c.deltaDays(market.data.delta.days)}`
+              : undefined,
+          }
+        : null
+  const dynasty = league?.boardValue?.available && league.boardValue.data.dynastyValue != null ? league.boardValue.data : null
+  // An AF trade value of 0 says nothing a reader can use; it is shown only when there is one.
+  const tradeValue = afProjection ? (afProjection.dynastyTradeValue ?? afProjection.tradeValue) || null : null
+
+  const newsBody = data ? (
+    <>
+      {data.news.available ? <NewsRows items={data.news.data} language={language} /> : null}
+      <PlayerRecentClips player={data.player} />
+      <PlayerHighlights key={`${data.player.sport}:${data.player.externalId}`} player={data.player} />
+    </>
+  ) : null
 
   return (
     <div className="af-pc-scrim" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div
-        className="af-pc-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label={c.dialogLabel(name)}
-        ref={panelRef}
-      >
-        {/* header ─────────────────────────────────────────────── */}
+      <div className="af-pc-panel" role="dialog" aria-modal="true" aria-label={c.dialogLabel(name)} ref={panelRef} data-testid="player-card">
+        {/* bar ─────────────────────────────────────────────────── */}
         <div className="af-pc-bar">
           <button type="button" className="af-pc-back" onClick={onClose}>
-            {league ? (
-              <>
-                <span className={`af-pc-crest af-pc-plat--${league.platform.toLowerCase()}`} aria-hidden>
-                  {initials(league.leagueName)}
-                </span>
-                <span>‹ {league.leagueName}</span>
-              </>
-            ) : (
-              <span>{c.back}</span>
-            )}
+            <span>{league ? `‹ ${league.leagueName}` : c.back}</span>
           </button>
           <span className="af-pc-bar-sp" />
-          {/*
-            ⚠ ONLY ON THE LEAGUE FLAVOUR. The watchlist row is keyed on a NOT
-            NULL leagueId, so on the universal card there is nowhere to write —
-            the same gate Propose Trade carries, for the same reason.
-          */}
-          {useFollow ? (
+          {useFollow || (league && watchId) ? (
             <button
               type="button"
               className="af-pc-star"
               onClick={toggleWatch}
               aria-pressed={watched}
-              aria-label={watched ? c.unfollow(name) : c.follow(name)}
-              title={watched ? c.followingTitle : c.followTitle}
-            >
-              <span aria-hidden>{watched ? '★' : '☆'}</span>
-            </button>
-          ) : league && watchId ? (
-            <button
-              type="button"
-              className="af-pc-star"
-              onClick={toggleWatch}
-              aria-pressed={watched}
-              aria-label={watched ? c.stopWatching(name) : c.watch(name)}
-              title={watched ? c.watchingTitle : c.watchTitle}
+              aria-label={useFollow ? (watched ? c.unfollow(name) : c.follow(name)) : watched ? c.stopWatching(name) : c.watch(name)}
+              title={useFollow ? (watched ? c.followingTitle : c.followTitle) : watched ? c.watchingTitle : c.watchTitle}
             >
               <span aria-hidden>{watched ? '★' : '☆'}</span>
             </button>
@@ -471,77 +529,102 @@ export default function PlayerCardSheet({
         </div>
 
         <div className="af-pc-body">
-          {/* identity ──────────────────────────────────────────── */}
-          <div className="af-pc-id">
-            <div className="af-pc-face-wrap">
-              <div className="af-pc-face">
-                {image ? (
-                  <FallbackImg
-                    src={image}
-                    alt=""
-                    width={100}
-                    height={100}
-                    fallback={
-                      <span className="af-pc-face-none" aria-hidden>
-                        {initials(name)}
-                      </span>
-                    }
-                  />
-                ) : (
-                  <span className="af-pc-face-none" aria-hidden>
-                    {initials(name)}
-                  </span>
-                )}
-              </div>
-              {/* The club crest on the photo's corner, any sport; the shared TeamLogo falls back to the
-                  team's initials when no crest loads. A free agent has no club, so no corner. */}
-              {team && !isNoTeam(team) ? (
-                <span className="af-pc-crest" data-testid="player-card-team-logo">
-                  <TeamLogo teamAbbr={team} sport={String(p?.sport ?? subject.sport ?? 'NFL')} size={30} />
+          {/* hero ──────────────────────────────────────────────── */}
+          <div className="af-pc-hero" style={{ '--af-pc-band': bandColour(sport, team) } as React.CSSProperties} data-testid="player-card-hero">
+            {crest ? <FallbackImg className="af-pc-hero-mark" src={crest} alt="" width={260} height={260} fallback={null} /> : null}
+            <div className="af-pc-hero-face">
+              {image ? (
+                <FallbackImg src={image} alt="" width={168} height={168} fallback={<span className="af-pc-face-none" aria-hidden>{initials(name)}</span>} />
+              ) : (
+                <span className="af-pc-face-none" aria-hidden>
+                  {initials(name)}
+                </span>
+              )}
+              {position ? (
+                <span className="af-bd-pos af-pc-hero-pos" data-pos={position.toUpperCase()}>
+                  {position.toUpperCase()}
                 </span>
               ) : null}
             </div>
-            <div className="af-pc-id-main">
-              <h2 className="af-pc-name">{name}</h2>
-              <div className="af-pc-meta">
-                {position ? (
-                  <span className="af-bd-pos" data-pos={position.toUpperCase()}>
-                    {position.toUpperCase()}
-                  </span>
-                ) : null}
-                {team ? (
-                  <span className="af-pc-faint">
-                    {position ? ' · ' : ''}
-                    {team}
-                    {p?.number != null ? ` #${p.number}` : ''}
-                  </span>
-                ) : null}
-                {/* Opened inside a dynasty league: age on the career arc, ROOKIE / PROSPECT (DynastyRosterMarkers.tsx). */}
-                <DynastyMarkerChips mark={data?.dynastyMarker} />
-              </div>
-
-              {league ? (
-                <div className="af-pc-owner">
-                  {/* UNREADABLE: a foreign-id league — neither "free agent" nor an owner is known. */}
-                  {league.slot === 'UNREADABLE' ? (
-                    <span className="af-pc-faint">{c.unreadable}</span>
-                  ) : league.slot === 'NOT ROSTERED' ? (
-                    <span className="af-pc-owner-free">{c.freeAgent}</span>
-                  ) : (
-                    <>
-                      <span className="af-pc-owner-who">
-                        {league.isYours ? c.onYourRoster : c.ownedBy(league.owner?.ownerName ?? null)}
-                      </span>
-                      <span className="af-pc-faint">
-                        {' · '}
-                        {league.owner?.teamName ?? slotText(league.slot, language)}
-                        {league.owner?.teamName ? ` · ${slotText(league.slot, language)}` : ''}
-                      </span>
-                    </>
-                  )}
+            <div className="af-pc-hero-main">
+              {ownerLine ? (
+                <div className="af-pc-hero-owner" data-free={league?.slot === 'NOT ROSTERED' || undefined} data-testid="player-card-owner">
+                  {ownerLine}
                 </div>
               ) : null}
-
+              <div className="af-pc-hero-name">
+                <h2 className="af-pc-name">{name}</h2>
+                {team && !isNoTeam(team) ? (
+                  <span className="af-pc-hero-club" data-testid="player-card-team-logo">
+                    <TeamLogo teamAbbr={team} sport={sport} size={18} />
+                    {p?.number != null ? <span className="af-num">#{p.number}</span> : <span>{team}</span>}
+                  </span>
+                ) : null}
+                <span className="af-pc-meta">
+                  <DynastyMarkerChips mark={data?.dynastyMarker} />
+                </span>
+              </div>
+              {bio && (bio.age != null || bio.height || bio.weight || bio.yearsExp != null || bio.college) ? (
+                <div className="af-pc-bio">
+                  {bio.age != null ? (
+                    <span className="af-pc-bio-i">
+                      <span className="af-pc-label">{c.age}</span>
+                      <b>{bio.age}</b>
+                    </span>
+                  ) : null}
+                  {bio.height ? (
+                    <span className="af-pc-bio-i">
+                      <span className="af-pc-label">{c.height}</span>
+                      <b>{bio.height}</b>
+                    </span>
+                  ) : null}
+                  {bio.weight ? (
+                    <span className="af-pc-bio-i">
+                      <span className="af-pc-label">{c.weight}</span>
+                      <b>{bio.weight}</b>
+                    </span>
+                  ) : null}
+                  {/* 0 is a rookie and null is unknown — never collapse them. */}
+                  {bio.yearsExp != null ? (
+                    <span className="af-pc-bio-i">
+                      <span className="af-pc-label">{c.experience}</span>
+                      <b>{bio.yearsExp === 0 ? c.rookie : bio.yearsExp}</b>
+                    </span>
+                  ) : null}
+                  {bio.college ? (
+                    <span className="af-pc-bio-i">
+                      <span className="af-pc-label">{c.college}</span>
+                      <b>{bio.college}</b>
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {chips.length ? (
+                <div className="af-pc-ranks" data-testid="player-card-ranks">
+                  {chips.map((chip) => (
+                    <span key={chip.label} className="af-pc-rank">
+                      <b className="af-num">{chip.value}</b> {chip.label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="af-pc-acts">
+                {actions.drop ? (
+                  <button type="button" className="af-pc-btn af-pc-btn--drop" onClick={() => setConfirmDrop(true)} aria-label={l.dropAria(name)} data-testid="player-card-drop">
+                    − {l.drop}
+                  </button>
+                ) : null}
+                {actions.add ? (
+                  <a className="af-pc-btn af-pc-btn--go" href={actions.add.href} aria-label={l.addAria(name)} data-testid="player-card-add">
+                    + {l.add}
+                  </a>
+                ) : null}
+                {actions.trade ? (
+                  <a className="af-pc-btn af-pc-cta" href={actions.trade.href} data-testid="player-card-trade">
+                    {c.proposeTrade}
+                  </a>
+                ) : null}
+              </div>
               {/* Keeper leagues only (lib/keeper/keeperCardCost.ts): the cost under the league's rule and its value. */}
               {data?.keeperCost ? (
                 <div className="af-pc-keeper" data-testid="player-card-keeper-cost">
@@ -558,39 +641,11 @@ export default function PlayerCardSheet({
                   ) : null}
                 </div>
               ) : null}
-
-              {/*
-                The design's Propose Trade action.
-
-                It goes to AF's own per-league trade builder rather than straight
-                to the platform, because that is where the deal is actually
-                priced and graded under this league's settings. The builder then
-                hands off to Sleeper/ESPN/Yahoo to SEND it — AllFantasy is
-                read-only on every connected platform and cannot submit a trade.
-
-                Only on the league flavour, and only when he is not already
-                yours: "propose a trade" for a player on your own roster is not
-                a thing you can do.
-              */}
-              {league && !league.isYours && league.slot !== 'NOT ROSTERED' && league.slot !== 'UNREADABLE' ? (
-                <a
-                  className="af-pc-cta"
-                  href={`/core/trades?league=${encodeURIComponent(league.leagueId)}`}
-                >
-                  {c.proposeTrade}
-                </a>
-              ) : null}
-
+              {/* The trade block: your own player's toggle, or someone else's listing, with the platform's caveat. */}
               {league && block && (canMarkBlock || (!league.isYours && block.listed)) ? (
                 <div className="af-pc-block">
                   {canMarkBlock ? (
-                    <button
-                      type="button"
-                      className="af-pc-block-btn"
-                      aria-pressed={onBlock}
-                      disabled={blockBusy}
-                      onClick={toggleBlock}
-                    >
+                    <button type="button" className="af-pc-btn af-pc-block-btn" aria-pressed={onBlock} disabled={blockBusy} onClick={toggleBlock}>
                       {onBlock ? c.blockOn : c.blockPut}
                     </button>
                   ) : (
@@ -605,43 +660,7 @@ export default function PlayerCardSheet({
                       {blockError}
                     </span>
                   ) : null}
-                  <span className="af-pc-block-note">{reason(block.note)}</span>
-                </div>
-              ) : null}
-
-              {bio ? (
-                <div className="af-pc-bio">
-                  {bio.age != null ? (
-                    <span className="af-pc-bio-i">
-                      <Label>{c.age}</Label>
-                      <b>{bio.age}</b>
-                    </span>
-                  ) : null}
-                  {bio.height ? (
-                    <span className="af-pc-bio-i">
-                      <Label>{c.height}</Label>
-                      <b>{bio.height}</b>
-                    </span>
-                  ) : null}
-                  {bio.weight ? (
-                    <span className="af-pc-bio-i">
-                      <Label>{c.weight}</Label>
-                      <b>{bio.weight}</b>
-                    </span>
-                  ) : null}
-                  {/* 0 is a rookie and null is unknown — never collapse them. */}
-                  {bio.yearsExp != null ? (
-                    <span className="af-pc-bio-i">
-                      <Label>{c.experience}</Label>
-                      <b>{bio.yearsExp === 0 ? c.rookie : bio.yearsExp}</b>
-                    </span>
-                  ) : null}
-                  {bio.college ? (
-                    <span className="af-pc-bio-i">
-                      <Label>{c.college}</Label>
-                      <b>{bio.college}</b>
-                    </span>
-                  ) : null}
+                  {block.note ? <span className="af-pc-block-note">{reason(block.note)}</span> : null}
                 </div>
               ) : null}
             </div>
@@ -650,385 +669,266 @@ export default function PlayerCardSheet({
           {status === 'loading' ? <p className="af-pc-absent">{c.loading}</p> : null}
           {status === 'error' ? <p className="af-pc-absent">{c.loadError}</p> : null}
 
-          {/*
-            availability ───────────────────────────────────────────
-
-            High on the card on purpose: whether he can play outranks what he is
-            worth, and a reader who scrolls past it has been failed.
-
-            🛑 THE AGE IS RENDERED BESIDE THE STATUS, ALWAYS. A designation is a
-            point-in-time claim and `SportsInjury` is mostly old — 2.2% of rows
-            for rostered players are within 2 days, 15% within 7. The loader
-            already refuses anything older than 14 days, but "inside 14 days" is
-            not "true now", so the card shows WHEN and lets the reader judge
-            rather than asserting currency it cannot support.
-          */}
-          {data?.injury ? (
+          {/* Whether he can play outranks everything below; shown only when there is a designation. */}
+          {data?.injury?.available ? (
             <div className="af-pc-injury">
-              {data.injury.available ? (
-                <>
-                  <span className="af-pc-injury-s" data-status={data.injury.data.status}>
-                    {injuryStatusText(data.injury.data.status, language)}
-                  </span>
-                  {data.injury.data.note ? (
-                    <span className="af-pc-injury-n">{data.injury.data.note}</span>
-                  ) : data.injury.data.bodyPart ? (
-                    <span className="af-pc-injury-n">{data.injury.data.bodyPart}</span>
-                  ) : null}
-                  <span className="af-pc-faint">
-                    {ago(data.injury.data.reportedAt) ? ` · ${ago(data.injury.data.reportedAt)}` : ''}
-                    {` · ${data.injury.data.source}`}
-                  </span>
-                </>
-              ) : (
-                <span className="af-pc-absent">{reason(data.injury.reason)}</span>
-              )}
-
-              {/*
-                🛑 THE STAMP THAT MAKES THE LINE ABOVE CHECKABLE, AND IT MATTERS
-                MOST ON THE EMPTY BRANCH. "No injury designation in the last 14
-                days" is exactly what a DEAD FEED says too — measured, api_sports
-                held 1,444 rows for rostered players with not one fresher than a
-                week — and until now nothing on this card could tell a healthy
-                player from a source that stopped.
-
-                ⚠ RENDERED ONLY WHEN THERE IS SOMETHING TO SAY. No telemetry row
-                means we have no record, which is not the same as "never checked";
-                claiming the latter from the absence of the former is the kind of
-                confident falsehood this section is built to avoid. So the
-                unavailable arm renders nothing at all.
-              */}
-              {data.injuryFeed?.available ? (
-                <span className="af-pc-feed">
-                  {data.injuryFeed.data.checkedAt ? c.feedChecked(ago(data.injuryFeed.data.checkedAt)) : c.feedNeverRan}
-                  {/*
-                    An error stamp and a success stamp are never written by the
-                    same run, on purpose — "last succeeded 6h ago, last errored
-                    2m ago" is a far more useful pair than either alone, and it is
-                    the shape that shows a feed which is running and failing.
-                  */}
-                  {data.injuryFeed.data.erroredAt ? c.feedLastError(ago(data.injuryFeed.data.erroredAt)) : ''}
-                  {/*
-                    ⚠ THE STARVATION SIGNAL. Seven sports rotate on a 24-hour
-                    period against a 200s budget, so a climbing skip count is how
-                    "checked 9h ago" stops being a blip and becomes the norm.
-                    Silent below 1 so an ordinary run adds no noise.
-                  */}
-                  {data.injuryFeed.data.skipped > 0 ? c.feedSkipped(data.injuryFeed.data.skipped) : ''}
-                </span>
+              <span className="af-pc-injury-s" data-status={data.injury.data.status}>
+                {injuryStatusText(data.injury.data.status, language)}
+              </span>
+              {data.injury.data.note || data.injury.data.bodyPart ? (
+                <span className="af-pc-injury-n">{data.injury.data.note ?? data.injury.data.bodyPart}</span>
               ) : null}
+              {/* The age stays beside the status: a designation is a point-in-time claim. */}
+              <span className="af-pc-faint">
+                {[ago(data.injury.data.reportedAt), data.injury.data.source].filter(Boolean).join(' · ')}
+              </span>
             </div>
           ) : null}
 
-          {/* insight ───────────────────────────────────────────── */}
-          {insight ? (
-            <div className="af-pc-insight">
-              <button
-                type="button"
-                className="af-pc-insight-h"
-                onClick={() => setInsightOpen((v) => !v)}
-                aria-expanded={insightOpen}
-              >
-                <span className="af-pc-dot" aria-hidden />
-                <span className="af-pc-insight-t">{insight.headline}</span>
-                <span className="af-pc-chev" aria-hidden>
-                  {insightOpen ? '⌃' : '⌄'}
-                </span>
-              </button>
-              {insightOpen ? (
-                <div className="af-pc-insight-d">
-                  <p>{insight.detail}</p>
-                  {/* The basis is not decoration: it is what makes the line checkable. */}
-                  <p className="af-pc-basis">{c.basedOn(insight.basis)}</p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {/* stat tiles ────────────────────────────────────────── */}
           {data ? (
-            <div className="af-pc-tiles">
-              {afProjection ? (
-                  <>
-                    <Tile label={c.afRank} value={`#${afProjection.rank}`} tone="plain"
-                      sub={`#${afProjection.positionRank} ${data.player.position ?? ''} · ${projectionNumber(afProjection.perGame)} ${projectionUnit} ${c.afPerGame}`} />
-                    {(afProjection.dynastyTradeValue ?? afProjection.tradeValue) != null ? (
-                      <Tile label={c.afTrade}
-                        value={projectionNumber((afProjection.dynastyTradeValue ?? afProjection.tradeValue)!)} tone="plain"
-                        sub={afProjection.tradeValueUnit ?? undefined} />
-                    ) : null}
-                    {afProjection.weekly != null ? (
-                      <Tile label={c.afWeek(afProjection.week)} value={projectionNumber(afProjection.weekly)} tone="plain"
-                        sub={<>{projectionUnit}<ProjectionFactorLine reasons={afProjection.afFactors?.reasons} testId="player-card-af-factors" /></>} />
-                    ) : null}
-                    {afProjection.fullSeason != null ? (
-                      <Tile label={c.afFullSeason} value={projectionNumber(afProjection.fullSeason)} tone="plain"
-                        sub={afProjection.fullSeasonBasis === 'standard_season'
-                          ? `${projectionUnit} · ${c.afStandardSeason}`
-                          : projectionUnit} />
-                    ) : null}
-                    {afProjection.restOfSeason != null ? (
-                      <Tile label={c.afRemaining} value={projectionNumber(afProjection.restOfSeason)} tone="plain" sub={projectionUnit} />
-                    ) : null}
-                  </>
-              ) : null}
-              {league ? (
-                <>
-                  {league.boardValue?.available ? (
+            <div className="af-pc-layout">
+              <div className="af-pc-main">
+                {tabs.length ? (
+                  <div className="af-pc-tabs" role="tablist" aria-label={l.tabsLabel}>
+                    {tabs.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        role="tab"
+                        id={`af-pc-tab-${t}`}
+                        aria-selected={activeTab === t}
+                        aria-controls="af-pc-tabpanel"
+                        className={`af-pc-tab${t === 'news' ? ' af-pc-tab--phone' : ''}`}
+                        onClick={() => setTab(t)}
+                        data-testid={`player-card-tab-${t}`}
+                      >
+                        {l.tabs[t]}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="af-pc-tabpanel" role="tabpanel" id="af-pc-tabpanel" aria-labelledby={activeTab ? `af-pc-tab-${activeTab}` : undefined}>
+                  {activeTab === 'outlook' ? (
                     <>
-                      <Tile
-                        label={c.leagueValue}
-                        value={Math.round(league.boardValue.data.value).toLocaleString(getAppIntlLocale())}
-                        tone="accent"
-                        sub={
-                          <span className="af-pc-faint">
-                            {c.leagueValueSub(
-                              league.boardValue.data.perGame.toFixed(1),
-                              league.boardValue.data.unit,
-                              league.boardValue.data.gamesRemaining,
-                              league.boardValue.data.scheduleKnown,
+                      {insight ? (
+                        <div className="af-pc-insight">
+                          <button type="button" className="af-pc-insight-h" onClick={() => setInsightOpen((v) => !v)} aria-expanded={insightOpen}>
+                            <span className="af-pc-dot" aria-hidden />
+                            <span className="af-pc-insight-t">
+                              <span className="af-pc-label">{l.chimmyTake}</span> {insight.headline}
+                            </span>
+                            <span className="af-pc-chev" aria-hidden>
+                              {insightOpen ? '⌃' : '⌄'}
+                            </span>
+                          </button>
+                          {insightOpen ? (
+                            <div className="af-pc-insight-d">
+                              <p>{insight.detail}</p>
+                              <p className="af-pc-basis">{c.basedOn(insight.basis)}</p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="af-pc-stats">
+                        {afProjection?.weekly != null ? (
+                          <Stat
+                            label={l.thisWeek}
+                            value={projectionNumber(afProjection.weekly)}
+                            sub={<ProjectionFactorLine reasons={afProjection.afFactors?.reasons} testId="player-card-af-factors" />}
+                          />
+                        ) : null}
+                        {afProjection?.restOfSeason != null ? (
+                          <Stat label={l.restOfSeason} value={projectionNumber(afProjection.restOfSeason)} />
+                        ) : afProjection?.fullSeason != null ? (
+                          <Stat label={l.season} value={projectionNumber(afProjection.fullSeason)} />
+                        ) : null}
+                        {afProjection ? <Stat label={c.afPerGame} value={projectionNumber(afProjection.perGame)} sub={projectionUnit} /> : null}
+                        {value ? <Stat label={value.label} value={value.value} sub={value.sub} /> : tradeValue ? <Stat label={l.value} value={projectionNumber(tradeValue)} /> : null}
+                        {dynasty ? (
+                          <Stat label={c.dynastyValue} value={Math.round(dynasty.dynastyValue!).toLocaleString(getAppIntlLocale())} sub={c.dynastyValueSub(dynasty.age)} />
+                        ) : null}
+                      </div>
+                      {league?.isYours && isGamesCountSport(sport) ? (
+                        <GamesCountWeekPanel leagueId={league.leagueId} playerIds={[followExternalId, followSleeperId]} />
+                      ) : null}
+                      <PlayerValueHistoryChart sleeperId={p?.sleeperId ?? subject.sleeperId} sport={sport} leagueId={league?.leagueId} unlocked={!depthLocked} />
+                    </>
+                  ) : null}
+
+                  {activeTab === 'gamelog' && more ? (
+                    <table className="af-pc-table" data-testid="player-card-gamelog">
+                      <caption className="af-pc-label">{l.lastGames(more.gameLog[0]?.season ?? 0)}</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">{isWeeklySport(sport) ? l.colWeek : l.colDate}</th>
+                          <th scope="col">{l.colOpp}</th>
+                          <th scope="col" className="af-num">{l.colPts}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {more.gameLog.map((g) => (
+                          <tr key={`${g.week}-${g.date ?? ''}`}>
+                            <td>{isWeeklySport(sport) || !g.date ? g.week : g.date.slice(5).replace('-', '/')}</td>
+                            <td>{g.opponent ?? '—'}</td>
+                            <td className="af-num">{g.points.toFixed(1)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : null}
+
+                  {activeTab === 'career' && more ? (
+                    <table className="af-pc-table" data-testid="player-card-career">
+                      <thead>
+                        <tr>
+                          <th scope="col">{l.colSeason}</th>
+                          <th scope="col">{l.colTeam}</th>
+                          <th scope="col" className="af-num">{l.colGames}</th>
+                          <th scope="col" className="af-num">{l.colPts}</th>
+                          <th scope="col" className="af-num">{l.colPerGame}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {more.career.map((r) => (
+                          <tr key={r.season}>
+                            <td>{r.season}</td>
+                            <td>{r.team ?? '—'}</td>
+                            <td className="af-num">{r.games ?? '—'}</td>
+                            <td className="af-num">{r.points != null ? r.points.toFixed(1) : '—'}</td>
+                            <td className="af-num">{r.perGame != null ? r.perGame.toFixed(1) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : null}
+
+                  {activeTab === 'depth' && more?.depthChart ? (
+                    <div data-testid="player-card-depth">
+                      <div className="af-pc-label">{l.depthAt(more.depthChart.position)}</div>
+                      <ol className="af-pc-depth">
+                        {more.depthChart.rows.map((r) => (
+                          <li key={`${r.rank}-${r.name}`} data-me={r.isSubject || undefined}>
+                            <span className="af-num">{r.rank}</span> {r.name}
+                            {r.rank === 1 ? <span className="af-pc-faint"> · {l.starter}</span> : null}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : null}
+
+                  {activeTab === 'schedule' ? (
+                    <>
+                      {data.schedule.available ? (
+                        <>
+                          <div className="af-pc-label">{c.nextUp}</div>
+                          {data.schedule.data.kind === 'daily' ? (
+                            <DailyGameRows schedule={data.schedule.data} language={language} />
+                          ) : (
+                            <>
+                              <ScheduleRows weeks={data.schedule.data.weeks} language={language} />
+                              <p className="af-pc-basis">{scheduleProjectionNote(data.schedule.data, language)}</p>
+                              {data.schedule.data.weeks.some((w) => w.afProjection != null) ? (
+                                <p className="af-pc-basis">{c.projNote(PROJECTION_PROVIDER_LABEL)}</p>
+                              ) : null}
+                            </>
+                          )}
+                        </>
+                      ) : null}
+                      {league?.playoffSchedule.available ? (
+                        <>
+                          <div className="af-pc-label">
+                            {c.playoffSchedule(
+                              league.playoffSchedule.data.startWeek,
+                              league.playoffSchedule.data.startWeek + league.playoffSchedule.data.weeks.length - 1,
                             )}
-                          </span>
-                        }
-                      />
-                      {league.boardValue.data.dynastyValue != null ? (
-                        <Tile
-                          label={c.dynastyValue}
-                          value={Math.round(league.boardValue.data.dynastyValue).toLocaleString(getAppIntlLocale())}
-                          tone="plain"
-                          sub={<span className="af-pc-faint">{c.dynastyValueSub(league.boardValue.data.age)}</span>}
-                        />
+                          </div>
+                          <ScheduleRows weeks={league.playoffSchedule.data.weeks} language={language} />
+                        </>
+                      ) : null}
+                      {league && league.yourRoster.length > 0 && position ? (
+                        <>
+                          <div className="af-pc-label">{c.yourRosterAt(position)}</div>
+                          {league.yourRoster.map((r) => (
+                            <div key={r.name} className="af-pc-row">
+                              <span className="af-pc-row-k">{r.name}</span>
+                              <span className="af-pc-row-v af-num">{r.value != null ? r.value.toLocaleString(getAppIntlLocale()) : '—'}</span>
+                            </div>
+                          ))}
+                        </>
                       ) : null}
                     </>
-                  ) : league.boardValue ? (
-                    <Tile label={c.leagueValue} value="—" tone="plain" sub={<span className="af-pc-faint">{c.notPriced}</span>} />
-                  ) : league.price.available ? (
-                    <Tile
-                      label={c.leaguePrice}
-                      value={league.price.data.value.toLocaleString(getAppIntlLocale())}
-                      tone="accent"
-                      sub={
-                        <span className="af-pc-faint">
-                          {c.leaguePriceSub(league.price.data.mode, league.price.data.numQbs, league.price.data.teams)}
-                        </span>
-                      }
-                    />
-                  ) : (
-                    <Tile label={c.leaguePrice} value="—" tone="plain" sub={<span className="af-pc-faint">{c.notPriced}</span>} />
-                  )}
-                  <Tile label={c.slot} value={slotText(league.slot, language)} tone="plain" />
-                </>
-              ) : null}
-
-              {market?.available ? (
-                <>
-                  {!league ? (
-                    <Tile
-                      label={c.tradePrice}
-                      value={market.data.value.toLocaleString(getAppIntlLocale())}
-                      tone="accent"
-                      sub={
-                        market.data.delta ? (
-                          <span className={market.data.delta.change >= 0 ? 'af-pc-up' : 'af-pc-down'}>
-                            {market.data.delta.change >= 0 ? '+' : ''}
-                            {market.data.delta.change.toLocaleString(getAppIntlLocale())} · {c.deltaDays(market.data.delta.days)}
-                          </span>
-                        ) : depthLocked && depth ? (
-                          <span className="af-pc-faint">{c.priceMoveLocked(depth.planName)}</span>
-                        ) : (
-                          <span className="af-pc-faint">{c.noMove}</span>
-                        )
-                      }
-                    />
                   ) : null}
-                  <Tile
-                    label={c.overallRank}
-                    value={market.data.overallRank != null ? `#${market.data.overallRank}` : '—'}
-                  />
-                  <Tile
-                    label={c.posRank(position)}
-                    value={market.data.positionRank != null ? `#${market.data.positionRank}` : '—'}
-                  />
-                </>
-              ) : null}
 
-              {!league && data.ownership.available ? (
-                <Tile
-                  label={c.rostered}
-                  value={`${Math.round(data.ownership.data.ownPct * 100)}%`}
-                  sub={
-                    <span className="af-pc-faint">
-                      {c.ofLeagues(data.ownership.data.leaguesCounted)}
-                      {data.ownership.data.startPct != null ? c.startPct(Math.round(data.ownership.data.startPct * 100)) : ''}
-                    </span>
-                  }
-                />
-              ) : null}
-            </div>
-          ) : null}
-
-          {/* A league-value-board value says what it is, and what it rests on (games, at-bats or innings). */}
-          {data && league?.boardValue?.available ? (
-            <p className="af-pc-basis">
-              {c.boardBasis({
-                sport: league.boardValue.data.sport,
-                perGame: league.boardValue.data.perGame.toFixed(1),
-                unit: league.boardValue.data.unit,
-                replacement: league.boardValue.data.replacementPerGame.toFixed(1),
-                replacementName: league.boardValue.data.replacementName,
-                gamesLeft: league.boardValue.data.gamesRemaining,
-                scheduleKnown: league.boardValue.data.scheduleKnown,
-                sample: league.boardValue.data.sample,
-                baseline: league.boardValue.data.baselineSeasonLabel,
-              })}
-            </p>
-          ) : null}
-          {data && league?.boardValue && !league.boardValue.available ? <Absent reason={reason(league.boardValue.reason)} /> : null}
-
-          {/* the price basis, which the tile above deliberately does not hide */}
-          {data && market?.available && !league ? (
-            <p className="af-pc-basis">{c.marketBasis(market.data.format, market.data.qbFormat, market.data.source)}</p>
-          ) : null}
-          {data && !market?.available ? <Absent reason={market?.reason ? reason(market.reason) : c.noMarketPrice} /> : null}
-
-          {/* "Which games count" (NBA/NHL/MLB): renders nothing unless the league uses best-N or lock-in. */}
-          {data && league?.isYours && isGamesCountSport(p?.sport ?? subject.sport) ? (
-            <GamesCountWeekPanel leagueId={league.leagueId} playerIds={[followExternalId, followSleeperId]} />
-          ) : null}
-
-          {/* two columns ───────────────────────────────────────── */}
-          {data ? <PlayerValueHistoryChart sleeperId={p?.sleeperId ?? subject.sleeperId} sport={p?.sport ?? subject.sport} leagueId={league?.leagueId} unlocked={!depthLocked} /> : null}
-          {data ? (
-            <div className="af-pc-cols">
-              <div className="af-pc-col">
-                {/* Rendered "SCHEDULE · SCHEDULE" in the league flavour before. */}
-                <Label>{league ? c.schedule : c.nextUp}</Label>
-                {data.schedule.available ? (
-                  data.schedule.data.kind === 'daily' ? (
-                    /* NBA / NHL / MLB: next games by date, no week strip and no bye. */
-                    <DailyGameRows schedule={data.schedule.data} language={language} />
-                  ) : (
-                  <>
-                    <ScheduleRows weeks={data.schedule.data.weeks} language={language} />
-                    {/*
-                      ⚠ THE HANDOFF DREW A PROJECTION ON ALL FIVE ROWS AND WE HOLD ONE
-                      WEEK. Saying so is the difference between a thin card and a card
-                      that looks broken.
-                    */}
-                    <p className="af-pc-basis">{scheduleProjectionNote(data.schedule.data, language)}</p>
-                    {data.schedule.data.weeks.some((w) => w.afProjection != null) ? (
-                      <p className="af-pc-basis">{c.projNote(PROJECTION_PROVIDER_LABEL)}</p>
-                    ) : null}
-                  </>
-                  )
-                ) : (
-                  <Absent reason={reason(data.schedule.reason)} />
-                )}
-
-                {league ? (
-                  <>
-                    {/*
-                      The design's "PLAYOFF SCHEDULE · WK 15-17". The weeks come
-                      from THIS league's settings, not that literal — 15 is right
-                      for 197 of 257 claimed leagues and wrong for the rest.
-                    */}
-                    <Label>
-                      {league.playoffSchedule.available
-                        ? c.playoffSchedule(
-                            league.playoffSchedule.data.startWeek,
-                            league.playoffSchedule.data.startWeek + league.playoffSchedule.data.weeks.length - 1,
-                          )
-                        : c.playoffSchedule(null, null)}
-                    </Label>
-                    {league.playoffSchedule.available ? (
-                      <ScheduleRows weeks={league.playoffSchedule.data.weeks} language={language} />
+                  {activeTab === 'history' ? (
+                    depthLocked && depth ? (
+                      <CoreDepthLock
+                        access={depth}
+                        what={league ? lockSubjectText('Trades in this league', language) : lockSubjectText('Trade history and similar players', language)}
+                        lang={language}
+                      />
                     ) : (
-                      <Absent reason={reason(league.playoffSchedule.reason)} />
-                    )}
-
-                    <Label>{c.yourRosterAt(position)}</Label>
-                    {league.yourRoster.length > 0 ? (
-                      league.yourRoster.map((r) => (
-                        <div key={r.name} className="af-pc-row">
-                          <span className="af-pc-row-k">{r.name}</span>
-                          <span className="af-pc-row-v af-num">
-                            {r.value != null ? r.value.toLocaleString(getAppIntlLocale()) : '—'}
-                          </span>
-                        </div>
-                      ))
-                    ) : league.slot === 'UNREADABLE' ? (
-                      // Unread, not empty: "you have nobody else here" would be a claim about a roster we cannot read.
-                      <Absent reason={c.unreadableSentence} />
-                    ) : (
-                      <Absent reason={c.nobodyElse} />
-                    )}
-                  </>
-                ) : null}
-              </div>
-
-              <div className="af-pc-col">
-                {depthLocked && depth ? (
-                  <CoreDepthLock
-                    access={depth}
-                    what={
-                      league
-                        ? lockSubjectText('Trades in this league', language)
-                        : lockSubjectText('Trade history and similar players', language)
-                    }
-                    lang={language}
-                  />
-                ) : (
-                  <>
-                    {depth ? <FreeUntilNote access={depth} lang={language} /> : null}
-                    <Label>{league ? c.tradesInLeague : c.recentTrades}</Label>
-                    {league ? (
-                      league.trades.length > 0 ? (
-                        <TradeRows trades={league.trades} subject={name} language={language} />
-                      ) : (
-                        <Absent reason={c.noLeagueTrade} />
-                      )
-                    ) : data.trades.available ? (
                       <>
-                        <TradeRows trades={data.trades.data} subject={name} language={language} />
-                        {/* Scope stated: these are our imports, not the whole sport. */}
-                        <p className="af-pc-basis">{c.importedScope}</p>
-                      </>
-                    ) : (
-                      <Absent reason={reason(data.trades.reason)} />
-                    )}
-
-                    {!league ? (
-                      <>
-                        <Label>{c.similarPrice}</Label>
-                        {data.comps.available ? (
-                          <div className="af-pc-chips">
-                            {data.comps.data.map((c) => (
-                              <button key={c.sleeperId} type="button" className="af-pc-chip" onClick={() => openComp(c)}>
-                                {c.name}
-                                <span className="af-pc-faint af-num"> {c.value.toLocaleString(getAppIntlLocale())}</span>
-                              </button>
-                            ))}
-                          </div>
+                        {depth ? <FreeUntilNote access={depth} lang={language} /> : null}
+                        {league ? (
+                          <>
+                            <div className="af-pc-label">{c.tradesInLeague}</div>
+                            <TradeRows trades={league.trades} subject={name} language={language} />
+                          </>
                         ) : (
-                          <Absent reason={reason(data.comps.reason)} />
+                          <>
+                            {data.trades.available ? (
+                              <>
+                                <div className="af-pc-label">{c.recentTrades}</div>
+                                <TradeRows trades={data.trades.data} subject={name} language={language} />
+                                <p className="af-pc-basis">{c.importedScope}</p>
+                              </>
+                            ) : null}
+                            {data.comps.available ? (
+                              <>
+                                <div className="af-pc-label">{c.similarPrice}</div>
+                                <div className="af-pc-chips">
+                                  {data.comps.data.map((comp) => (
+                                    <button key={comp.sleeperId} type="button" className="af-pc-chip" onClick={() => openComp(comp)}>
+                                      {comp.name}
+                                      <span className="af-pc-faint af-num"> {comp.value.toLocaleString(getAppIntlLocale())}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            ) : null}
+                          </>
                         )}
                       </>
-                    ) : null}
-                  </>
-                )}
+                    )
+                  ) : null}
 
-                <Label>{c.latest}</Label>
-                {data.news.available ? (
-                  <NewsRows items={data.news.data} language={language} />
-                ) : (
-                  <Absent reason={reason(data.news.reason)} />
-                )}
-                <PlayerRecentClips player={data.player} />
-                <PlayerHighlights key={`${data.player.sport}:${data.player.externalId}`} player={data.player} />
+                  {/* Phones only: on a wide screen the same news sits in the side column. */}
+                  {activeTab === 'news' ? <div className="af-pc-news-tab">{newsBody}</div> : null}
+                </div>
               </div>
+
+              <aside className="af-pc-aside" aria-label={l.tabs.news}>
+                <div className="af-pc-aside-h">{l.tabs.news}</div>
+                {/* Not while the phone News tab holds the same feeds: one copy, one set of clip reads. */}
+                {activeTab === 'news' ? null : newsBody}
+              </aside>
             </div>
           ) : null}
         </div>
+
+        {confirmDrop && actions.drop ? (
+          <DropConfirmSheet
+            name={name}
+            position={position}
+            team={team}
+            sport={sport}
+            image={image}
+            href={actions.drop.href}
+            language={language}
+            onCancel={() => setConfirmDrop(false)}
+          />
+        ) : null}
       </div>
     </div>
   )
