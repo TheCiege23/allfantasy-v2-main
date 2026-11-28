@@ -6389,6 +6389,7 @@ model League {
   pirateClaims                          PirateClaim[]
   /// Set once this imported league has been switched to native IN PLACE (docs/league-import/IN_PLACE_NATIVE_CONVERSION_PLAN.md).
   nativeConversion                      LeagueNativeConversion?
+  positionEligibilityChanges            LeaguePositionEligibilityChange[]
   // Commissioner OS tenancy — T-101. See prisma/tenancy.prisma and
   // docs/commissioner-os/TENANCY.md §5.
   //
@@ -16914,6 +16915,32 @@ model LeagueNativeConversion {
   @@index([fromPlatform, fromPlatformLeagueId, fromSeason])
   @@index([status])
   @@map("league_native_conversions")
+}
+
+/// A commissioner's position-eligibility change for one player in one league (NBA today). Append-only: the
+/// current eligibility is a fold of this log (lib/league-eligibility/nbaPositionEligibility.ts), so the log
+/// league members read IS the record the lineup check uses. Nothing is edited or deleted in place; a `reset`
+/// row undoes an earlier change. Additive only: no existing table changes.
+model LeaguePositionEligibilityChange {
+  id          String   @id @default(cuid())
+  leagueId    String
+  /// The roster player id, as the league's rosters store it.
+  playerId    String   @db.VarChar(64)
+  /// The name at the time of the change, so the log still reads if the player leaves the pool.
+  playerName  String   @db.VarChar(120)
+  /// PG | SG | SF | PF | C
+  position    String   @db.VarChar(4)
+  /// add | remove | reset
+  action      String   @db.VarChar(8)
+  /// Why, in the commissioner's words. Shown to every league member. Required for add and remove.
+  reason      String?  @db.VarChar(280)
+  actorUserId String
+  createdAt   DateTime @default(now())
+  league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, createdAt])
+  @@index([leagueId, playerId])
+  @@map("league_position_eligibility_changes")
 }
 
 model LeagueEntrySlot {

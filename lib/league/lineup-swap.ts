@@ -87,16 +87,29 @@ export function buildLineupListsFromPlayerData(
   }
 }
 
+/**
+ * A comma joins several positions on one player ("PG,SF"): Yahoo's `display_position`, and an NBA
+ * player whose commissioner added a position (lib/league-eligibility/nbaPositionEligibility.ts).
+ * He fits a slot when ANY of them does. Only a comma splits — a slash is part of real position names
+ * ("D/ST"), so it never does.
+ */
+export function playerPositionTokens(playerPosition: string | undefined | null): string[] {
+  return String(playerPosition ?? '')
+    .split(',')
+    .map((p) => normalizePositionForStarterEligibility(p))
+    .filter(Boolean)
+}
+
 export function playerEligibleForSlot(
   slot: ExpandedStarterSlot,
   playerPosition: string | undefined | null,
 ): boolean {
-  const pos = normalizePositionForStarterEligibility(String(playerPosition ?? ''))
-  if (!pos) return false
+  const positions = playerPositionTokens(playerPosition)
+  if (!positions.length) return false
   const allowed = (slot.allowedPositions ?? []).map((p) =>
     normalizePositionForStarterEligibility(String(p)),
   )
-  return allowed.includes(pos)
+  return positions.some((pos) => allowed.includes(pos))
 }
 
 /** Remove id from first matching section list (mutates copies). */
