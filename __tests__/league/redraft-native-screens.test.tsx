@@ -109,42 +109,34 @@ const waiverRoutes = (settings: Record<string, unknown>, faabRemaining: number |
   '/watchlist': { playerIds: [] },
 })
 
-describe('Players & waivers — claim type + FAAB header', () => {
-  it('redraft FAAB: claim type, the balance against the budget, priority, and a claim state', async () => {
+describe('Players & waivers — one waiver line (Sleeper pass 2)', () => {
+  it('redraft FAAB: claim type, the balance against the budget and priority in one line; claims still carry their state', async () => {
     stubFetch(waiverRoutes({ sport: 'NHL', waiverType: 'faab', faabBudget: 100, processingDayOfWeek: 3 }, 64))
     render(<NativeWaiversScreen league={redraft('NHL')} />)
-    const header = await screen.findByTestId('redraft-waiver-header')
-    expect(within(header).getByTestId('redraft-waiver-claim-type').textContent).toBe('FAAB bidding')
-    await waitFor(() => expect(within(header).getByTestId('redraft-waiver-faab').textContent).toBe('$64 / $100'))
-    expect(within(header).getByRole('meter').getAttribute('aria-valuenow')).toBe('64')
-    expect(within(header).getByText('Your priority')).toBeTruthy()
+    const line = await screen.findByTestId('players-waiver-line')
+    await waitFor(() => expect(line.textContent).toContain('FAAB $64 left of $100'))
+    expect(line.textContent).toContain('FAAB bidding')
+    expect(line.textContent).toContain('Priority 3 of')
+    expect(screen.queryByTestId('redraft-waiver-header')).toBeNull()
+    // The claims panel opens from the header button; its claim state is still there.
+    fireEvent.click(screen.getByTestId('players-claims-toggle'))
     expect((await screen.findByTestId('native-waivers-claim-state-c1')).textContent).toBe('Pending')
-    // The head chips move into the header; they are not shown twice.
-    expect(screen.queryByText('FAAB $64 left')).toBeNull()
   })
 
-  it('redraft rolling waivers: no FAAB cell at all', async () => {
+  it('rolling waivers: the claim type and no FAAB', async () => {
     stubFetch(waiverRoutes({ sport: 'NHL', waiverType: 'rolling', faabBudget: null }, null))
     render(<NativeWaiversScreen league={redraft('NHL')} />)
-    const header = await screen.findByTestId('redraft-waiver-header')
-    expect(within(header).getByTestId('redraft-waiver-claim-type').textContent).toBe('Rolling priority')
-    expect(within(header).queryByTestId('redraft-waiver-faab')).toBeNull()
+    const line = await screen.findByTestId('players-waiver-line')
+    await waitFor(() => expect(line.textContent).toContain('Rolling priority'))
+    expect(line.textContent).not.toContain('FAAB $')
   })
 
-  it('redraft FAAB with no budget in settings: the real balance, no invented bar', async () => {
+  it('FAAB with no budget in settings: the real balance, no invented budget', async () => {
     stubFetch(waiverRoutes({ sport: 'NHL', waiverType: 'faab', faabBudget: null }, 40))
     render(<NativeWaiversScreen league={redraft('NHL')} />)
-    const header = await screen.findByTestId('redraft-waiver-header')
-    await waitFor(() => expect(within(header).getByTestId('redraft-waiver-faab').textContent).toBe('$40'))
-    expect(within(header).queryByRole('meter')).toBeNull()
-  })
-
-  it('another format: the original head chips, no header, no claim state', async () => {
-    stubFetch(waiverRoutes({ sport: 'NHL', waiverType: 'faab', faabBudget: 100 }, 64))
-    render(<NativeWaiversScreen league={dynasty('NHL')} />)
-    expect(await screen.findByText('FAAB $64 left')).toBeTruthy()
-    expect(screen.queryByTestId('redraft-waiver-header')).toBeNull()
-    expect(screen.queryByTestId('native-waivers-claim-state-c1')).toBeNull()
+    const line = await screen.findByTestId('players-waiver-line')
+    await waitFor(() => expect(line.textContent).toContain('FAAB $40 left'))
+    expect(line.textContent).not.toContain(' of $')
   })
 })
 
@@ -228,7 +220,7 @@ describe('Standings & playoffs — playoff line, clinched / eliminated, bracket'
     render(<NativeStandingsScreen league={sLeague(redraft)} isCommissioner={false} onSelectTab={() => {}} />)
     expect((await screen.findByTestId('native-standings-race-r1')).textContent).toBe('Clinched')
     expect(screen.getByTestId('native-standings-race-r4').textContent).toBe('Eliminated')
-    fireEvent.click(screen.getByRole('button', { name: 'Playoff picture' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Playoffs' }))
     const bracket = await screen.findByTestId('redraft-playoff-bracket-view')
     expect(within(bracket).getByText('Championship')).toBeTruthy()
     expect(within(bracket).getByText('101.5')).toBeTruthy()

@@ -71,7 +71,10 @@ describe('NativeStandingsScreen', () => {
     expect(rows[2].getAttribute('data-cut')).toBe('true')
     expect(within(rows[0]).getByText('BYE')).toBeTruthy()
     expect(within(rows[1]).getByText('81%')).toBeTruthy()
-    expect(screen.getByText(/44% for a bye/)).toBeTruthy()
+    // Sleeper pass 4: no "Your path" card (the odds column says it); the playoff format sits with the Playoffs view.
+    expect(screen.queryByText(/44% for a bye/)).toBeNull()
+    expect(screen.queryByText('Toilet bowl')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Playoffs' }))
     expect(screen.getByText('2 · 1 byes')).toBeTruthy()
     expect(screen.getByText('15 – 15')).toBeTruthy()
     expect(screen.getByText('Toilet bowl')).toBeTruthy()
@@ -79,14 +82,12 @@ describe('NativeStandingsScreen', () => {
     expect(calls.every((c) => !c.init?.method || c.init.method === 'GET')).toBe(true)
   })
 
-  it('Power ranks by all-play, not by record', async () => {
+  it('two views only, Standings and Playoffs; Power rankings is gone (Sleeper pass 4)', async () => {
     stubFetch({ '/scoring/standings': standings, '/season-forecast': { teamForecasts: null }, '/scoring/playoff-seeds': { seeds: [] } })
     render(<NativeStandingsScreen league={league} isCommissioner={false} onSelectTab={() => {}} />)
     await screen.findByRole('table')
-    fireEvent.click(screen.getByRole('button', { name: 'Power rankings' }))
-    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
-    expect(rows[0].querySelector('strong')?.textContent).toBe('Open Team 5')
-    expect(screen.queryByText('Edit in Commissioner')).toBeNull()
+    const views = within(screen.getByRole('group', { name: 'Standings view' })).getAllByRole('button').map((b) => b.textContent)
+    expect(views).toEqual(['Standings', 'Playoffs'])
   })
 })
 
@@ -108,7 +109,7 @@ describe('NativeMatchupScreen', () => {
     insights: { matchupEdge: 'edge', startSit: 'Start Rashid Shaheed if Nacua sits.', weather: '', injuryNews: '', swingPlayers: [], riskLevel: 'low', floorVsCeiling: '' },
     partialData: false, refreshIntervalMs: 0,
   }
-  it('score header, AF win prob, slot rows and the viewer-first scoreboard', async () => {
+  it('score header, AF win prob and slot rows; no Chimmy card or league scoreboard (Sleeper pass 3)', async () => {
     const calls = stubFetch({
       '/matchup-center': { payload },
       '/scoring/matchups': { matchups: [
@@ -120,16 +121,17 @@ describe('NativeMatchupScreen', () => {
     })
     const onSelectTab = vi.fn()
     render(<NativeMatchupScreen league={league} onSelectTab={onSelectTab} />)
-    expect((await screen.findAllByText('112.4')).length).toBe(2) // header + scoreboard
+    // The header only: the league scoreboard is the League tab's now.
+    expect((await screen.findAllByText('112.4')).length).toBe(1)
     expect(screen.getByText('71%')).toBeTruthy()
     expect(screen.getByText(/proj 122.4 – 108.7/)).toBeTruthy()
-    expect(screen.getByText('Start Rashid Shaheed if Nacua sits.')).toBeTruthy()
+    expect(screen.queryByText('Start Rashid Shaheed if Nacua sits.')).toBeNull()
     // Kyren 0.0 vs Henry 11.6 with Kyren yet to play: Henry leads (good), Kyren not yet "bad".
     expect(screen.getByText('11.6').getAttribute('data-pts')).toBe('good')
     expect(screen.getByText('0.0').getAttribute('data-pts')).toBe('neutral')
-    const board = document.querySelector('.nls-board')!
-    expect(board.querySelector('li')?.getAttribute('data-mine')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: 'Review lineup' }))
+    expect(document.querySelector('.nls-board')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'League scoreboard' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit my lineup' }))
     expect(onSelectTab).toHaveBeenCalledWith('roster')
     fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
     await waitFor(() => expect(calls.some((c) => c.url.includes('week=4'))).toBe(true))

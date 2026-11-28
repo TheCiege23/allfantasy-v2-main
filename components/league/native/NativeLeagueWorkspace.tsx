@@ -208,7 +208,7 @@ export function NativeLeagueWorkspace({ native, sourceLeagueId = null, importAct
   const { t } = useOptionalLanguage()
   const phase = nativeLeaguePhase(league)
   const draftDone = ['Regular season', 'Playoffs', 'Offseason'].includes(phase)
-  const groups = buildNativeLeagueNavigation(tabs, isCommissioner, survivor, t, { draftDone })
+  const groups = buildNativeLeagueNavigation(tabs, isCommissioner, survivor, t, { draftDone, scheduleMade: draftDone || !isNativePlatform(league.platform) })
   // A guillotine league, hosted here or imported: LeagueShell gives it the `guillotine` tab (lib/guillotine/importedGuillyView.ts).
   const guilly = tabs.some(tab => tab.id === 'guillotine')
   const shownPhase = guilly ? GUILLY_PHASE_NAME[phase] ?? phase : phase
@@ -505,7 +505,7 @@ export function NativeLeagueWorkspace({ native, sourceLeagueId = null, importAct
       tap from a bottom bar during Setup would do that before managers have joined. Setup opens
       Draft HQ instead, which says what is missing and carries the explicit "Enter" button.
     */}
-    {!shell.embedCenterOnly && <nav className="nl-bottom-nav" aria-label={tNl('nativeLeague.bottom.aria')}>{[homeLeafId, draftSlot ? 'draft' : 'matchups', 'roster', 'waivers', 'league_chat'].map((id, index) => {
+    {!shell.embedCenterOnly && <nav className="nl-bottom-nav" aria-label={tNl('nativeLeague.bottom.aria')}>{[homeLeafId, draftSlot ? 'draft' : 'matchups', 'roster', 'waivers'].map((id, index) => {
       const item = bottomLeaf(id) ?? (index === 3 ? leaves.find(row => row.id === 'players') : undefined)
       if (!item) return null
       const Icon = icons[item.icon as keyof typeof icons] ?? Home

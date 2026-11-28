@@ -335,7 +335,7 @@ describe('native league workspace', () => {
     const { container } = renderWorkspace(wsLeague(), 'somewhere_else')
     expectAll(readable(), WS_EN)
     const bottom = [...container.querySelector('.nl-bottom-nav')!.children].map((el) => el.textContent)
-    expect(bottom).toEqual(['League', 'Matchup', 'Team', 'Players', 'Chat'])
+    expect(bottom).toEqual(['League', 'Matchup', 'Team', 'Players'])
     expect(container.querySelector('.nl-eyebrow')!.textContent).toBe('Regular season')
   })
 
@@ -351,7 +351,7 @@ describe('native league workspace', () => {
     expectAll(text, ['Todas las ligas', 'Viendo', 'Ir a una liga', 'Nativa de AllFantasy', '12 equipos', 'Temporada regular',
       'Fuera de temporada', 'Sección actual', 'Tus ligas', 'Todas 2', 'Sincronizadas', 'Importar liga', '2 ligas'])
     const bottom = [...container.querySelector('.nl-bottom-nav')!.children].map((el) => el.textContent)
-    expect(bottom).toEqual(['Liga', 'Duelo', 'Equipo', 'Jugadores', 'Chat'])
+    expect(bottom).toEqual(['Liga', 'Duelo', 'Equipo', 'Jugadores'])
     // The phase is still matched on its English value; only the label changed.
     expect(container.querySelector('.nl-phase [aria-current="step"]')!.textContent).toBe('Temporada regular')
   })

@@ -29,6 +29,7 @@ import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
+import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
 import { readChosenPlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { shouldApplyIncomingView, shouldMirrorActiveView } from '@/lib/league/leagueTabSync'
@@ -768,11 +769,42 @@ export function LeagueShell({
 
   /** Explicit tab selection (user click). Records the choice so auto-landing
    * defaults below stop firing, then updates the active tab. */
-  const handleUserTabChange = useCallback((t: string) => {
-    userPickedTabRef.current = true
-    pendingIncomingTabRef.current = null
-    setActiveTab(t)
-  }, [])
+  /*
+   * Chat is not a tab (owner, 2026-11-28: "chat should not be a tab, it should remain in the chat bubble").
+   * Anything that asks for the `league_chat` tab — a League home row, the activity card, a deep link — opens
+   * the chat bubble on this league instead, and the screen stays where it was.
+   */
+  const openLeagueChatBubble = useCallback(() => {
+    window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: { tab: 'league', leagueId: league.id } }))
+  }, [league.id])
+  const selectScreenTab = useCallback(
+    (t: string) => {
+      if (t === 'league_chat' && workspaceShell) {
+        openLeagueChatBubble()
+        return
+      }
+      setActiveTab(t)
+    },
+    [workspaceShell, openLeagueChatBubble],
+  )
+  const handleUserTabChange = useCallback(
+    (t: string) => {
+      if (t === 'league_chat' && workspaceShell) {
+        openLeagueChatBubble()
+        return
+      }
+      userPickedTabRef.current = true
+      pendingIncomingTabRef.current = null
+      setActiveTab(t)
+    },
+    [workspaceShell, openLeagueChatBubble],
+  )
+  // A `?view=league_chat` link (or a remembered tab) lands on League home with the bubble open.
+  useEffect(() => {
+    if (activeTab !== 'league_chat' || !workspaceShell) return
+    openLeagueChatBubble()
+    setActiveTab(tabDefs.some((tab) => tab.id === 'native_home') ? 'native_home' : tabDefs[0]?.id ?? 'home')
+  }, [activeTab, workspaceShell, openLeagueChatBubble, tabDefs])
 
   useEffect(() => {
     setRosterLegalityIssueCount(0)
@@ -1985,7 +2017,7 @@ export function LeagueShell({
                   hasTeam={userTeam != null}
                   draftDateIso={draftDateIso}
                   availableTabIds={tabDefs.map((item) => item.id)}
-                  onSelectTab={setActiveTab}
+                  onSelectTab={selectScreenTab}
                   imported={importedWhatsNext}
                 />
               </div>
@@ -2084,7 +2116,7 @@ export function LeagueShell({
               leagueDashboard={leagueDashboard}
               onOpenLeagueSettingsModal={openLeagueSettingsModal}
               settingsOpen={settingsOpen}
-              onSelectTab={setActiveTab}
+              onSelectTab={selectScreenTab}
               isPredraftLifecycle={isPredraftLifecycle}
               draftDateIso={draftDateIso}
               draftSetupSession={draftSetupSession}
@@ -2371,6 +2403,21 @@ export function LeagueShell({
   )
 }
 
+/** A matchup link opened before the draft: the schedule is made when the draft ends, so say that instead of an empty week. */
+function MatchupAfterDraftNote({ onGoToDraft }: { onGoToDraft: () => void }) {
+  return (
+    <div className="mx-auto w-full max-w-2xl px-4 py-6" data-testid="matchup-after-draft">
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
+        <h2 className="text-[17px] font-bold text-white">Matchups start after the draft</h2>
+        <p className="mt-1 text-sm text-white/55">Your schedule is created automatically when the draft ends.</p>
+        <button type="button" onClick={onGoToDraft} className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-[#ff3d81] text-sm font-black uppercase tracking-[0.1em] text-[#ffffff]">
+          Go to draft
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /** Format tabs the simple League home lists as rows, one tap each (dynasty, keeper, specialty formats). */
 const SIMPLE_HOME_FORMAT_TABS = new Set([
   'survivor', 'survivor_tribal', 'survivor_challenges', 'survivor_jury', 'survivor_command',
@@ -2611,6 +2658,8 @@ function LeagueTabRouter({
       )
     switch (nativeScreen) {
       case 'matchup':
+        // No schedule exists until the draft ends (it is generated then), so there is no matchup to show.
+        if (isPredraftLifecycle) return <MatchupAfterDraftNote onGoToDraft={() => onSelectTab('draft')} />
         return oneLeagueWeek(<NativeMatchupScreen league={selectedLeague} onSelectTab={goTo} />)
       case 'lineup':
         return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />

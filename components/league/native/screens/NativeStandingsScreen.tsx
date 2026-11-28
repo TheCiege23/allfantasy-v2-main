@@ -1,5 +1,6 @@
 'use client'
 
+import { noScheduleYet } from '@/lib/league/scheduleState'
 import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
 import { GuillotineStandingsScreen } from './NativeGuillotineScreens'
 import { Fragment, useEffect, useMemo, useState } from 'react'
@@ -196,7 +197,7 @@ function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { le
         <div className="nls-cols">
           <section className="nls-card nls-card-flush" aria-label="Standings">
             {!rows.length ? (
-              <p className="nls-empty">Standings appear once the first week is scored.</p>
+              <p className="nls-empty">{noScheduleYet(league) ? 'Standings start after the draft.' : 'Standings appear once the first week is scored.'}</p>
             ) : (
               <>
                 <table className="nls-table">
@@ -242,7 +243,7 @@ function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { le
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-standings-screen" data-rd-screen={rd ? 'standings' : undefined}>
       <ScreenHead eyebrow={scored ? `After week ${scored}` : `${season} season`} title="Standings & playoffs">
-        <Segmented label="Standings view" value={view} onChange={setView} options={[{ id: 'standings', label: 'Standings' }, { id: 'playoffs', label: 'Playoff picture' }, { id: 'power', label: 'Power rankings' }]} />
+        <Segmented label="Standings view" value={view} onChange={setView} options={[{ id: 'standings', label: 'Standings' }, { id: 'playoffs', label: 'Playoffs' }]} />
       </ScreenHead>
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
@@ -252,7 +253,7 @@ function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { le
         <div className="nls-cols">
           <section className="nls-card nls-card-flush" aria-label={view === 'power' ? 'Power rankings' : view === 'playoffs' ? 'Playoff picture' : 'Standings'}>
             {!rows.length ? (
-              <p className="nls-empty">Standings appear once the first week is scored.</p>
+              <p className="nls-empty">{noScheduleYet(league) ? 'Standings start after the draft.' : 'Standings appear once the first week is scored.'}</p>
             ) : view === 'standings' ? (
               <>
                 <table className="nls-table">
@@ -404,37 +405,28 @@ function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { le
             )}
           </section>
 
-          <aside className="nls-aside" aria-label="Your playoff path">
-            <Card label="Your path" tone="accent">
-              {viewer ? (
-                viewerOdds ? (
-                  <>
-                    <div className="nls-big-odds">
-                      <b>{Math.round(viewerOdds.playoffProbability)}%</b>
-                      <span>playoff odds{byes > 0 ? ` · ${Math.round(viewerOdds.byeProbability)}% for a bye` : ''}</span>
-                    </div>
-                    <p>You are {ordinal(viewer.rank) ?? 'in the race'} at {record(viewer)}{cut ? `, with the top ${cut} making the playoffs` : ''}.</p>
-                  </>
-                ) : (
-                  <p>You are {viewer.rank ? `#${viewer.rank}` : 'in the race'} at {record(viewer)}. Playoff odds appear after AF runs this week&apos;s forecast.</p>
-                )
-              ) : (
-                <p>Your team&apos;s path appears here once you have a team in this league.</p>
-              )}
-            </Card>
-            <Card label="Playoff format">
-              <dl className="nls-dl">
-                <div><dt>Teams</dt><dd className="nls-mono">{format.playIn ? `${format.playIn.qualifiers} + play-in · ${format.playIn.games.map(([a, b]) => `#${a} v #${b}`).join(', ')}` : format.teams != null ? `${format.teams}${format.byes ? ` · ${format.byes} byes` : ''}` : 'League default'}</dd></div>
-                <div><dt>Weeks</dt><dd className="nls-mono">{format.startWeek != null ? (format.weeks ? `${format.startWeek} – ${format.startWeek + format.weeks - 1}` : `From ${format.startWeek}`) : 'League default'}</dd></div>
-                <div><dt>Reseeding</dt><dd>{format.reseed === true ? 'Each round' : format.reseed === false ? 'Fixed bracket' : 'League default'}</dd></div>
-                <div><dt>Consolation</dt><dd>{format.consolation === 'toilet_bowl' ? 'Toilet bowl' : format.consolation === 'consolation' ? 'Consolation bracket' : format.consolation === 'none' ? 'None' : 'League default'}</dd></div>
-              </dl>
-              {isCommissioner ? <button type="button" className="nl-text-link" onClick={() => onSelectTab('settings')}>Edit in Commissioner</button> : null}
-            </Card>
-            {/* Dynasty only: the upcoming rookie draft's lottery odds, Draft HQ's own numbers. */}
-            {dynasty ? <DynastyLotteryCard leagueId={league.id} leagueName={league.name} /> : null}
-            <SideContestsCard leagueId={league.id} />
-            <PayoutsCard leagueId={league.id} />
+          {/*
+            Sleeper pass 4 (owner, 2026-11-28): the side column held five cards. "Your path" repeated the table's own
+            odds column; the playoff format belongs with the Playoffs view; the rest are folded into one row.
+          */}
+          <aside className="nls-aside" aria-label="League extras">
+            {view === 'playoffs' ? (
+              <Card label="Playoff format">
+                <dl className="nls-dl">
+                  <div><dt>Teams</dt><dd className="nls-mono">{format.playIn ? `${format.playIn.qualifiers} + play-in · ${format.playIn.games.map(([a, b]) => `#${a} v #${b}`).join(', ')}` : format.teams != null ? `${format.teams}${format.byes ? ` · ${format.byes} byes` : ''}` : 'League default'}</dd></div>
+                  <div><dt>Weeks</dt><dd className="nls-mono">{format.startWeek != null ? (format.weeks ? `${format.startWeek} – ${format.startWeek + format.weeks - 1}` : `From ${format.startWeek}`) : 'League default'}</dd></div>
+                  <div><dt>Reseeding</dt><dd>{format.reseed === true ? 'Each round' : format.reseed === false ? 'Fixed bracket' : 'League default'}</dd></div>
+                  <div><dt>Consolation</dt><dd>{format.consolation === 'toilet_bowl' ? 'Toilet bowl' : format.consolation === 'consolation' ? 'Consolation bracket' : format.consolation === 'none' ? 'None' : 'League default'}</dd></div>
+                </dl>
+                {isCommissioner ? <button type="button" className="nl-text-link" onClick={() => onSelectTab('settings')}>Edit in Commissioner</button> : null}
+              </Card>
+            ) : null}
+            <details className="nls-card nls-more-fold" data-testid="standings-more">
+              <summary className="nls-label">More</summary>
+              {dynasty ? <DynastyLotteryCard leagueId={league.id} leagueName={league.name} /> : null}
+              <SideContestsCard leagueId={league.id} />
+              <PayoutsCard leagueId={league.id} />
+            </details>
           </aside>
         </div>
       ) : null}

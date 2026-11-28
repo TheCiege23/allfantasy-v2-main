@@ -40,7 +40,7 @@ import { Card, InjuryFlag, PlayerAvatar, PlayerNameButton, PosPill, ScreenHead, 
 import { GamesLeftChip, WeekPlannerCard, useWeekPlanner } from './WeekPlannerCard'
 import { GoalieStartChip, useGoalieStarts } from './GoalieStartChip'
 import { claimStatusLabel, faabMeter, waiverClaimTypeLabel } from '@/lib/league-media/redraftScreens'
-import { RedraftScreen, RedraftWaiverHeader, useRedraftScreen } from './RedraftScreenParts'
+import { RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
 
 /**
  * Players & waivers — handoff §3, `Waivers.png` / `MobileWaivers.png`.
@@ -114,6 +114,34 @@ function rosteredPct(p: UnifiedPlayerWireDto): number | null {
   return null
 }
 
+/** The three list tabs on screen (Sleeper's Trend · Available · Leaders). Search is the top bar; Watchlist a filter; claims a button. */
+const VISIBLE_PLAYER_TABS = PLAYERS_TABS.filter((t) => t.id === 'trending' || t.id === 'available' || t.id === 'leaders')
+
+type SortKey = 'projection' | 'adp' | 'stats'
+
+/** Projection and stats sort high to low, ADP low to high; a player without the figure goes last. */
+export function sortPlayerRows<T extends { projectedPoints?: number | null; adp?: number | null; fantasyPointsPerGame?: number | null }>(rows: readonly T[], key: SortKey): T[] {
+  const val = (p: T): number | null => {
+    const v = key === 'adp' ? p.adp : key === 'stats' ? p.fantasyPointsPerGame : p.projectedPoints
+    return typeof v === 'number' && Number.isFinite(v) ? v : null
+  }
+  return [...rows].sort((a, b) => {
+    const x = val(a)
+    const y = val(b)
+    if (x == null && y == null) return 0
+    if (x == null) return 1
+    if (y == null) return -1
+    return key === 'adp' ? x - y : y - x
+  })
+}
+
+/** Rookies = no prior season (yearsExp 0); veterans = one or more. Unknown experience matches neither filter. */
+export function matchesExperience(p: { product?: { yearsExp?: number | null } | null }, want: 'rookies' | 'veterans'): boolean {
+  const y = p.product?.yearsExp
+  if (y == null || !Number.isFinite(Number(y))) return false
+  return want === 'rookies' ? Number(y) === 0 : Number(y) > 0
+}
+
 export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const id = encodeURIComponent(league.id)
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -139,10 +167,24 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const [conditionalClaims, setConditionalClaims] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('available')
+  const [listTab, setTab] = useState<Tab>('available')
   const [pos, setPos] = useState('ALL')
   const [query, setQuery] = useState('')
+  /*
+   * Sleeper pass 2 (owner, 2026-11-28): one search bar on top that searches every player while you type,
+   * three list tabs (Trend · Available · Leaders), a sort, and one Filters panel holding Watchlist and
+   * Rookies / Veterans. My claims opens from a header button; the Trade list is gone (trades start on the
+   * player card). Before the draft the list sorts by ADP.
+   */
+  // Only a league that SAYS it has not drafted: no lifecycle at all is not read as "before the draft".
+  const predraftPhase = ['setup', 'pre_draft', 'predraft', 'draft_setup', 'drafting', 'in_draft'].includes(String(league.lifecycleState ?? '').trim().toLowerCase())
+  const [sortKey, setSortKey] = useState<'projection' | 'adp' | 'stats'>(() => (predraftPhase ? 'adp' : 'projection'))
+  const [experience, setExperience] = useState<'all' | 'rookies' | 'veterans'>('all')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [claimsOpen, setClaimsOpen] = useState(false)
   const q = useDeferredValue(query)
+  /** Typing in the top bar searches every player in the league (the old Search tab); clearing it returns to the tab. */
+  const tab: Tab = q.trim() && listTab !== 'watchlist' ? 'search' : listTab
   /** `notice`: why this is a claim (an add refused by a lock); `dropId`: the drop that add had chosen, kept. */
   const [drawer, setDrawer] = useState<{ player: UnifiedPlayerWireDto; immediate: boolean; notice?: string; dropId?: string | null } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -333,11 +375,12 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       if (startable.length > 0 || rows.length === 0) rows = startable
     }
     if (needle) rows = rows.filter((p) => p.name.toLowerCase().includes(needle) || String(p.team ?? '').toLowerCase().includes(needle))
+    if (experience !== 'all') rows = rows.filter((p) => matchesExperience(p, experience))
     if (tab === 'trending') rows = [...rows].sort((a, b) => (trend.get(b.id) ?? 0) - (trend.get(a.id) ?? 0))
-    else rows = [...rows].sort((a, b) => (Number(b.projectedPoints ?? -1) || -1) - (Number(a.projectedPoints ?? -1) || -1))
+    else rows = sortPlayerRows(rows, sortKey)
     // Prospects have no projection: after every real player (lib/waiver-wire/prospectFreeAgentDisplay.ts).
     return (tab === 'trending' ? rows : placeProspectsAfterPlayers(rows, 'projection')).slice(0, 120)
-  }, [allPlayers, leaguePlayers, lastWeek, tab, watch, claimedIds, pos, q, trend, rosterable])
+  }, [allPlayers, leaguePlayers, lastWeek, tab, watch, claimedIds, pos, q, trend, rosterable, experience, sortKey])
   const listHasProspects = list.some((p) => isNhlProspectWireRow(p))
   // The waiver wire's own display adapter: canonical photo / crest, and the season stat line.
   const shown = useMemo(() => list.map((p) => ({ p, a: adaptWaiverWirePlayer(p) })), [list])
@@ -498,28 +541,21 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const waiverDay = nextRunAt ? DAYS[new Date(nextRunAt).getDay()] : settings?.processingDayOfWeek != null ? DAYS[settings.processingDayOfWeek] : null
   const totalBid = claims.reduce((s, c) => s + (Number(c.faabBid) || 0), 0)
   const mine = history.filter((t) => roster.id && t.roster?.id === roster.id).slice(0, 4)
+  const waiverLine = [
+    settings ? waiverClaimTypeLabel(settings.waiverType) : null,
+    faabMode && roster.faab != null ? 'FAAB $' + roster.faab + ' left' + (settings?.faabBudget ? ' of $' + settings.faabBudget : '') : null,
+    roster.priority != null ? `Priority ${roster.priority} of ${league.teamCount}` : null,
+    runLabel ? `Waivers run ${runLabel}` : null,
+  ].filter(Boolean).join(' · ')
+  const activeFilters = (experience !== 'all' ? 1 : 0) + (listTab === 'watchlist' ? 1 : 0)
   const lastRunOthers = history.filter((t) => !(roster.id && t.roster?.id === roster.id)).length
 
   return (
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-waivers-screen" data-rd-screen={rd ? 'waivers' : undefined}>
-      <ScreenHead eyebrow="Players" title="Players & waivers">
-        {/* Redraft carries these in the header strip below instead. */}
-        {!rd && runLabel ? <span className="nls-chip">Waivers run {runLabel}</span> : null}
-        {!rd && faabMode && roster.faab != null ? <span className="nls-chip" data-tone="accent">FAAB ${roster.faab} left</span> : null}
-        {!rd && roster.priority != null ? <span className="nls-chip">Priority {roster.priority} of {league.teamCount}</span> : null}
-      </ScreenHead>
-
-      {rd && settings ? (
-        <RedraftWaiverHeader
-          claimType={waiverClaimTypeLabel(settings.waiverType)}
-          faab={faabMode ? faabMeter(roster.faab, settings.faabBudget) : null}
-          faabRemaining={faabMode ? roster.faab : null}
-          runLabel={runLabel}
-          priority={roster.priority}
-          teamCount={league.teamCount}
-        />
-      ) : null}
+      {/* Sleeper pass 2: the search bar leads; one thin line replaces the header chips and the redraft waiver strip. */}
+      <input ref={searchRef} className="nls-search" type="search" placeholder="Search players" aria-label="Search players" value={query} onChange={(e) => setQuery(e.target.value)} data-testid="players-search" />
+      {waiverLine && !predraftPhase ? <p className="nls-muted" data-testid="players-waiver-line">{waiverLine}</p> : null}
 
       {handoffDrop && roster.ids.includes(handoffDrop) ? (
         <p className="nls-handoff" role="status" data-testid="native-waivers-drop-handoff">
@@ -530,13 +566,44 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         </p>
       ) : null}
 
-      <WeekPlannerCard planner={planner} offset={plannerOffset} onOffset={setPlannerOffset} />
-
-      <div className="nls-toolbar">
-        <Segmented label="Player list" value={tab} onChange={setTab} options={[...PLAYERS_TABS]} />
-        <Segmented label="Position" value={pos} onChange={setPos} options={[{ id: 'ALL', label: 'ALL' }, ...positions.map((p) => ({ id: p, label: p }))]} />
-        <input ref={searchRef} className="nls-search" type="search" placeholder="Search players" aria-label="Search players" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div className="nls-toolbar" data-testid="players-toolbar">
+        <Segmented label="Player list" value={listTab === 'watchlist' || listTab === 'claims' ? 'available' : listTab} onChange={setTab} options={VISIBLE_PLAYER_TABS} />
+        {tab !== 'trending' ? (
+          <select className="nls-weeksel" aria-label="Sort players by" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} data-testid="players-sort">
+            <option value="projection">Projection</option>
+            <option value="adp">ADP</option>
+            <option value="stats">Stats</option>
+          </select>
+        ) : null}
+        {predraftPhase ? null : <button type="button" className="nls-btn" data-size="sm" aria-expanded={claimsOpen} onClick={() => setClaimsOpen((v) => !v)} data-testid="players-claims-toggle">
+          Claims{claims.length ? ` (${claims.length})` : ''}
+        </button>}
       </div>
+      <div className="nls-toolbar">
+        <Segmented label="Position" value={pos} onChange={setPos} options={[{ id: 'ALL', label: 'ALL' }, ...positions.map((p) => ({ id: p, label: p }))]} />
+        <button type="button" className="nls-btn" data-size="sm" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((v) => !v)} data-testid="players-filters-toggle">
+          Filters{activeFilters ? ` (${activeFilters})` : ''}
+        </button>
+      </div>
+      {filtersOpen ? (
+        <div className="nls-card" data-testid="players-filters">
+          <Segmented label="Experience" value={experience} onChange={setExperience} options={[{ id: 'all', label: 'All' }, { id: 'rookies', label: 'Rookies' }, { id: 'veterans', label: 'Veterans' }]} />
+          <label className="nls-check">
+            <input type="checkbox" checked={listTab === 'watchlist'} onChange={(e) => setTab(e.target.checked ? 'watchlist' : 'available')} data-testid="players-filter-watchlist" /> Watchlist only
+          </label>
+          <div className="nls-actions nls-actions-top">
+            <button type="button" className="nls-btn" onClick={() => { setExperience('all'); setPos('ALL'); if (listTab === 'watchlist') setTab('available') }} data-testid="players-filters-reset">Reset</button>
+            <button type="button" className="nls-btn" data-variant="primary" onClick={() => setFiltersOpen(false)}>Apply</button>
+          </div>
+        </div>
+      ) : null}
+      {/* The daily-sport week planner folds away (Sleeper pass 2): useful for streaming, not needed on every visit. */}
+      {planner ? (
+        <details className="nls-card" data-testid="players-week-planner">
+          <summary className="nls-label">Games this week</summary>
+          <WeekPlannerCard planner={planner} offset={plannerOffset} onOffset={setPlannerOffset} />
+        </details>
+      ) : null}
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {phaseReason ? (
@@ -560,7 +627,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         </p>
       ) : null}
 
-      <div className="nls-cols">
+      <div className="nls-stack" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <section className="nls-card nls-card-flush" aria-label="Players" aria-busy={loading}>
           {(loading && !players.length) || (tabUsesLeagueScope(tab) && leagueLoading && !leaguePlayers) ? (
             <p className="nls-empty" role="status">Loading players…</p>
@@ -575,14 +642,12 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                     <span className="nls-long">{league.currentWeek ? `Wk ${league.currentWeek} proj` : 'Proj'}</span>
                     <span className="nls-short">Proj</span>
                   </th>
-                  <th scope="col" data-hide="phone">AF trend</th>
                   <th scope="col" data-align="left" data-hide="phone">Status</th>
                   <th scope="col"><span className="nls-sr">Action</span></th>
                 </tr>
               </thead>
               <tbody>
                 {shown.map(({ p, a }) => {
-                  const t = trend.get(p.id) ?? 0
                   const pct = rosteredPct(p)
                   const claimed = claimedIds.has(p.id)
                   const holdUntil = playerWaiverHoldUntil(p, settings)
@@ -666,17 +731,16 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                       </td>
                       <td data-hide="phone">{pct != null ? `${Math.round(pct)}%` : '—'}</td>
                       <td data-proj>{fmt1(p.projectedPoints)}</td>
-                      <td data-hide="phone" data-pts={t > 0 ? 'good' : t < 0 ? 'bad' : 'neutral'}>{signed(t)}</td>
                       <td data-align="left" data-hide="phone">
                         {heldBy ? <span className="nls-chip">{heldBy}</span> : rowImmediate ? <span className="nls-chip" data-tone="good">Free agent</span> : <span className="nls-chip" data-tone="warn">Waivers{waiverDay ? ` · ${waiverDay}` : ''}</span>}
                       </td>
                       <td data-action>
-                        {row.rosteredBy?.mine ? (
+                        {predraftPhase && !row.rosteredBy ? null : row.rosteredBy?.mine ? (
                           <span className="nls-chip">Yours</span>
                         ) : row.rosteredBy ? (
                           <button type="button" className="nls-btn" data-size="sm" aria-label={`Trade for ${p.name}`} onClick={() => setTradeFor({ playerId: p.id, rosterId: row.rosteredBy?.rosterId ?? null })} data-testid={`native-waivers-trade-${p.id}`}>Trade</button>
                         ) : claimed ? (
-                          <button type="button" className="nls-btn" data-size="sm" onClick={() => setTab('claims')}>Claimed</button>
+                          <button type="button" className="nls-btn" data-size="sm" onClick={() => setClaimsOpen(true)}>Claimed</button>
                         ) : (
                           <button type="button" className="nls-btn" data-size="sm" data-variant="primary" disabled={busy === p.id || movesClosed} title={movesClosed ? phaseReason ?? undefined : undefined} onClick={() => onAdd(p)}>
                             {rowImmediate ? 'Add' : 'Claim'}
@@ -712,7 +776,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         />
         ) : null}
 
-        <aside className="nls-aside" aria-label="Your claims">
+        <aside className="nls-aside" aria-label="Your claims" hidden={!claimsOpen} style={{ order: -1, display: claimsOpen ? undefined : 'none' }} data-testid="players-claims">
           <Card label="Your claims" right={faabMode && totalBid > 0 ? <span className="nls-mono">${totalBid} bid</span> : undefined}>
             {claims.length ? (
               <ol className="nls-claims">

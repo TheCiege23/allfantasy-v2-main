@@ -89,45 +89,12 @@ describe('NativeMatchupScreen on the league’s own season', () => {
     expect(weekReads.length).toBe(2)
     expect(calls.every((u) => !u.includes('week='))).toBe(true)
 
-    // One line per game; a game not started draws a dash, not 0.0.
-    const board = screen.getByTestId('native-scoreboard')
-    const lines = [...board.querySelectorAll('li')]
-    expect(lines.length).toBe(2)
-    expect(lines[0].getAttribute('data-mine')).toBe('true')
-    expect(lines[1].textContent).toContain('Cubs')
-    expect(lines[1].textContent).toContain('—')
-    expect(lines[1].textContent).not.toContain('0.0')
+    // Sleeper pass 3: the league's games are the League tab's; this screen is your matchup only.
+    expect(screen.queryByTestId('native-scoreboard')).toBeNull()
 
     // Stepping back asks for the week before the one shown, not for week 0 or week 1.
     fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
     await waitFor(() => expect(calls.some((u) => u.includes('week=6'))).toBe(true))
-  })
-
-  it('🛑 a big league’s scoreboard is a glance beside the matchup, with the full list one tap away', async () => {
-    // 36 teams playing five games a week is 90 games: the list ran to nine screens beside the matchup.
-    const all = Array.from({ length: 90 }, (_, i) => boardGame(`g${i}`, `Home ${i}`, 100 + i, `Away ${i}`, 90, i === 0 ? { mine: true } : {}))
-    stubFetch({
-      '/matchup-center': () => payload(5, {}),
-      '/scoring/matchups': () => ({ season: 2026, week: 5, matchups: [], games: all }),
-    })
-    render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
-    const board = await screen.findByTestId('native-scoreboard')
-    expect(board.querySelectorAll('li').length).toBe(8)
-    expect(board.querySelector('li')?.getAttribute('data-mine')).toBe('true')
-    expect(screen.getByText('8 of 90 games')).toBeTruthy()
-    fireEvent.click(screen.getByTestId('native-scoreboard-all'))
-    await waitFor(() => expect(screen.getByTestId('native-scoreboard').querySelectorAll('li').length).toBe(90))
-    expect(screen.queryByTestId('native-scoreboard-all')).toBeNull()
-  })
-
-  it('a league whose week fits is shown whole, with no "see all"', async () => {
-    stubFetch({
-      '/matchup-center': () => payload(5, {}),
-      '/scoring/matchups': () => ({ season: 2026, week: 5, matchups: [], games: Array.from({ length: 6 }, (_, i) => boardGame(`g${i}`, `Home ${i}`, 100, `Away ${i}`, 90)) }),
-    })
-    render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
-    expect((await screen.findByTestId('native-scoreboard')).querySelectorAll('li').length).toBe(6)
-    expect(screen.queryByTestId('native-scoreboard-all')).toBeNull()
   })
 
   it('a team that plays twice in a week can open its second game', async () => {

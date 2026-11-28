@@ -191,23 +191,17 @@ export function LeagueActivityTab({ leagueId }: { leagueId: string }) {
         </div>
       ) : null}
 
-      <div role="group" aria-label="Filter activity" className="flex flex-wrap gap-2">
+      {/*
+        The same segmented switch as every league screen (Standings / Playoffs, Trend / Available / Leaders),
+        not its own green pills (owner, 2026-11-28: "restyle the activity filter buttons to match").
+      */}
+      <div role="group" aria-label="Filter activity" className="nls-seg" style={{ maxWidth: '100%', overflowX: 'auto', scrollbarWidth: 'none' }} data-testid="activity-filters">
         {FILTERS.map((f) => {
           const on = filter === f.id
           return (
-            <button
-              key={f.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setFilter(f.id)}
-              className="min-h-[40px] rounded-full border px-4 text-[14px] font-bold"
-              style={
-                on
-                  ? { background: 'var(--lsk-accent-strong, #3ddc84)', color: 'var(--lsk-accent-ink, #06070f)', borderColor: 'var(--lsk-accent-strong, #3ddc84)' }
-                  : { background: 'transparent', color: T.text2, borderColor: T.line }
-              }
-            >
-              {filterLabel(f)} <span className="opacity-75">{moves ? count(f.id) : ''}</span>
+            <button key={f.id} type="button" aria-pressed={on} onClick={() => setFilter(f.id)}>
+              {filterLabel(f)}
+              {moves ? <span className="opacity-75"> {count(f.id)}</span> : null}
             </button>
           )
         })}

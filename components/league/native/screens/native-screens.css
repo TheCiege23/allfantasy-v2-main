@@ -737,3 +737,6 @@
   .nls-lockbar[data-compact=true] { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 8px 12px; }
   .nls-lrow .nls-proj .nls-proj-pts { font-size: 17px; }
 }
+
+/* A fold with nothing in it (no payouts, no side contests) is not drawn (Sleeper pass 4). */
+.nls-more-fold:not(:has(> :not(summary))) { display: none; }

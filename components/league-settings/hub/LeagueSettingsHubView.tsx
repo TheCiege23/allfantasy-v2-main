@@ -257,23 +257,8 @@ export function LeagueSettingsHubView({
       </div>
 
       <div className="af-lsh-body" id="af-lsh-panel" role="tabpanel" aria-labelledby={`af-lsh-tab-${tab}`}>
-        <nav className="af-lsh-jump" aria-label={t('On this page')} onClick={openLinkedSection}>
-          <span className="af-lsh-jump-label">{t('On this page')}</span>
-          {sections.map((s) => (
-            <a key={s.id} href={`#af-lsh-${s.id}`}>{t(s.label)}</a>
-          ))}
-          <div className="af-lsh-format">
-            <span className="af-lsh-eyebrow">{t('Format')}</span>
-            <strong>{t(meta.label)}</strong>
-            <span>{t(meta.blurb)}</span>
-          </div>
-        </nav>
         <div className="af-lsh-stack">
-          <nav className="af-lsh-chips" aria-label={t('Sections')} onClick={openLinkedSection}>
-            {sections.map((s) => (
-              <a key={s.id} href={`#af-lsh-${s.id}`}>{t(s.label)}</a>
-            ))}
-          </nav>
+          {/* Sleeper pass 4 (owner, 2026-11-28): the tabs are the navigation; no jump list, section chips or Format box. */}
           {data.importedFrom && tab === 'setup' ? (
             <div className="af-lsh-banner" data-tone="info">
               <div>

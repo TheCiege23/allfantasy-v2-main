@@ -6,6 +6,7 @@ import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
 import { fmt1, initialsOf } from '@/lib/league/native/nativeScreenModels'
 import type { LeagueWeekCard, LeagueWeekCards, LeagueWeekCardTeam } from '@/server/services/nativeLeagueWeekCards'
 import { NativeStandingsScreen } from './NativeStandingsScreen'
+import { noScheduleYet } from '@/lib/league/scheduleState'
 
 /**
  * The League page (owner, 2026-11-27): Sleeper's League tab is three things — every matchup this week,
@@ -17,14 +18,18 @@ export function NativeLeaguePageScreen(props: { league: UserLeague; isCommission
   const { league, isCommissioner, onSelectTab } = props
   return (
     <div className="nls nls-league-page" data-testid="native-league-page">
-      <LeagueWeekMatchups leagueId={league.id} />
+      {/* No schedule until the draft ends (owner, 2026-11-28), so no Matchups section before it. */}
+      {noScheduleYet(league) ? null : <LeagueWeekMatchups leagueId={league.id} />}
       {/* Each screen carries its own title ("Standings & playoffs", "Activity"); a second heading here said it twice. */}
       <section aria-label="Standings">
         <NativeStandingsScreen league={league} isCommissioner={isCommissioner} onSelectTab={onSelectTab} />
       </section>
-      <section aria-label="Activity">
-        <LeagueActivityTab leagueId={league.id} />
-      </section>
+      {/* Nothing has happened before the draft: no Activity section until there is some. */}
+      {noScheduleYet(league) ? null : (
+        <section aria-label="Activity">
+          <LeagueActivityTab leagueId={league.id} />
+        </section>
+      )}
       <div className="nls-lp-more">
         <button type="button" className="nls-btn" data-testid="league-page-history" onClick={() => onSelectTab('legacy')}>
           League history
@@ -33,6 +38,8 @@ export function NativeLeaguePageScreen(props: { league: UserLeague; isCommission
     </div>
   )
 }
+
+export { noScheduleYet }
 
 function LeagueWeekMatchups({ leagueId }: { leagueId: string }) {
   const [data, setData] = useState<LeagueWeekCards | null>(null)
