@@ -97,10 +97,18 @@ function mapPlayerRows(rows: unknown, idMap: Map<string, string>): unknown {
   })
 }
 
+/**
+ * Sleeper writes `"0"` into `starters` for a slot the manager left EMPTY. It is not a player, and
+ * every other Sleeper reader already skips it (e.g. SleeperHistoricalSeasonStateSyncService,
+ * imported-league-alerts/sleeperEvents). Counting it made any team with an empty starter slot look
+ * like it "lists a player who isn't on the roster", which blocked the native switch.
+ */
+const EMPTY_SLOT_IDS = new Set(['', '0'])
+
 function rowIds(rows: unknown): string[] {
   if (!Array.isArray(rows)) return []
   return rows.map((row) => typeof row === 'string' || typeof row === 'number' ? String(row) : String(asRecord(row).id ?? asRecord(row).player_id ?? ''))
-    .filter(Boolean)
+    .filter((id) => !EMPTY_SLOT_IDS.has(id))
 }
 
 export function importedOwnedPlayerIds(data: unknown): string[] {

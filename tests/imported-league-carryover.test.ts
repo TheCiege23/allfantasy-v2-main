@@ -61,6 +61,13 @@ describe('standalone imported league carryover', () => {
     expect(() => importedOwnedPlayerIds({ players: ['one'], starters: ['two'] })).toThrow(/missing from its team roster/)
   })
 
+  it("treats Sleeper's \"0\" as an empty starter slot, not a player", () => {
+    expect(importedOwnedPlayerIds({ players: ['one', 'two'], starters: ['one', '0', '0'] })).toEqual(['one', 'two'])
+    expect(importedOwnedPlayerIds({ starters: ['one', '0'], lineup_sections: { bench: ['two', 0] } })).toEqual(['one', 'two'])
+    // Control: a real stray player beside an empty slot is still refused.
+    expect(() => importedOwnedPlayerIds({ players: ['one'], starters: ['0', 'two'] })).toThrow(/missing from its team roster/)
+  })
+
   it('checks numeric lineup IDs against ownership and recovers legacy numeric-only lineups', () => {
     expect(() => importedOwnedPlayerIds({ players: [123], lineup_sections: { starters: [456] } })).toThrow(/missing from its team roster/)
     const data = { starters: [123], lineup_sections: { bench: [456] } }
