@@ -14,9 +14,15 @@ describe('which tab a league opens on (owner, 2026-11-25)', () => {
     expect(nativeLeagueLandingTab({ remembered: null, firstTopTabId: firstTop(true), draftDone: true })).toBe('matchups')
   })
 
-  it('keeps the tab last open in this league', () => {
-    expect(nativeLeagueLandingTab({ remembered: 'trades', firstTopTabId: 'matchups', draftDone: true })).toBe('trades')
+  it('before the draft, keeps the tab last open in this league', () => {
     expect(nativeLeagueLandingTab({ remembered: 'draft', firstTopTabId: 'draft', draftDone: false })).toBe('draft')
+    expect(nativeLeagueLandingTab({ remembered: 'settings', firstTopTabId: 'draft', draftDone: false })).toBe('settings')
+  })
+
+  it('after the draft, always opens on the matchup, whatever was open last (owner, 2026-11-28)', () => {
+    for (const remembered of ['roster', 'trades', 'waivers', 'settings', 'draft', null]) {
+      expect(nativeLeagueLandingTab({ remembered, firstTopTabId: firstTop(true), draftDone: true }), String(remembered)).toBe('matchups')
+    }
   })
 
   it('does not reopen the old League overview, or a Draft tab that is gone after the draft', () => {

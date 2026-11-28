@@ -81,6 +81,13 @@ type HighScoresPayload = {
   teamRows?: Array<{ rank: number; teamName: string; season: number; week: number; points: number }>
 }
 
+/**
+ * Fields saved through PATCH /api/commissioner/leagues/[id] rather than /api/league/settings.
+ * `tradeReviewType` must go there: that route writes the mode to every store a trade runtime reads
+ * (lib/league-trade-engine/leagueTradeReviewSetting.ts), and the settings PATCH does not take it.
+ */
+const COMMISSIONER_ROUTE_FIELDS = new Set(['tradeReviewType'])
+
 /** Draft session statuses before the first pick (lib/league/structuralSettingsLock.ts). */
 const DRAFT_NOT_STARTED = new Set(['pre_draft', 'configuring', 'configured'])
 
@@ -266,7 +273,10 @@ export function LeagueSettingsHub({
   /** One setting from its picker (Sleeper-style rows, 2026-11-28): the same PATCH as a switch, one field. */
   const onSetSetting = useCallback(async (field: string, value: string | number): Promise<string | null> => {
     setBusyField(field)
-    const r = await sendJson('/api/league/settings', 'PATCH', { leagueId, [field]: value })
+    // Trade review has its own writer (it must reach every trade runtime's store); everything else is the settings PATCH.
+    const r = COMMISSIONER_ROUTE_FIELDS.has(field)
+      ? await sendJson(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}`, 'PATCH', { [field]: value })
+      : await sendJson('/api/league/settings', 'PATCH', { leagueId, [field]: value })
     setBusyField(null)
     if (!r.ok) return tx(r.error ?? 'Save failed')
     toast.success(tx('Saved'))

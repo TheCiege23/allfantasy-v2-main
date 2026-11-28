@@ -7,8 +7,14 @@ import type { UserLeague } from '@/app/dashboard/types'
 vi.mock('@/lib/dashboard/intelligence-events', () => ({ invalidateIntelligence: () => undefined }))
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), message: vi.fn() }) }))
 vi.mock('@/components/waiver-wire/WaiverClaimDrawer', () => ({
-  default: ({ open, player, faabMode }: { open: boolean; player: { name: string } | null; faabMode: boolean }) =>
-    open ? <div data-testid="claim-drawer">{player?.name} · {faabMode ? 'faab' : 'priority'}</div> : null,
+  default: ({ open, player, faabMode, immediate, notice, nextRunLabel }: { open: boolean; player: { name: string } | null; faabMode: boolean; immediate?: boolean; notice?: string | null; nextRunLabel?: string | null }) =>
+    open ? (
+      <div data-testid="claim-drawer" data-immediate={immediate ? 'true' : 'false'}>
+        {player?.name} · {faabMode ? 'faab' : 'priority'}
+        {notice ? <p data-testid="claim-drawer-notice">{notice}</p> : null}
+        {nextRunLabel ? <p data-testid="claim-drawer-run">{nextRunLabel}</p> : null}
+      </div>
+    ) : null,
 }))
 
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
@@ -105,5 +111,50 @@ describe('NativeWaiversScreen', () => {
     expect(screen.getByAltText('Jalen Brunson').getAttribute('src')).toBe(nba.headshotUrl)
     expect(screen.getByTestId('waiver-team-logo').getAttribute('src')).toBe(nba.teamLogoUrl)
     expect(screen.getByTestId('native-waivers-stats-n1').textContent).toBe('PTS/G26REB/G3.3AST/G6.8')
+  })
+})
+
+describe('a locked instant add becomes a claim (owner report, 2026-11-28)', () => {
+  function stubWithLockedAdd(settings: Record<string, unknown>) {
+    const routes = base(settings) as Record<string, unknown>
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/add-drop')) {
+        return new Response(JSON.stringify({ ok: false, code: 'PLAYER_LOCKED', error: 'This starter is locked because their game has started.' }), { status: 423 })
+      }
+      const key = Object.keys(routes).sort((a, b) => b.length - a.length).find((k) => url.includes(k))
+      return key ? new Response(JSON.stringify(routes[key]), { status: 200 }) : new Response('{}', { status: 404 })
+    }))
+  }
+
+  it('opens the claim sheet with why, when it runs, and the FAAB bid', async () => {
+    // FAAB with daily free-agent unlock: the NBA default, and the owner's league. Instant adds are offered.
+    stubWithLockedAdd({ waiverType: 'faab', faabBudget: 100, freeAgentUnlockBehavior: 'daily' })
+    render(<NativeWaiversScreen league={league} />)
+    await screen.findByText('Tank Bigsby')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0])
+    const drawer = await screen.findByTestId('claim-drawer')
+    expect(drawer.getAttribute('data-immediate')).toBe('false')
+    expect(screen.getByTestId('claim-drawer-notice').textContent).toContain('This starter is locked because their game has started.')
+    expect(screen.getByTestId('claim-drawer-notice').textContent).toContain('next waiver run')
+    expect(screen.getByTestId('claim-drawer-run').textContent).toBeTruthy()
+  })
+
+  it('CONTROL: with no waiver run to settle a claim, the add just says why it failed', async () => {
+    const { toast } = await import('sonner')
+    stubWithLockedAdd({ waiverType: 'fcfs' })
+    vi.mocked(toast.error).mockClear()
+    // An FCFS league answers no run time: drop the state's nextRunAt.
+    const routes = base({ waiverType: 'fcfs' }) as Record<string, unknown>
+    routes['/state'] = { state: {} }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/add-drop')) return new Response(JSON.stringify({ ok: false, code: 'PLAYER_LOCKED', error: 'Locked.' }), { status: 423 })
+      const key = Object.keys(routes).sort((a, b) => b.length - a.length).find((k) => url.includes(k))
+      return key ? new Response(JSON.stringify(routes[key]), { status: 200 }) : new Response('{}', { status: 404 })
+    }))
+    render(<NativeWaiversScreen league={league} />)
+    await screen.findByText('Tank Bigsby')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0])
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Locked.'))
+    expect(screen.queryByTestId('claim-drawer')).toBeNull()
   })
 })

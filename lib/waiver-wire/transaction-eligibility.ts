@@ -324,7 +324,18 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
         })
       : null
   const dropLocked = new Set([...kick.lockedPlayerIds, ...(scheduleLocked ?? [])])
-  if (dropId && dropLocked.has(dropId)) {
+  /*
+   * 🛑 ONLY AN INSTANT ADD IS HELD TO TONIGHT'S LOCK (owner report, 2026-11-28: "I should be able to claim
+   * a player for tomorrow's games"). A waiver claim settles at the next run, and the run checks the drop
+   * again then (`waiverRunDropRefusal`, process-engine.ts), against the games of THAT moment. Checking it
+   * here too meant a manager whose drop had played tonight could not even file the claim that would have
+   * gone through tomorrow morning: the add-drop answered 423 and nothing offered a claim instead.
+   */
+  // An instant add is either the free-agent service (`freeAgent`) or a caller that says so in the claim's
+  // metadata (the redraft runtime's add and the pirate witness, `source: 'free_agent_immediate'`).
+  const meta = input.claimMetadata && typeof input.claimMetadata === 'object' ? (input.claimMetadata as Record<string, unknown>) : {}
+  const instantAdd = input.freeAgent === true || meta.source === 'free_agent_immediate'
+  if (dropId && instantAdd && dropLocked.has(dropId)) {
     const sec = sectionForPlayerId(roster.playerData, dropId)
     const canDropStarters = engineConfig.can_drop_starters_after_game_start === true
     /*

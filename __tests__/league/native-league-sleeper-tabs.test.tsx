@@ -103,9 +103,12 @@ describe('switching league keeps the page', () => {
 
 const league = { id: 'lg1', name: 'Keepers', platform: 'allfantasy', sport: 'NFL', season: 2026, teamCount: 12, format: 'redraft', scoring: 'PPR', currentWeek: 8, lifecycleState: 'in_season', leagueVariant: 'redraft', leagueType: 'redraft' } as never
 
-function workspace(tabs: { id: string; label: string }[], activeTab: string, onSelectTab = vi.fn()) {
+/** Before the draft a league reopens on the tab last open; after it, on its matchup (owner, 2026-11-28). */
+const preDraftLeague = { ...(league as object), lifecycleState: 'pre_draft' } as never
+
+function workspace(tabs: { id: string; label: string }[], activeTab: string, onSelectTab = vi.fn(), forLeague: never = league) {
   return (
-    <NativeLeagueWorkspace native league={league} leagues={[league]} tabs={tabs} activeTab={activeTab} isCommissioner onSelectTab={onSelectTab} onOpenSettings={() => {}} leftPanel={null} rightPanel={null}>
+    <NativeLeagueWorkspace native league={forLeague} leagues={[forLeague]} tabs={tabs} activeTab={activeTab} isCommissioner onSelectTab={onSelectTab} onOpenSettings={() => {}} leftPanel={null} rightPanel={null}>
       <div>screen</div>
     </NativeLeagueWorkspace>
   )
@@ -145,15 +148,23 @@ describe('the sidebar and sub-tabs, rendered', () => {
 describe('coming back to a league reopens the last tab', () => {
   const memory = 'af:league-section:lg1'
 
-  it('waits for a tab that arrives late, and does not save League home over it meanwhile', () => {
+  it('before the draft: waits for a tab that arrives late, and does not save League home over it meanwhile', () => {
     localStorage.setItem(memory, 'settings')
     const onSelectTab = vi.fn()
     const early = CORE.filter(t => t.id !== 'settings' && t.id !== 'commissioner')
-    const { rerender } = render(workspace(early, 'native_home', onSelectTab))
+    const { rerender } = render(workspace(early, 'native_home', onSelectTab, preDraftLeague))
     expect(onSelectTab).not.toHaveBeenCalled()
     expect(localStorage.getItem(memory)).toBe('settings')
-    rerender(workspace(CORE, 'native_home', onSelectTab))
+    rerender(workspace(CORE, 'native_home', onSelectTab, preDraftLeague))
     expect(onSelectTab).toHaveBeenCalledWith('settings')
+  })
+
+  it('after the draft: opens on the matchup, not the tab last open (owner, 2026-11-28)', () => {
+    localStorage.setItem(memory, 'settings')
+    const onSelectTab = vi.fn()
+    render(workspace(CORE, 'native_home', onSelectTab))
+    expect(onSelectTab).toHaveBeenCalledWith('matchups')
+    expect(onSelectTab).not.toHaveBeenCalledWith('settings')
   })
 
   it('a ?view= in the URL wins over the remembered tab', () => {
@@ -168,8 +179,8 @@ describe('coming back to a league reopens the last tab', () => {
   it('opening another tab ends the wait', () => {
     localStorage.setItem(memory, 'settings')
     const early = CORE.filter(t => t.id !== 'settings' && t.id !== 'commissioner')
-    const { rerender } = render(workspace(early, 'native_home'))
-    rerender(workspace(early, 'trades'))
+    const { rerender } = render(workspace(early, 'native_home', vi.fn(), preDraftLeague))
+    rerender(workspace(early, 'trades', vi.fn(), preDraftLeague))
     expect(localStorage.getItem(memory)).toBe('trades')
   })
 })

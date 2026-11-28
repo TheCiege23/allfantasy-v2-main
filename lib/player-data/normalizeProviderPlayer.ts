@@ -24,6 +24,21 @@ function metadataBag(row: PoolPlayerRecord): Record<string, unknown> {
 }
 
 /**
+ * The photo a pool row carries. 🛑 SportPlayerPoolResolver puts the one it chose at the TOP LEVEL, as
+ * `image_url` (it ranks them: a current-team ESPN headshot over TheSportsDB's old jersey), and writes
+ * only `{ source }` into `metadata`. This read `metadata.imageUrl` / `metadata.headshotUrl` alone, so
+ * every waiver-wire row lost its photo (owner report, 2026-11-28: "no player headshots on the waivers,
+ * nowhere"). The resolver's choice first; a photo a caller put in metadata still counts after it.
+ */
+function poolRowImage(row: PoolPlayerRecord, meta: Record<string, unknown>): string | undefined {
+  const top = row as PoolPlayerRecord & { image_url?: unknown; imageUrl?: unknown }
+  for (const v of [top.image_url, top.imageUrl, meta.imageUrl, meta.headshotUrl]) {
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return undefined
+}
+
+/**
  * Map SportPlayerPoolResolver row → RawDraftPlayerLike for normalizeDraftPlayer().
  */
 export function poolPlayerRecordToRawDraftLike(row: PoolPlayerRecord): RawDraftPlayerLike {
@@ -48,7 +63,7 @@ export function poolPlayerRecordToRawDraftLike(row: PoolPlayerRecord): RawDraftP
     age: row.age ?? undefined,
     yearsExp: row.experience ?? undefined,
     classYearLabel: typeof cls === 'string' ? cls : undefined,
-    imageUrl: typeof meta.imageUrl === 'string' ? meta.imageUrl : typeof meta.headshotUrl === 'string' ? meta.headshotUrl : undefined,
+    imageUrl: poolRowImage(row, meta),
     college: typeof meta.college === 'string' ? meta.college : undefined,
     collegeOrPipeline: typeof meta.college === 'string' ? meta.college : undefined,
     birthDateRaw: typeof birthDateRaw === 'string' ? birthDateRaw : undefined,

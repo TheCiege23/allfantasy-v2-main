@@ -220,10 +220,52 @@ function waiverTypeText(raw: unknown): string | null {
   return humanize(s)
 }
 
+/**
+ * The stored trade review mode as the one of three it means (lib/league-trade-engine/leagueTradeReviewSetting.ts
+ * `normalizeTradeReviewChoice`): "No review" is STORED as `instant`, because the redraft runtime reads a
+ * stored `none` as "trades disabled" and falls back to commissioner review. Null for anything else.
+ */
+function tradeReviewChoice(snapshot: Record<string, unknown>): 'commissioner' | 'league_vote' | 'instant' | null {
+  const raw = (str(snapshot.trade_review_mode) ?? str(snapshot.tradeReviewMode))?.toLowerCase()
+  if (raw === 'commissioner') return 'commissioner'
+  if (raw === 'league_vote' || raw === 'league' || raw?.includes('vote')) return 'league_vote'
+  if (raw === 'instant' || raw === 'none' || raw === 'no_veto') return 'instant'
+  return null
+}
+
+/**
+ * The seeding behaviours the playoff engine actually has (lib/scoring-engine/scoringSettingsResolved.ts
+ * `getPlayoffSeedingRule`, lib/playoff-defaults/seedingRule.ts `isPointsOnlySeeding`): standard
+ * (record, then points for), points only, and division winners first. Any other stored value seeds as
+ * standard, so a picker offering one (the full editor's "Points-for then record") would promise an
+ * order the engine never applies. The settings PATCH mirrors the column into
+ * `playoff_structure.seeding_rules`, the copy the engine reads first.
+ */
+export const PLAYOFF_SEEDING_CHOICES: HubRowChoice[] = [
+  { value: 'standard_standings', label: 'Record, then points for', note: 'Best record is the top seed; points for breaks ties' },
+  { value: 'points_only', label: 'Points for only', note: 'Most points scored is the top seed, whatever the record' },
+  { value: 'division_winners_first', label: 'Division winners first', note: 'Each division winner is seeded ahead of the wild cards' },
+]
+/** `playoffLowerBracket`: the settings sync derives the toilet-bowl and consolation flags from it. */
+export const LOWER_BRACKET_CHOICES: HubRowChoice[] = [
+  { value: 'consolation', label: 'Consolation bracket', note: 'Non-playoff teams play for the best finish' },
+  { value: 'toilet', label: 'Toilet bowl', note: 'Non-playoff teams play to avoid last place' },
+  { value: 'none', label: 'None', note: 'Non-playoff teams are done for the season' },
+]
+const seedingLabel = (v: string | number) => PLAYOFF_SEEDING_CHOICES.find((c) => c.value === v)?.label ?? humanize(String(v))
+const lowerBracketLabel = (v: string | number) => LOWER_BRACKET_CHOICES.find((c) => c.value === v)?.label ?? humanize(String(v))
+
+/** The three modes the commissioner PATCH writes to every trade runtime (`tradeReviewType`). */
+export const TRADE_REVIEW_CHOICES: HubRowChoice[] = [
+  { value: 'commissioner', label: 'Commissioner', note: 'You approve or veto each accepted trade' },
+  { value: 'league_vote', label: 'League vote', note: 'Managers vote; set the threshold in the full trade editor' },
+  { value: 'instant', label: 'No review', note: 'Accepted trades go through at once' },
+]
+
 function tradeReviewText(snapshot: Record<string, unknown>): string | null {
   const raw = str(snapshot.trade_review_mode) ?? str(snapshot.tradeReviewMode)
   if (!raw) return DASH
-  if (raw === 'none') return 'No review'
+  if (raw === 'none' || raw === 'instant' || raw === 'no_veto') return 'No review'
   if (raw === 'commissioner') return 'Commissioner'
   if (raw.includes('vote') || raw === 'league') return 'League vote'
   return humanize(raw)
@@ -318,7 +360,13 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
       value: deadline != null ? (deadline > 0 ? `Week ${deadline}` : 'None') : DASH,
       edit: rangeEdit('tradeDeadlineWeek', deadline, 1, lastWeek, (n) => `Week ${n}`, [{ value: 0, label: 'None', note: 'Trades stay open all season' }]),
     },
-    { key: 'review', label: 'Trade Review', value: tradeReviewText(snap) },
+    {
+      key: 'review',
+      label: 'Trade Review',
+      value: tradeReviewText(snap),
+      // Saved through PATCH /api/commissioner/leagues/[id], the one writer that reaches every trade runtime.
+      edit: { field: 'tradeReviewType', current: tradeReviewChoice(snap), choices: TRADE_REVIEW_CHOICES },
+    },
     { key: 'reviewTime', label: 'Time to Review Pending Trades', value: hoursText(reviewHours), edit: hoursEdit('tradeReviewHours', reviewHours) },
     { key: 'pickTrading', label: 'Allow Draft Pick Trading', value: yesNo(l.draftPickTrading), toggle: bool(l.draftPickTrading) == null ? undefined : { field: 'draftPickTrading', on: l.draftPickTrading === true } },
     { key: 'benchDrops', label: 'Prevent Bench Players From Being Dropped After Game Starts', value: yesNo(l.preventBenchDrops), toggle: bool(l.preventBenchDrops) == null ? undefined : { field: 'preventBenchDrops', on: l.preventBenchDrops === true } },
@@ -382,8 +430,18 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
             value: num(l.playoffWeeksPerRound) != null ? String(l.playoffWeeksPerRound) : DASH,
             edit: rangeEdit('playoffWeeksPerRound', num(l.playoffWeeksPerRound), 1, 2, (n) => (n === 1 ? '1 week' : `${n} weeks`)),
           },
-          { key: 'seeding', label: 'Seeding', value: str(l.playoffSeedingRule) ? humanize(String(l.playoffSeedingRule)) : DASH },
-          { key: 'lower', label: 'Consolation Bracket', value: str(l.playoffLowerBracket) ? humanize(String(l.playoffLowerBracket)) : DASH },
+          {
+            key: 'seeding',
+            label: 'Seeding',
+            value: str(l.playoffSeedingRule) ? seedingLabel(String(l.playoffSeedingRule)) : DASH,
+            edit: { field: 'playoffSeedingRule', current: str(l.playoffSeedingRule), choices: choicesWith(str(l.playoffSeedingRule), PLAYOFF_SEEDING_CHOICES, seedingLabel) },
+          },
+          {
+            key: 'lower',
+            label: 'Consolation Bracket',
+            value: str(l.playoffLowerBracket) ? lowerBracketLabel(String(l.playoffLowerBracket)) : DASH,
+            edit: { field: 'playoffLowerBracket', current: str(l.playoffLowerBracket), choices: choicesWith(str(l.playoffLowerBracket), LOWER_BRACKET_CHOICES, lowerBracketLabel) },
+          },
         ]
 
   return [
