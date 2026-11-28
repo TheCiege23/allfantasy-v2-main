@@ -95,6 +95,17 @@ export function saleArtFor(date: Date): SaleArt | null {
   return null
 }
 
+/**
+ * The store-wide Black Friday → Cyber Monday sale (lib/monetization/holidaySale.ts) is the other
+ * real 50% offer. During it the shield follows the sale banner's own name for the moment
+ * (`holidaySaleName`: "Black Friday" Fri–Sat, "Cyber Monday" from Sunday), so the two never
+ * disagree. Whether the sale is live, and whether the viewer is on the web, is the caller's job
+ * (components/brand/BrandShield.tsx) — this stays a pure lookup.
+ */
+export function holidaySaleShieldSrc(saleName: string): string {
+  return saleName === "Cyber Monday" ? SALE_SRC.cyber : SALE_SRC.gold
+}
+
 /** True only when the owner's offer label itself states 50%. */
 export function isFiftyPercentOffer(label: string | null | undefined): boolean {
   return typeof label === "string" && /(^|[^\d])50\s*%/.test(label)
@@ -114,4 +125,28 @@ export function brandShieldSrc(args: {
     if (art) return SALE_SRC[art]
   }
   return seasonalShieldSrc(date)
+}
+
+/**
+ * The whole decision BrandShield renders, as a pure function so the in-app rule is testable.
+ *
+ *   onWeb = false (server render, first client render, or inside the iOS / Android app)
+ *     → seasonal art, ALWAYS. The apps sell at the store's price; no sale art there.
+ *   onWeb = true and a live 50% holiday sale (`holidaySale`, from getHolidaySale)
+ *     → gold / cyber, following the sale banner's name.
+ *   onWeb = true and a `founding` offer passed (pricing only)
+ *     → brandShieldSrc's founding rule.
+ *   otherwise → seasonal art.
+ */
+export function resolveBrandShieldSrc(args: {
+  now: Date
+  onWeb: boolean
+  holidaySale: { percentOff: number } | null
+  holidaySaleName: string
+  founding?: { label: string | null } | null
+}): string {
+  if (!args.onWeb) return seasonalShieldSrc(args.now)
+  if (args.holidaySale && args.holidaySale.percentOff === 50) return holidaySaleShieldSrc(args.holidaySaleName)
+  if (args.founding !== undefined) return brandShieldSrc({ date: args.now, founding: args.founding })
+  return seasonalShieldSrc(args.now)
 }

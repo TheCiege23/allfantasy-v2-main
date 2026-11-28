@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   brandSeasonFor,
   brandShieldSrc,
+  holidaySaleShieldSrc,
+  resolveBrandShieldSrc,
   isFiftyPercentOffer,
   saleArtFor,
   seasonalShieldSrc,
@@ -107,5 +109,57 @@ describe("brandShieldSrc — the sale art is a promise, so it needs a real 50% o
   it("outside a sale window a 50% offer still shows the seasonal shield", () => {
     expect(brandShieldSrc({ date: day("2026-10-10"), founding: fifty })).toBe("/brand/seasonal/af-shield-fall.webp")
     expect(brandShieldSrc({ date: day("2027-03-01"), founding: fifty })).toBe(PLAIN_SHIELD_SRC)
+  })
+})
+
+describe("holidaySaleShieldSrc — follows the sale banner's own name", () => {
+  it("is gold for Black Friday and cyber for Cyber Monday", () => {
+    expect(holidaySaleShieldSrc("Black Friday")).toBe("/brand/sale/af-shield-sale-gold.webp")
+    expect(holidaySaleShieldSrc("Cyber Monday")).toBe("/brand/sale/af-shield-sale-cyber.webp")
+  })
+})
+
+describe("resolveBrandShieldSrc — the sale art is web-only", () => {
+  const sat = day("2026-11-28") // Saturday of the Black Friday sale
+  const sale = { percentOff: 50 }
+  const fall = "/brand/seasonal/af-shield-fall.webp"
+  const gold = "/brand/sale/af-shield-sale-gold.webp"
+
+  it("NEVER shows sale art inside the iOS / Android app, even mid-sale with a 50% founding offer", () => {
+    expect(
+      resolveBrandShieldSrc({
+        now: sat,
+        onWeb: false,
+        holidaySale: sale,
+        holidaySaleName: "Black Friday",
+        founding: { label: "50% off AF Pro for life" },
+      }),
+    ).toBe(fall)
+  })
+
+  it("shows the holiday sale art on the web while the sale is live", () => {
+    expect(resolveBrandShieldSrc({ now: sat, onWeb: true, holidaySale: sale, holidaySaleName: "Black Friday" })).toBe(gold)
+    expect(
+      resolveBrandShieldSrc({ now: day("2026-11-30"), onWeb: true, holidaySale: sale, holidaySaleName: "Cyber Monday" }),
+    ).toBe("/brand/sale/af-shield-sale-cyber.webp")
+  })
+
+  it("no sale (ended, or killed by NEXT_PUBLIC_HOLIDAY_SALE_DISABLED) → seasonal, unless a founding 50% offer", () => {
+    expect(resolveBrandShieldSrc({ now: sat, onWeb: true, holidaySale: null, holidaySaleName: "Black Friday" })).toBe(fall)
+    expect(
+      resolveBrandShieldSrc({
+        now: day("2026-12-10"),
+        onWeb: true,
+        holidaySale: null,
+        holidaySaleName: "Cyber Monday",
+        founding: { label: "50% off AF Pro for life" },
+      }),
+    ).toBe("/brand/sale/af-shield-sale-holiday.webp")
+  })
+
+  it("a sale at a different percentage never shows 50% OFF art", () => {
+    expect(
+      resolveBrandShieldSrc({ now: sat, onWeb: true, holidaySale: { percentOff: 30 }, holidaySaleName: "Black Friday" }),
+    ).toBe(fall)
   })
 })
