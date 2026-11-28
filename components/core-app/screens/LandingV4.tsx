@@ -16,6 +16,7 @@ import { TradeMarketMovers } from '@/components/trade-market/TradeMarketMovers'
 import { LaunchBanner } from '@/components/launch/LaunchBanner'
 import { FORMAT_DEMO_META } from '@/lib/demo-league/formats/registry'
 import type { FoundingOfferView } from '@/lib/monetization/foundingMember'
+import { BrandShield } from '@/components/brand/BrandShield'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
 // AfCoreShell imports it for every screen inside the shell — but this one renders
 // standalone at `/`, so without this line every `var(--surface)` and `var(--line)`
@@ -134,26 +135,9 @@ function LangSwitch({ lang, label, className }: { lang: LandingLang; label: stri
   )
 }
 
+/** The brand shield (seasonal by date). Also imported by CommissionersV4. */
 export function Shield() {
-  return (
-    <svg width="28" height="30" viewBox="0 0 28 30" aria-hidden focusable="false">
-      <path
-        d="M14 1.5 26 6v10.5c0 6.4-5 10.6-12 12.5-7-1.9-12-6.1-12-12.5V6l12-4.5Z"
-        fill="var(--accent-soft)"
-        stroke="var(--accent)"
-        strokeWidth="1.5"
-      />
-      <text
-        x="14"
-        y="19"
-        textAnchor="middle"
-        fill="var(--accent)"
-        style={{ font: '900 10px Archivo, sans-serif', letterSpacing: '0.02em' }}
-      >
-        AF
-      </text>
-    </svg>
-  )
+  return <BrandShield />
 }
 
 /**

@@ -51,3 +51,67 @@ export function seasonalShieldSrc(date: Date = new Date()): string {
   const season = brandSeasonFor(date)
   return season ? SEASON_SRC[season] : PLAIN_SHIELD_SRC
 }
+
+/* ── "50% OFF" sale art ─────────────────────────────────────────────────────
+ *
+ * ⚠ THE SALE SHIELD IS A PROMISE ABOUT THE PRICE, SO IT ONLY SHOWS WHEN THE
+ * PRICE IS REAL. There is no store-wide sale in this app. The one discount is
+ * the founding-member coupon (lib/monetization/foundingMember.ts), whose size
+ * lives in Stripe and is described by the owner's FOUNDING_OFFER_LABEL. So the
+ * art shows only to a viewer the founding offer applies to, and only while that
+ * label itself says 50%. No label, a different figure, or no offer → the
+ * ordinary seasonal shield. Never decide eligibility here; take the offer the
+ * server already resolved for this viewer.
+ */
+
+export type SaleArt = "gold" | "cyber" | "holiday"
+
+const SALE_SRC: Record<SaleArt, string> = {
+  gold: "/brand/sale/af-shield-sale-gold.webp",
+  cyber: "/brand/sale/af-shield-sale-cyber.webp",
+  holiday: "/brand/sale/af-shield-sale-holiday.webp",
+}
+
+const DAY_MS = 86_400_000
+
+/** Day number (UTC midnight / day) of US Thanksgiving: the 4th Thursday of November. */
+function thanksgivingDay(year: number): number {
+  const nov1 = new Date(Date.UTC(year, 10, 1)).getUTCDay() // 0 = Sunday
+  const firstThursday = 1 + ((4 - nov1 + 7) % 7)
+  return Date.UTC(year, 10, firstThursday + 21) / DAY_MS
+}
+
+/**
+ * gold     Black Friday weekend (Fri - Sun after Thanksgiving)
+ * cyber    Cyber Monday
+ * holiday  Dec 1 - Dec 25 (Cyber Monday wins if it falls on Dec 1 or 2)
+ */
+export function saleArtFor(date: Date): SaleArt | null {
+  const { y, m, d } = easternParts(date)
+  const offset = Date.UTC(y, m - 1, d) / DAY_MS - thanksgivingDay(y)
+  if (offset >= 1 && offset <= 3) return "gold"
+  if (offset === 4) return "cyber"
+  if (m === 12 && d <= 25) return "holiday"
+  return null
+}
+
+/** True only when the owner's offer label itself states 50%. */
+export function isFiftyPercentOffer(label: string | null | undefined): boolean {
+  return typeof label === "string" && /(^|[^\d])50\s*%/.test(label)
+}
+
+/**
+ * The shield for a surface that knows this viewer's founding offer (pricing).
+ * `founding` is the server-resolved view from LaunchOfferContext; null = none.
+ */
+export function brandShieldSrc(args: {
+  date?: Date
+  founding: { label: string | null } | null | undefined
+}): string {
+  const date = args.date ?? new Date()
+  if (args.founding && isFiftyPercentOffer(args.founding.label)) {
+    const art = saleArtFor(date)
+    if (art) return SALE_SRC[art]
+  }
+  return seasonalShieldSrc(date)
+}

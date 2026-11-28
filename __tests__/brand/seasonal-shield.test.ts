@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { brandSeasonFor, seasonalShieldSrc, PLAIN_SHIELD_SRC } from "@/lib/brand/seasonalShield"
+import {
+  brandSeasonFor,
+  brandShieldSrc,
+  isFiftyPercentOffer,
+  saleArtFor,
+  seasonalShieldSrc,
+  PLAIN_SHIELD_SRC,
+} from "@/lib/brand/seasonalShield"
 
 // Noon Eastern on the given day, written as UTC (EST = UTC-5, EDT = UTC-4;
 // 17:00Z is midday Eastern either way).
@@ -39,5 +46,66 @@ describe("seasonalShieldSrc", () => {
     expect(seasonalShieldSrc(day("2026-12-24"))).toBe("/brand/seasonal/af-shield-winter.webp")
     expect(seasonalShieldSrc(day("2027-01-01"))).toBe("/brand/seasonal/af-shield-newyear.webp")
     expect(seasonalShieldSrc(day("2027-03-01"))).toBe(PLAIN_SHIELD_SRC)
+  })
+})
+
+describe("saleArtFor", () => {
+  // Thanksgiving 2026 is Thu Nov 26; 2027 is Thu Nov 25; 2029 is Thu Nov 22.
+  it.each([
+    ["2026-11-26", null], // Thanksgiving itself
+    ["2026-11-27", "gold"], // Black Friday
+    ["2026-11-29", "gold"], // Sunday
+    ["2026-11-30", "cyber"], // Cyber Monday
+    ["2026-12-01", "holiday"],
+    ["2026-12-25", "holiday"],
+    ["2026-12-26", null],
+    ["2027-11-26", "gold"],
+    ["2027-11-29", "cyber"],
+    ["2029-11-23", "gold"],
+    ["2029-11-26", "cyber"],
+    ["2026-07-04", null],
+  ] as const)("%s -> %s", (iso, art) => {
+    expect(saleArtFor(day(iso))).toBe(art)
+  })
+})
+
+describe("isFiftyPercentOffer", () => {
+  it.each([
+    ["50% off AF Pro for life", true],
+    ["Founding members: 50 % off", true],
+    ["150% value", false],
+    ["25% off AF Pro", false],
+    ["Half price", false],
+    ["", false],
+  ] as const)("%j -> %s", (label, ok) => {
+    expect(isFiftyPercentOffer(label)).toBe(ok)
+  })
+  it("is false for a missing label", () => {
+    expect(isFiftyPercentOffer(null)).toBe(false)
+    expect(isFiftyPercentOffer(undefined)).toBe(false)
+  })
+})
+
+describe("brandShieldSrc — the sale art is a promise, so it needs a real 50% offer", () => {
+  const blackFriday = day("2026-11-27")
+  const fifty = { label: "50% off AF Pro for life" }
+
+  it("shows the sale art only with a 50% founding offer in a sale window", () => {
+    expect(brandShieldSrc({ date: blackFriday, founding: fifty })).toBe("/brand/sale/af-shield-sale-gold.webp")
+    expect(brandShieldSrc({ date: day("2026-11-30"), founding: fifty })).toBe("/brand/sale/af-shield-sale-cyber.webp")
+    expect(brandShieldSrc({ date: day("2026-12-10"), founding: fifty })).toBe("/brand/sale/af-shield-sale-holiday.webp")
+  })
+
+  it("falls back to the seasonal shield without an offer, without a label, or with another figure", () => {
+    const fall = "/brand/seasonal/af-shield-fall.webp"
+    expect(brandShieldSrc({ date: blackFriday, founding: null })).toBe(fall)
+    expect(brandShieldSrc({ date: blackFriday, founding: undefined })).toBe(fall)
+    expect(brandShieldSrc({ date: blackFriday, founding: { label: null } })).toBe(fall)
+    expect(brandShieldSrc({ date: blackFriday, founding: { label: "25% off" } })).toBe(fall)
+  })
+
+  it("outside a sale window a 50% offer still shows the seasonal shield", () => {
+    expect(brandShieldSrc({ date: day("2026-10-10"), founding: fifty })).toBe("/brand/seasonal/af-shield-fall.webp")
+    expect(brandShieldSrc({ date: day("2027-03-01"), founding: fifty })).toBe(PLAIN_SHIELD_SRC)
   })
 })
