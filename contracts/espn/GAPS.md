@@ -274,6 +274,39 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
 - `T-03c` UNVERIFIED: statuses other than `PENDING` (accepted, declined, cancelled, countered) and whether
   they ever appear in this list. Mapped to `unknown`, never guessed. A countered offer's shape is not known.
 - `T-03d` NOT CAPTURED, READ-ONLY: accept, decline and counter. AllFantasy shows the offer and links to ESPN.
+- `T-03e` OPEN 2026-11-28 — **the write capture accept / decline / counter needs, and why the admin capture
+  cannot take it.** The owner asked for these inside AllFantasy. Nothing committed shows the shape of ANY
+  ESPN fantasy write, and this file's rule forbids probing for one. The owner-only admin capture
+  (`lib/admin/contractCapture/`, Admin → Data & reliability → Provider contract capture) only ever sends
+  READS, and capturing a write means performing it — so it was deliberately NOT extended. Built instead,
+  with no ESPN request in it: `lib/provider-trades/espnOfferActions.ts` (vocabulary, the flag
+  `ESPN_TRADE_OFFER_ACTIONS` — off unless `on` — AND a second lock `ESPN_OFFER_WRITE_CONTRACT_CAPTURED =
+  false`, plus the ledger transition each action makes once ESPN confirms it),
+  `app/api/league/espn-trade-offers/action/route.ts` (POST; answers 501 "not available yet — act on it in
+  ESPN" every time), and Trade Inbox buttons that render only from the server's empty `actions` list.
+  - **Needed, per action, from ONE real request each:** method; full URL path and query (league id, season,
+    team id placement, any `view`/`platformVersion` params); request headers that are not cookies
+    (`Content-Type`, `x-fantasy-*`, `x-fantasy-platform`, `x-fantasy-source`, origin/referer if required);
+    the JSON body exactly (how the offer id, the acting team, the action and — for a counter — the new item
+    list and any drop are expressed); the response status and body for success; and one refusal (an offer
+    already answered, or expired) so a failure can be told from a success.
+    - accept: the request ESPN sends when the RECEIVING team accepts an offer.
+    - decline: the request when the receiving team declines one.
+    - counter: the request when the receiving team counters, and whether the original offer is then
+      cancelled by ESPN or must be declined separately (`T-03c`: a countered offer's shape is unknown).
+    - Then, after each, one `scripts/probe.sh`-style READ of `view=mPendingTransactions` so the follow-up
+      status (`T-03c`) is captured in the same change.
+  - **How the owner can supply it, without anyone probing:** in his own browser, signed in on
+    fantasy.espn.com, in a league he controls with a throwaway offer between two teams he can act for (or
+    with a willing league-mate): open DevTools → Network, tick "Preserve log", accept (then on a second
+    throwaway offer decline, and on a third counter), and "Save all as HAR with content". 🛑 A HAR carries
+    `espn_s2`, `SWID` and other cookies in plain text: it must be redacted before it is committed or
+    shared — strip every `Cookie` / `Set-Cookie` header and any `SWID`/`espn_s2` value, the same rule as
+    `scripts/redact-fantasy.mjs` — and only the redacted request/response pairs for the trade calls go into
+    `fixtures/` (e.g. `fantasy-trade-accept.NFL.2026.json`), with this entry updated to CAPTURED.
+  - Wiring once captured is one step: implement the request inside `performEspnOfferAction` through the
+    existing ESPN adapter (no new host literal), apply `espnOfferStatusAfter` to the ledger only on a
+    confirmed response, and flip `ESPN_OFFER_WRITE_CONTRACT_CAPTURED` in that same change.
 
 ## Per-player weekly fantasy points, 2026-11-23 — recorded without probing
 

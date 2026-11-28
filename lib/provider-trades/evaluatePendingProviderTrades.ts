@@ -55,6 +55,18 @@ export async function evaluatePendingProviderTrades(args: {
    * that asks for it on settled trades pays a whole-roster enrichment to learn nothing.
    */
   includeRosterImpact?: boolean
+  /**
+   * Per transaction id: players the VIEWER releases when it executes (an ESPN conditional drop), in
+   * the world's id space. Counted as leaving the viewer's lineup; never valued. See
+   * `viewerReleasedPlayerIds` on the evaluator.
+   */
+  releasedByViewer?: ReadonlyMap<string, readonly string[]>
+  /**
+   * Record the proposal-time `TRADE_PROPOSED` event (default true). ESPN passes false: its offers
+   * carry conditional drops the canonical movements cannot hold, so a value record written here would
+   * describe a trade without the drop — the grade the user sees is `gradeEspnOfferViews`, not this.
+   */
+  recordProposal?: boolean
 }): Promise<Map<string, ProviderPendingEvaluation>> {
   const output = new Map<string, ProviderPendingEvaluation>()
   if (args.trades.length === 0) return output
@@ -84,6 +96,7 @@ export async function evaluatePendingProviderTrades(args: {
         viewerRosterId,
         assets,
         includeRosterImpact: args.includeRosterImpact === true,
+        viewerReleasedPlayerIds: args.releasedByViewer?.get(trade.transactionId) ?? [],
       }, { resolveWorld: async () => world })
       const view: ProviderPendingEvaluation = {
         action: evaluation.action,
@@ -107,6 +120,7 @@ export async function evaluatePendingProviderTrades(args: {
       const rosterImpact = summarizeRosterImpact(evaluation.rosterImpact)
       output.set(trade.transactionId, rosterImpact === undefined ? view : { ...view, rosterImpact })
 
+      if (args.recordProposal === false) return
       const idempotencyKey = `provider-trade:${trade.provider}:${trade.transactionId}:proposed`
       const exists = await prisma.domainEvent.findUnique({ where: { idempotencyKey }, select: { eventId: true } }).catch(() => null)
       if (!exists) {

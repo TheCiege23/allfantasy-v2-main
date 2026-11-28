@@ -325,7 +325,7 @@ export type ImportedOfferSide = {
  * caller is where "only the recipient is on AllFantasy" gets decided, and it must not call this.
  */
 export function postImportedOfferToDm(input: {
-  provider: 'sleeper' | 'yahoo'
+  provider: 'sleeper' | 'yahoo' | 'espn'
   providerLeagueId: string
   transactionId: string
   leagueId: string

@@ -33,7 +33,7 @@ import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/reco
 import { evaluateCanonicalTrade } from '@/lib/decision-os/trade/canonicalEvaluator'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
-import { summarizeRosterImpact } from '@/lib/decision-os/trade/rosterImpactSummary'
+import { summarizeRosterImpact, type LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { League } from '@prisma/client'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
@@ -1217,7 +1217,25 @@ export async function GET(req: NextRequest) {
         viewerTeamId: null,
       }))
       const trades = read.views.map((v) => v.trade)
-      const grades = await gradeEspnOfferViews(read.views, await grader()).catch(() => new Map<string, TradeGradeView>())
+      const [{ espnOfferLineupImpacts }, { espnOfferActionsFor }] = await Promise.all([
+        import('@/lib/provider-trades/espnOfferLineupImpact'),
+        import('@/lib/provider-trades/espnOfferActions'),
+      ])
+      /*
+       * Lineup impact through the canonical evaluator, ESPN ids resolved to Sleeper ids first; an
+       * unresolved player is a blocked line ("not computed"), never a guess. Graded separately below.
+       */
+      const [grades, lineup] = await Promise.all([
+        gradeEspnOfferViews(read.views, await grader()).catch(() => new Map<string, TradeGradeView>()),
+        espnOfferLineupImpacts(leagueId, read.views).catch(() => new Map<string, LineupImpactSummary | null>()),
+      ])
+      // Empty while the flag is off or no ESPN write is captured (GAPS.md T-03e): the buttons stay hidden.
+      const actionsById = new Map(
+        read.views.map((v) => [
+          v.trade.transactionId,
+          espnOfferActionsFor({ status: 'pending', viewerConsented: v.viewerConsented, proposedByViewer: v.trade.proposedByViewer }),
+        ]),
+      )
       const dropLines = new Map(read.views.map((v) => [v.trade.transactionId, v.dropLine]))
       const expiries = new Map(read.views.map((v) => [v.trade.transactionId, v.expiresAt]))
       const espnUrl = `https://fantasy.espn.com/football/league?leagueId=${encodeURIComponent(league.platformLeagueId)}`
@@ -1230,7 +1248,12 @@ export async function GET(req: NextRequest) {
           ...activeTrades,
           ...mapProviderTrades(trades, new Map(), grades).map((row) => {
             const id = row.id.slice('espn:'.length)
-            return { ...row, dropNote: dropLines.get(id) ?? null, expiresAt: expiries.get(id) ?? null }
+            return {
+              ...row,
+              dropNote: dropLines.get(id) ?? null,
+              expiresAt: expiries.get(id) ?? null,
+              ...(lineup.has(id) ? { rosterImpact: lineup.get(id) ?? null } : {}),
+            }
           }),
         ],
         historyTrades,
@@ -1250,6 +1273,8 @@ export async function GET(req: NextRequest) {
           ...o,
           dropNote: dropLines.get(o.transactionId) ?? null,
           expiresAt: expiries.get(o.transactionId) ?? null,
+          rosterImpact: lineup.has(o.transactionId) ? lineup.get(o.transactionId) ?? null : undefined,
+          actions: actionsById.get(o.transactionId) ?? [],
         })),
       })
     }

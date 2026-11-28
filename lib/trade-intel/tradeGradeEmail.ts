@@ -655,6 +655,14 @@ export function buildPendingTradeOfferEmail(params: {
   receiptUrl?: string | null
   /** Sleeper's trade screen, only when the link is verified. */
   sleeperUrl?: string | null
+  /**
+   * Where the offer lives and must be answered. Defaults to Sleeper (every caller before ESPN).
+   * ESPN: `providerUrl` is the league on fantasy.espn.com; AllFantasy cannot answer it yet either.
+   */
+  provider?: 'sleeper' | 'espn'
+  providerUrl?: string | null
+  /** ESPN's conditional drop, already worded ("and they drop Marvin Harrison Jr."). */
+  dropNote?: string | null
   /** THE grade for this offer from the recipient's side (`give` = what they send). */
   grade?: TradeGradeView | null
   /** The league type the grade was priced under. Defaults to the one the grade carries. */
@@ -708,10 +716,20 @@ export function buildPendingTradeOfferEmail(params: {
       : ''
 
   const leagueType = params.leagueType ?? params.grade?.leagueType ?? null
+  const providerName = params.provider === 'espn' ? 'ESPN' : 'Sleeper'
+  const answerUrl = params.provider === 'espn' ? params.providerUrl ?? null : params.sleeperUrl ?? null
   const sleeperNote =
-    (params.sleeperUrl
-      ? `<a href="${escapeHtml(params.sleeperUrl)}" style="color:${MUTED};text-decoration:underline;font-size:12px">Answer it in Sleeper</a><br>`
-      : '') + escapeHtml('AllFantasy can’t accept or decline a Sleeper trade. You answer it in Sleeper.')
+    (answerUrl
+      ? `<a href="${escapeHtml(answerUrl)}" style="color:${MUTED};text-decoration:underline;font-size:12px">Answer it in ${providerName}</a><br>`
+      : '') +
+    escapeHtml(
+      params.provider === 'espn'
+        ? 'AllFantasy can’t accept, decline or counter an ESPN trade yet. You answer it in ESPN.'
+        : 'AllFantasy can’t accept or decline a Sleeper trade. You answer it in Sleeper.',
+    )
+  const dropRow = params.dropNote?.trim()
+    ? card(`<div style="font-size:13px;line-height:1.6;color:${MUTED}">${escapeHtml(`If it goes through: ${params.dropNote.trim().replace(/^and /, '')}.`.replace(/\.\.$/, '.'))}</div>`)
+    : ''
 
   const html = shell({
     preheader: g
@@ -719,8 +737,8 @@ export function buildPendingTradeOfferEmail(params: {
       : `You get ${names(params.youGet)} for ${names(params.youGive)}.`,
     eyebrow: 'Trade offer · waiting on you',
     title: leagueName,
-    sub: `${who} sent you an offer on Sleeper.`,
-    rows: verdict + swap + rosterFitCard(params.grade ?? null) + leagueTypeCard(leagueType, params.confirmUrl ?? null) +
+    sub: `${who} sent you an offer on ${providerName}.`,
+    rows: verdict + swap + dropRow + rosterFitCard(params.grade ?? null) + leagueTypeCard(leagueType, params.confirmUrl ?? null) +
       (params.receiptUrl ? cta(params.receiptUrl, 'See the original grade', 'The grade and values from this email, saved so you can compare later.') : '') +
       cta(params.reviewUrl, 'See our read on this offer', sleeperNote),
     footer: emailFooter({ baseUrl: params.baseUrl, leagueName, leagueId: params.leagueId ?? null, unsubscribeUrl: params.unsubscribeUrl ?? null }),
