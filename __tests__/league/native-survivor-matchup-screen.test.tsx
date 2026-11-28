@@ -47,4 +47,31 @@ describe('NativeMatchupScreen in a Survivor league', () => {
     expect(pts[1]).toContain('Final')
     expect(calls.some((u) => u.includes('/survivor/summary'))).toBe(true)
   })
+
+  it('mid-week in an NBA league: asks for live totals, shows them as unofficial, and orders the race by them', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(url)
+      if (url.includes('/survivor/summary')) {
+        return new Response(JSON.stringify({
+          currentWeek: 6, merged: false, myRosterId: 'me', myTribeId: 'kaniva', scoresFinalized: false, council: null,
+          tribes: [{ id: 'kaniva', name: 'Kaniva', members: [{ rosterId: 'me', isLeader: false }] }, { id: 'koa', name: 'Koa', members: [{ rosterId: 'o1', isLeader: false }] }],
+          tribeScores: { kaniva: 0, koa: 0 }, memberScores: { me: 0, o1: 0 }, immunityRosterIds: [],
+          liveMemberScores: { me: 41.5, o1: 22 },
+          rosterDisplayNames: { me: 'TheCiege26’s Team', o1: 'Test Team 3' },
+        }), { status: 200 })
+      }
+      return new Response('{}', { status: 404 })
+    }))
+    render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
+    expect(await screen.findByTestId('survivor-my-live-score')).toBeTruthy()
+    expect(calls.find((u) => u.includes('/survivor/summary'))).toContain('live=1')
+    expect(screen.getByTestId('survivor-my-live-score').textContent).toContain('41.5')
+    const live = screen.getAllByTestId('survivor-tribe-live').map((el) => el.textContent)
+    expect(live).toEqual(['41.5 live', '22.0 live'])
+    expect(screen.getByTestId('survivor-tribe-race').textContent!.indexOf('Kaniva')).toBeLessThan(screen.getByTestId('survivor-tribe-race').textContent!.indexOf('Koa'))
+    expect(screen.getByText(/Live totals are unofficial/)).toBeTruthy()
+    expect(screen.getByTestId('survivor-status').textContent).toBe('Kaniva leads the tribe race so far: on track for immunity.')
+  })
 })
+

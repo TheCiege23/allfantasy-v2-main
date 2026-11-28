@@ -172,7 +172,8 @@ function SurvivorMatchupScreen({ league, onSelectTab }: ScreenProps) {
     setError(null)
     const weekQuery = pickedWeek != null ? `week=${pickedWeek}` : ''
     void Promise.all([
-      fetch(`/api/leagues/${encodeURIComponent(league.id)}/survivor/summary${weekQuery ? `?${weekQuery}` : ''}`, { credentials: 'include', cache: 'no-store' }),
+      // `live=1`: the unofficial live totals for an NBA week not final yet (lib/survivor/survivorLiveTribeScores.ts).
+      fetch(`/api/leagues/${encodeURIComponent(league.id)}/survivor/summary?live=1${weekQuery ? `&${weekQuery}` : ''}`, { credentials: 'include', cache: 'no-store' }),
       fetch(`/api/leagues/${encodeURIComponent(league.id)}/matchup-center?season=${season}${weekQuery ? `&${weekQuery}` : ''}`, { credentials: 'include', cache: 'no-store' }),
     ])
       .then(async ([s, m]) => {
@@ -220,6 +221,12 @@ function SurvivorMatchupScreen({ league, onSelectTab }: ScreenProps) {
               <span>Your score{view.myImmune ? ' · Immune' : ''}</span>
               <span>{fmtScore(view.myScore)}</span>
             </div>
+            {view.live ? (
+              <div className="nls-board-line" data-testid="survivor-my-live-score">
+                <span>Live so far</span>
+                <span>{fmtScore(view.myLiveScore)}</span>
+              </div>
+            ) : null}
             {view.myRank ? (
               <div className="nls-board-line">
                 <span>{view.merged ? 'Your place on the island' : 'Your tribe’s place'}</span>
@@ -227,7 +234,13 @@ function SurvivorMatchupScreen({ league, onSelectTab }: ScreenProps) {
               </div>
             ) : null}
             <p data-testid="survivor-status">{view.status}</p>
-            <p className="nls-muted">{view.final ? 'Final scores.' : 'Provisional: scores update as games finish.'}</p>
+            <p className="nls-muted">
+              {view.final
+                ? 'Final scores.'
+                : view.live
+                  ? 'Live totals are unofficial and order the race until the week ends. The official score counts each starter once his NBA week is final.'
+                  : 'Provisional: scores update as games finish.'}
+            </p>
           </Card>
           <Card label={view.merged ? 'The island' : 'Tribe race'}>
             <div data-testid="survivor-tribe-race">
@@ -235,13 +248,19 @@ function SurvivorMatchupScreen({ league, onSelectTab }: ScreenProps) {
                 <div key={t.id} className="nls-survivor-tribe" data-mine={t.mine || undefined} data-attending={t.attending || undefined}>
                   <div className="nls-board-line" data-lead={t.rank === 1}>
                     <span>{view.merged ? t.name : `${t.rank}. ${t.name}`}{t.attending ? ' · Elimination Council' : ''}</span>
-                    <span>{fmtScore(t.score)}</span>
+                    {view.live ? (
+                      <span data-testid="survivor-tribe-live">
+                        {fmtScore(t.liveScore)} <small className="nls-muted">live</small>
+                      </span>
+                    ) : (
+                      <span>{fmtScore(t.score)}</span>
+                    )}
                   </div>
                   <ul className="nls-survivor-members">
                     {t.members.map((m) => (
                       <li key={m.rosterId} data-mine={m.mine || undefined}>
                         <span>{m.name}{m.mine ? ' (you)' : ''}{m.immune ? ' · Immune' : ''}</span>
-                        <span>{fmtScore(m.score)}</span>
+                        <span>{fmtScore(view.live ? m.liveScore : m.score)}</span>
                       </li>
                     ))}
                   </ul>
