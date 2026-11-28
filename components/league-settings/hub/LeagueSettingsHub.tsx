@@ -290,6 +290,32 @@ export function LeagueSettingsHub({
     return { error: null }
   }, [leagueId, loadSettings])
 
+  /**
+   * One roster slot (2026-11-28). The roster PUT replaces the whole slot map, so the map is read FRESH
+   * here and only this slot changed in it: a screen opened an hour ago must not write back counts that
+   * another tab has since changed. Mid-season it answers 409 with a confirmation code, as scoring does.
+   */
+  const onSetRosterSlot = useCallback(async (slotKey: string, count: number, confirmMidSeason: boolean) => {
+    const url = `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-settings`
+    const current = await getJson<{ config?: { slots?: Record<string, number> }; unifiedConfig?: unknown; slotDefs?: HubSlotDef[] }>(url)
+    const slots = current?.config?.slots
+    if (!slots || typeof slots !== 'object') return { error: tx('Could not read the current roster. Try again.') }
+    const r = await sendJson(url, 'PUT', {
+      slots: { ...slots, [slotKey]: count },
+      templateKey: 'custom',
+      ...(confirmMidSeason ? { [MID_SEASON_CONFIRM_FLAG]: true } : {}),
+    })
+    if (!r.ok) return { error: tx(r.error ?? 'Save failed'), needsConfirm: r.json?.code === MID_SEASON_CONFIRMATION_CODE }
+    const fixes = Number(r.json?.lineupsNeedingFixes ?? 0)
+    toast.success(fixes > 0 ? tx(`Saved. ${fixes} lineup${fixes === 1 ? '' : 's'} now need a move; those managers were told.`) : tx('Saved'))
+    const warnings = Array.isArray(r.json?.bestBallPoolWarnings) ? (r.json!.bestBallPoolWarnings as unknown[]).filter((w): w is string => typeof w === 'string') : []
+    for (const w of warnings) toast.message(w)
+    // The roster list is its own read: show the saved layout from the PUT's answer, slot bounds kept.
+    setRoster({ unifiedConfig: r.json?.unifiedConfig ?? current.unifiedConfig, slotDefs: current.slotDefs })
+    await loadSettings()
+    return { error: null }
+  }, [leagueId, loadSettings])
+
   const onSaveNote = useCallback(async (text: string): Promise<string | null> => {
     const r = await sendJson('/api/league/settings', 'PATCH', { leagueId, settingsMerge: { [COMMISSIONER_NOTES_KEY]: text.slice(0, 2000) } })
     if (!r.ok) return r.error
@@ -450,6 +476,7 @@ export function LeagueSettingsHub({
         onToggleSetting: (f, n) => void onToggleSetting(f, n),
         onSetSetting,
         onSetScoringRule,
+        onSetRosterSlot,
         onSaveTeamName,
         onSaveNote,
         onToggleNotification,

@@ -700,8 +700,9 @@ export function buildDraftGroups(p: HubSettingsPayload): HubGroup[] {
 
 /* --------------------------------------------------------------- roster */
 
-export type HubSlotDef = { key: string; label?: string; shortLabel?: string; color?: string }
-export type HubRosterItem = { key: string; name: string; abbr: string; count: number; color: string; section: string }
+export type HubSlotDef = { key: string; label?: string; shortLabel?: string; color?: string; minCount?: number; maxCount?: number }
+/** `slotKey`, `min` and `max` are for the slot's own editor (2026-11-28): the bounds are the sport's slot definition. */
+export type HubRosterItem = { key: string; name: string; abbr: string; count: number; color: string; section: string; slotKey?: string; min?: number; max?: number }
 
 const FALLBACK_SLOT_COLORS: Record<string, string> = {
   QB: '#fb7185', RB: '#34d399', WR: '#22d3ee', TE: '#fbbf24', K: '#c084fc', DEF: '#fb923c', DST: '#fb923c',
@@ -764,6 +765,9 @@ export function buildRosterItems(
         count,
         color: slotSwatch(key, def, sport),
         section: section.label,
+        slotKey: key,
+        min: typeof def?.minCount === 'number' ? def.minCount : 0,
+        max: typeof def?.maxCount === 'number' ? def.maxCount : undefined,
       })
     }
   }

@@ -939,6 +939,7 @@ const ES: Record<string, string> = {
   'Points per yard.': 'Puntos por yarda.',
   'Enter a number between -100 and 100.': 'Escribe un número entre -100 y 100.',
   'Confirm and save': 'Confirmar y guardar',
+  'Could not read the current roster. Try again.': 'No se pudo leer la plantilla actual. Inténtalo de nuevo.',
   'Common values': 'Valores comunes',
   'Managers bid from a season budget': 'Los mánagers pujan con un presupuesto de temporada',
   'A successful claim sends you to the back': 'Un reclamo exitoso te manda al final',

@@ -126,6 +126,8 @@ export type HubCallbacks = {
    * commissioner has read the server's mid-season warning and chosen to go ahead; it is never set first.
    */
   onSetScoringRule?: (statKey: string, points: number, confirmMidSeason: boolean) => Promise<ScoringSaveResult>
+  /** One roster slot's count (2026-11-28). Same mid-season contract as scoring: confirm only from the sheet. */
+  onSetRosterSlot?: (slotKey: string, count: number, confirmMidSeason: boolean) => Promise<ScoringSaveResult>
   onSaveTeamName: (name: string) => Promise<string | null>
   /** Commissioner notes, stored in `League.settings.commissioner_notes`. */
   onSaveNote: (text: string) => Promise<string | null>
@@ -1115,7 +1117,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
         {data.roster === undefined ? <Loading lines={4} /> : data.roster === null || data.roster.length === 0 ? (
           <p className="af-lsh-empty">{t('Roster positions aren’t available for this league yet.')}</p>
         ) : (
-          <RosterList items={data.roster} />
+          <RosterList items={data.roster} onSetSlot={edit ? cb.onSetRosterSlot : undefined} />
         )}
       </Card>
 
@@ -1358,8 +1360,11 @@ function NotesCard({ note, edit, onSave }: { note: string | null | undefined; ed
   )
 }
 
-function RosterList({ items }: { items: HubRosterItem[] }) {
+type OnSetRosterSlot = NonNullable<HubCallbacks['onSetRosterSlot']>
+
+function RosterList({ items, onSetSlot }: { items: HubRosterItem[]; onSetSlot?: OnSetRosterSlot }) {
   const { t } = useT()
+  const [editing, setEditing] = useState<HubRosterItem | null>(null)
   const sections = useMemo(() => {
     const map = new Map<string, HubRosterItem[]>()
     for (const it of items) map.set(it.section, [...(map.get(it.section) ?? []), it])
@@ -1375,22 +1380,97 @@ function RosterList({ items }: { items: HubRosterItem[] }) {
             <div className="af-lsh-grid">
               {[list.slice(0, half), list.slice(half)].filter((c) => c.length).map((col, i) => (
                 <div className="af-lsh-col" key={i}>
-                  {col.map((it) => (
-                    <div className="af-lsh-slot" key={it.key}>
-                      <span className="af-lsh-dot" style={{ background: it.color }} aria-hidden />
-                      <strong>{t(it.name)}</strong>
-                      <small>{it.abbr}</small>
-                      <b data-zero={it.count === 0 ? 'true' : undefined}>{it.count}</b>
-                    </div>
-                  ))}
+                  {col.map((it) => {
+                    const body = (
+                      <>
+                        <span className="af-lsh-dot" style={{ background: it.color }} aria-hidden />
+                        <strong>{t(it.name)}</strong>
+                        <small>{it.abbr}</small>
+                        <b data-zero={it.count === 0 ? 'true' : undefined}>{it.count}</b>
+                      </>
+                    )
+                    // A commissioner taps a slot to change how many the league has (Sleeper's roster screen).
+                    return onSetSlot && it.slotKey ? (
+                      <button key={it.key} type="button" className="af-lsh-slot af-lsh-slot-btn" onClick={() => setEditing(it)} data-testid={`roster-slot-${it.slotKey}`} aria-haspopup="dialog">
+                        {body}
+                        <ChevronRight className="af-lsh-nav-chevron" size={16} aria-hidden />
+                      </button>
+                    ) : (
+                      <div className="af-lsh-slot" key={it.key}>{body}</div>
+                    )
+                  })}
                 </div>
               ))}
             </div>
           </div>
         )
       })}
+      {editing && onSetSlot ? <RosterSlotSheet item={editing} onSave={onSetSlot} onClose={() => setEditing(null)} /> : null}
     </>
   )
+}
+
+/**
+ * One roster slot: minus / count / plus inside the sport's own bounds, and Save. Mid-season the server's
+ * warning comes first and the confirmation is sent only from "Confirm and save", as for scoring.
+ */
+function RosterSlotSheet({ item, onSave, onClose }: { item: HubRosterItem; onSave: OnSetRosterSlot; onClose: () => void }) {
+  const { t } = useT()
+  const min = item.min ?? 0
+  const max = item.max ?? 20
+  const [count, setCount] = useState(item.count)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState<string | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const save = async (confirmMidSeason: boolean) => {
+    if (saving) return
+    if (!confirmMidSeason && count === item.count) { onClose(); return }
+    setSaving(true)
+    setError(null)
+    const r = await onSave(item.slotKey!, count, confirmMidSeason)
+    setSaving(false)
+    if (r.needsConfirm) { setConfirm(r.error); return }
+    if (r.error) { setError(r.error); return }
+    onClose()
+  }
+  const sheet = (
+    <div className="af-lsh-sheet-backdrop" onClick={onClose} data-testid="roster-slot-editor">
+      <div className="af-lsh-sheet" role="dialog" aria-modal="true" aria-label={t(item.name)} onClick={(e) => e.stopPropagation()}>
+        <div className="af-lsh-sheet-grab" aria-hidden />
+        <div className="af-lsh-sheet-head">
+          <strong>{t(item.name)} <small style={{ color: item.color }}>{item.abbr}</small></strong>
+          <button type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" onClick={onClose}>{t('Cancel')}</button>
+        </div>
+        <p className="af-lsh-sheet-sub">{t(`How many ${item.abbr} spots every team has.`)} {t(`${min} to ${max}.`)}</p>
+        <div className="af-lsh-stepper">
+          <button type="button" className="af-lsh-step" aria-label={t('Less')} onClick={() => setCount((c) => Math.max(min, c - 1))} disabled={saving || count <= min}>−</button>
+          <output className="af-lsh-step-input af-lsh-step-count" aria-live="polite" data-testid="roster-slot-count">{count}</output>
+          <button type="button" className="af-lsh-step" aria-label={t('More')} onClick={() => setCount((c) => Math.min(max, c + 1))} disabled={saving || count >= max}>+</button>
+        </div>
+        {error ? <p className="af-lsh-sheet-error" role="alert">{error}</p> : null}
+        {confirm ? (
+          <div className="af-lsh-sheet-confirm" role="alert">
+            <p>{confirm}</p>
+            <button type="button" className="af-lsh-btn" data-variant="primary" onClick={() => void save(true)} disabled={saving} data-testid="roster-slot-confirm">
+              {t('Confirm and save')}
+            </button>
+          </div>
+        ) : (
+          <div className="af-lsh-sheet-actions">
+            <button type="button" className="af-lsh-btn" data-variant="primary" onClick={() => void save(false)} disabled={saving} data-testid="roster-slot-save">
+              {saving ? t('Saving…') : t('Save')}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+  return typeof document === 'undefined' ? sheet : createPortal(sheet, document.body)
 }
 
 /* ----------------------------------------------------------- Members tab */
