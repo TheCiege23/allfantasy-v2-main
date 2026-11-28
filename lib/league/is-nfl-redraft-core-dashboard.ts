@@ -84,3 +84,15 @@ export function isNflRedraftCoreDashboardFromUserLeague(league: UserLeague): boo
     keeperPhaseActive: league.keeperPhaseActive ?? false,
   })
 }
+
+/** `isRedraftFormatLeague` for a client `UserLeague`, any sport: which leagues get the one simple redraft League home. */
+export function isRedraftFormatUserLeague(league: UserLeague): boolean {
+  return isRedraftFormatLeague({
+    leagueType: league.leagueType ?? null,
+    isDynasty: league.isDynasty ?? false,
+    leagueVariant: league.leagueVariant ?? null,
+    bestBallMode: league.bestBallMode ?? false,
+    guillotineMode: league.guillotineMode ?? false,
+    keeperPhaseActive: league.keeperPhaseActive ?? false,
+  })
+}
