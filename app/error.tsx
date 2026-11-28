@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect } from "react"
+import { reportBoundaryError } from "@/lib/observability/reportBoundaryError"
 
 export default function RootError({
   error,
@@ -11,6 +12,7 @@ export default function RootError({
   reset: () => void
 }) {
   useEffect(() => {
+    reportBoundaryError(error, "app")
     try {
       // eslint-disable-next-line no-console
       console.error("[app/error] root boundary caught", {

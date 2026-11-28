@@ -110,6 +110,8 @@ export type InactiveManagerTeam = {
   suggested: boolean
   /** No manager has this seat: Chimmy can still be handed it, to draft and run all season. */
   emptySeat: boolean
+  /** The league owner's own team: never suggested to them as inactive (they are the one reading). */
+  leagueOwnerTeam?: boolean
   /**
    * Who Chimmy is for this team and what it does about trades, for a team on autopilot; null otherwise.
    * COMMISSIONER-ONLY (owner decision 2026-11-25): this view is only ever served behind
@@ -133,6 +135,7 @@ export async function readInactiveManagerView(
   const health = await getLeagueManagerHealth(leagueId)
   const owners = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
   const emptySeats = new Set(owners.filter((r) => !r.platformUserId || isSeatPlaceholderUserId(r.platformUserId)).map((r) => r.id))
+  const ownerSeats = new Set(owners.filter((r) => league.userId && r.platformUserId === league.userId).map((r) => r.id))
   const suggested = new Set(suggestInactiveTeams(health.rows, managed))
   return {
     native: true,
@@ -153,6 +156,7 @@ export async function readInactiveManagerView(
       managed: managed[r.rosterId] ?? null,
       suggested: suggested.has(r.rosterId),
       emptySeat: emptySeats.has(r.rosterId),
+      leagueOwnerTeam: ownerSeats.has(r.rosterId),
       chimmy: chimmyViewFor(r.rosterId, managed[r.rosterId]),
     })),
   }

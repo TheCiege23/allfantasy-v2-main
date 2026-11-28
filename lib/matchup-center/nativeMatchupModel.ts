@@ -103,11 +103,48 @@ export type NativeBoardGame = {
   kind: NativeWeekGame['kind']
   label: string | null
   status: NativeGameStatus
-  home: { rosterId: string; teamName: string; totalPoints: number | null }
+  home: NativeBoardSide
   /** Null on a bye. */
-  away: { rosterId: string; teamName: string; totalPoints: number | null } | null
+  away: NativeBoardSide | null
   /** True when the viewer plays in it. */
   mine: boolean
+  /** The home side's chance to win from the two AF projections, 0–1. Null when either is incomplete. */
+  homeWinProbability?: number | null
+}
+
+export type NativeBoardSide = {
+  rosterId: string
+  teamName: string
+  totalPoints: number | null
+  /** The team's AF projection for its starters this week, in this league's scoring. Null when unknown. */
+  projectedPoints?: number | null
+}
+
+/** One team's AF projection: the sum over starters, and whether every starter had one. */
+export type NativeTeamProjection = { total: number; complete: boolean }
+
+/**
+ * Adds each team's projection, and each game's win chance, to the board. A side with no projection keeps
+ * `null`; the win chance is drawn only when both sides are fully projected — a partial total would
+ * understate a team and turn a guess into a confident percentage.
+ */
+export function withBoardProjections(
+  board: readonly NativeBoardGame[],
+  projections: ReadonlyMap<string, NativeTeamProjection>,
+): NativeBoardGame[] {
+  const sideWith = (s: NativeBoardSide): NativeBoardSide => {
+    const p = projections.get(s.rosterId)
+    return { ...s, projectedPoints: p ? Math.round(p.total * 10) / 10 : null }
+  }
+  return board.map((g) => {
+    const hp = projections.get(g.home.rosterId)
+    const ap = g.away ? projections.get(g.away.rosterId) : undefined
+    let homeWinProbability: number | null = null
+    if (hp?.complete && ap?.complete && hp.total >= 0 && ap.total >= 0 && hp.total + ap.total > 0) {
+      homeWinProbability = Math.max(0.05, Math.min(0.95, hp.total / (hp.total + ap.total)))
+    }
+    return { ...g, home: sideWith(g.home), away: g.away ? sideWith(g.away) : null, homeWinProbability }
+  })
 }
 
 /**

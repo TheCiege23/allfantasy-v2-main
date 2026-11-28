@@ -226,3 +226,31 @@ describe('buildNativeStarters', () => {
     expect(rows).toEqual([{ playerId: 'x', name: 'Player', position: 'FLEX', team: null, points: 3 }])
   })
 })
+
+describe('withBoardProjections (scoreboard projections, 2026-11-28)', () => {
+  const game = (id: string, home: string, away: string | null): import('@/lib/matchup-center/nativeMatchupModel').NativeBoardGame => ({
+    id, kind: 'regular', label: null, status: 'upcoming', mine: false,
+    home: { rosterId: home, teamName: home, totalPoints: null },
+    away: away ? { rosterId: away, teamName: away, totalPoints: null } : null,
+  })
+  it('adds each team projection and a win chance when both sides are fully projected', async () => {
+    const { withBoardProjections } = await import('@/lib/matchup-center/nativeMatchupModel')
+    const [g] = withBoardProjections([game('g', 'a', 'b')], new Map([['a', { total: 155.63, complete: true }], ['b', { total: 146.4, complete: true }]]))
+    expect(g.home.projectedPoints).toBe(155.6)
+    expect(g.away?.projectedPoints).toBe(146.4)
+    expect(g.homeWinProbability).toBeCloseTo(155.63 / (155.63 + 146.4), 6)
+  })
+  it('draws no win chance from a partial projection, but still shows the number', async () => {
+    const { withBoardProjections } = await import('@/lib/matchup-center/nativeMatchupModel')
+    const [g] = withBoardProjections([game('g', 'a', 'b')], new Map([['a', { total: 80, complete: false }], ['b', { total: 146.4, complete: true }]]))
+    expect(g.home.projectedPoints).toBe(80)
+    expect(g.homeWinProbability).toBeNull()
+  })
+  it('leaves a team with no projection null, and a bye alone', async () => {
+    const { withBoardProjections } = await import('@/lib/matchup-center/nativeMatchupModel')
+    const [g, bye] = withBoardProjections([game('g', 'a', 'b'), game('h', 'c', null)], new Map())
+    expect(g.home.projectedPoints).toBeNull()
+    expect(g.homeWinProbability).toBeNull()
+    expect(bye.away).toBeNull()
+  })
+})

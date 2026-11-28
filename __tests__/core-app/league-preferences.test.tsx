@@ -103,7 +103,7 @@ describe('the league switcher', () => {
   it('keeps a hidden league in the filter counts (Home still counts it)', () => {
     open()
     // "Sleeper" covers Alpha AND the hidden Bravo.
-    expect(document.body.textContent).toMatch(/Sleeper\s*2/)
+    expect(document.body.textContent).toMatch(/Sleeper \(2\)/)
   })
 
   it('still finds a hidden league by search, and shows it when it is the open league', () => {

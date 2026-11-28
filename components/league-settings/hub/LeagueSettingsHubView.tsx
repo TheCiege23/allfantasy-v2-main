@@ -10,6 +10,9 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import './league-settings-hub.css'
+import {
+  CalendarDays, ChevronRight, ClipboardList, Coins, Crown, Flame, Lock, LockKeyhole, Network, Scale, Settings2, Sparkles, Trophy, UserCog, Users, type LucideIcon,
+} from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { hubLocale, hubScheduleMode, hubSeasons, hubText } from '@/lib/league-settings-hub/hubI18n'
 import {
@@ -136,12 +139,17 @@ type HubTr = { t: (s: string) => string; tStat: (s: string) => string; tMode: (s
 const HubT = createContext<HubTr>({ t: (s) => s, tStat: (s) => s, tMode: (s) => s, lang: 'en' })
 const useT = () => useContext(HubT)
 
-const TABS: Array<{ id: HubTabId; label: string }> = [
-  { id: 'my', label: 'My Settings' },
-  { id: 'setup', label: 'League Setup' },
-  { id: 'members', label: 'Members' },
-  { id: 'hub', label: 'Commissioner Hub' },
-  { id: 'record', label: 'Record Book' },
+/**
+ * `short` is the phone label (owner report, 2026-11-28: "the settings tab doesn't fit everything on
+ * mobile"): five long names scrolled off a 390px screen, so "Commissioner Hub" read as "Co". The long
+ * name stays the tab's accessible name.
+ */
+const TABS: Array<{ id: HubTabId; label: string; short: string }> = [
+  { id: 'my', label: 'My Settings', short: 'Mine' },
+  { id: 'setup', label: 'League Setup', short: 'Setup' },
+  { id: 'members', label: 'Members', short: 'Members' },
+  { id: 'hub', label: 'Commissioner Hub', short: 'Commish' },
+  { id: 'record', label: 'Record Book', short: 'History' },
 ]
 
 /**
@@ -223,16 +231,13 @@ export function LeagueSettingsHubView({
             className="af-lsh-tab"
             onClick={() => setTab(tb.id)}
             data-testid={`league-settings-hub-tab-${tb.id}`}
+            aria-label={t(tb.label)}
           >
-            {t(tb.label)}
+            <span className="af-lsh-tab-long" aria-hidden>{t(tb.label)}</span>
+            <span className="af-lsh-tab-short" aria-hidden>{t(tb.short)}</span>
           </button>
         ))}
       </div>
-        {advanced ? (
-          <button type="button" className="af-lsh-btn" data-variant="ghost" onClick={advanced.onOpen} data-testid="league-settings-hub-advanced">
-            {t(advanced.label)}
-          </button>
-        ) : null}
       </div>
 
       <div className="af-lsh-body" id="af-lsh-panel" role="tabpanel" aria-labelledby={`af-lsh-tab-${tab}`}>
@@ -273,6 +278,22 @@ export function LeagueSettingsHubView({
           {tab === 'members' ? <MembersTab data={data} cb={cb} /> : null}
           {tab === 'hub' ? <CommissionerHubTab data={data} cb={cb} slots={slots} /> : null}
           {tab === 'record' ? <RecordTab data={data} /> : null}
+          {/*
+            The full editor, last and as one row (2026-11-28): beside the tabs it took a row of its own
+            above every setting on a phone, and a manager's first tap was often the escape hatch.
+          */}
+          {advanced ? (
+            <section className="af-lsh-card" aria-label={t(advanced.label)}>
+              <button type="button" className="af-lsh-row af-lsh-nav" onClick={advanced.onOpen} data-testid="league-settings-hub-advanced">
+                <span className="af-lsh-nav-icon" aria-hidden><Settings2 size={18} strokeWidth={2} /></span>
+                <span className="af-lsh-row-copy">
+                  <span>{t(advanced.label)}</span>
+                  <span>{t('Every setting in one long editor.')}</span>
+                </span>
+                <ChevronRight className="af-lsh-nav-chevron" size={18} aria-hidden />
+              </button>
+            </section>
+          ) : null}
         </div>
       </div>
     </div>
@@ -547,40 +568,87 @@ function AfOptionRows({ options, cb, canOpen, tagged = false }: { options: HubAf
   )
 }
 
+/** Each tool's icon, so a commissioner finds a row by its mark before reading it (Sleeper's settings list). */
+const HUB_LINK_ICON: Record<string, LucideIcon> = {
+  'hub-edit-lineups': ClipboardList,
+  'hub-lock-roster': Lock,
+  'hub-member-settings': UserCog,
+  'hub-co-commissioners': Crown,
+  'hub-score-adjustments': Scale,
+  'hub-dues': Coins,
+  'hub-settings-lock': LockKeyhole,
+  'hub-edit-schedule': CalendarDays,
+  'hub-divisions': Network,
+  'hub-rivalry-open': Flame,
+  'hub-playoffs': Trophy,
+  'hub-league-chimmy': Sparkles,
+  'hub-draft': Users,
+}
+
+/**
+ * The hub's tools as one tappable row each — icon, name, one muted line, chevron — the way Sleeper's
+ * commissioner settings read (owner report, 2026-11-28: the hub "looks like code, not ready for users").
+ * It used to be a title, a sentence and a separate "Open" pill per row; on a phone the pills formed a
+ * column under the floating chat buttons, and every row read as a form. The whole row is the button now.
+ */
 function HubLinks({ links, cb }: { links: HubLink[]; cb: HubCallbacks }) {
   const { t } = useT()
   return (
-    <div className="af-lsh-list">
-      {links.map((l) => (
-        <div key={l.testid} className="af-lsh-row">
-          <div className="af-lsh-row-copy">
-            <span>{t(l.label)}</span>
-            <span>{t(l.description)}</span>
-          </div>
-          {l.href ? (
-            <a className="af-lsh-btn" data-size="sm" href={l.href} data-testid={l.testid}>{t('Open')}</a>
-          ) : (
-            <button type="button" className="af-lsh-btn" data-size="sm" onClick={() => cb.onOpenEditor(l.panel as string)} data-testid={l.testid}>{t('Open')}</button>
-          )}
-        </div>
-      ))}
+    <div className="af-lsh-list" data-variant="nav">
+      {links.map((l) => {
+        const Icon = HUB_LINK_ICON[l.testid] ?? Settings2
+        const body = (
+          <>
+            <span className="af-lsh-nav-icon" aria-hidden><Icon size={18} strokeWidth={2} /></span>
+            <span className="af-lsh-row-copy">
+              <span>{t(l.label)}</span>
+              <span>{t(l.description)}</span>
+            </span>
+            <ChevronRight className="af-lsh-nav-chevron" size={18} aria-hidden />
+          </>
+        )
+        return l.href ? (
+          <a key={l.testid} className="af-lsh-row af-lsh-nav" href={l.href} data-testid={l.testid}>{body}</a>
+        ) : (
+          <button key={l.testid} type="button" className="af-lsh-row af-lsh-nav" onClick={() => cb.onOpenEditor(l.panel as string)} data-testid={l.testid}>{body}</button>
+        )
+      })}
     </div>
   )
 }
 
+const TASK_TAG: Record<TaskCard['severity'], string> = { bad: 'Urgent', warn: 'Soon', info: 'Suggestion' }
+
+/**
+ * One thing that needs the commissioner: a severity tag, the title, at most two lines of detail (the
+ * rest on tap), and the action as a real button under it — not a dot and an "Open" pill beside a
+ * paragraph (owner report, 2026-11-28).
+ */
 function TaskRow({ card }: { card: TaskCard }) {
   const { t } = useT()
+  const [more, setMore] = useState(false)
+  const long = (card.detail?.length ?? 0) > 120
   return (
-    <div className="af-lsh-row" data-testid="hub-task">
-      <span className="af-lsh-dot" aria-hidden style={{ width: 10, height: 10, background: TASK_DOT[card.severity] }} />
-      <div className="af-lsh-row-copy" style={{ flex: '1 1 auto' }}>
-        <span>{card.title}</span>
-        {card.detail ? <span>{card.detail}</span> : null}
+    <div className="af-lsh-task" data-testid="hub-task" data-severity={card.severity}>
+      <div className="af-lsh-task-top">
+        <span className="af-lsh-task-tag" style={{ color: TASK_DOT[card.severity], borderColor: TASK_DOT[card.severity] }}>{t(TASK_TAG[card.severity])}</span>
       </div>
+      <strong className="af-lsh-task-title">{card.title}</strong>
+      {card.detail ? (
+        <p className="af-lsh-task-detail" data-clamped={long && !more ? 'true' : undefined}>
+          {card.detail}
+        </p>
+      ) : null}
+      {long ? (
+        <button type="button" className="af-lsh-task-more" onClick={() => setMore((v) => !v)} aria-expanded={more}>
+          {t(more ? 'Show less' : 'Show more')}
+        </button>
+      ) : null}
       {card.action ? (
         <a
           className="af-lsh-btn"
-          data-size="sm"
+          // Only the urgent card's action is the bright button; three in a row read as one shout.
+          data-variant={card.severity === 'bad' ? 'primary' : undefined}
           href={card.action.href}
           {...(card.action.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
         >

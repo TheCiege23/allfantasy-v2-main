@@ -1,6 +1,7 @@
 import { resolveMissingNflPickPlayerId } from '@/lib/draft/resolveMissingPickPlayerId'
 import { placeDraftedRookiesOnTaxi, type DraftedRookieRow } from '@/lib/redraft/offseason/placeDraftedRookiesOnTaxi'
 import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
+import { createScheduleRowsOnce } from '@/lib/redraft/scheduleWriteLock'
 import { sgDraftScoringCalendar } from '@/lib/survivor-guillotine/draftSeason'
 import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
@@ -473,9 +474,12 @@ export async function ensureScheduleForNewSeason(params: {
       isMedianMatchup: false,
     }))
 
-  if (rows.length > 0) {
-    await prisma.redraftMatchup.createMany({ data: rows })
-  }
+  // Re-checked under a per-season lock: two draft syncs racing used to write the schedule twice.
+  await createScheduleRowsOnce({
+    seasonId: params.seasonId,
+    alreadyWritten: async (tx) => (await tx.redraftMatchup.count({ where: { seasonId: params.seasonId } })) > 0,
+    rows,
+  })
 }
 
 /**
