@@ -233,6 +233,28 @@ function tradeReviewChoice(snapshot: Record<string, unknown>): 'commissioner' | 
   return null
 }
 
+/**
+ * The seeding behaviours the playoff engine actually has (lib/scoring-engine/scoringSettingsResolved.ts
+ * `getPlayoffSeedingRule`, lib/playoff-defaults/seedingRule.ts `isPointsOnlySeeding`): standard
+ * (record, then points for), points only, and division winners first. Any other stored value seeds as
+ * standard, so a picker offering one (the full editor's "Points-for then record") would promise an
+ * order the engine never applies. The settings PATCH mirrors the column into
+ * `playoff_structure.seeding_rules`, the copy the engine reads first.
+ */
+export const PLAYOFF_SEEDING_CHOICES: HubRowChoice[] = [
+  { value: 'standard_standings', label: 'Record, then points for', note: 'Best record is the top seed; points for breaks ties' },
+  { value: 'points_only', label: 'Points for only', note: 'Most points scored is the top seed, whatever the record' },
+  { value: 'division_winners_first', label: 'Division winners first', note: 'Each division winner is seeded ahead of the wild cards' },
+]
+/** `playoffLowerBracket`: the settings sync derives the toilet-bowl and consolation flags from it. */
+export const LOWER_BRACKET_CHOICES: HubRowChoice[] = [
+  { value: 'consolation', label: 'Consolation bracket', note: 'Non-playoff teams play for the best finish' },
+  { value: 'toilet', label: 'Toilet bowl', note: 'Non-playoff teams play to avoid last place' },
+  { value: 'none', label: 'None', note: 'Non-playoff teams are done for the season' },
+]
+const seedingLabel = (v: string | number) => PLAYOFF_SEEDING_CHOICES.find((c) => c.value === v)?.label ?? humanize(String(v))
+const lowerBracketLabel = (v: string | number) => LOWER_BRACKET_CHOICES.find((c) => c.value === v)?.label ?? humanize(String(v))
+
 /** The three modes the commissioner PATCH writes to every trade runtime (`tradeReviewType`). */
 export const TRADE_REVIEW_CHOICES: HubRowChoice[] = [
   { value: 'commissioner', label: 'Commissioner', note: 'You approve or veto each accepted trade' },
@@ -408,8 +430,18 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
             value: num(l.playoffWeeksPerRound) != null ? String(l.playoffWeeksPerRound) : DASH,
             edit: rangeEdit('playoffWeeksPerRound', num(l.playoffWeeksPerRound), 1, 2, (n) => (n === 1 ? '1 week' : `${n} weeks`)),
           },
-          { key: 'seeding', label: 'Seeding', value: str(l.playoffSeedingRule) ? humanize(String(l.playoffSeedingRule)) : DASH },
-          { key: 'lower', label: 'Consolation Bracket', value: str(l.playoffLowerBracket) ? humanize(String(l.playoffLowerBracket)) : DASH },
+          {
+            key: 'seeding',
+            label: 'Seeding',
+            value: str(l.playoffSeedingRule) ? seedingLabel(String(l.playoffSeedingRule)) : DASH,
+            edit: { field: 'playoffSeedingRule', current: str(l.playoffSeedingRule), choices: choicesWith(str(l.playoffSeedingRule), PLAYOFF_SEEDING_CHOICES, seedingLabel) },
+          },
+          {
+            key: 'lower',
+            label: 'Consolation Bracket',
+            value: str(l.playoffLowerBracket) ? lowerBracketLabel(String(l.playoffLowerBracket)) : DASH,
+            edit: { field: 'playoffLowerBracket', current: str(l.playoffLowerBracket), choices: choicesWith(str(l.playoffLowerBracket), LOWER_BRACKET_CHOICES, lowerBracketLabel) },
+          },
         ]
 
   return [
