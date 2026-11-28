@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getCbbdDraftPicks, getCbbdTeamRoster, type CbbdDraftPick, type CbbdRosterTeam } from '@/lib/cbbd/cbbdFetch'
 import { describeCfbdFailure } from '@/lib/cfbd-fetch'
 import type { StoredDraftPick } from '@/lib/devy/cfbdDraftPicksStore'
+import { DRAFT_HISTORY_EXPIRES_AT, toDraftHistoryRow, writeDraftHistoryRow } from '@/lib/devy/cbbdDraftHistoryIngest'
 
 /**
  * The NBA draft, keyed by the drafted player's ESPN athlete id — basketball's half of the C2C / Devy
@@ -25,6 +26,12 @@ import type { StoredDraftPick } from '@/lib/devy/cfbdDraftPicksStore'
  * COST. One draft call plus one roster call per drafted player's school — about 25 for a draft.
  * Refreshed every 12 hours through the draft window, then once after it, then never again for that
  * year: a draft does not change. Callers gate it behind the CFBD quota reserve, which this spends.
+ *
+ * EVERY YEAR IS KEPT (2026-11-28, B-03). This writes only its own year's keys and never deletes one, and
+ * both rows it writes carry a far-future expiry: a held draft is history, not cache. The draft call it already
+ * makes is also stored unlinked under `cbbd:draft-history:v1:<year>` (lib/devy/cbbdDraftHistoryIngest.ts), so
+ * the measurement's history grows each June at no extra cost. That write happens before the roster reads, so
+ * a roster failure does not lose the draft.
  */
 
 export const CBBD_DRAFT_PICKS_KEY_PREFIX = 'cbbd:draft-picks:v1:'
@@ -44,7 +51,6 @@ export type StoredCbbdDraftPicks = {
 }
 
 const HOUR_MS = 60 * 60 * 1000
-const DAY_MS = 24 * HOUR_MS
 
 /** The NBA draft is held in late June. The window it is refreshed through: June 20 to July 10 (UTC). */
 export function inNbaDraftWindow(now: Date): boolean {
@@ -142,6 +148,9 @@ export async function refreshCbbdDraftPicks(opts: { now?: Date; deadlineAt?: num
   if (!draft.ok) return { year, error: describeCfbdFailure(draft.failure) }
   if (!Array.isArray(draft.data) || draft.data.length === 0) return { year, skipped: 'no picks published yet' }
 
+  const history = toDraftHistoryRow(year, draft.data, now)
+  if (history.ok) await writeDraftHistoryRow(history.row).catch(() => undefined)
+
   const rosters = new Map<string, CbbdRosterTeam | null>()
   for (const school of schoolsToRead(draft.data)) {
     if (opts.deadlineAt && Date.now() > opts.deadlineAt) return { year, skipped: 'deferred: run budget spent mid-draft' }
@@ -152,7 +161,8 @@ export async function refreshCbbdDraftPicks(opts: { now?: Date; deadlineAt?: num
 
   const { picks, unlinked } = linkCbbdPicks(draft.data, rosters)
   const data: StoredCbbdDraftPicks = { year, fetchedAt: now.toISOString(), picks, unlinked }
-  const expiresAt = new Date(now.getTime() + 2 * 365 * DAY_MS)
+  // Not a two-year TTL any more: this year's linked picks are history once the draft is held.
+  const expiresAt = DRAFT_HISTORY_EXPIRES_AT
   await prisma.sportsDataCache.upsert({
     where: { cacheKey: key },
     create: { cacheKey: key, data: data as never, expiresAt },
