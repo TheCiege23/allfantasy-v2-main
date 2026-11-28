@@ -669,3 +669,59 @@
 .nls-goalie-chip[data-tone=in], .nls-goalie-chip[data-tone=start] { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); }
 .nls-goalie-chip[data-tone=lean] { border-style: dashed; }
 .nls-goalie-chip[data-tone=bench] { color: var(--faint); }
+
+/* ── Team tab, Sleeper pass (2026-11-28) ─────────────────────────────────────────────────────────────
+ * One team card first (team, record, this week's score over its projection, the opponent and win chance,
+ * then the three actions), a one-line lock strip, and position badges filled in their colour the way
+ * Sleeper's are, so a lineup reads by colour before it reads by text. */
+.nls-teamcard { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--line2); border-radius: 16px; background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 10%, var(--surface)), var(--surface)); }
+.nls-teamcard-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.nls-teamcard-avatar { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; overflow: hidden; background: var(--raised); border: 1px solid var(--line2); color: var(--text); font: 800 16px/1 var(--nl-mono); }
+.nls-teamcard-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.nls-teamcard-id { min-width: 0; }
+.nls-teamcard-id .nls-eyebrow { margin: 0 0 2px; }
+.nls-teamcard-id .nls-title { margin: 0; font-size: 22px; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nls-teamcard-id .nls-sub { margin: 2px 0 0; font: 500 12px/1.3 var(--nl-mono); color: var(--text2); }
+.nls-teamcard-score { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.nls-teamcard-score strong { font: 700 24px/1 var(--nl-mono); color: var(--text); }
+.nls-teamcard-score small { margin-top: 4px; font: 500 12px/1 var(--nl-mono); color: var(--muted); }
+.nls-teamcard-vs { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--text2); }
+.nls-teamcard-vs b { color: var(--text); font-weight: 700; }
+.nls-teamcard-vs [data-tone=good] { color: var(--good); font-weight: 700; }
+.nls-teamcard-vs [data-tone=bad] { color: var(--bad); font-weight: 700; }
+.nls-teamcard-bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.nls-teamcard-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--bad); }
+.nls-teamcard-bar > span[data-tone=good] { background: var(--good); }
+.nls-teamcard-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
+.nls-teamcard-actions > .nls-btn { width: 100%; justify-content: center; white-space: nowrap; }
+.nls-teamcard-actions > .nls-btn[hidden] { display: none; }
+
+.nls-lockbar[data-compact=true] { min-height: 0; padding: 8px 12px; gap: 10px; font-size: 13px; }
+.nls-lockhelp { min-width: 0; }
+.nls-lockhelp summary { cursor: pointer; list-style: none; }
+.nls-lockhelp summary::-webkit-details-marker { display: none; }
+.nls-lockhelp summary::after { content: ' · How to set your lineup ▾'; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.nls-lockhelp[open] summary::after { content: ' ▴'; }
+.nls-lockhelp > span { display: block; margin-top: 6px; color: var(--text2); }
+
+/* Filled position badges (Sleeper): the tone colour as the fill, dark ink on top. */
+.nls-pos[data-tone=qb], .nls-pos[data-tone=rb], .nls-pos[data-tone=wr], .nls-pos[data-tone=te], .nls-pos[data-tone=k] { border-color: transparent; color: #0b1020; font-weight: 800; }
+.nls-pos[data-tone=qb] { background: var(--nl-pos-qb); }
+.nls-pos[data-tone=rb] { background: var(--nl-pos-rb); }
+.nls-pos[data-tone=wr] { background: var(--nl-pos-wr); }
+.nls-pos[data-tone=te] { background: var(--nl-pos-te); }
+.nls-pos[data-tone=k] { background: var(--nl-pos-k); }
+
+/* A starter's points this week over his projection. */
+.nls-lrow .nls-proj .nls-proj-pts { font: 700 19px/1 var(--nl-mono); color: var(--text); }
+.nls-lrow .nls-proj[data-scored=live] .nls-proj-pts { color: var(--good); }
+
+@media (max-width: 720px) {
+  .nls-teamcard { padding: 12px 14px; border-radius: 14px; }
+  .nls-teamcard-avatar { width: 44px; height: 44px; font-size: 14px; }
+  .nls-teamcard-id .nls-title { font-size: 19px; }
+  .nls-teamcard-score strong { font-size: 21px; }
+  .nls-teamcard-actions > .nls-btn { padding-left: 6px; padding-right: 6px; font-size: 13px; }
+  .nls-lockbar[data-compact=true] { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 8px 12px; }
+  .nls-lrow .nls-proj .nls-proj-pts { font-size: 17px; }
+}

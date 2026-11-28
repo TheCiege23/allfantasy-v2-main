@@ -58,6 +58,7 @@ import {
   type QueuedLineupEdit,
 } from '@/lib/pwa/offlineLineupQueue'
 import { OfflineLineupSnapshotView } from './OfflineLineupSnapshotView'
+import { TeamWeekCard, useTeamWeek } from './TeamWeekCard'
 import { dailyOffDayIds, isOnBye } from '@/lib/league-media/redraftScreens'
 import { RedraftBadge, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -269,6 +270,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [saving, setSaving] = useState(false)
   const [move, setMove] = useState<Move | null>(null)
   const openCard = useNativePlayerCard(league.sport)
+  // This week, Sleeper-style: the team's score, projection, opponent and win chance, and each starter's points.
+  const teamWeek = useTeamWeek(league.id, league.season)
   // NHL: each goalie's next start — projected from recent starts, "in net" once his game is on.
   const goalieStart = useGoalieStarts(String(league.sport ?? '').toUpperCase() === 'NHL')
   const isGoalie = (p: { position?: string | null } | undefined) => String(p?.position ?? '').toUpperCase() === 'G'
@@ -832,12 +835,20 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
             </span>
           </span>
         </PlayerCell>
-        <span className="nls-proj" data-has={p?.projectedPoints != null || undefined}>
-          {fmt1(p?.projectedPoints ?? null)}
-          {p?.projectedPoints != null && p.projectionsSource === SLEEPER_PROJECTION_SOURCE ? (
-            <small data-testid={`lineup-proj-source-${p.id}`} title={SLEEPER_PROJECTION_TITLE}>Sleeper</small>
-          ) : showMedia && p?.projectedPoints != null ? <small>proj</small> : null}
-        </span>
+        {(() => {
+          // Sleeper's column: this week's points on top once his game has started, the projection beneath.
+          const wk = kind === 'starter' && id && !daily ? teamWeek?.points.get(id) : undefined
+          const scored = wk && wk.state !== 'upcoming' ? wk : null
+          return (
+            <span className="nls-proj" data-has={p?.projectedPoints != null || scored != null || undefined} data-scored={scored ? scored.state : undefined}>
+              {scored ? <b className="nls-proj-pts" data-testid={`lineup-points-${id}`}>{fmt1(scored.points)}</b> : null}
+              {scored ? (p?.projectedPoints != null ? <small>{fmt1(p.projectedPoints)}</small> : null) : fmt1(p?.projectedPoints ?? null)}
+              {p?.projectedPoints != null && p.projectionsSource === SLEEPER_PROJECTION_SOURCE ? (
+                <small data-testid={`lineup-proj-source-${p.id}`} title={SLEEPER_PROJECTION_TITLE}>Sleeper</small>
+              ) : !scored && showMedia && p?.projectedPoints != null ? <small>proj</small> : null}
+            </span>
+          )
+        })()}
         <span className="nls-lrow-action">
           {editable ? (
             isLocked ? (
@@ -985,14 +996,22 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   return (
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-lineup-screen" data-rd-screen={rd ? 'lineup' : undefined}>
-      <ScreenHead eyebrow="My team" title={userTeam.teamName} sub={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}>
-        {/* Best ball has no trades and no lineup to set: neither button is offered (see the note below). */}
-        {league.bestBallMode ? null : <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>}
-        <button type="button" className="nls-btn" onClick={() => onSelectTab('waivers')}>Add / drop</button>
-        <button type="button" className="nls-btn" data-variant="primary" hidden={Boolean(league.bestBallMode)} disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
-          Optimize lineup
-        </button>
-      </ScreenHead>
+      <TeamWeekCard
+        teamName={userTeam.teamName}
+        avatarUrl={userTeam.avatarUrl}
+        line={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}
+        week={teamWeek}
+        actions={
+          <>
+            {/* Best ball has no trades and no lineup to set: neither button is offered (see the note below). */}
+            {league.bestBallMode ? null : <button type="button" className="nls-btn" data-size="sm" onClick={() => onSelectTab('trades')}>Propose trade</button>}
+            <button type="button" className="nls-btn" data-size="sm" onClick={() => onSelectTab('waivers')}>Add / drop</button>
+            <button type="button" className="nls-btn" data-size="sm" data-variant="primary" hidden={Boolean(league.bestBallMode)} disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
+              Optimize lineup
+            </button>
+          </>
+        }
+      />
 
       <Segmented label="Team view" value={tab} onChange={setTab} options={[{ id: 'lineup', label: 'Lineup' }, { id: 'roster', label: 'Full roster' }]} />
 
@@ -1025,9 +1044,21 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               </div>
             ) : null}
             {lockText ? (
-              <div className="nls-lockbar" data-tone={editable ? undefined : 'locked'} role="status">
+              /*
+               * One line, not a paragraph (2026-11-28, Sleeper pass): the lock and the first sentence stay
+               * in view; how to move players folds under "How to set your lineup", so the starters are no
+               * longer a screen below the fold on a phone. The full text stays in the DOM for readers.
+               */
+              <div className="nls-lockbar" data-tone={editable ? undefined : 'locked'} data-compact="true" role="status">
                 {editable && nextLock ? <span className="nls-chip" data-tone="warn">Next lock {untilLabel(nextLock.getTime() - now.getTime())}</span> : null}
-                <span>{lockText}</span>
+                {lockText.includes(TAP_HELP) ? (
+                  <details className="nls-lockhelp">
+                    <summary>{lockText.replace(TAP_HELP, '').trim() || 'How to set your lineup'}</summary>
+                    <span>{TAP_HELP}</span>
+                  </details>
+                ) : (
+                  <span>{lockText}</span>
+                )}
               </div>
             ) : null}
 
@@ -1071,10 +1102,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                         : `${byeStarters.length} starters are on bye this week and will score 0: ${byeStarters.map((id) => players[id]?.name ?? 'Unknown').join(', ')}. Swap them out before lock.`}
                     </p>
                   ) : null}
-                  {data?.rosterId && !daily ? <AutoBenchByeToggle leagueId={league.id} /> : null}
+                  {/* Back from a break: said first, it is about the lineup below. */}
                   {data?.rosterId ? <WelcomeBackCard leagueId={league.id} /> : null}
-                  {data?.rosterId ? <MyTeamAutomations leagueId={league.id} /> : null}
-                  {data?.rosterId ? <AutomaticChangesLog leagueId={league.id} className="nls-card" onUndone={() => void load()} /> : null}
                   <section className="nls-card nls-card-flush" aria-label="Starters">
                     <h3 className="nls-label nls-card-head"><span>Starters</span><span>{startersProj != null ? `Proj ${fmt1(startersProj)}` : ''}</span></h3>
                     <ul className="nls-rows">{slots.map((s, i) => renderRow(lists.starters[i] ?? '', s, 'starter', i))}</ul>
@@ -1117,6 +1146,13 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                       </ul>
                     </DropZone>
                   ) : null}
+                  {/*
+                    Automations sit under the roster (2026-11-28, Sleeper pass): above it they pushed the
+                    starters off the first screen. What AllFantasy changed is still listed, and undoable.
+                  */}
+                  {data?.rosterId && !daily ? <AutoBenchByeToggle leagueId={league.id} /> : null}
+                  {data?.rosterId ? <AutomaticChangesLog leagueId={league.id} className="nls-card" onUndone={() => void load()} /> : null}
+                  {data?.rosterId ? <MyTeamAutomations leagueId={league.id} /> : null}
                   <DragOverlay dropAnimation={null}>
                     {dragId ? <div className="nls-drag-overlay"><PosPill label={players[dragId]?.position ?? '—'} /><strong>{players[dragId]?.name ?? 'Player'}</strong></div> : null}
                   </DragOverlay>
