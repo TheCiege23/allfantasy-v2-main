@@ -16,6 +16,9 @@ const h = vi.hoisted(() => ({
   spend: vi.fn(),
   members: new Set<string>(),
   commissioner: false,
+  /** Rosters in league L1, by id → owner. */
+  rosters: {} as Record<string, string>,
+  rosterReads: [] as unknown[],
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: (...a: unknown[]) => h.session(...a) }))
@@ -58,7 +61,21 @@ vi.mock('@/lib/prisma', () => {
     get: (_t, k) => (k === 'then' ? undefined : dbProxy),
     apply: () => Promise.resolve(null),
   })
-  return { prisma: dbProxy }
+  const findFirst = async (args: { where: { id?: string; leagueId?: string; ownerId?: string } }) => {
+    const { id, leagueId } = args.where
+    if (!id || leagueId !== 'L1' || !(id in h.rosters)) return null
+    return { id, ownerId: h.rosters[id] }
+  }
+  return {
+    prisma: new Proxy({}, {
+      get: (_t, model) => {
+        if (model === 'then') return undefined
+        if (model === 'redraftRoster') return { findFirst }
+        if (model === 'c2CPlayerState') return { findMany: async (args: unknown) => { h.rosterReads.push(args); return [] } }
+        return dbProxy
+      },
+    }),
+  }
 })
 
 import { POST } from '@/app/api/c2c/ai/route'
@@ -86,6 +103,8 @@ beforeEach(() => {
   h.spend.mockReset()
   h.members = new Set(['me', 'rival'])
   h.commissioner = false
+  h.rosters = { 'r-me': 'me', 'r-rival': 'rival' }
+  h.rosterReads = []
   setTier('pro')
 })
 
@@ -126,4 +145,34 @@ describe('C2C manager-scoped actions: your own team, or any team in your league 
       })
     })
   }
+})
+
+describe('draft_advice with a named rosterId: the same rule, checked before the roster is read', () => {
+  it('your own roster → runs', async () => {
+    const r = await ask('draft_advice', { rosterId: 'r-me' })
+    expect(r.status).not.toBe(403)
+    expect(h.spend.mock.calls.map(([k]) => k)).toContain('getDraftAdvice')
+  })
+
+  it("another manager's roster, as a plain member → 403, its states never read, no model", async () => {
+    const r = await ask('draft_advice', { rosterId: 'r-rival' })
+    expect(r.status).toBe(403)
+    expect(h.rosterReads).toEqual([])
+    expect(h.spend).not.toHaveBeenCalled()
+  })
+
+  it("another manager's roster, as the commissioner → runs", async () => {
+    h.commissioner = true
+    const r = await ask('draft_advice', { rosterId: 'r-rival' })
+    expect(r.status).not.toBe(403)
+    expect(h.spend.mock.calls.map(([k]) => k)).toContain('getDraftAdvice')
+  })
+
+  it('a roster that is not in this league, even as the commissioner → 403', async () => {
+    h.commissioner = true
+    const r = await ask('draft_advice', { rosterId: 'r-elsewhere' })
+    expect(r.status).toBe(403)
+    expect(h.rosterReads).toEqual([])
+    expect(h.spend).not.toHaveBeenCalled()
+  })
 })

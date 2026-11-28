@@ -63,6 +63,20 @@ async function refuseOtherManager(leagueId: string, userId: string, managerId: s
   return target.ok ? null : forbidden
 }
 
+/** The roster form of the same rule: the roster must be in this league, and yours unless you commission it. */
+async function refuseOtherRoster(leagueId: string, userId: string, rosterId: string): Promise<NextResponse | null> {
+  const forbidden = NextResponse.json(
+    { error: "You can only ask about your own team. A commissioner can ask about any team in their league." },
+    { status: 403 },
+  )
+  const roster = await prisma.redraftRoster
+    .findFirst({ where: { id: rosterId, leagueId }, select: { ownerId: true } })
+    .catch(() => null)
+  if (!roster) return forbidden
+  if (roster.ownerId === userId) return null
+  return (await canCommissionerAct(leagueId, userId, 'league').catch(() => false)) ? null : forbidden
+}
+
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>
   try {
@@ -327,6 +341,12 @@ export async function POST(req: NextRequest) {
         if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
         const notYoursDraft = await refuseOtherManager(leagueId, userId, managerId)
         if (notYoursDraft) return notYoursDraft
+        // A named roster follows the same rule (owner follow-up 2026-11-28): your own roster, or — as this
+        // league's commissioner — any roster IN this league. Checked before the roster's states or any model.
+        if (typeof body.rosterId === 'string') {
+          const notYoursRoster = await refuseOtherRoster(leagueId, userId, body.rosterId)
+          if (notYoursRoster) return notYoursRoster
+        }
         const rosterId =
           typeof body.rosterId === 'string'
             ? body.rosterId
