@@ -13,7 +13,8 @@ import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
 import { compactDraftPlayerStats } from '@/lib/draft-room/compactDraftPlayerStats'
 import { DraftPlayerCard } from './DraftPlayerCard'
 import { SleeperPoolTable } from './SleeperPoolTable'
-import { applyPoolSort, nextSortState, sortKeyForColumn, type PoolSortKey } from './SleeperPoolSort'
+import { applyPoolSort, defaultSortDirectionForKey, nextSortState, sortKeyForColumn, type PoolSortKey } from './SleeperPoolSort'
+import { phonePoolSortOptions } from './phonePoolSortOptions'
 // NflDraftPoolStatsGroupHeader import removed in Slice D.1.5 Path B; re-add when D.2 ships the
 // Sleeper-style table mode and rows actually align to those columns.
 import { PlayerDetailModal, type DraftAssistantRoomContext } from './PlayerDetailModal'
@@ -624,6 +625,11 @@ function PlayerPanelInner({
     () => sleeperPoolStatOptionsFromPositionFilter(sport, positionFilter),
     [sport, positionFilter],
   )
+  /** Phone only: the card list has no column headers, so it sorts from this list instead. */
+  const phoneSortOptions = useMemo(
+    () => phonePoolSortOptions(sport, sleeperStatOpts, effectiveUseAiAdp),
+    [sport, sleeperStatOpts, effectiveUseAiAdp],
+  )
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -926,6 +932,42 @@ function PlayerPanelInner({
             <span data-testid="draft-player-filter-toggle">{filtersOpen ? 'Done' : 'Filters'}</span>
             {collapsedFilterCount > 0 ? <span data-testid="draft-mobile-filters-count">{collapsedFilterCount}</span> : null}
           </button>
+          {/* Phone sort (2026-11-28). The desktop table sorts from its headers; the phone card list
+              had no sort at all ("you weren't able to sort by average points per game last year").
+              Same sort state and keys as the headers, so switching layout keeps the order. */}
+          {phoneLayout ? (
+            <div className="flex items-center gap-1" data-testid="draft-mobile-sort">
+              <label className="sr-only" htmlFor={`${filterRegionId}-sort`}>Sort players by</label>
+              <select
+                id={`${filterRegionId}-sort`}
+                data-testid="draft-mobile-sort-key"
+                value={phoneSortOptions.some((o) => o.key === sortBy) ? sortBy : ''}
+                onChange={(e) => {
+                  const key = e.target.value
+                  if (!key) return
+                  setSortBy(key)
+                  setSortDirection(defaultSortDirectionForKey(key))
+                }}
+                className="min-h-[44px] max-w-[120px] rounded-lg border border-white/15 bg-black/40 px-2 text-sm text-cyan-100"
+              >
+                {phoneSortOptions.some((o) => o.key === sortBy) ? null : <option value="">Sorted</option>}
+                {phoneSortOptions.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                data-testid="draft-mobile-sort-direction"
+                onClick={() => setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                aria-label={sortDirection === 'asc' ? 'Sorted low to high. Switch to high to low' : 'Sorted high to low. Switch to low to high'}
+                className="min-h-[44px] min-w-[44px] rounded-lg border border-white/15 px-2 text-sm text-cyan-100"
+              >
+                {sortDirection === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+          ) : null}
           {/* D.6.1 — position pills replacing the legacy <select>. Each pill shows the
               available pool count for that position; the active pill fills with that
               position's board colour, and idle pills carry it in their label.
