@@ -113,6 +113,7 @@ import { resolveLegacySettingsPanel, settingsPanelView } from '@/lib/league-sett
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { LeagueRulesHomeHost } from '@/components/league/native/LeagueRulesHomeHost'
+import { LeagueStakesCard, stakesFormatFor } from '@/components/league/native/LeagueStakesCard'
 import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
 import type { ImportedLeagueLike } from '@/lib/league/whats-next/adapters'
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
@@ -2372,6 +2373,11 @@ export function LeagueShell({
   )
 }
 
+/** Format tabs the simple League home lists as rows, one tap each (dynasty, keeper, specialty formats). */
+const SIMPLE_HOME_FORMAT_TABS = new Set([
+  'dynasty', 'dynasty_picks', 'dynasty_taxi', 'keeper', 'bestball', 'guillotine', 'zombie', 'pirate', 'big_brother', 'idp', 'defense_hub',
+])
+
 function LeagueTabRouter({
   activeTab,
   tabDefs,
@@ -2638,13 +2644,20 @@ function LeagueTabRouter({
           imported={importedWhatsNext}
         />
       )
+      if (!importedWhatsNext && (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor')) {
+        return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
+      }
       /*
-       * Every AllFantasy-hosted redraft league, any sport, gets the one simple League home (owner,
-       * 2026-11-28: "move every sport's league home onto the same screen"). Its next-up card does the
-       * "What's next?" job, so the panel is not stacked above it. Dynasty, Survivor, Guillotine, Best
-       * Ball and imported leagues keep the full home below: their format cards live there.
+       * Every AllFantasy-hosted league gets the one simple League home, whatever the sport or format
+       * (owner, 2026-11-28: redraft first, then "simplify the dynasty and specialty league homes too").
+       * Its next-up card does the "What's next?" job, so the panel is not stacked above it. A format
+       * adds only its stakes card (Guillotine, Big Brother) and one row per format tab (Picks, Taxi,
+       * Keepers, Chop…). Survivor keeps its island above (the home IS the game board), and imported
+       * leagues keep the full home below: their data comes from another site.
        */
-      if (!importedWhatsNext && isRedraftFormatUserLeague(selectedLeague) && guillyTabKind(selectedLeague, true) == null) {
+      if (!importedWhatsNext) {
+        const stakesFormat = stakesFormatFor(selectedLeague)
+        const plainRedraft = isRedraftFormatUserLeague(selectedLeague) && guillyTabKind(selectedLeague, true) == null
         return oneLeagueHome(
           <NflRedraftLeagueHomeDashboard
             league={selectedLeague}
@@ -2658,11 +2671,11 @@ function LeagueTabRouter({
             onOpenTab={onSelectTab}
             availableTabIds={tabDefs.map((item) => item.id)}
             rulesSlot={<LeagueRulesHomeHost leagueId={leagueId} blocked={settingsOpen} />}
+            formatRows={tabDefs.filter((item) => SIMPLE_HOME_FORMAT_TABS.has(item.id))}
+            formatSlot={stakesFormat ? <LeagueStakesCard leagueId={leagueId} format={stakesFormat} onSelectTab={onSelectTab} /> : null}
+            nextSlot={plainRedraft ? undefined : whatsNext}
           />,
         )
-      }
-      if (!importedWhatsNext && (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor')) {
-        return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
       }
       return <div className="wn-home-stack">{whatsNext}{oneLeagueHome(<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} imported={importedWhatsNext != null} />)}</div>
     }

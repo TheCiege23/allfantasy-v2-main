@@ -32,14 +32,18 @@ describe('which leagues get the simple League home', () => {
     expect(isRedraftFormatUserLeague({ ...base, sport: 'MLB', leagueType: 'dynasty' } as UserLeague)).toBe(false)
   })
 
-  it('the League home button routes a hosted redraft league there, before the full home', () => {
+  it('the League home button routes every hosted league there (Survivor first, imports after)', () => {
     const shell = readFileSync(resolve(__dirname, '../../app/league/[leagueId]/LeagueShell.tsx'), 'utf8')
     const nativeHome = shell.slice(shell.indexOf("case 'native_home': {"), shell.indexOf("case 'home':"))
+    const survivor = nativeHome.indexOf('<SurvivorNativeHome')
     const simple = nativeHome.indexOf('<NflRedraftLeagueHomeDashboard')
-    expect(nativeHome).toMatch(/\n\s*if \(!importedWhatsNext && isRedraftFormatUserLeague\(selectedLeague\) && guillyTabKind\(selectedLeague, true\) == null\) \{\n\s*return oneLeagueHome\(\n\s*<NflRedraftLeagueHomeDashboard/)
-    expect(simple).toBeGreaterThan(-1)
+    expect(nativeHome).toMatch(/\n\s*if \(!importedWhatsNext\) \{\n\s*const stakesFormat = stakesFormatFor\(selectedLeague\)/)
+    expect(survivor).toBeGreaterThan(-1)
+    expect(simple).toBeGreaterThan(survivor)
     expect(simple).toBeLessThan(nativeHome.indexOf('<NativeLeagueHome'))
-    expect(nativeHome).toContain('availableTabIds={tabDefs.map((item) => item.id)}')
+    // Dynasty and specialty formats keep "What's next?" (engine turns, the format walkthrough) as their one card.
+    expect(nativeHome).toContain('nextSlot={plainRedraft ? undefined : whatsNext}')
+    expect(nativeHome).toContain('formatRows={tabDefs.filter((item) => SIMPLE_HOME_FORMAT_TABS.has(item.id))}')
   })
 })
 
@@ -87,3 +91,23 @@ describe('the simple home on a non-football league', () => {
     expect(onOpenTab).toHaveBeenLastCalledWith('standings')
   })
 })
+
+describe('dynasty and specialty formats on the simple home', () => {
+  it('a dynasty league reads its format, shows its format rows, and its next slot replaces the draft card', () => {
+    const onOpenTab = vi.fn()
+    render(
+      <NflRedraftLeagueHomeDashboard league={{ ...base, sport: 'NFL', leagueType: 'dynasty', isDynasty: true } as UserLeague}
+        leagueId="L1" teamSlots={teams} isCommissioner={false} draftDateIso={null} hasActiveRedraftSeason={false}
+        onOpenSettings={vi.fn()} onOpenTab={onOpenTab} availableTabIds={['native_home', 'roster', 'dynasty_picks', 'dynasty_taxi']}
+        formatRows={[{ id: 'dynasty_picks', label: 'Picks' }, { id: 'dynasty_taxi', label: 'Taxi' }]}
+        nextSlot={<div data-testid="whats-next-slot" />} formatSlot={<div data-testid="stakes-slot" />} />,
+    )
+    expect(screen.getByTestId('g32-home-status')).toHaveTextContent(/NFL · Dynasty/i)
+    expect(screen.getByTestId('whats-next-slot')).toBeInTheDocument()
+    expect(screen.queryByTestId('g32-home-next')).toBeNull()
+    expect(screen.getByTestId('stakes-slot')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('g32-home-row-format-dynasty_picks'))
+    expect(onOpenTab).toHaveBeenLastCalledWith('dynasty_picks')
+  })
+})
+
