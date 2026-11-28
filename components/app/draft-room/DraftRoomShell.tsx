@@ -68,6 +68,8 @@ type DraftRoomShellProps = {
   playerPanel: ReactNode
   queuePanel: ReactNode
   chatPanel: ReactNode
+  /** Redraft snake room (Sleeper pass 5): no Chat tab in the phone tray; the room mounts the chat bubble instead. */
+  hidePhoneChatTab?: boolean
   helperPanel?: ReactNode
   /** "Before your next pick" lookahead. Omitted for auctions, which have no pick order. */
   intelPanel?: ReactNode
@@ -123,6 +125,7 @@ export function DraftRoomShell({
   playerPanel,
   queuePanel,
   chatPanel,
+  hidePhoneChatTab = false,
   helperPanel,
   intelPanel,
   rosterPanel,
@@ -259,7 +262,8 @@ export function DraftRoomShell({
       (tab.id !== 'helper' || helperPanel) &&
       (tab.id !== 'intel' || intelPanel) &&
       (tab.id !== 'roster' || rosterPanel) &&
-      (tab.id !== 'keepers' || keeperPanel)
+      (tab.id !== 'keepers' || keeperPanel) &&
+      (tab.id !== 'chat' || !hidePhoneChatTab)
   )
   /* Chimmy is a tab of its own on phones (2026-11-19), as in the desktop dock; "More" now appears
      only when a league has extra tabs (keepers). */

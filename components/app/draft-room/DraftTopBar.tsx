@@ -147,6 +147,11 @@ type DraftTopBarProps = {
   /** Extra rows at the end of the ⋯ menu's room section (the mock room's Reset and Export). */
   extraMenuItems?: Array<{ id: string; label: string; description?: string; testId: string; onSelect: () => void }>
   /**
+   * Redraft snake room, Sleeper pass 5 (owner, 2026-11-28): the bar keeps back, name, the clock and the "…" menu.
+   * The controls slot (music) and the settings gear are not drawn here; the room passes them as menu items.
+   */
+  simpleRoom?: boolean
+  /**
    * What the clock pill says when no clock is running, in place of the draft status and an empty
    * timer ("in progress –"). The mock room: "CPU picking" while a CPU manager is on the clock.
    */
@@ -327,6 +332,7 @@ export function DraftTopBar({
   showAutoPickPill = false,
   controlsSlot = null,
   extraMenuItems = [],
+  simpleRoom = false,
   idleClockLabel = null,
   showInvite = true,
   scheduledStartIso = null,
@@ -1188,7 +1194,7 @@ export function DraftTopBar({
         </div>
 
         <div className="order-2 flex flex-wrap items-center justify-end gap-1 lg:order-none">
-          {controlsSlot}
+          {simpleRoom ? null : controlsSlot}
           {isCommissioner && (draftStatus === 'in_progress' || draftStatus === 'paused') && ((draftStatus === 'in_progress' && onPause) || (draftStatus === 'paused' && onResume)) ? (
             <button
               type="button"
@@ -1231,7 +1237,7 @@ export function DraftTopBar({
           </button>
           ) : null}
 
-          {onOpenDraftRoomSettings ? (
+          {onOpenDraftRoomSettings && !simpleRoom ? (
             /* Draft settings for everyone: commissioners and co-commissioners edit, everyone else reads,
                and after the draft nobody edits (DraftRoomSettingsModal enforces both). This replaced
                "Ask Chimmy" (Chimmy is a tab in the side dock). */

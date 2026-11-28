@@ -192,6 +192,8 @@ export type PlayerPanelProps = {
   /** Called when user toggles Chimmy overlays from the pool toolbar. */
   onShowAiOverlaysChange?: (value: boolean) => void
   presentationVariant?: 'default' | 'redraft_snake'
+  /** Redraft snake room (Sleeper pass 5): no Compare, no Table/Card switch on a phone, Chimmy toggles live in the Chimmy tab. */
+  simpleRoom?: boolean
   /** D.2 — explicit pool layout opt-out. Defaults to 'auto' which picks
    * Sleeper-style table for NFL redraft/snake on desktop and falls back to
    * the existing card layout everywhere else. Pass 'card' to force the legacy
@@ -244,7 +246,10 @@ function PlayerListCards({
   onCompareTap,
   draftSport,
   aiRowBadges,
+  simpleRoom = false,
 }: {
+  /** Redraft snake room (Sleeper pass 5): no per-card Compare button. */
+  simpleRoom?: boolean
   filtered: PlayerEntry[]
   draftedNames: Set<string>
   draftedPlayerIds?: ReadonlySet<string> | null
@@ -307,7 +312,7 @@ function PlayerListCards({
               nflDraftProjectionSplits={p.nflDraftProjectionSplits ?? null}
               testId={`draft-player-card-${index}`}
               onSelect={() => onPlayerSelect(p)}
-              compareAction={
+              compareAction={simpleRoom ? undefined : 
                 <button
                   type="button"
                   onClick={() => onCompareTap(p)}
@@ -421,6 +426,7 @@ function PlayerPanelInner({
   showAiOverlays,
   onShowAiOverlaysChange,
   presentationVariant = 'default',
+  simpleRoom = false,
   poolLayout = 'auto',
   getDraftCopilotInsight,
   getAssistantRoomContext,
@@ -1052,7 +1058,7 @@ function PlayerPanelInner({
             role="radiogroup"
             aria-label="Player pool view mode"
             data-testid="draft-pool-view-mode"
-            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-transparent bg-[#1d2236] p-0.5"
+            className={`${simpleRoom ? 'max-md:hidden ' : ''}ml-auto inline-flex items-center gap-1 rounded-lg border border-transparent bg-[#1d2236] p-0.5`}
           >
             <button
               type="button"
@@ -1138,7 +1144,7 @@ function PlayerPanelInner({
               are the canonical sort UI. The "Use Chimmy ADP" toggle, AI-ADP warnings,
               and the "My roster / Pool" view-toggle remain in this row because they
               don't belong on the table header. */}
-          {effectiveUseAiAdp && (
+          {effectiveUseAiAdp && !simpleRoom && (
             <span className="rounded border border-cyan-300/25 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-100" title="AllFantasy ADP enabled">
               Chimmy ADP
             </span>
@@ -1184,7 +1190,7 @@ function PlayerPanelInner({
               Low sample
             </span>
           )}
-          {hasAiOverlaySignals ? (
+          {hasAiOverlaySignals && !simpleRoom ? (
             <button
               type="button"
               onClick={() => {
@@ -1529,6 +1535,7 @@ function PlayerPanelInner({
             if (!useTable) {
               return (
                 <PlayerListCards
+                  simpleRoom={simpleRoom}
                   filtered={filtered}
                   draftedNames={draftedNames}
                   draftedPlayerIds={draftedIdsForRows}

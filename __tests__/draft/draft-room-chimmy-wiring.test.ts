@@ -15,7 +15,9 @@ describe('draft room ↔ Chimmy wiring', () => {
   it('mounts the helper panel in the phone tray', () => {
     expect(src).not.toMatch(/helperPanel=\{undefined\}/)
     // 2026-11-19: the phone's Chimmy tab shows the merged Chimmy (next pick, suggestions, Chimmy).
-    expect(src).toMatch(/helperPanel=\{chimmyTabNode\}/)
+    expect(src).toMatch(/helperPanel=\{simpleRoom \? simpleChimmyTabNode : chimmyTabNode\}/)
+    // 2026-11-28 (Sleeper pass 5): a redraft snake room keeps every Chimmy piece, folded under "More from Chimmy".
+    expect(src.slice(src.indexOf('const simpleChimmyTabNode = ('))).toMatch(/\{helperPanelNode\}/)
     expect(src.slice(src.indexOf('const chimmyTabNode = ('))).toMatch(/\{helperPanelNode\}/)
     const node = src.slice(src.indexOf('const helperPanelNode = ('), src.indexOf('const keeperPanel ='))
     expect(node).toMatch(/<DraftHelperPanel\s/)
