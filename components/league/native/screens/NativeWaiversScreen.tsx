@@ -38,6 +38,7 @@ import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
 import { Card, InjuryFlag, PlayerAvatar, PlayerNameButton, PosPill, ScreenHead, Segmented, useNativePlayerCard } from './NativeScreenParts'
 import { GamesLeftChip, WeekPlannerCard, useWeekPlanner } from './WeekPlannerCard'
+import { GoalieStartChip, useGoalieStarts } from './GoalieStartChip'
 import { claimStatusLabel, faabMeter, waiverClaimTypeLabel } from '@/lib/league-media/redraftScreens'
 import { RedraftScreen, RedraftWaiverHeader, useRedraftScreen } from './RedraftScreenParts'
 
@@ -290,6 +291,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const [plannerOffset, setPlannerOffset] = useState<0 | 1>(0)
   const plannerTeams = useMemo(() => players.map((p) => p.team ?? '').filter(Boolean), [players])
   const { planner, teamFor } = useWeekPlanner(league.id, settings?.sport ?? league.sport, plannerTeams, plannerOffset)
+  const goalieStart = useGoalieStarts(String(settings?.sport ?? league.sport ?? '').toUpperCase() === 'NHL')
   // NHL dynasty: a name search also asks the server for prospects beyond the ones the list carries.
   const prospectSearchRows = useNhlProspectSearch<UnifiedPlayerWireDto>(league.id, prospectMeta, q)
   const allPlayers = useMemo(() => mergeProspectSearchRows(players, prospectSearchRows), [players, prospectSearchRows])
@@ -610,6 +612,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                               <span className="nls-pcell-pos"><PosPill label={p.position} /></span>
                               {p.team ?? (isNhlProspectWireRow(p) ? tr('draftRoom.pool.prospectUnsigned') : 'FA')}{a.displayByeWeek ? ` · Bye ${a.displayByeWeek}` : ''}
                               <GamesLeftChip team={teamFor(p.team)} compact />
+                              {String(p.position ?? '').toUpperCase() === 'G' ? <GoalieStartChip entry={goalieStart(p.name)} /> : null}
                               {isNhlProspectWireRow(p) ? (
                                 <span className="nls-chip" data-tone="accent" title={tr('draftRoom.pool.prospectTooltip')} data-testid={`native-waivers-prospect-badge-${p.id}`}>
                                   {tr('draftRoom.pool.prospectBadge')}

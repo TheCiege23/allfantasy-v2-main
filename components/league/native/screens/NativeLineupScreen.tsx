@@ -38,6 +38,7 @@ import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupV
 import { lockRowLabel } from '@/lib/league/native/lockRowLabel'
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, PlayerNameButton, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
 import { WeekByPlayerCard } from './WeekByPlayerCard'
+import { GoalieStartChip, useGoalieStarts } from './GoalieStartChip'
 import { weekByPlayer } from '@/lib/league/native/weekByPlayer'
 import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { MyTeamAutomations } from './MyTeamAutomations'
@@ -268,6 +269,9 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [saving, setSaving] = useState(false)
   const [move, setMove] = useState<Move | null>(null)
   const openCard = useNativePlayerCard(league.sport)
+  // NHL: each goalie's next start — projected from recent starts, "in net" once his game is on.
+  const goalieStart = useGoalieStarts(String(league.sport ?? '').toUpperCase() === 'NHL')
+  const isGoalie = (p: { position?: string | null } | undefined) => String(p?.position ?? '').toUpperCase() === 'G'
   /** Tap to swap: the first tap, waiting for the second. */
   const [picked, setPicked] = useState<LineupTap | null>(null)
   const [tab, setTab] = useState<'lineup' | 'roster'>('lineup')
@@ -813,6 +817,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                 {kind !== 'starter' && p?.position && !rdPill ? <span className="nls-player-pos"> {p.position}</span> : null}
                 <RankTag p={p} />
                 <InjuryFlag status={p?.injuryStatus} />
+                {isGoalie(p) ? <GoalieStartChip entry={goalieStart(p?.name)} /> : null}
                 {dayBadge(id)}
               </strong>
               {/* On the second line, so a long name truncating on a phone never hides them. */}

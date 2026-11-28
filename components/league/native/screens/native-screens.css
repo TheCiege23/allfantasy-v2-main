@@ -650,3 +650,9 @@
 .nls-wbp[data-density=compact] .nls-wbp-table th, .nls-wbp[data-density=compact] .nls-wbp-table td,
 .nls-wp[data-density=compact] .nls-wp-table th, .nls-wp[data-density=compact] .nls-wp-table td { padding: 3px 5px; font-size: 11px; }
 .nls-wbp[data-density=compact] .nls-wbp-dow, .nls-wp[data-density=compact] .nls-wp-dow { display: inline; margin-right: 3px; }
+
+/* A goalie's next start (GoalieStartChip): projected until his game is on. Not red/green — a tone, a word. */
+.nls-goalie-chip { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 7px; border: 1px solid var(--line2); border-radius: 999px; color: var(--text2); font: 700 11px/1.4 var(--nl-mono); white-space: nowrap; vertical-align: middle; }
+.nls-goalie-chip[data-tone=in], .nls-goalie-chip[data-tone=start] { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); }
+.nls-goalie-chip[data-tone=lean] { border-style: dashed; }
+.nls-goalie-chip[data-tone=bench] { color: var(--faint); }

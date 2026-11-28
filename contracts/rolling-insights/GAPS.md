@@ -631,3 +631,22 @@ the meantime. When the fix email arrives: (1) re-run the 2025 NHL season sync
 should be ~1,280, shutouts ~115–150); (3) only then consider letting goalies back into the
 prior-season blend (`lib/projections/dailySportSeasonTotals.ts`) and mapping `so_g`. The
 derivations take max(vendor, derived), so a vendor fix can never double-count.
+
+## 📌 2026-11-28 — No CONFIRMED starting goalie in any contract; projected from our own box scores
+
+**What exists.** Nothing in `contracts/` documents a confirmed (or "probable") NHL starting goalie:
+`/live` NHL lists a game's goalies only once the game has a box (`fixtures/live.NHL.json` — the
+`goalies` group, starter and dressed backup, the backup at `0:00`), and no other contract has a
+pre-game lineup. `lib/core-app/weeklyScheduleForecast.ts` already records the gap as
+`confirmed-goalie-starts`.
+
+**What ships meanwhile.** `lib/nhl/goalieStarts.ts` PROJECTS each team's next starter from its own
+recent `:goalies` lines in `player_game_stats` (most starts in the last 10; the backup on the second
+night of a back-to-back) and says "in net" only once the game's box exists. Every surface labels it
+"Projected" with its reason, and never "confirmed". Read path: `/api/nhl/goalie-starts`, DB-only.
+
+**Open — a vendor decision, not a probe.** Confirmed starters come from services that gather
+morning-skate and beat-reporter news. Whether to buy one (and which) is the owner's call; until
+then do not probe any provider for a "starters" endpoint. If a feed is added, its fixture is
+committed in the same change, and `goalieStarts.ts` should take it as `status: 'confirmed'` ahead of
+the projection, never mixed into it.
