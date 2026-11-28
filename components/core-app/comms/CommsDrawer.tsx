@@ -130,7 +130,7 @@ export type CommsDrawerProps = {
    * `initialTab` follows only a CHANGE of tab, so asking twice for the tab the user has since
    * left did nothing; `seq` changes every time. `leagueId` rescopes the drawer.
    */
-  openRequest?: { seq: number; tab: CommsTab | null; leagueId: string | null } | null
+  openRequest?: { seq: number; tab: CommsTab | null; leagueId: string | null; dmWith?: string | null } | null
   /**
    * Put the drawer back on the tab and league this user last had (see commsUiMemory.ts). Only the
    * chat bubble asks for this: a drawer opened on a specific tab must open on THAT tab, not on
@@ -696,9 +696,16 @@ export function CommsDrawer({
     writeCommsUi(userId, { tab, scopeId, pageLeagueId })
   }, [rememberPlace, userId, tab, scopeId, pageLeagueId])
 
+  /*
+   * "Message @someone" (commsEvents.openDirectMessage). Held HERE until the DMs panel says it ran it:
+   * that panel mounts only while its tab is shown, so a prop alone would start the conversation again
+   * every time the user came back to the tab.
+   */
+  const [pendingDm, setPendingDm] = useState<string | null>(null)
   const openRequestSeq = openRequest?.seq ?? 0
   useEffect(() => {
     if (!openRequest) return
+    if (openRequest.dmWith) setPendingDm(openRequest.dmWith)
     if (openRequest.tab) setTab(openRequest.tab)
     if (openRequest.leagueId && leagues.some((l) => l.id === openRequest.leagueId)) {
       setScopeId(openRequest.leagueId)
@@ -1008,7 +1015,7 @@ export function CommsDrawer({
            */
           <ThreadPanel key="huddle" kind="group" privacy={HUDDLE_PRIVACY} />
         ) : tab === 'dms' ? (
-          <ThreadPanel key="dms" kind="dm" privacy={DM_PRIVACY} />
+          <ThreadPanel key="dms" kind="dm" privacy={DM_PRIVACY} startDmWith={pendingDm} onStartDmHandled={() => setPendingDm(null)} />
         ) : tab === 'music' ? (
           <MusicPanel />
         ) : (

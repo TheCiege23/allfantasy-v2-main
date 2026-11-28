@@ -6,6 +6,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { allPlayShare, fitPlayoffFormatToLeague, fmt1, initialsOf, oddsTone, ordinal, powerOrder, readPlayoffFormat, streakTone } from '@/lib/league/native/nativeScreenModels'
 import { Card, ScreenHead, Segmented } from './NativeScreenParts'
+import { MessageManagerButton, useLeagueManagerContacts } from './MessageManagerButton'
 import { SideContestsCard } from './SideContestsCard'
 import { PayoutsCard } from './PayoutsCard'
 import { groupStandingsByDivision } from '@/lib/league/divisions/leagueDivisions'
@@ -64,6 +65,8 @@ function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { le
   // eliminated split — read only, and only claimed once the bracket is generated (playoffRaceStatus).
   const rd = useRedraftScreen(league)
   const [runtime, setRuntime] = useState<RedraftPlayoffRuntimeClient | null>(null)
+  // Who to message for each team row (no button on your own team or one with no AllFantasy manager).
+  const contactFor = useLeagueManagerContacts(league.id)
   useEffect(() => {
     if (!rd) return
     let cancelled = false
@@ -163,7 +166,7 @@ function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { le
         const st = race(r)
         return st ? <span className="nls-chip nls-rd-race" data-tone={st === 'eliminated' ? undefined : st === 'champion' ? 'accent' : 'good'} data-testid={`native-standings-race-${r.rosterId}`}>{PLAYOFF_RACE_LABEL[st]}</span> : null
       })()}
-      {r.rosterId === data?.viewerRosterId ? <span className="nls-sr">(your team)</span> : null}
+      {r.rosterId === data?.viewerRosterId ? <span className="nls-sr">(your team)</span> : <MessageManagerButton contact={contactFor(r.rosterId, r.seasonRosterId)} />}
     </div>
   )
 
@@ -320,6 +323,7 @@ function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { le
                                   <span className="nls-avatar" aria-hidden>{initialsOf(r.teamName)}</span>
                                   <strong>{r.teamName}</strong>
                                   {r.divisionRank === 1 ? <span className="nls-chip" data-tone="good">Leader</span> : null}
+                                  {r.rosterId === data.viewerRosterId ? null : <MessageManagerButton contact={contactFor(r.rosterId, r.seasonRosterId)} />}
                                 </div>
                               </td>
                               <td>{record(r)}</td>

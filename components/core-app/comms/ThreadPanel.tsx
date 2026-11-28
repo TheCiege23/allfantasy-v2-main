@@ -117,9 +117,18 @@ export function ThreadPanel({
   kind,
   privacy,
   onAskChimmy,
+  startDmWith = null,
+  onStartDmHandled,
 }: {
   kind: 'dm' | 'group'
   privacy: string
+  /**
+   * DMs only: a username to open a conversation with as soon as the panel is up ("Message" on a
+   * league screen). Runs the picker's own start, so an existing thread is reopened, not duplicated.
+   */
+  startDmWith?: string | null
+  /** Called once `startDmWith` has been acted on, so the drawer can stop asking. */
+  onStartDmHandled?: () => void
   /**
    * The league page's Messages tab offers "Ask Chimmy about this chat", seeded with the
    * conversation. Absent in the drawer, whose Chimmy tab is one tap away already.
@@ -582,6 +591,26 @@ export function ThreadPanel({
     },
     [busy, loadThreads, open],
   )
+  /*
+   * The request this panel already started, so it runs ONCE however the parent clears it: the effect
+   * is re-checked when `busy` clears (a tap during another start is not lost), which would otherwise
+   * start the same conversation a second time. Reset when the request goes away, so tapping the same
+   * manager's Message again later does start again.
+   */
+  const startedDmFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (kind !== 'dm') return
+    if (!startDmWith) {
+      startedDmFor.current = null
+      return
+    }
+    if (busy || startedDmFor.current === startDmWith) return
+    startedDmFor.current = startDmWith
+    onStartDmHandled?.()
+    void startConversation('/api/shared/chat/dm/start', { username: startDmWith })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, startDmWith, busy])
+
 
   /*
    * ── Report and Block, from the message actions sheet ──────────────────────────────
