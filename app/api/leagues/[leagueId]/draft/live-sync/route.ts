@@ -7,7 +7,8 @@ import { withTimedRoute } from '@/lib/logging/withTimedRoute'
 import { logStructured } from '@/lib/logging/structured'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { canAccessLeagueDraft, getCurrentUserRosterIdsForLeague } from '@/lib/live-draft-engine/auth'
+import { touchAndListDraftPresence, viewerRosterIdsCached } from '@/lib/draft-room/draftPresence'
 import { runAutomationTicksThrottled } from '@/lib/live-draft-engine/draftAutomationTicks'
 import { mirrorSleeperDraftForLeagueThrottled } from '@/lib/draft/mirrorActiveSleeperDrafts'
 import { buildDraftLiveSyncPayload } from '@/lib/draft-room/buildDraftLiveSyncPayload'
@@ -45,7 +46,11 @@ export const GET = withTimedRoute('draft_live_sync', async (req: NextRequest, ct
       chatLimit,
     })
 
-    return NextResponse.json(payload)
+    // Who is in the room: this poll marks the viewer's teams present and reads everyone's (draftPresence.ts).
+    const rosterIds = await viewerRosterIdsCached(leagueId, userId, () => getCurrentUserRosterIdsForLeague(leagueId, userId))
+    const onlineRosterIds = await touchAndListDraftPresence(leagueId, rosterIds)
+
+    return NextResponse.json({ ...payload, presence: { onlineRosterIds } })
   } catch (error) {
     logStructured('error', 'draft_live_sync', 'request_failed', {
       leagueId,

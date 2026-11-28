@@ -128,7 +128,14 @@ export function fixtureApiResponses(nowMs: number, opts: FixtureOptions = {}) {
     snapshot,
     league: {
       'draft/session': { leagueId: FIXTURE_LEAGUE_ID, session: snapshot },
-      'draft/live-sync': { leagueId: FIXTURE_LEAGUE_ID, updated: false, updatedAt: snapshot.updatedAt, session: snapshot },
+      // Presence: the viewer and four other managers have the room open (lib/draft-room/draftPresence.ts).
+      'draft/live-sync': {
+        leagueId: FIXTURE_LEAGUE_ID,
+        updated: false,
+        updatedAt: snapshot.updatedAt,
+        session: snapshot,
+        presence: { onlineRosterIds: [VIEWER_ROSTER, ...FIXTURE_SLOT_ORDER.filter((s) => s.rosterId !== VIEWER_ROSTER).slice(0, 4).map((s) => s.rosterId)] },
+      },
       'draft/events': { leagueId: FIXTURE_LEAGUE_ID, updated: false, updatedAt: snapshot.updatedAt, session: snapshot },
       'draft/pool': { entries: pool, sport: 'NFL', count: pool.length },
       'draft/queue': {

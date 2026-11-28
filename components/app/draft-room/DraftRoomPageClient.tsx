@@ -365,6 +365,7 @@ export function DraftRoomPageClient({
   const governanceSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [pickSubmitting, setPickSubmitting] = useState(false)
   const [draftUISettings, setDraftUISettings] = useState<DraftUISettings | null>(null)
+  const [onlineRosterIds, setOnlineRosterIds] = useState<string[]>([])
   const [skipPickAllowed, setSkipPickAllowed] = useState(false)
   const [orphanAiStatus, setOrphanAiStatus] = useState<{
     orphanRosterIds: string[]
@@ -2323,11 +2324,13 @@ export function DraftRoomPageClient({
     fetchDraftAssistantContext,
     fetchDraftPool,
     fetchLeagueAiAdp,
+    setOnlineRosterIds,
   })
 
   // ── Supabase realtime: draft-room presence ────────────────────────────────
-  // Presence tracking removed (Supabase removed). Online count is always 0.
-  const onlineCount = 0
+  // Who is in the room: returned by every live-sync poll (lib/draft-room/draftPresence.ts). Presence
+  // went away with Supabase and this was hard-coded to 0.
+  const onlineCount = onlineRosterIds.length
 
   useEffect(() => {
     return () => {
@@ -5521,6 +5524,7 @@ export function DraftRoomPageClient({
                   currentUserRosterId={currentUserRosterId ?? null}
                   aiManagedRosterIds={aiManagedRosterIds}
                   autoDraftRosterIds={session.autoDraftRosterIds ?? []}
+                  onlineRosterIds={onlineRosterIds}
                   autoDraft={isAutoDraft}
                   orderSourceLabel={boardOrderSourceLabel}
                   presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
