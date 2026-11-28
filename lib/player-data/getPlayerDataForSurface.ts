@@ -22,6 +22,7 @@ import {
   normalizePoolRowToUnified,
 } from '@/lib/player-data/normalizeProviderPlayer'
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
+import { isEspnProHeadshot } from '@/lib/espn/espnProHeadshots'
 
 export type GetPlayerDataForSurfaceInput = {
   surface: PlayerDataSurface
@@ -135,14 +136,19 @@ export function namesAgree(a: string | null | undefined, b: string | null | unde
   return x.length > 0 && x === norm(b)
 }
 
+/**
+ * The row whose photo a surface shows. A row with a photo beats one without; among those, a current-team ESPN
+ * headshot (lib/espn/proEspnHeadshotIngest.ts, GAPS E-08) beats every other source — TheSportsDB's cutout of
+ * a traded player still shows his old jersey — and then the source rank decides.
+ */
 function chooseBestSportsPlayerRow<T extends { imageUrl?: string | null; source?: string | null }>(
   current: T | undefined,
   candidate: T,
 ): T {
   if (!current) return candidate
-  const currentScore = sportsPlayerSourceRank(current.source) + (isHttpUrl(current.imageUrl) ? 1_000 : 0)
-  const candidateScore = sportsPlayerSourceRank(candidate.source) + (isHttpUrl(candidate.imageUrl) ? 1_000 : 0)
-  return candidateScore > currentScore ? candidate : current
+  const score = (row: T) =>
+    sportsPlayerSourceRank(row.source) + (isHttpUrl(row.imageUrl) ? 1_000 : 0) + (isEspnProHeadshot(row.imageUrl) ? 2_000 : 0)
+  return score(candidate) > score(current) ? candidate : current
 }
 
 function pickRecordHeadshot(seed: CanonicalMediaSeed): string | null {

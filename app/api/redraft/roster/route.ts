@@ -44,6 +44,10 @@ import {
 } from '@/lib/player-identity/rollingInsightsCrosswalk'
 import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from '@/lib/core-app/rosterIdCrosswalk'
 import { BEST_BALL_LINEUP_CODE, BEST_BALL_LINEUP_MESSAGE, lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
+import { tradeTeamsNotOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer'
+import { TEAM_NOT_SWITCHED_CODE, isOfficialOnAllFantasy, lineupTeamNotSwitchedMessage } from '@/lib/league/switching/switchingLeague'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
 
 export const dynamic = 'force-dynamic'
 
@@ -565,7 +569,7 @@ export async function GET(req: NextRequest) {
     rosterConfig,
   })
 
-  return NextResponse.json({
+  return await afJson(userId, {
     roster: {
       ...roster,
       players: hydratedPlayers,
@@ -658,7 +662,11 @@ export async function PATCH(req: NextRequest) {
   })) as RedraftRosterRouteRow | null
   if (!roster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const week = Math.max(1, Math.floor(Number(body.week ?? roster.season.currentWeek ?? 1) || 1))
+  // 🛑 NEVER A WEEK AHEAD OF THE SEASON'S. This writes the CURRENT slot types, and a future week has no
+  // started games, so `week: 13` moved week 12's started players with no lock at all (2026-11-23).
+  const requestedWeek = Math.max(1, Math.floor(Number(body.week ?? roster.season.currentWeek ?? 1) || 1))
+  const currentWeek = Number(roster.season.currentWeek)
+  const week = Number.isFinite(currentWeek) && currentWeek >= 1 ? Math.min(requestedWeek, Math.floor(currentWeek)) : requestedWeek
   const injuryHydrated = await hydrateCurrentInjuryStatuses(roster.players, roster.season.season, week)
   // Enforce lineup locks (G1): stamp derived isLocked from the schedule BEFORE
   // applying moves, so a player whose game has kicked off cannot be moved.
@@ -673,6 +681,17 @@ export async function PATCH(req: NextRequest) {
       { error: REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE, code: REDRAFT_MOVES_LOCKED_CODE },
       { status: REDRAFT_MOVES_LOCKED_STATUS },
     )
+  }
+  // 🛑 A team still on the old platform in an official switching league sets its lineup there; a move
+  // saved here would be replaced by the next copy (lib/roster-lineup-engine/lineupService.ts, same rule).
+  if (isOfficialOnAllFantasy(leagueForLock?.settings)) {
+    const [mirrored] = await tradeTeamsNotOnAllFantasy(roster.leagueId, [roster.id])
+    if (mirrored) {
+      return NextResponse.json(
+        { error: lineupTeamNotSwitchedMessage(mirrored.name, sourcePlatformLabel(leagueForLock?.platform)), code: TEAM_NOT_SWITCHED_CODE },
+        { status: 409 },
+      )
+    }
   }
   const { players: hydratedPlayers } = await hydrateRedraftLineupLocks(prisma, {
     sport: roster.season.sport,

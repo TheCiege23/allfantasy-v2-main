@@ -1,5 +1,6 @@
 import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -49,7 +50,7 @@ export async function POST(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string; email?: string | null } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
@@ -57,6 +58,15 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  /*
+   * 🛑 AF COMMISSIONER (`commissioner_automation`, AF Supreme inherits it) — the key /ai-commissioner/run
+   * and /chat already enforce (owner's decision 2026-11-27; gating audit H6). "Chimmy explain" ran a model
+   * call through runUnifiedOrchestration for any commissioner while the panel showed an upsell. The free
+   * fairness list (/ai-commissioner/insights) is unchanged. Refused before the body, the DB and the model.
+   */
+  const plan = await requireFeatureEntitlement({ userId, userEmail: session?.user?.email ?? null, featureId: 'commissioner_automation' })
+  if (!plan.ok) return plan.response
 
   const body = (await req.json().catch(() => ({}))) as Partial<{ alertId: string; tradeId: string }>
   const alertId = String(body.alertId ?? '').trim()
@@ -71,6 +81,17 @@ export async function POST(
     const smokeProviderEnabled = isAiResultCacheSmokeProviderEnabled()
 
     const fallback = explainTradeFairnessInsight(tradeInsight)
+    // A WITHHELD grade has no verdict to explain — the model would only invent one. Say why, plainly.
+    if (!tradeInsight.graded) {
+      return NextResponse.json({
+        narrative: fallback,
+        source: 'template' as const,
+        verdict: null,
+        sections: undefined,
+        factGuardWarnings: undefined,
+        context: { leagueId, type: 'trade_fairness', tradeFairness: tradeInsight },
+      })
+    }
     const tradeSport =
       typeof (tradeInsight as { sport?: string | null }).sport === 'string'
         ? (tradeInsight as { sport?: string | null }).sport

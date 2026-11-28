@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { assertNotOwnTeamTrade } from '@/lib/league-trade-engine/ownTeamTrade'
 import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
@@ -54,6 +55,10 @@ import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/survivor/survivorTradeRuleBypass'
 import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
 import { ensureSeasonRosterLinksBeforeMove } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
+import { CHIMMY_TRADES_OFF_MESSAGE, CHIMMY_TWO_TEAM_MESSAGE, chimmyRunTeams, resolveChimmyActor } from './chimmyActor'
+import { leagueTradeTeamsNotOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer'
+import { TRADE_TEAM_NOT_SWITCHED_CODE, tradeTeamNotSwitchedMessage } from '@/lib/league/switching/switchingLeague'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
 
 /**
  * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts) at proposal and at acceptance. One league
@@ -525,14 +530,37 @@ function lifecycleGateThrowable(err: { error: string; code: string; status: numb
  * (deadline chosen by the requester). The week is resolved here, from the league's own season —
  * see lib/trade-deadline/tradeDeadlineWindow.ts.
  */
+/**
+ * A league made official on AllFantasy trades here only between teams that switched (lib/league/switching):
+ * a team still on the old platform has its roster copied in from there, so a trade made here would be undone
+ * by the next copy. Checked when the offer is made and again when it is processed.
+ */
+async function assertTradeTeamsSwitched(leagueId: string, platform: string | null | undefined, rosterIds: string[]): Promise<void> {
+  const notSwitched = await leagueTradeTeamsNotOnAllFantasy(leagueId, rosterIds)
+  if (notSwitched.length === 0) return
+  throw new CodedTradeError(
+    TRADE_TEAM_NOT_SWITCHED_CODE,
+    tradeTeamNotSwitchedMessage(notSwitched.map((t) => t.name), sourcePlatformLabel(platform)),
+  )
+}
+
 export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   verifiedProposalEvidence?: VerifiedProposalEvidence | null
 }): Promise<{ id: string }> {
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   if (!league) throw new Error('League not found')
 
+  // Chimmy making an offer for a team it runs (./chimmyActor.ts). Never a commissioner's override:
+  // the lifecycle gate below treats it as the team's own manager.
+  const chimmyActing = input.chimmyForRosterId
+    ? await resolveChimmyActor(input.leagueId, input.chimmyForRosterId, input.proposedByUserId)
+    : null
+  if (input.chimmyForRosterId && (!chimmyActing || input.chimmyForRosterId !== input.proposerRosterId)) {
+    throw new Error('Chimmy is not running the proposing team')
+  }
+
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.proposedByUserId, {
-    isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.proposedByUserId),
+    isElevatedCommissioner: chimmyActing ? false : await isElevatedCommissioner(input.leagueId, input.proposedByUserId),
   })
   if (!life.ok) throw lifecycleGateThrowable(life.err)
 
@@ -551,7 +579,8 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   const receiver = participants.find((r) => r.id === input.receiverRosterId) ?? null
   if (!proposer || !receiver) throw new Error('Roster not found')
   if (participants.length !== participantRosterIds.length) throw new Error('Every trade participant must belong to this league')
-  const proposerOwnsRoster = isRosterManagedBy(proposer, input.proposedByUserId)
+  const proposerOwnsRoster = Boolean(chimmyActing)
+    || isRosterManagedBy(proposer, input.proposedByUserId)
     || (await managedPlatformIds(input.leagueId, input.proposedByUserId)).has(proposer.platformUserId)
     || await isAcceptedCoOwnerForRoster(input.leagueId, proposer.id, input.proposedByUserId)
   if (!proposerOwnsRoster) {
@@ -559,6 +588,20 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
   }
   // One manager, several teams: no moving players between them (lib/league-trade-engine/ownTeamTrade.ts).
   await assertNotOwnTeamTrade(input.proposedByUserId, participants)
+  await assertTradeTeamsSwitched(input.leagueId, league.platform, participantRosterIds)
+
+  /*
+   * A team Chimmy runs takes offers only as its commissioner allows (lib/inactive-manager), and only in a
+   * two-team trade: Chimmy answers offers on the hourly run, and does not join multi-team trades.
+   */
+  const chimmyTeams = await chimmyRunTeams(input.leagueId).catch(() => new Map<string, string>())
+  for (const id of participantRosterIds) {
+    if (id === input.proposerRosterId) continue
+    const mode = chimmyTeams.get(id)
+    if (!mode) continue
+    if (mode === 'off') throw new CodedTradeError('RECEIVER_ON_AUTOPILOT', CHIMMY_TRADES_OFF_MESSAGE)
+    if (participantRosterIds.length > 2) throw new CodedTradeError('RECEIVER_ON_AUTOPILOT', CHIMMY_TWO_TEAM_MESSAGE)
+  }
 
   const rosterTxGate = await assertRosterTransactionsAllowed({
     leagueId: input.leagueId,
@@ -634,7 +677,8 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
     participantRosterIds,
     assets: input.assets,
     season: league.season,
-    proposedByUserId: input.proposedByUserId,
+    // Chimmy's offer is graded for its own team, never for the commissioner who answers for it.
+    proposedByUserId: chimmyActing ? null : input.proposedByUserId,
   })
 
   const createData = {
@@ -719,7 +763,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
         if (parent) await claimParentForCounter(tx, parent.id)
         const created = await tx.afLeagueTrade.create({ data: createData })
         if (parent) await linkCounterToParent(tx, parent, created.id)
-        const managerStrategy = managerStore
+        const managerStrategy = managerStore && !chimmyActing
           ? await getTradeManagerStrategy(input.leagueId, input.proposedByUserId, {
               tradeManagerStrategy: tx.tradeManagerStrategy,
             })
@@ -879,6 +923,8 @@ export async function acceptAfLeagueTrade(input: {
   tradeId: string
   userId: string
   leagueId: string
+  /** SERVER-ONLY: Chimmy accepts for this team, which it runs (./chimmyActor.ts). Routes never set it. */
+  chimmyForRosterId?: string | null
 }): Promise<{ status: string }> {
   const trade = await prisma.afLeagueTrade.findFirst({
     where: { id: input.tradeId, leagueId: input.leagueId },
@@ -894,16 +940,24 @@ export async function acceptAfLeagueTrade(input: {
     ...trade.items.flatMap((i) => [i.fromRosterId, i.toRosterId]),
   ])]
   const participants = await prisma.roster.findMany({ where: { id: { in: participantRosterIds }, leagueId: input.leagueId } })
-  let acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && isRosterManagedBy(r, input.userId))
-  if (!acceptingRoster) {
+  const chimmy = input.chimmyForRosterId
+    ? await resolveChimmyActor(input.leagueId, input.chimmyForRosterId, input.userId)
+    : null
+  // Chimmy answers as the team itself, never as whatever else the commissioner runs in this league.
+  let acceptingRoster = input.chimmyForRosterId
+    ? (chimmy ? participants.find((r) => r.id === input.chimmyForRosterId && r.id !== trade.proposerRosterId) : undefined)
+    : participants.find((r) => r.id !== trade.proposerRosterId && isRosterManagedBy(r, input.userId))
+  if (!acceptingRoster && !input.chimmyForRosterId) {
     const acceptingIdentityIds = await managedPlatformIds(input.leagueId, input.userId)
     acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && acceptingIdentityIds.has(r.platformUserId))
   }
-  if (!acceptingRoster) {
+  if (!acceptingRoster && !input.chimmyForRosterId) {
     const coOwnerRosterId = await acceptedCoOwnerRosterId(input.leagueId, input.userId)
     acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && r.id === coOwnerRosterId)
   }
   if (!acceptingRoster) throw new Error('Only a participating manager can accept')
+  // The DM line names who answered: Chimmy for a team it runs, never the commissioner behind it.
+  const dmActor = chimmy ? { actorName: 'Chimmy' } : { actorUserId: input.userId }
 
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   if (!league) throw new Error('League not found')
@@ -957,7 +1011,7 @@ export async function acceptAfLeagueTrade(input: {
   const survivorHoldCopy = governanceCopy((league as { language?: string | null } | null)?.language)
 
   const life = await assertLifecycleActionAllowed(input.leagueId, 'trade_act', input.userId, {
-    isElevatedCommissioner: await isElevatedCommissioner(input.leagueId, input.userId),
+    isElevatedCommissioner: chimmy ? false : await isElevatedCommissioner(input.leagueId, input.userId),
   })
   if (!life.ok) throw lifecycleGateThrowable(life.err)
 
@@ -978,7 +1032,7 @@ export async function acceptAfLeagueTrade(input: {
       type: 'trade_accepted',
       title: 'Your trade offer was accepted',
     })
-    announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', actorUserId: input.userId })
+    announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', ...dmActor })
     announceTradeInLeagueChat(trade.id)
     return { status: 'processed' }
   }
@@ -1017,7 +1071,7 @@ export async function acceptAfLeagueTrade(input: {
     announceTradeStatusInDm({
       tradeId: trade.id,
       status: 'accepted',
-      actorUserId: input.userId,
+      ...dmActor,
       detail: survivorHeld
         ? survivorHoldCopy.tradeHeldForCommissioner
         : held
@@ -1065,7 +1119,7 @@ export async function acceptAfLeagueTrade(input: {
     announceTradeStatusInDm({
       tradeId: trade.id,
       status: 'accepted',
-      actorUserId: input.userId,
+      ...dmActor,
       detail: 'The league veto window is open before it processes.',
     })
     announceTradeInLeagueChat(trade.id, 'Accepted. The league veto window is open before it processes.')
@@ -1080,7 +1134,7 @@ export async function acceptAfLeagueTrade(input: {
     type: 'trade_accepted',
     title: 'Your trade offer was accepted',
   })
-  announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', actorUserId: input.userId })
+  announceTradeStatusInDm({ tradeId: trade.id, status: 'accepted', ...dmActor })
   announceTradeInLeagueChat(trade.id)
   return { status: 'processed' }
 }
@@ -1128,6 +1182,7 @@ export async function finalizeAfLeagueTradeProcessing(input: {
   }
 
   const league = await prisma.league.findUniqueOrThrow({ where: { id: trade.leagueId } })
+  await assertTradeTeamsSwitched(trade.leagueId, league.platform, participantRosterIds)
   // Survivor: a free-trade token this trade relies on is spent once the trade has executed (below).
   // Read BEFORE the assets move, while the played-player facts still describe the trade. Survivor only.
   const survivorBypass = league.survivorMode
@@ -1363,7 +1418,15 @@ export async function commissionerAfTradeDecision(input: {
   await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId, auditMetadata, commissionerApproved: true })
 }
 
-export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {
+export async function rejectAfLeagueTrade(input: {
+  tradeId: string
+  leagueId: string
+  userId: string
+  /** SERVER-ONLY: Chimmy declines for this team, which it runs (./chimmyActor.ts). Routes never set it. */
+  chimmyForRosterId?: string | null
+  /** Chimmy's one-line reason, shown under its decline in the managers' DM. */
+  note?: string | null
+}): Promise<void> {
   const trade = await prisma.afLeagueTrade.findFirst({
     where: { id: input.tradeId, leagueId: input.leagueId },
   })
@@ -1378,10 +1441,16 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
     trade.receiverRosterId,
     ...(tradeWithItems?.items ?? []).flatMap((i) => [i.fromRosterId, i.toRosterId]),
   ])]
-  let isRecv = Boolean(await prisma.roster.findFirst({
+  const chimmy = input.chimmyForRosterId
+    && input.chimmyForRosterId !== trade.proposerRosterId
+    && participantIds.includes(input.chimmyForRosterId)
+    ? await resolveChimmyActor(input.leagueId, input.chimmyForRosterId, input.userId)
+    : null
+  if (input.chimmyForRosterId && !chimmy) throw new Error('Chimmy is not running that team')
+  let isRecv = Boolean(chimmy) || Boolean(await prisma.roster.findFirst({
     where: { id: { in: participantIds.filter((id) => id !== trade.proposerRosterId) }, platformUserId: input.userId },
   }))
-  if (!isRecv) {
+  if (!isRecv && !chimmy) {
     const rejectingIdentityIds = await managedPlatformIds(input.leagueId, input.userId)
     const receivingRosters = await prisma.roster.findMany({
       where: { id: { in: participantIds.filter((id) => id !== trade.proposerRosterId) }, leagueId: input.leagueId },
@@ -1416,7 +1485,9 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
   })
   // A commissioner who is not a party is named by role, not by account.
   announceTradeStatusInDm(
-    isRecv
+    chimmy
+      ? { tradeId: trade.id, status: 'rejected', actorName: 'Chimmy', detail: input.note ?? null }
+      : isRecv
       ? { tradeId: trade.id, status: 'rejected', actorUserId: input.userId }
       : { tradeId: trade.id, status: 'rejected', actorName: 'The commissioner' },
   )
@@ -1521,7 +1592,7 @@ export async function expireAfLeagueTradeAtDeadline(input: {
     })
     const raw = rosters
       .map((r) => r.platformUserId)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !id.startsWith('orphan-'))
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !isSeatPlaceholderUserId(id))
     const userIds = [...new Set(await Promise.all(raw.map(deliverableUserId)))]
     if (userIds.length > 0) {
       const { ingest, tradeEvent } = await import('@/lib/notification-engine')
@@ -1620,7 +1691,7 @@ async function notifyTradePartiesOfVeto(input: { leagueId: string; tradeId: stri
     })
     const raw = rosters
       .map((r) => r.platformUserId)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !id.startsWith('orphan-'))
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !isSeatPlaceholderUserId(id))
     const userIds = [...new Set(await Promise.all(raw.map(deliverableUserId)))]
     if (userIds.length === 0) return
     const { ingest, tradeEvent } = await import('@/lib/notification-engine')

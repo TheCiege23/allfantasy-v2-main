@@ -38,12 +38,12 @@ export async function loadWeekLineups(
 
   const links = await db.roster.findMany({
     where: { redraftRosterId: { in: [...args.redraftRosterIds] } },
-    select: { id: true, redraftRosterId: true, league: { select: { platform: true } } },
+    select: { id: true, redraftRosterId: true, league: { select: { platform: true, settings: true } } },
   })
   const redraftByAf = new Map<string, string>()
   for (const l of links) {
     if (!l.redraftRosterId) continue
-    if (resolveWriteAuthority(l.league?.platform) !== 'NATIVE') continue
+    if (resolveWriteAuthority({ platform: l.league?.platform, settings: l.league?.settings ?? null }) !== 'NATIVE') continue
     redraftByAf.set(l.id, l.redraftRosterId)
   }
   if (redraftByAf.size === 0) return out

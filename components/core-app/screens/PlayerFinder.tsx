@@ -11,7 +11,8 @@ import '@/components/core-app/af-player-finder-redesign.css'
 import '@/components/core-app/player-finder/af-finder-guide.css'
 import { finderGuideMessages } from '@/lib/core-app/messages/finderGuide'
 import { leagueCountOf } from '@/lib/core-app/finderGuide'
-import { messagesFor } from '@/lib/i18n/messages'
+import { defineMessages, messagesFor } from '@/lib/i18n/messages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { DynastyMarkersScope, DynastyNameLine } from '@/components/core-app/screens/DynastyRosterMarkers'
 import { markerKeyFor, type DynastyRosterMarker } from '@/lib/core-app/dynastyRosterMarkers'
 import { PlayerVerdict } from '@/components/core-app/player-finder/PlayerVerdict'
@@ -468,6 +469,12 @@ function rowAction(r: LeagueRow, last: string, t: FinderCopy, language: string):
   )
 }
 
+/* 2026-11-20: what the player's "More detail" fold holds, named in a few words (MoreDetail `note`). */
+const finderMoreDetailMessages = defineMessages({
+  en: { note: 'Market value · this season · season stats' },
+  es: { note: 'Valor de mercado · esta temporada · estadísticas por temporada' },
+})
+
 export function PlayerFinder({
   query,
   sport = null,
@@ -509,6 +516,7 @@ export function PlayerFinder({
   const { language } = useOptionalLanguage()
   const t = finderCopy(language)
   const g = messagesFor(finderGuideMessages, language)
+  const moreDetailCopy = messagesFor(finderMoreDetailMessages, language)
   /* The home's headline: how many of your starters may not play, when the game-day read is on the page. */
   const flaggedStarters = triage?.available ? triage.data.rows.length : null
   const homeTitle = flaggedStarters == null ? g.homeTitle : flaggedStarters > 0 ? g.homeFlagged(flaggedStarters) : g.homeClear
@@ -962,7 +970,7 @@ export function PlayerFinder({
           <header className="af-pf-home-head">
             {/* What the page is for (2026-11-13 guide): game-day alerts land here; search by name or team. */}
             <h2 className="af-display af-pf-home-title" data-testid="pf-home-title">{homeTitle}</h2>
-            <p className="af-pf-home-sub">{g.homeSub}</p>
+            {/* No sub-line (2026-11-24, the simplify pass): the search box right above says what it does. */}
           </header>
         ) : null}
         {/* Push reaches 2 of 42 managers (2026-10-10); ask here on the days the game-day banner does not. */}
@@ -1528,13 +1536,6 @@ export function PlayerFinder({
             */}
             {signedIn ? <FreeAgentBids data={freeAgentBids} playerName={detail.player.name} access={depthAccess} /> : null}
 
-            {/* ── Market value, last 30 days ──: facts free; the buy-low / sell-high call is AF Pro. */}
-            {valueTrend && valueTrend.books.length > 0 ? (
-              <PhoneFold title={ac.foldValue}>
-                <ValueTrend data={valueTrend} access={depthAccess} />
-              </PhoneFold>
-            ) : null}
-
             {/* ── Next man up ──: his depth chart, and where each player around him is in your leagues (free). */}
             {depthChart && depthChart.entries.length >= 2 ? (
               <PhoneFold title={ac.foldDepth}>
@@ -1550,13 +1551,6 @@ export function PlayerFinder({
             {signedIn && whoStartsHim ? (
               <PhoneFold title={ac.foldWhoStarts}>
                 <WhoStartsHim data={whoStartsHim} playerName={detail.player.name} access={depthAccess} />
-              </PhoneFold>
-            ) : null}
-
-            {/* ── This season: projected against scored, week by week (Phase 1) ── */}
-            {depth ? (
-              <PhoneFold title={ac.foldSeason}>
-                <PlayerSeasonCard state={depth.season} name={detail.player.name} />
               </PhoneFold>
             ) : null}
 
@@ -1578,27 +1572,54 @@ export function PlayerFinder({
               </div>
             ) : null}
 
-            {/* ── Season stats ──────────────────────────────────────── */}
-            <section className="af-pf-block af-pf-d-only">
-              <h3 className="af-label">{t.seasonStatistics}</h3>
-              {detail.seasonStats.available ? (
-                <ul className="af-pf-seasons">
-                  {detail.seasonStats.data.map((s) => (
-                    <li key={s.season} className="af-pf-season">
-                      <span className="af-num af-pf-season-year">{s.season}</span>
-                      <span className="af-pf-season-stats">
-                        {Object.entries(s.stats)
-                          .slice(0, 6)
-                          .map(([k, v]) => `${k} ${v}`)
-                          .join(' · ')}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <Unavailable reason={why(detail.seasonStats.reason)} />
-              )}
-            </section>
+            {/*
+              2026-11-20 — the page's one "More detail" fold (MoreDetail.tsx). The player, his leagues, the
+              tiles, injury, next game and news, free-agent bids, the depth chart, who'd start him and the
+              recommended moves stay on screen; the 30-day market value chart, the week-by-week season card
+              and the season-stat history are reference, not the next move, so they moved in here unchanged.
+            */}
+            {/* With no value chart and no season card, only the desktop-only stats are inside: skip the fold on a phone. */}
+            <MoreDetail
+              note={moreDetailCopy.note}
+              testId="finder-more"
+              className={(valueTrend && valueTrend.books.length > 0) || depth ? undefined : 'af-pf-d-only'}
+            >
+              {/* ── Market value, last 30 days ──: facts free; the buy-low / sell-high call is AF Pro. */}
+              {valueTrend && valueTrend.books.length > 0 ? (
+                <PhoneFold title={ac.foldValue}>
+                  <ValueTrend data={valueTrend} access={depthAccess} />
+                </PhoneFold>
+              ) : null}
+
+              {/* ── This season: projected against scored, week by week (Phase 1) ── */}
+              {depth ? (
+                <PhoneFold title={ac.foldSeason}>
+                  <PlayerSeasonCard state={depth.season} name={detail.player.name} />
+                </PhoneFold>
+              ) : null}
+
+              {/* ── Season stats ──────────────────────────────────────── */}
+              <section className="af-pf-block af-pf-d-only">
+                <h3 className="af-label">{t.seasonStatistics}</h3>
+                {detail.seasonStats.available ? (
+                  <ul className="af-pf-seasons">
+                    {detail.seasonStats.data.map((s) => (
+                      <li key={s.season} className="af-pf-season">
+                        <span className="af-num af-pf-season-year">{s.season}</span>
+                        <span className="af-pf-season-stats">
+                          {Object.entries(s.stats)
+                            .slice(0, 6)
+                            .map(([k, v]) => `${k} ${v}`)
+                            .join(' · ')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Unavailable reason={why(detail.seasonStats.reason)} />
+                )}
+              </section>
+            </MoreDetail>
           </section>
         ) : myPlayersHome ? null : (
           <section className="af-card af-pf-detail af-pf-detail--empty">

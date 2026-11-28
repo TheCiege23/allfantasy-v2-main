@@ -164,7 +164,12 @@ describe('DraftTopBar strings keep their English and gain Spanish', () => {
     expect(formatTimerSummary(null, en)).toBe('Untimed picks')
     expect(formatTimerSummary(30, en)).toBe('30 Seconds Per Pick')
     expect(formatTimerSummary(60, en)).toBe('1 Minute Per Pick')
-    expect(formatTimerSummary(90, en)).toBe('2 Minutes Per Pick')
+    // Exact units only: a 90-second clock is not "2 Minutes" (2026-11-25).
+    expect(formatTimerSummary(90, en)).toBe('90 Seconds Per Pick')
+    expect(formatTimerSummary(120, en)).toBe('2 Minutes Per Pick')
+    expect(formatTimerSummary(5400, en)).toBe('90 Minutes Per Pick')
+    expect(formatTimerSummary(8 * 3600, en)).toBe('8 Hours Per Pick')
+    expect(formatTimerSummary(36 * 3600, en)).toBe('36 Hours Per Pick')
     expect(formatTimerSummary(3600, en)).toBe('1 Hour Per Pick')
     expect(formatTimerSummary(2 * 86400, en)).toBe('2 Days Per Pick')
     expect(formatTimerSummary(2 * 86400, es)).toBe('2 días por selección')
@@ -289,8 +294,10 @@ describe('wiring in the draft room', () => {
     expect(client).toMatch(/surfaceVariant=\{presentationVariant === 'redraft_snake' \? 'redraft_snake' : isDynasty \? 'dynasty' : 'default'\}/)
   })
 
-  it('the round-1 queue and overlay share one gate', () => {
-    expect(client.match(/roomAnnouncesRoundOne\(\{ presentationVariant, isDynasty, draftType: session\??\.draftType \}\)/g)).toHaveLength(2)
+  it('the round-1 queue, the overlay and the last-pick notice share one gate', () => {
+    // Three uses of the SAME call: the queue, the overlay, and DraftLastPickToast's skipRoundOne
+    // (it stays quiet for round 1 exactly when the round-1 card is the one announcing it).
+    expect(client.match(/roomAnnouncesRoundOne\(\{ presentationVariant, isDynasty, draftType: session\??\.draftType \}\)/g)).toHaveLength(3)
   })
 
   it('reads the season the settings route already returns', () => {

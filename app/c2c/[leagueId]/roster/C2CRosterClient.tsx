@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
-import { DevyPlayerCard } from '@/app/devy/components/DevyPlayerCard'
 import { C2CScoreSummaryBar } from '@/app/c2c/components/C2CScoreSummaryBar'
 import { C2CCampusPlayerCard } from '@/app/c2c/components/C2CCampusPlayerCard'
 import { C2CCantonPlayerCard } from '@/app/c2c/components/C2CCantonPlayerCard'
@@ -37,7 +36,8 @@ export function C2CRosterClient({
   const [cfg, setCfg] = useState<C2CConfigClient | null>(null)
   const [, setRosterId] = useState<string | null>(null)
   const [buckets, setBuckets] = useState<RosterBuckets | null>(null)
-  const [seasonId, setSeasonId] = useState<string | null>(null)
+  /** This week's stored points by playerId (only players with a scored row). */
+  const [points, setPoints] = useState<Record<string, number>>({})
   const [week, setWeek] = useState(1)
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear())
   const [scores, setScores] = useState<{
@@ -112,7 +112,6 @@ export function C2CRosterClient({
       }
       const season = sj.season
       if (!season?.id) throw new Error('Season missing')
-      setSeasonId(season.id)
       setWeek(Math.max(1, season.currentWeek ?? 1))
       setSeasonYear(season.season)
       const roster = season.rosters?.find((r) => r.ownerId === userId)
@@ -120,12 +119,13 @@ export function C2CRosterClient({
       setRosterId(roster.id)
 
       const rr = await fetch(
-        `/api/c2c/roster?leagueId=${encodeURIComponent(leagueId)}&rosterId=${encodeURIComponent(roster.id)}`,
+        `/api/c2c/roster?leagueId=${encodeURIComponent(leagueId)}&rosterId=${encodeURIComponent(roster.id)}&week=${Math.max(1, season.currentWeek ?? 1)}&season=${season.season}`,
         { credentials: 'include' },
       )
       if (!rr.ok) throw new Error('Roster fetch failed')
-      const rj = (await rr.json()) as { roster: RosterBuckets }
+      const rj = (await rr.json()) as { roster: RosterBuckets; points?: Record<string, number> }
       setBuckets(rj.roster)
+      setPoints(rj.points ?? {})
 
       const mu = await fetch(
         `/api/redraft/matchup?seasonId=${encodeURIComponent(season.id)}&week=${encodeURIComponent(String(Math.max(1, season.currentWeek ?? 1)))}`,
@@ -163,18 +163,18 @@ export function C2CRosterClient({
 
   const campusDevyNote = cfg?.devyScoringEnabled
     ? 'Devy eligible for campus slots when moved to a campus starter.'
-    : 'No scoring in devy — prospect rights only.'
+    : 'Prospect rights only — devy players do not score.'
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10 text-center text-[13px] text-white/45" data-testid="c2c-roster-loading">
+      <div className="mx-auto max-w-6xl px-4 py-10 text-center text-[13px] text-[var(--muted)]" data-testid="c2c-roster-loading">
         Loading C2C roster…
       </div>
     )
   }
   if (err || !cfg || !buckets) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10 text-center text-[13px] text-red-300/90" data-testid="c2c-roster-error">
+      <div className="mx-auto max-w-6xl px-4 py-10 text-center text-[13px] text-[var(--bad)]" data-testid="c2c-roster-error">
         {err ?? 'Unable to load roster.'}
       </div>
     )
@@ -182,70 +182,87 @@ export function C2CRosterClient({
 
   const showCampus = viewMode === 'full' || viewMode === 'campus'
   const showCanton = viewMode === 'full' || viewMode === 'canton'
+  /** The Campus and Canton views list only that side's players (2026-11-23: Campus listed a Canton bench WR, the taxi and IR). */
+  const sideMatches = (p: C2CPlayerRow) => viewMode === 'full' || p.playerSide === viewMode
+  const bench = buckets.bench.filter(sideMatches)
+  const taxi = buckets.taxi.filter(sideMatches)
+  const devy = viewMode === 'canton' ? [] : buckets.devy
+  const ir = buckets.ir.filter(sideMatches)
+  const open = (p: C2CPlayerRow) => setModal({ open: true, player: p, side: p.playerSide === 'campus' ? 'campus' : 'canton' })
+  const card = (p: C2CPlayerRow, showSide = false) =>
+    p.playerSide === 'campus' ? (
+      <C2CCampusPlayerCard key={p.playerId} player={p} pointsThisWeek={points[p.playerId] ?? null} showSide={showSide} onOpen={() => open(p)} />
+    ) : (
+      <C2CCantonPlayerCard key={p.playerId} player={p} pointsThisWeek={points[p.playerId] ?? null} showSide={showSide} onOpen={() => open(p)} />
+    )
+  /** "campus_RB1" → "RB1": the slot already names the position, so "RB · RB1" said it twice. */
+  const slotLabel = (slot: string) => slot.replace(/^[^_]+_/, '')
+  const starterGrid = 'grid grid-cols-1 gap-2 min-[520px]:grid-cols-2 lg:grid-cols-4'
+  const empty = <div className="rounded-xl border border-dashed border-[var(--line2)] py-5 text-center text-[12px] text-[var(--muted)]">Empty</div>
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-12 pt-4">
-      <div className="sticky top-14 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.07] bg-[#0c0c1e]/95 p-1 backdrop-blur md:top-0">
+    <div className="mx-auto max-w-6xl px-4 pb-12 pt-4">
+      <div className="sticky top-14 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-1 backdrop-blur md:top-0">
         <div className="flex min-w-0 flex-1 gap-1">
           {(['full', 'campus', 'canton'] as const).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => setViewMode(m)}
-              className={`flex-1 rounded-lg px-2 py-2 text-[11px] font-bold uppercase tracking-wide ${
-                viewMode === m ? 'bg-violet-600/30 text-white' : 'text-white/45 hover:bg-white/[0.04]'
+              aria-pressed={viewMode === m}
+              className={`min-h-[40px] flex-1 rounded-lg px-2 text-[12px] font-bold ${
+                viewMode === m ? 'bg-[var(--accent-soft)] text-[var(--text)]' : 'text-[var(--muted)] hover:bg-[var(--chip)]'
               }`}
               data-testid={`c2c-view-${m}`}
             >
-              {m === 'full' ? 'Full' : m === 'campus' ? 'Campus' : 'Canton'}
+              {m === 'full' ? 'Full roster' : m === 'campus' ? 'Campus' : 'Canton'}
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={() => void loadBalance()}
-          disabled={!hasAfSub || balanceLoading}
-          className="shrink-0 rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-40"
-          data-testid="c2c-roster-balance"
-        >
-          {balanceLoading ? '…' : 'Roster Balance'}
-        </button>
+        {hasAfSub ? (
+          <button
+            type="button"
+            onClick={() => void loadBalance()}
+            disabled={balanceLoading}
+            className="min-h-[40px] shrink-0 rounded-lg px-3 text-[12px] font-bold text-[var(--accent)] hover:bg-[var(--chip)] disabled:opacity-50"
+            data-testid="c2c-roster-balance"
+          >
+            {balanceLoading ? 'Checking…' : 'Roster balance'}
+          </button>
+        ) : null}
       </div>
 
       {balanceOpen ? (
-        <div
-          className="mb-4 rounded-xl border border-white/[0.08] bg-[#0a1228]/90 p-4 text-[12px] text-white/80"
-          data-testid="c2c-roster-balance-panel"
-        >
-          {balanceErr ? <p className="text-amber-200/90">{balanceErr}</p> : null}
-          {balanceLoading ? <p className="text-white/55">Loading balance…</p> : null}
+        <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4 text-[13px] text-[var(--text2)]" data-testid="c2c-roster-balance-panel">
+          {balanceErr ? <p className="text-[var(--c2c-amber)]">{balanceErr}</p> : null}
+          {balanceLoading ? <p className="text-[var(--muted)]">Checking your balance…</p> : null}
           {balanceReport ? (
             <div className="space-y-2">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Roster balance</p>
+              <p className="text-[12px] font-bold text-[var(--muted)]">Roster balance</p>
               <p>
-                <span className="text-white/45">Campus side: </span>
-                <span className="font-semibold text-violet-200">{balanceReport.campusSideGrade}</span>
-                <span className="text-white/45"> · Canton side: </span>
-                <span className="font-semibold text-blue-200">{balanceReport.cantonSideGrade}</span>
+                <span className="text-[var(--muted)]">Campus side: </span>
+                <span className="font-semibold text-[var(--campus)]">{balanceReport.campusSideGrade}</span>
+                <span className="text-[var(--muted)]"> · Canton side: </span>
+                <span className="font-semibold text-[var(--canton)]">{balanceReport.cantonSideGrade}</span>
               </p>
               <p>
-                <span className="text-white/45">Balance score: </span>
+                <span className="text-[var(--muted)]">Balance score: </span>
                 {balanceReport.balanceScore}
-                <span className="text-white/45"> · Weaker side: </span>
+                <span className="text-[var(--muted)]"> · Weaker side: </span>
                 {balanceReport.weakSide}
               </p>
               <p>
-                <span className="text-white/45">Pipeline: </span>
+                <span className="text-[var(--muted)]">Pipeline: </span>
                 {balanceReport.pipelineHealth}
               </p>
-              <ul className="list-disc space-y-1 pl-4 text-white/70">
+              <ul className="list-disc space-y-1 pl-4">
                 {balanceReport.recommendations.map((r) => (
                   <li key={r}>{r}</li>
                 ))}
               </ul>
             </div>
           ) : !balanceErr && !balanceLoading ? (
-            <p className="text-white/45">No report yet.</p>
+            <p className="text-[var(--muted)]">No report yet.</p>
           ) : null}
         </div>
       ) : null}
@@ -262,28 +279,17 @@ export function C2CRosterClient({
 
       {showCampus ? (
         <section className="mt-8" data-testid="c2c-campus-section">
-          <div className="sticky top-28 z-[5] mb-3 rounded-lg border border-violet-500/30 bg-violet-950/40 px-3 py-2 md:top-12">
-            <h2 className="text-[12px] font-bold uppercase tracking-wide text-violet-200">🎓 Campus starters</h2>
-            <p className="text-[11px] text-violet-200/70">Points count toward team score</p>
+          <div className="mb-3 rounded-lg border border-[var(--campus-line)] bg-[var(--campus-soft)] px-3 py-2">
+            <h2 className="text-[13px] font-bold text-[var(--campus)]">🎓 Campus starters</h2>
+            <p className="text-[12px] text-[var(--text2)]">These count toward your score.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className={starterGrid}>
             {slots.campus.map((slot, i) => {
               const p = buckets.campusStarters[i] ?? null
               return (
-                <div key={slot.slot} className="rounded-xl border border-violet-500/20 bg-black/20 p-2">
-                  <p className="text-[11px] font-bold uppercase text-violet-300/80">
-                    {slot.position} · {slot.slot.replace(/^[^_]+_/, '')}
-                  </p>
-                  {p ? (
-                    <C2CCampusPlayerCard
-                      player={p}
-                      onOpen={() => setModal({ open: true, player: p, side: 'campus' })}
-                    />
-                  ) : (
-                    <div className="mt-2 rounded-lg border border-dashed border-white/[0.08] py-6 text-center text-[11px] text-white/35">
-                      Empty
-                    </div>
-                  )}
+                <div key={slot.slot}>
+                  <p className="mb-1 text-[11px] font-bold text-[var(--campus)]">{slotLabel(slot.slot)}</p>
+                  {p ? card(p) : empty}
                 </div>
               )
             })}
@@ -293,28 +299,17 @@ export function C2CRosterClient({
 
       {showCanton ? (
         <section className="mt-10" data-testid="c2c-canton-section">
-          <div className="sticky top-28 z-[5] mb-3 rounded-lg border border-blue-500/30 bg-blue-950/40 px-3 py-2 md:top-12">
-            <h2 className="text-[12px] font-bold uppercase tracking-wide text-blue-200">🏙 Canton starters</h2>
-            <p className="text-[11px] text-blue-200/70">Points count toward team score</p>
+          <div className="mb-3 rounded-lg border border-[var(--canton-line)] bg-[var(--canton-soft)] px-3 py-2">
+            <h2 className="text-[13px] font-bold text-[var(--canton)]">🏙 Canton starters</h2>
+            <p className="text-[12px] text-[var(--text2)]">These count toward your score.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className={starterGrid}>
             {slots.canton.map((slot, i) => {
               const p = buckets.cantonStarters[i] ?? null
               return (
-                <div key={slot.slot} className="rounded-xl border border-blue-500/20 bg-black/20 p-2">
-                  <p className="text-[11px] font-bold uppercase text-blue-300/80">
-                    {slot.position} · {slot.slot.replace(/^[^_]+_/, '')}
-                  </p>
-                  {p ? (
-                    <C2CCantonPlayerCard
-                      player={p}
-                      onOpen={() => setModal({ open: true, player: p, side: 'canton' })}
-                    />
-                  ) : (
-                    <div className="mt-2 rounded-lg border border-dashed border-white/[0.08] py-6 text-center text-[11px] text-white/35">
-                      Empty
-                    </div>
-                  )}
+                <div key={slot.slot}>
+                  <p className="mb-1 text-[11px] font-bold text-[var(--canton)]">{slotLabel(slot.slot)}</p>
+                  {p ? card(p) : empty}
                 </div>
               )
             })}
@@ -322,91 +317,46 @@ export function C2CRosterClient({
         </section>
       ) : null}
 
-      <section className="mt-10">
-        <button
-          type="button"
-          onClick={() => setBenchBannerOpen((v) => !v)}
-          className="flex w-full items-center justify-between rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-left text-[12px] font-semibold text-amber-100"
-          data-testid="c2c-bench-banner"
-        >
-          <span>Bench — points display only, do not count</span>
-          <span className="text-white/50">{benchBannerOpen ? '−' : '+'}</span>
-        </button>
-        {benchBannerOpen ? (
-          <div className="mt-2 space-y-2">
-            {buckets.bench.map((p) => (
-              <div
-                key={p.playerId}
-                className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-black/20 p-2 opacity-90"
-              >
-                <span className="text-[11px] font-bold text-white/35">{p.playerSide === 'campus' ? '🎓' : '🏙'}</span>
-                {p.playerSide === 'campus' ? (
-                  <C2CCampusPlayerCard compact player={p} onOpen={() => setModal({ open: true, player: p, side: 'campus' })} />
-                ) : (
-                  <C2CCantonPlayerCard compact player={p} onOpen={() => setModal({ open: true, player: p, side: 'canton' })} />
-                )}
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="mt-8 rounded-xl border border-amber-500/25 bg-[color:var(--c2c-panel)] p-3" data-testid="c2c-taxi-section">
-        <h3 className="text-[11px] font-bold uppercase text-amber-200/90">Taxi — points do not count</h3>
-        <div className="mt-2 space-y-2">
-          {buckets.taxi.map((p) => (
-            <DevyPlayerCard
-              key={p.playerId}
-              variant="taxi"
-              playerId={p.playerId}
-              name={p.playerName}
-              position={p.position}
-              subtitle={p.nflNbaTeam ?? p.school ?? undefined}
-              schoolLogoUrl={p.schoolLogoUrl}
-              classYear={p.classYear}
-              onOpen={() => setModal({ open: true, player: p, side: p.playerSide === 'campus' ? 'campus' : 'canton' })}
-            />
-          ))}
-          {buckets.taxi.length === 0 ? <p className="text-[11px] text-white/35">No taxi players</p> : null}
-        </div>
-      </section>
-
-      <section className="mt-8 rounded-xl border border-violet-500/25 bg-violet-950/20 p-3" data-testid="c2c-devy-section">
-        <h3 className="text-[11px] font-bold uppercase text-violet-200">Devy</h3>
-        <p className="mt-1 text-[11px] text-violet-200/70">{campusDevyNote}</p>
-        <div className="mt-2 space-y-2">
-          {buckets.devy.map((p) => (
-            <DevyPlayerCard
-              key={p.playerId}
-              variant="devy"
-              playerId={p.playerId}
-              name={p.playerName}
-              position={p.position}
-              schoolLogoUrl={p.schoolLogoUrl}
-              classYear={p.classYear}
-              onOpen={() => setModal({ open: true, player: p, side: 'campus' })}
-            />
-          ))}
-          {buckets.devy.length === 0 ? <p className="text-[11px] text-white/35">No devy stash</p> : null}
-        </div>
-      </section>
-
-      {buckets.ir.length > 0 ? (
-        <section className="mt-6">
-          <h3 className="text-[11px] font-bold uppercase text-white/45">IR</h3>
-          <div className="mt-2 space-y-2 opacity-80">
-            {buckets.ir.map((p) => (
-              <p key={p.playerId} className="text-[12px] text-white/55">
-                {p.playerName} · {p.position}
-              </p>
-            ))}
-          </div>
+      {bench.length ? (
+        <section className="mt-10">
+          <button
+            type="button"
+            onClick={() => setBenchBannerOpen((v) => !v)}
+            aria-expanded={benchBannerOpen}
+            className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 text-left text-[13px] font-semibold text-[var(--text)]"
+            data-testid="c2c-bench-banner"
+          >
+            <span>Bench <span className="font-normal text-[var(--muted)]">· points don’t count</span></span>
+            <span className="text-[var(--muted)]">{benchBannerOpen ? '−' : '+'}</span>
+          </button>
+          {benchBannerOpen ? <div className={`mt-2 ${starterGrid}`}>{bench.map((p) => card(p, viewMode === 'full'))}</div> : null}
         </section>
       ) : null}
 
-      <p className="mt-8 text-center text-[11px] text-white/30">
-        Week {week} · Season {seasonYear}
-        {seasonId ? ` · ${seasonId.slice(0, 8)}…` : ''}
+      {taxi.length ? (
+        <section className="mt-8" data-testid="c2c-taxi-section">
+          <h3 className="mb-2 text-[13px] font-bold text-[var(--c2c-amber)]">Taxi squad <span className="font-normal text-[var(--muted)]">· points don’t count</span></h3>
+          <div className={starterGrid}>{taxi.map((p) => card(p))}</div>
+        </section>
+      ) : null}
+
+      {devy.length ? (
+        <section className="mt-8" data-testid="c2c-devy-section">
+          <h3 className="text-[13px] font-bold text-[var(--campus)]">Devy</h3>
+          <p className="mb-2 text-[12px] text-[var(--muted)]">{campusDevyNote}</p>
+          <div className={starterGrid}>{devy.map((p) => card(p))}</div>
+        </section>
+      ) : null}
+
+      {ir.length ? (
+        <section className="mt-8" data-testid="c2c-ir-section">
+          <h3 className="mb-2 text-[13px] font-bold text-[var(--text)]">Injured reserve</h3>
+          <div className={starterGrid}>{ir.map((p) => card(p))}</div>
+        </section>
+      ) : null}
+
+      <p className="mt-8 text-center text-[12px] text-[var(--faint)]">
+        Week {week} · {seasonYear} season
       </p>
 
       <C2CPlayerModal

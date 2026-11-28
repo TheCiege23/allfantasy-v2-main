@@ -28,6 +28,7 @@
  */
 
 import { importedPlatformLabel, isNativePlatform } from '@/lib/dashboard/platform-label'
+import { hasTeamSwitched, isOfficialOnAllFantasy } from './switching/switchingLeague'
 
 export type WriteAuthority = 'NATIVE' | 'SHADOW' | 'CONNECTED'
 
@@ -63,15 +64,64 @@ export const WRITE_BACK_CONNECTED_PLATFORMS: ReadonlySet<string> = new Set<strin
  * a malformed imported row to NATIVE would tell a manager their change reached ESPN when it
  * did not. Over-disclose rather than over-claim.
  */
-export function resolveWriteAuthority(platform: string | null | undefined): WriteAuthority {
+export function resolveWriteAuthority(league: LeagueAuthoritySource): WriteAuthority {
+  /*
+   * A caller past the types (an `any`, plain JS, an old test) may still pass the bare platform string,
+   * the pre-switching signature. Read it as a platform: `undefined` would resolve to NATIVE and tell a
+   * manager their change reached Sleeper — the over-claim direction this module exists to prevent.
+   */
+  const raw = league as unknown
+  if (raw == null || typeof raw === 'string') return resolveWriteAuthority({ platform: raw as string | null, settings: null })
+  const platform = league.platform
   if (isNativePlatform(platform)) return 'NATIVE'
+  // An imported league the commissioner made official on AllFantasy (lib/league/switching).
+  if (isOfficialOnAllFantasy(league.settings)) return 'NATIVE'
   const p = (platform ?? '').trim().toLowerCase()
   return WRITE_BACK_CONNECTED_PLATFORMS.has(p) ? 'CONNECTED' : 'SHADOW'
 }
 
 /** True when writes stay inside AllFantasy and must say so. */
-export function isShadowLeague(platform: string | null | undefined): boolean {
-  return resolveWriteAuthority(platform) === 'SHADOW'
+export function isShadowLeague(league: LeagueAuthoritySource): boolean {
+  return resolveWriteAuthority(league) === 'SHADOW'
+}
+
+/**
+ * What authority is read from: the league's platform AND its settings, because an imported league can
+ * be made official on AllFantasy (`League.settings.switching`). Both are required on purpose, so a
+ * caller that never selected `settings` fails to compile rather than silently reading every switched
+ * league as a shadow. Pass `settings: null` only where no league row exists.
+ */
+export type LeagueAuthoritySource = { platform?: string | null; settings: unknown }
+
+/**
+ * ⚠ ONLY FOR A SURFACE THAT HAS NOT LOADED `settings` (a badge given just a platform prop). It reads an
+ * imported league as NOT official, which is what every league was before switching existed. Greppable on
+ * purpose: each caller is a place still to wire `settings` into before a switched league looks right there.
+ */
+/**
+ * The same bare-string tolerance as `resolveWriteAuthority`, for any helper that reads `.platform` itself
+ * (the copy builders here, `leagueWorkspaceMode`, `buildStagedWriteAuthority`).
+ */
+export function asAuthoritySource(league: LeagueAuthoritySource): LeagueAuthoritySource {
+  const raw = league as unknown
+  return raw == null || typeof raw === 'string' ? { platform: raw as string | null, settings: null } : league
+}
+
+export function platformOnlyAuthority(platform: string | null | undefined): { platform: string | null | undefined; settings: null } {
+  return { platform, settings: null }
+}
+
+/**
+ * Who is in charge of ONE team's moves. `MIRRORED`: the league is official on AllFantasy but this
+ * team's manager has not switched, so the team is copied in from the old platform and its moves happen
+ * there. A write to it here would be undone by the next copy, so callers refuse it.
+ */
+export type TeamWriteAuthority = WriteAuthority | 'MIRRORED'
+
+export function resolveTeamWriteAuthority(league: LeagueAuthoritySource, leagueTeamId: string | null | undefined): TeamWriteAuthority {
+  const leagueAuthority = resolveWriteAuthority(league)
+  if (leagueAuthority !== 'NATIVE' || isNativePlatform(league.platform)) return leagueAuthority
+  return hasTeamSwitched(league.settings, leagueTeamId) ? 'NATIVE' : 'MIRRORED'
 }
 
 /**
@@ -135,10 +185,10 @@ const REAL_ACTION_COPY: Record<WriteAuthorityAction, (source: string | null) => 
  */
 export function writeAuthorityCopy(
   action: WriteAuthorityAction,
-  platform: string | null | undefined,
+  league: LeagueAuthoritySource,
 ): WriteAuthorityCopy {
-  const authority = resolveWriteAuthority(platform)
-  const source = sourcePlatformLabel(platform)
+  const authority = resolveWriteAuthority(league)
+  const source = sourcePlatformLabel(asAuthoritySource(league).platform)
   if (authority === 'SHADOW') {
     // `source` is non-null whenever authority is SHADOW (both derive from the same non-native
     // check), but fall back rather than render "undefined" if that ever stops holding.
@@ -148,9 +198,9 @@ export function writeAuthorityCopy(
 }
 
 /** Standing one-liner for banners and badges — not tied to a particular mutation. */
-export function shadowDisclosure(platform: string | null | undefined): string | null {
-  if (!isShadowLeague(platform)) return null
-  const source = sourcePlatformLabel(platform) ?? 'your host platform'
+export function shadowDisclosure(league: LeagueAuthoritySource): string | null {
+  if (!isShadowLeague(league)) return null
+  const source = sourcePlatformLabel(asAuthoritySource(league).platform) ?? 'your host platform'
   return `Changes stay inside AllFantasy. ${source} remains your league's system of record.`
 }
 
@@ -160,10 +210,10 @@ export function shadowDisclosure(platform: string | null | undefined): string | 
  */
 export function saveActionLabel(
   action: WriteAuthorityAction,
-  platform: string | null | undefined,
+  league: LeagueAuthoritySource,
 ): string {
-  const authority = resolveWriteAuthority(platform)
-  const source = sourcePlatformLabel(platform)
+  const authority = resolveWriteAuthority(league)
+  const source = sourcePlatformLabel(asAuthoritySource(league).platform)
   if (authority === 'CONNECTED' && source) {
     if (action === 'trade') return `Send offer in ${source}`
     return `Save to ${source}`
@@ -199,14 +249,14 @@ export type WriteAuthorityEnvelope = {
  */
 export function buildWriteAuthorityEnvelope(
   action: WriteAuthorityAction,
-  platform: string | null | undefined,
+  league: LeagueAuthoritySource,
 ): WriteAuthorityEnvelope {
-  const authority = resolveWriteAuthority(platform)
+  const authority = resolveWriteAuthority(league)
   return {
     authority,
-    platform: platform ?? null,
-    sourceLabel: sourcePlatformLabel(platform),
+    platform: asAuthoritySource(league).platform ?? null,
+    sourceLabel: sourcePlatformLabel(asAuthoritySource(league).platform),
     shadow: authority === 'SHADOW',
-    copy: writeAuthorityCopy(action, platform),
+    copy: writeAuthorityCopy(action, league),
   }
 }

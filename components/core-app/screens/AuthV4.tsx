@@ -22,6 +22,11 @@ import { isSocialProviderEnabled, type SocialProvider } from '@/lib/auth/SocialP
 import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
 import { safeRedirectPath } from '@/lib/auth/auth-intent-resolver'
 import AndroidBracketAppOption from '@/components/brackets/AndroidBracketAppOption'
+import IosBracketAppOption from '@/components/brackets/IosBracketAppOption'
+import AppleNativeSignInButton from '@/components/auth/AppleNativeSignInButton'
+import PasskeySignInButton from '@/components/auth/PasskeySignInButton'
+import PasskeyOffer, { shouldOfferPasskey } from '@/components/auth/PasskeyOffer'
+import { LandingStoreBadges } from '@/components/core-app/screens/LandingStoreBadges'
 import { BrandShield } from '@/components/brand/BrandShield'
 
 /**
@@ -172,10 +177,13 @@ function OAuthGrid({
   callbackUrl,
   lead = false,
   leadDivider = 'Or sign up with email',
+  beforeSignIn,
 }: {
   callbackUrl: string
   lead?: boolean
   leadDivider?: string
+  /** Runs before the provider opens; `false` stays on the page (a Partner Code that did not check out). */
+  beforeSignIn?: () => Promise<boolean>
 }) {
   const [pending, setPending] = useState<SocialProvider | null>(null)
 
@@ -212,6 +220,7 @@ function OAuthGrid({
                 if (lead) trackSignupMethod(p.id)
                 setPending(p.id)
                 try {
+                  if (beforeSignIn && !(await beforeSignIn())) return
                   await signIn(p.id, { callbackUrl })
                 } finally {
                   setPending(null)
@@ -252,8 +261,15 @@ function OAuthGrid({
  * text a code (it only does so for a number on a verified account, and answers the same
  * either way); step two hands the code to the `phone-code` next-auth provider.
  */
-function PhoneCodeSignIn({ callbackUrl, onUsePassword }: { callbackUrl: string; onUsePassword: () => void }) {
-  const router = useRouter()
+function PhoneCodeSignIn({
+  callbackUrl,
+  onUsePassword,
+  onSignedIn,
+}: {
+  callbackUrl: string
+  onUsePassword: () => void
+  onSignedIn: () => Promise<void>
+}) {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [sentTo, setSentTo] = useState<string | null>(null)
@@ -310,7 +326,7 @@ function PhoneCodeSignIn({ callbackUrl, onUsePassword }: { callbackUrl: string; 
             : resolveLoginErrorMessage(result.error),
         )
       } else {
-        router.replace(callbackUrl)
+        await onSignedIn()
       }
     } catch {
       setError('Something went wrong signing in. Please try again.')
@@ -404,7 +420,24 @@ function PhoneCodeSignIn({ callbackUrl, onUsePassword }: { callbackUrl: string; 
 
 function SignIn({ callbackUrl }: { callbackUrl: string }) {
   useReferralClickFromUrl()
+  const router = useRouter()
   const [method, setMethod] = useState<'password' | 'code'>('password')
+  const [offerPasskey, setOfferPasskey] = useState(false)
+
+  // After a password or text-code sign-in: offer Face ID / a fingerprint for next time, once, on a
+  // device that can do it (components/auth/PasskeyOffer). Otherwise straight on.
+  async function afterSignIn() {
+    if (await shouldOfferPasskey()) setOfferPasskey(true)
+    else router.replace(callbackUrl)
+  }
+
+  if (offerPasskey) {
+    return (
+      <div className="af-au-card">
+        <PasskeyOffer onDone={() => router.replace(callbackUrl)} />
+      </div>
+    )
+  }
 
   return (
     <div className="af-au-card">
@@ -415,10 +448,16 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
         </div>
       </header>
 
+      {/* iOS app only: the social grid is hidden there, so this is the one-tap way in. */}
+      <AppleNativeSignInButton callbackUrl={callbackUrl} />
+
+      {/* Face ID / fingerprint / Windows Hello, on a device that can (not the iOS app yet). */}
+      <PasskeySignInButton callbackUrl={callbackUrl} />
+
       {method === 'code' ? (
-        <PhoneCodeSignIn callbackUrl={callbackUrl} onUsePassword={() => setMethod('password')} />
+        <PhoneCodeSignIn callbackUrl={callbackUrl} onUsePassword={() => setMethod('password')} onSignedIn={afterSignIn} />
       ) : (
-        <PasswordSignIn callbackUrl={callbackUrl} onUseCode={() => setMethod('code')} />
+        <PasswordSignIn callbackUrl={callbackUrl} onUseCode={() => setMethod('code')} onSignedIn={afterSignIn} />
       )}
 
       <DevBypassSignIn callbackUrl={callbackUrl} />
@@ -428,8 +467,15 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
   )
 }
 
-function PasswordSignIn({ callbackUrl, onUseCode }: { callbackUrl: string; onUseCode: () => void }) {
-  const router = useRouter()
+function PasswordSignIn({
+  callbackUrl,
+  onUseCode,
+  onSignedIn,
+}: {
+  callbackUrl: string
+  onUseCode: () => void
+  onSignedIn: () => Promise<void>
+}) {
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -455,7 +501,7 @@ function PasswordSignIn({ callbackUrl, onUseCode }: { callbackUrl: string; onUse
         // live login rather than inventing its own.
         setError(resolveLoginErrorMessage(result.error))
       } else {
-        router.replace(callbackUrl)
+        await onSignedIn()
       }
     } catch {
       setError('Something went wrong signing in. Please try again.')
@@ -616,6 +662,47 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
    * purpose: not everyone plays on Sleeper.
    */
   const [sleeperHandle, setSleeperHandle] = useState('')
+  /*
+   * A commissioner's Partner Code, typed (2026-11-24). /with/CODE lands here as ?code=CODE and also
+   * sets a cookie, but someone who saw the code on a share image and installed the app has neither —
+   * typing it is how they count for the commissioner. Folded behind a link unless the URL carries one,
+   * so most people never see an extra box. /api/auth/register checks it before creating anything.
+   *
+   * It sits ABOVE the Apple and Google buttons, and those buttons first send a typed code to
+   * /api/partner-codes/remember, which checks it and sets the same cookie /with/CODE sets; the
+   * social account is created in lib/auth/SocialAccountLinkingService, which reads that cookie.
+   * A code that does not check out stops the button with the reason, rather than signing up
+   * someone who will never count for the commissioner they meant.
+   */
+  const [partnerCode, setPartnerCode] = useState('')
+  const [partnerOpen, setPartnerOpen] = useState(false)
+  const [partnerError, setPartnerError] = useState<string | null>(null)
+  async function rememberPartnerCode(): Promise<boolean> {
+    setPartnerError(null)
+    if (!partnerCode) return true
+    try {
+      const res = await fetch('/api/partner-codes/remember', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: partnerCode }),
+      })
+      // 404: the program is off, so there is nothing to remember and nothing to block.
+      if (res.ok || res.status === 404) return true
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      setPartnerError(readableApiError(data, 'We could not check that partner code. Please try again.'))
+      return false
+    } catch {
+      setPartnerError('We could not check that partner code. Please try again.')
+      return false
+    }
+  }
+  useEffect(() => {
+    const fromUrl = (new URLSearchParams(window.location.search).get('code') ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 20)
+    if (fromUrl) {
+      setPartnerCode(fromUrl)
+      setPartnerOpen(true)
+    }
+  }, [])
   const [disclaimer, setDisclaimer] = useState(false)
   const [terms, setTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -717,6 +804,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             ? { phone: codeSentTo ?? phone.trim(), phoneVerificationCode: code.replace(/\s/g, '') }
             : {}),
           ...(sleeperHandle.trim() ? { sleeperUsername: sleeperHandle.trim() } : {}),
+          ...(partnerCode ? { partnerCode } : {}),
           /*
            * A friend's code in this page's own URL (`/signup?ref=CODE`, 2026-11-15). The auth pages do not
            * mount ReferralTracker, so the `af_ref` cookie is only there when the visitor came through the
@@ -799,10 +887,50 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
         </div>
       </header>
 
+      {partnerOpen ? (
+        <label className="af-au-field" data-testid="signup-partner-code">
+          <span className="af-label">Partner code (optional)</span>
+          <input
+            type="text"
+            name="partnerCode"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            placeholder="Their code"
+            maxLength={20}
+            value={partnerCode}
+            aria-invalid={partnerError ? true : undefined}
+            aria-describedby="signup-partner-code-hint"
+            onChange={(e) => {
+              setPartnerCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 20))
+              setPartnerError(null)
+            }}
+          />
+          {partnerError ? (
+            <span id="signup-partner-code-hint" className="af-au-hint af-au-hint--error" role="alert">{partnerError}</span>
+          ) : (
+            <span id="signup-partner-code-hint" className="af-au-hint">From the commissioner who invited you. Works with every way to sign up below.</span>
+          )}
+        </label>
+      ) : (
+        <button
+          type="button"
+          className="af-au-link-btn"
+          data-testid="signup-partner-code-open"
+          onClick={() => setPartnerOpen(true)}
+        >
+          Have a partner code?
+        </button>
+      )}
+
+      {/* iOS app only: one tap, no username or password (the social grid is hidden there). */}
+      <AppleNativeSignInButton callbackUrl={callbackUrl} showTerms beforeSignIn={rememberPartnerCode} />
+
       <OAuthGrid
         callbackUrl={callbackUrl}
         lead
         leadDivider={method === 'phone' ? 'Or sign up with your phone' : 'Or sign up with email'}
+        beforeSignIn={rememberPartnerCode}
       />
 
       <form className="af-au-form" onSubmit={onSubmit}>
@@ -959,7 +1087,7 @@ function AuthInner({ mode }: { mode: AuthMode }) {
   const callbackUrl = safeRedirectPath(params?.get('callbackUrl'))
 
   return <>
-    {callbackUrl.startsWith('/brackets/leagues/') ? <AndroidBracketAppOption /> : null}
+    {callbackUrl.startsWith('/brackets/leagues/') ? <><AndroidBracketAppOption /><IosBracketAppOption /></> : null}
     {mode === 'signin' ? <SignIn callbackUrl={callbackUrl} /> : <SignUp callbackUrl={callbackUrl} />}
   </>
 }
@@ -1002,6 +1130,18 @@ function AuthModeSwitch({ mode }: { mode: AuthMode }) {
   </div>
 }
 
+/**
+ * The store badges under the sign-up form, EXCEPT for a friend who came through a commissioner's
+ * Partner Code link (/with/CODE redirects here with ?code=CODE). That code attaches only at a WEB
+ * signup — the /with cookie read by /api/auth/register — so a badge tap that moved the signup into
+ * the app would silently cost the commissioner the referral. Sign up here first; the app comes after.
+ */
+function SignupStoreBadges() {
+  const params = useSearchParams()
+  if (params?.get('code')?.trim()) return null
+  return <LandingStoreBadges page="signup" className="af-lp-stores--center" testId="signup-store-badges" />
+}
+
 export function AuthV4({ mode }: { mode: AuthMode }) {
   return (
     <div className="af-core af-au">
@@ -1038,6 +1178,10 @@ export function AuthV4({ mode }: { mode: AuthMode }) {
       <Suspense fallback={<div className="af-au-card" aria-busy="true" />}>
         <AuthInner mode={mode} />
       </Suspense>
+      {/* Sign-up only: someone arriving to create an account may rather do it in the app. */}
+      {mode === 'signup' ? (
+        <Suspense fallback={null}><SignupStoreBadges /></Suspense>
+      ) : null}
       <p className="af-au-legal">
         100% fantasy sports — no gambling, no DFS. Not available in WA.
       </p>

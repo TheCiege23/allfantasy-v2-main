@@ -238,3 +238,131 @@
 .af-lsh-modal-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .af-lsh-modal-row .af-lsh-input { flex: 1 1 220px; width: auto; }
 .af-lsh-modal-foot { display: flex; justify-content: flex-end; padding: 12px 18px 16px; border-top: 1px solid rgba(255,255,255,.06); }
+
+/* Folded section cards (2026-11-24, the simplify pass): the head is the summary, with a chevron. */
+.af-lsh-fold > summary.af-lsh-card-head { list-style: none; cursor: pointer; align-items: center; position: relative; padding-right: 40px; }
+.af-lsh-fold > summary::-webkit-details-marker { display: none; }
+.af-lsh-fold > summary::after { content: '▾'; position: absolute; right: 18px; top: 50%; translate: 0 -50%; color: var(--lsh-muted); font-size: 14px; }
+.af-lsh-fold[open] > summary::after { rotate: 180deg; }
+.af-lsh-fold:not([open]) > summary.af-lsh-card-head { padding-bottom: 18px; }
+
+/* 2026-11-25 — My Settings › Notifications: the category switches behind one row inside the card. */
+.af-lsh-subfold > summary { list-style: none; cursor: pointer; }
+.af-lsh-subfold > summary::-webkit-details-marker { display: none; }
+.af-lsh-subfold-chev { margin-left: auto; color: var(--lsh-muted); font-size: 14px; transition: rotate 0.15s ease; }
+.af-lsh-subfold[open] .af-lsh-subfold-chev { rotate: 180deg; }
+
+/* ── Commissioner Hub, app pass (2026-11-28) ────────────────────────────────────────────────────────
+ * Tools as tappable rows (icon · name · one muted line · chevron), tasks as small cards with a
+ * severity tag and a real action button. Owner report: the hub "looks like code, not ready for users". */
+.af-lsh-list[data-variant=nav] { gap: 0; }
+.af-lsh-row.af-lsh-nav { width: 100%; justify-content: flex-start; gap: 14px; min-height: 64px; padding: 10px 18px; border: 0; border-bottom: 1px solid rgba(255,255,255,.045); background: transparent; color: inherit; font: inherit; text-align: left; text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.af-lsh-row.af-lsh-nav:last-child { border-bottom: 0; }
+.af-lsh-row.af-lsh-nav:hover, .af-lsh-row.af-lsh-nav:focus-visible { background: rgba(255,255,255,.04); }
+.af-lsh-row.af-lsh-nav:active { background: rgba(255,255,255,.07); }
+.af-lsh-row.af-lsh-nav > .af-lsh-row-copy { flex: 1 1 auto; }
+.af-lsh-row.af-lsh-nav > .af-lsh-row-copy > span + span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-lsh-nav-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--lsh-accent) 14%, transparent); color: var(--lsh-accent); }
+.af-lsh-nav-chevron { flex: none; color: var(--lsh-muted); }
+
+.af-lsh-task { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 0 14px 10px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.025); }
+.af-lsh-task[data-severity=bad] { border-color: rgba(239,68,68,.4); }
+.af-lsh-task-tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 1px solid; border-radius: 11px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.af-lsh-task-title { font-size: 15px; font-weight: 750; line-height: 1.3; }
+.af-lsh-task-detail { margin: 0; font-size: 13px; line-height: 1.45; color: var(--lsh-muted); }
+.af-lsh-task-detail[data-clamped=true] { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.af-lsh-task-more { padding: 0; border: 0; background: none; color: var(--lsh-accent); font-size: 12px; font-weight: 700; cursor: pointer; }
+.af-lsh-task > .af-lsh-btn { margin-top: 6px; }
+@media (max-width: 720px) {
+  .af-lsh-task > .af-lsh-btn { align-self: stretch; }
+  .af-lsh-row.af-lsh-nav { padding: 10px 14px; }
+  /* Room for the floating chat buttons: the last row is never under them. */
+  [data-testid=league-settings-hub-commissioner] > .af-lsh-card:last-child { margin-bottom: 88px; }
+}
+
+/* ── League settings, phone pass (2026-11-28) ───────────────────────────────────────────────────────
+ * Owner report: "The settings tab doesn't fit everything on mobile. Seems very complicated. Should be
+ * simple and easy for the commissioner to adjust settings like Sleeper." Three rows of tabs, an
+ * Advanced button and section chips stood above the first setting, and the tabs ran off the screen.
+ * On a narrow container: the tabs are one row that fits (short names), the section chips go — every
+ * section is already its own row below — and folded sections read as one list, as Sleeper's do. */
+.af-lsh-tab-short { display: none; }
+@container (max-width: 699px) {
+  .af-lsh-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 14px; background: var(--lsh-card); border: 1px solid var(--lsh-rule); overflow: visible; }
+  /* `.af-lsh button { font: inherit }` outranks a bare class, hence the doubled selector. */
+  .af-lsh .af-lsh-tab { min-height: 38px; padding: 0 2px; border: 0; border-radius: 10px; font-size: 12px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .af-lsh-tab-long { display: none; }
+  .af-lsh-tab-short { display: inline; }
+  .af-lsh-chips { display: none; }
+  .af-lsh-stack { gap: 10px; }
+  .af-lsh-card[data-fold=true] { border-radius: 14px; }
+  .af-lsh-fold > summary.af-lsh-card-head { min-height: 60px; padding: 12px 40px 12px 16px; }
+  .af-lsh-fold:not([open]) > summary.af-lsh-card-head { padding-bottom: 12px; }
+  .af-lsh-fold > summary.af-lsh-card-head h2 { font-size: 16px; font-weight: 750; letter-spacing: 0; }
+  .af-lsh-fold > summary.af-lsh-card-head > div { min-width: 0; flex: 1 1 auto; }
+  .af-lsh-fold:not([open]) > summary.af-lsh-card-head p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .af-lsh-fold > summary::after { content: '›'; font-size: 22px; rotate: 0deg; }
+  .af-lsh-fold[open] > summary::after { rotate: 90deg; }
+  /* An open section's Edit button stays beside its title, compact. */
+  .af-lsh-fold > summary.af-lsh-card-head .af-lsh-btn { min-height: 32px; padding: 0 12px; }
+  .af-lsh-card-head { padding: 14px 16px 10px; }
+  .af-lsh-card-head h2 { font-size: 18px; }
+  .af-lsh-row { padding: 8px 16px; }
+  .af-lsh-head { padding-bottom: 10px; }
+  .af-lsh-head-copy h1 { font-size: 18px; }
+  /* Room for the floating chat buttons under the last row. */
+  .af-lsh-stack > :last-child { margin-bottom: 88px; }
+}
+
+/* ── Sleeper-style setting rows and their picker sheet (2026-11-28) ─────────────────────────────────
+ * A setting with choices is one tappable row (value · chevron); its choices open in a bottom sheet on a
+ * phone and a centred card on a wide screen; choosing saves that one setting. */
+.af-lsh-row.af-lsh-pickrow { width: 100%; border: 0; border-bottom: 1px solid rgba(255,255,255,.045); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; gap: 10px; -webkit-tap-highlight-color: transparent; }
+.af-lsh-row.af-lsh-pickrow > .af-lsh-row-copy { flex: 1 1 auto; }
+.af-lsh-row.af-lsh-pickrow:hover, .af-lsh-row.af-lsh-pickrow:focus-visible { background: rgba(255,255,255,.04); }
+.af-lsh-row.af-lsh-pickrow:active { background: rgba(255,255,255,.07); }
+.af-lsh-row.af-lsh-pickrow > .af-lsh-value { color: var(--lsh-accent); }
+
+.af-lsh-sheet-backdrop { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; justify-content: center; background: rgba(2, 4, 12, .66); }
+.af-lsh-sheet { display: flex; flex-direction: column; width: 100%; max-width: 520px; max-height: 78vh; padding: 6px 0 calc(12px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; border: 1px solid rgba(255,255,255,.12); border-bottom: 0; background: var(--lsh-card, #0a1228); color: var(--lsh-text, #eef5ff); box-shadow: 0 -20px 60px rgba(0,0,0,.5); }
+.af-lsh-sheet-grab { align-self: center; width: 40px; height: 4px; margin: 4px 0 8px; border-radius: 2px; background: rgba(255,255,255,.22); }
+.af-lsh-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 18px 8px; }
+.af-lsh-sheet-head strong { font-size: 17px; font-weight: 800; }
+.af-lsh-sheet-sub { margin: 0; padding: 0 18px 8px; font-size: 13px; line-height: 1.4; color: var(--lsh-muted, #9fb2c9); }
+.af-lsh-sheet-error { margin: 0 18px 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(239,68,68,.45); background: rgba(239,68,68,.1); color: #fca5a5; font-size: 13px; line-height: 1.4; }
+.af-lsh-sheet-list { overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid rgba(255,255,255,.06); }
+.af-lsh-choice { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 18px; border: 0; border-bottom: 1px solid rgba(255,255,255,.045); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.af-lsh-choice:hover, .af-lsh-choice:focus-visible { background: rgba(255,255,255,.04); }
+.af-lsh-choice:disabled { cursor: progress; }
+.af-lsh-choice[aria-checked=true] { color: var(--lsh-accent, #22d3ee); }
+.af-lsh-choice-copy { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.af-lsh-choice-copy > span:first-child { font-size: 15px; font-weight: 650; }
+.af-lsh-choice-copy > span + span { font-size: 12px; color: var(--lsh-muted, #9fb2c9); }
+.af-lsh-choice-mark { flex: none; width: 20px; text-align: center; font-size: 16px; font-weight: 800; }
+@media (min-width: 721px) {
+  .af-lsh-sheet-backdrop { align-items: center; padding: 24px; }
+  .af-lsh-sheet { border-radius: 18px; border-bottom: 1px solid rgba(255,255,255,.12); }
+  .af-lsh-sheet-grab { display: none; }
+}
+/* The sheet is portalled out of `.af-lsh`, so it restates the two base rules it no longer inherits. */
+.af-lsh-sheet-backdrop, .af-lsh-sheet-backdrop * { box-sizing: border-box; }
+.af-lsh-sheet { font-family: inherit; font-size: 14px; --lsh-accent: #22d3ee; --lsh-text: #eef5ff; --lsh-muted: #9fb2c9; --lsh-card: #0a1228; --lsh-line: rgba(34, 211, 238, .38); }
+
+/* One scoring stat's editor (2026-11-28): minus / value / plus, common values, Save. */
+.af-lsh-stepper { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; gap: 10px; padding: 8px 18px; }
+.af-lsh-step { min-height: 52px; border-radius: 14px; border: 1px solid rgba(255,255,255,.16); background: #12163e; color: var(--lsh-text, #eef5ff); font-size: 24px; font-weight: 700; cursor: pointer; }
+.af-lsh-step:disabled { opacity: .5; }
+.af-lsh-step-input { min-height: 52px; width: 100%; border-radius: 14px; border: 1px solid var(--lsh-line, rgba(34,211,238,.38)); background: #070d20; color: var(--lsh-text, #eef5ff); font: 800 24px/1 'JetBrains Mono', ui-monospace, monospace; text-align: center; -moz-appearance: textfield; }
+.af-lsh-step-input::-webkit-outer-spin-button, .af-lsh-step-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.af-lsh-quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 18px 4px; }
+.af-lsh-quick .af-lsh-pill[aria-pressed=true] { background: var(--lsh-accent, #22d3ee); border-color: var(--lsh-accent, #22d3ee); color: #04202a; }
+.af-lsh-sheet-actions { padding: 12px 18px 4px; }
+.af-lsh-sheet-actions .af-lsh-btn, .af-lsh-sheet-confirm .af-lsh-btn { width: 100%; min-height: 48px; font-size: 14px; }
+.af-lsh-sheet-confirm { margin: 10px 18px 4px; padding: 12px; border-radius: 12px; border: 1px solid rgba(245,158,11,.45); background: rgba(245,158,11,.08); }
+.af-lsh-sheet-confirm p { margin: 0 0 10px; font-size: 13px; line-height: 1.45; color: #fcd34d; }
+
+/* A roster slot a commissioner can change (2026-11-28): the same row, as a button, with a chevron. */
+.af-lsh-slot.af-lsh-slot-btn { width: 100%; border: 0; border-bottom: 1px solid rgba(255,255,255,.045); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.af-lsh-slot.af-lsh-slot-btn:hover, .af-lsh-slot.af-lsh-slot-btn:focus-visible { background: rgba(255,255,255,.04); }
+.af-lsh-slot.af-lsh-slot-btn b { color: var(--lsh-accent); }
+.af-lsh-step-count { display: grid; place-items: center; }

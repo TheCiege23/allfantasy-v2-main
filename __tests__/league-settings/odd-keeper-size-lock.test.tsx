@@ -47,9 +47,12 @@ describe('league size in commissioner settings', () => {
     expect(screen.queryByTestId('settings-odd-keeper-size-locked')).toBeNull()
   })
 
-  it('redraft odd sizes stay open without the plan, on the list as before (4–18)', () => {
+  it('redraft odd sizes are AF Commissioner too since 2026-11-25; even sizes stay open (4–18)', () => {
     renderPanel('redraft', false)
-    expect([...sizeSelect().options].every((o) => !o.disabled)).toBe(true)
-    expect([...sizeSelect().options].at(-1)!.value).toBe('18')
+    const opts = [...sizeSelect().options]
+    expect(opts.filter((o) => Number(o.value) % 2 === 0).every((o) => !o.disabled)).toBe(true)
+    // The league's current size stays selectable even when odd; every other odd size is locked.
+    expect(opts.filter((o) => Number(o.value) % 2 === 1 && !o.selected).every((o) => o.disabled)).toBe(true)
+    expect(opts.at(-1)!.value).toBe('18')
   })
 })

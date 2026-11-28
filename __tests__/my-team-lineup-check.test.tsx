@@ -100,8 +100,10 @@ describe('the Lineup check card', () => {
     const { container } = render(<MyTeam data={data(KBFL)} />)
     const card = container.querySelector('.af-mt-check')!
     const links = [...card.querySelectorAll('a.af-mt-check-item')]
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['#lineup-player-daniels', '#lineup-player-sauls'])
-    expect(links[0].textContent).toContain('Jayden Daniels is ruled out — find a replacement')
+    // The card's title names Daniels; the list under it is "Also check" and does not name him again (2026-11-24).
+    expect(container.querySelector('#af-mt-decision-title')?.textContent).toContain('Jayden Daniels')
+    expect(card.querySelector('h2')?.textContent).toBe('Also check')
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['#lineup-player-sauls'])
     expect(card.textContent).toContain('1 starter has reached kickoff; confirm individual locks on your platform.')
     expect(card.querySelector('a.af-mt-check-fix')?.getAttribute('href')).toBe('https://example.test/lineup')
     // Every link target exists on the page.
@@ -148,9 +150,9 @@ describe('the Lineup check card', () => {
     // Inside the decision card it carries no frame of its own.
     expect(checks[0].classList.contains('af-mt-check--embedded')).toBe(true)
     expect(checks[0].classList.contains('af-frame')).toBe(false)
-    // The decision's headline and the check's list are both still there.
+    // The decision's headline names Daniels; the list under it names the rest, not Daniels again (2026-11-24).
     expect(decision.textContent).toContain('Jayden Daniels')
-    expect(decision.querySelectorAll('a.af-mt-check-item')).toHaveLength(2)
+    expect(decision.querySelectorAll('a.af-mt-check-item')).toHaveLength(1)
   })
 })
 
@@ -197,8 +199,10 @@ describe('lineup evidence gaps', () => {
   })
   it('presents a projected swap as a candidate with provider rules unverified', () => {
     const starters = [slot('WR', player('one'), { benchCheck: { verdict: 'swap', benchName: 'Bench', benchProjected: 15, starterName: 'Starter', starterProjected: 10 } })]
-    const card = render(<MyTeam data={data(starters)} />).container.querySelector('.af-mt-check')!
-    expect(card.textContent).toContain('Compare Bench with Player one')
+    // A lone swap is the card's title; no list repeats it underneath (2026-11-24).
+    const card = render(<MyTeam data={data(starters)} />).container.querySelector('.af-mt-decision')!
+    expect(card.querySelector('#af-mt-decision-title')?.textContent).toMatch(/Bench/)
+    expect(card.querySelectorAll('a.af-mt-check-item')).toHaveLength(0)
     // Where official moves happen is said once, by the banner above every tab — not again in the card.
     expect(card.textContent).not.toContain('Confirm eligibility, locks, and AutoSubs')
     expect(card.textContent).not.toContain('Start Bench over')

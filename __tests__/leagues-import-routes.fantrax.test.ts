@@ -44,6 +44,9 @@ vi.mock('@/lib/league-import/ImportedLeaguePreviewBuilder', () => ({
 
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   ImportedLeagueConflictError: ImportedLeagueConflictErrorMock,
+  ImportedLeagueAlreadyHereError: class ImportedLeagueAlreadyHereErrorMock extends Error {},
+  // The route names a switched-to-AllFantasy league (conversion plan, step 5); the mock must export it too.
+  ImportedLeagueConvertedError: class ImportedLeagueConvertedErrorMock extends Error {},
 }))
 
 vi.mock('@/lib/league-import/importPersistenceService', () => ({
@@ -273,6 +276,10 @@ describe('Fantrax import API routes', () => {
          */
         incompleteSteps: [],
         joinedExisting: false,
+        // How a team-less league mate joined an existing copy; null for an ordinary import.
+        joinedAs: null,
+        // The confirm screen's "other half" link; null when none was picked, as here.
+        pairLink: null,
       })
       expect(persistImportWithCanonicalAuditMock).toHaveBeenCalledWith(
         expect.objectContaining({

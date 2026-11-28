@@ -9,6 +9,8 @@ export const scopeSwitcherMessages = defineMessages({
   en: {
     sport: 'Sport',
     platform: 'Platform',
+    allSports: 'All sports',
+    allPlatforms: 'All platforms',
     kickerLeague: 'League',
     // 'Viewing' did not say what the menu picks (2026-11-13 guide): it picks a league, or all of them.
     kickerViewing: 'League',
@@ -25,6 +27,10 @@ export const scopeSwitcherMessages = defineMessages({
     noLeagueMatches: 'No league matches',
     starLabel: (starred: boolean, name: string) => `${starred ? 'Remove' : 'Add'} ${name} ${starred ? 'from' : 'to'} favorites`,
     favoritesNote: 'Favorites are saved to your account, across devices.',
+    // Under the league list (2026-11-23): on a phone the rail's add tiles are hidden, so they were only under More.
+    addLeagueAria: 'Add a league',
+    createLeague: 'Create a league',
+    importLeague: 'Import a league',
     otherSport: 'Other',
     noLeaguesInFilter: 'No leagues match these filters.',
     applyToHome: 'Use this filter on Home',
@@ -44,6 +50,8 @@ export const scopeSwitcherMessages = defineMessages({
   es: {
     sport: 'Deporte',
     platform: 'Plataforma',
+    allSports: 'Todos los deportes',
+    allPlatforms: 'Todas las plataformas',
     kickerLeague: 'Liga',
     kickerViewing: 'Liga',
     viewingSr: 'Viendo: ',
@@ -59,6 +67,9 @@ export const scopeSwitcherMessages = defineMessages({
     noLeagueMatches: 'Ninguna liga coincide con',
     starLabel: (starred, name) => `${starred ? 'Quitar' : 'Añadir'} ${name} ${starred ? 'de' : 'a'} favoritas`,
     favoritesNote: 'Las favoritas se guardan en tu cuenta, en todos tus dispositivos.',
+    addLeagueAria: 'Añadir una liga',
+    createLeague: 'Crear una liga',
+    importLeague: 'Importar una liga',
     otherSport: 'Otros',
     noLeaguesInFilter: 'Ninguna liga coincide con estos filtros.',
     applyToHome: 'Usar este filtro en Inicio',

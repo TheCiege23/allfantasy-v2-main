@@ -1,7 +1,10 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { lineupCrosswalkToSleeperIds, lineupRegistryNames, type LineupRegistryName } from './lineupCrosswalk'
+import { ownPointsByPlayer } from './matchupOwnPoints'
+import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import {
   composePlayerIdentities,
   type ComposedPlayerIdentity,
@@ -33,6 +36,8 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
 import { withNewestKickoffs } from './nextGameMap'
 import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
+import { loadOfficialWeeklyRows } from '@/lib/league/switching/officialWeeklyRows'
+import { isOfficialOnAllFantasy } from '@/lib/league/switching/switchingLeague'
 
 /*
  * The opposing side's two name lines. The importer stores an unowned Sleeper roster as team
@@ -213,6 +218,12 @@ export type MatchupPlayerCell = {
    * stats are imported daily after the games, so a Sunday line appears the next morning.
    */
   statLine?: string | null
+  /**
+   * AllFantasy's own estimate of what he scored, from that same stored stat line under this league's
+   * rules (lib/core-app/matchupOwnPoints.ts). Only when the platform's own per-player scores are not on
+   * file, only for a final game, and never copied into `actual`.
+   */
+  ownPoints?: number | null
 }
 
 export type MatchupSlot = {
@@ -687,9 +698,18 @@ async function buildMatchupData(
     String(sport ?? '').toUpperCase() === 'NFL'
       ? timer.time('finishedNfl', loadFinishedNflWeeks([{ season: latest.seasonYear, week: latest.week }]).catch(() => undefined))
       : Promise.resolve(undefined)
-  const storedWeeksRead = timer.time('storedWeeks', prisma.weeklyMatchup
-    .groupBy({ by: ['week'], where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear } })
-    .then((g) => g.map((r) => r.week).sort((a, b) => a - b))
+  /*
+   * 🛑 AN OFFICIAL SWITCHING LEAGUE IS SCORED BY ALLFANTASY, so its week comes from AllFantasy's own
+   * schedule (lib/league/switching/officialWeeklyRows.ts), in the same row shape. Its `WeeklyMatchup`
+   * rows are the platform's and are shared with every other user who imported the league.
+   */
+  const official = isOfficialOnAllFantasy(league.settings)
+  const storedWeeksRead = timer.time('storedWeeks', (official
+    ? loadOfficialWeeklyRows(league, latest.seasonYear).then((r) => [...new Set((r ?? []).map((x) => x.week))])
+    : prisma.weeklyMatchup
+      .groupBy({ by: ['week'], where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear } })
+      .then((g) => g.map((r) => r.week)))
+    .then((weeks) => weeks.sort((a, b) => a - b))
     .catch(() => [] as number[]))
   const finishedNfl = await finishedNflRead
   const finalProgress = finishedNfl ? leagueWeekProgress(league, finishedNfl) : progress
@@ -700,10 +720,12 @@ async function buildMatchupData(
     const week = currentScheduledLeagueWeek(league, latest.seasonYear, storedWeeks, finishedNfl)
     if (week != null) latest = { ...latest, week }
   }
-  const rows = await prisma.weeklyMatchup.findMany({
-    where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear, week: latest.week },
-    select: { rosterId: true, matchupId: true, game: true, pointsFor: true, pointsAgainst: true, win: true },
-  })
+  const rows = official
+    ? (await loadOfficialWeeklyRows(league, latest.seasonYear, { week: latest.week })) ?? []
+    : await prisma.weeklyMatchup.findMany({
+      where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear, week: latest.week },
+      select: { rosterId: true, matchupId: true, game: true, pointsFor: true, pointsAgainst: true, win: true },
+    })
   // All-zero rows are a scheduled matchup, not a scored result.
   const anyPoints = rows.some((r) => r.pointsFor > 0 || r.pointsAgainst > 0)
 
@@ -785,11 +807,20 @@ async function buildMatchupData(
    * The week on screen is left out: it is the game being played, not history.
    */
   const headToHeadRead: Promise<MatchupData['headToHead']> = opponentRow
-    ? timer.time('headToHead', prisma.weeklyMatchup
+    ? timer.time('headToHead', (official
+        // This season from AllFantasy's schedule; earlier seasons were played on the platform.
+        ? Promise.all([
+          loadOfficialWeeklyRows(league, latest.seasonYear, { rosterIds: [mine.rosterId, opponentRow.rosterId] }),
+          prisma.weeklyMatchup.findMany({
+            where: { leagueId: platformLeagueId, seasonYear: { not: latest.seasonYear }, rosterId: { in: [mine.rosterId, opponentRow.rosterId] } },
+            select: { seasonYear: true, week: true, rosterId: true, matchupId: true, pointsFor: true },
+          }),
+        ]).then(([thisSeason, earlier]) => [...earlier, ...(thisSeason ?? [])])
+        : prisma.weeklyMatchup
         .findMany({
           where: { leagueId: platformLeagueId, rosterId: { in: [mine.rosterId, opponentRow.rosterId] } },
           select: { seasonYear: true, week: true, rosterId: true, matchupId: true, pointsFor: true },
-        })
+        }))
         .then((rowsAll) => headToHeadFrom(rowsAll, mine.rosterId, { season: latest.seasonYear, week: latest.week }))
         .catch(() => null))
     : Promise.resolve(null)
@@ -814,8 +845,9 @@ async function buildMatchupData(
     opponent: opponentRow
       ? { platformUserId: oppTeam?.platformUserId ?? null, rosterId: String(opponentRow.rosterId) }
       : null,
-    // A Sleeper league's live lineups for this week, where Sleeper can vouch for them.
-    source: { platform: league.platform, platformLeagueId },
+    // A Sleeper league's live lineups for this week, where Sleeper can vouch for them. Not once the league
+    // is official: a switched team's lineup is set here, and AllFantasy's stored lineups cover every team.
+    source: official ? null : { platform: league.platform, platformLeagueId },
   })
 
   const anyProjected =
@@ -890,10 +922,17 @@ async function buildMatchupData(
    * one lookup would silently break the score join.
    */
   const playerCrosswalk = scoreIds.length
-    ? await timer.time('crosswalk', crosswalkToSleeperIds(league.platform, sport, scoreIds).catch(
+    ? await timer.time('crosswalk', lineupCrosswalkToSleeperIds(league.platform, sport, scoreIds).catch(
         () => new Map<string, string>(),
       ))
     : new Map<string, string>()
+  /* A Fantrax starter the crosswalk could not translate is still named, from the registry (see lineupCrosswalk.ts). */
+  const untranslatedIds = scoreIds.filter((id) => !playerCrosswalk.has(id))
+  const registryNames = untranslatedIds.length
+    ? await timer.time('registryNames', lineupRegistryNames(league.platform, sport, untranslatedIds, platformLeagueId).catch(
+        () => new Map<string, LineupRegistryName>(),
+      ))
+    : new Map<string, LineupRegistryName>()
   /* ⚠ ESPN D/ST ids (`-16002` is BUF) are not in the player crosswalk; the id alone names the club. */
   const sleeperIdByRosterId = String(sport ?? 'NFL').toUpperCase() === 'NFL'
     ? withTeamDefenseIds(league.platform, playerCrosswalk, scoreIds.map((playerId) => ({ playerId })))
@@ -931,7 +970,7 @@ async function buildMatchupData(
       ? prisma.playerGameStat
           .findMany({
             where: { sportType: 'NFL', source: 'sleeper', season: latest.seasonYear, weekOrRound: latest.week, playerId: { in: lookupIds } },
-            select: { playerId: true, statPayload: true },
+            select: { playerId: true, statPayload: true, normalizedStatMap: true },
           })
           .catch(() => [])
       : Promise.resolve([]))
@@ -982,6 +1021,13 @@ async function buildMatchupData(
     const line = nflStatLine(row.statPayload)
     if (line && !statLineBy.has(row.playerId)) statLineBy.set(row.playerId, line)
   }
+  /*
+   * With no platform score on file for anyone, price those same lines under this league's rules. Shown
+   * beside the box score as an estimate; `actual`, the live totals and the win probability are untouched.
+   */
+  const ownPointsBy = scoreRows.length === 0
+    ? ownPointsByPlayer(statRows, extractScoringSettings(league.settings))
+    : new Map<string, number>()
   /*
    * Each club's game THIS week — kickoff and opponent — from the same rows the states come from.
    * Regular-season fixtures only (an untyped live-writer row may be a preseason reading), earliest
@@ -1129,11 +1175,13 @@ async function buildMatchupData(
     entry: { playerId: string; unavailable?: Unavailable | null },
     sleeperId: string | null,
     team: string | null | undefined,
-  ): { result: GameResult | null; statLine: string | null } => {
-    if (gameStateOf(entry) !== 'final') return { result: null, statLine: null }
+  ): { result: GameResult | null; statLine: string | null; ownPoints: number | null } => {
+    if (gameStateOf(entry) !== 'final') return { result: null, statLine: null, ownPoints: null }
     return {
       result: resultOf(normalizeTeamAbbrev(team)),
       statLine: sleeperId ? statLineBy.get(sleeperId) ?? null : null,
+      // Not in a league whose scoring type we refuse to price: its projections are withheld for the same reason.
+      ownPoints: sleeperId && !withholdPointsProjections ? ownPointsBy.get(sleeperId) ?? null : null,
     }
   }
   const cellFor = (
@@ -1187,6 +1235,8 @@ async function buildMatchupData(
       }
     }
     const identity = identityBy.get(entry.playerId)
+    // Name, position and club only: with no Sleeper id there is no headshot, injury status or box score to attach.
+    const registry = identity ? undefined : registryNames.get(entry.playerId)
     return {
       playerId: entry.playerId,
       /*
@@ -1196,15 +1246,15 @@ async function buildMatchupData(
        * roster id.
        */
       sleeperId: identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null,
-      name: identity?.name ?? null,
-      position: displayPosition(identity?.position),
+      name: identity?.name ?? registry?.name ?? null,
+      position: displayPosition(identity?.position ?? registry?.position),
       /*
        * ⚠ NORMALISED, BECAUSE THE CREST LOOKUP UPPERCASES WHAT IT IS GIVEN AND
        * DOES NOT NORMALISE. `SportsPlayer.team` holds "Kansas City Chiefs" on 32
        * distinct values in production; `teamLogoUrl` would hand
        * "KANSAS CITY CHIEFS" to the CDN resolver and get nothing back.
        */
-      team: normalizeTeamAbbrev(identity?.team),
+      team: normalizeTeamAbbrev(identity?.team ?? registry?.team),
       sport,
       // Already vetted by `asHeadshotUrl` when the identity was composed.
       imageUrl: identity?.imageUrl ?? null,
@@ -1218,8 +1268,8 @@ async function buildMatchupData(
       injury: !entry.unavailable && identity
         ? atRisk[sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) ?? ''] ?? null
         : null,
-      ...fixtureOf(normalizeTeamAbbrev(identity?.team)),
-      ...finalLines(entry, identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null, identity?.team),
+      ...fixtureOf(normalizeTeamAbbrev(identity?.team ?? registry?.team)),
+      ...finalLines(entry, identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null, identity?.team ?? registry?.team),
     }
   }
 

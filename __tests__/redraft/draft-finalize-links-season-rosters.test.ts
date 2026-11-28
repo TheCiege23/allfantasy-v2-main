@@ -73,6 +73,52 @@ beforeEach(() => {
 })
 
 describe('draft finalization links league rosters to the season rosters it creates', () => {
+  it('does not recreate a dropped Survivor Guillotine draft pick on finalization replay', async () => {
+    await seedDraftedDynastyLeague()
+    await syncCompletedDraftToRedraftSeason(LEAGUE)
+    await holder.db.league.update({ where: { id: LEAGUE }, data: { leagueVariant: 'survivor_guillotine' } })
+    await holder.db.redraftRosterPlayer.updateMany({ where: { playerId: 'p-qb-1', droppedAt: null }, data: { droppedAt: new Date() } })
+
+    const replay = await syncCompletedDraftToRedraftSeason(LEAGUE)
+    expect(replay.redraftPlayersCreated).toBe(0)
+    expect(rowsOf(holder.db, 'RedraftRosterPlayer').filter((p: any) => p.playerId === 'p-qb-1' && !p.droppedAt)).toHaveLength(0)
+  })
+
+  /*
+   * 🛑 Zombie Chimmy Test, 2026-11-22: a dropped drafted player came back on the next post-draft pass,
+   * because only Survivor Guillotine checked dropped rows. Every format replays this on page loads.
+   */
+  it('does not recreate a dropped draft pick on finalization replay in an ordinary league', async () => {
+    await seedDraftedDynastyLeague()
+    await syncCompletedDraftToRedraftSeason(LEAGUE)
+    await holder.db.redraftRosterPlayer.updateMany({ where: { playerId: 'p-qb-1', droppedAt: null }, data: { droppedAt: new Date() } })
+
+    const replay = await syncCompletedDraftToRedraftSeason(LEAGUE)
+    expect(replay.redraftPlayersCreated).toBe(0)
+    expect(rowsOf(holder.db, 'RedraftRosterPlayer').filter((p: any) => p.playerId === 'p-qb-1' && !p.droppedAt)).toHaveLength(0)
+  })
+
+  it('does not put a traded draft pick back on the team that traded him away', async () => {
+    await seedDraftedDynastyLeague()
+    await syncCompletedDraftToRedraftSeason(LEAGUE)
+    await holder.db.$transaction(async (tx: any) => {
+      await applyRedraftRosterMoves(tx, { leagueId: LEAGUE, acquisitionType: 'trade', moves: [{ playerId: 'p-qb-1', fromRosterId: 'roster-a', toRosterId: 'roster-b' }] })
+    })
+
+    await syncCompletedDraftToRedraftSeason(LEAGUE)
+    const seasonRosterOf = (userId: string) => rowsOf(holder.db, 'RedraftRoster').find((r: any) => r.ownerId === userId)!.id
+    const live = rowsOf(holder.db, 'RedraftRosterPlayer').filter((p: any) => p.playerId === 'p-qb-1' && !p.droppedAt)
+    expect(live.map((p: any) => p.rosterId)).toEqual([seasonRosterOf('user-b')])
+  })
+
+  it('[control] a first finalization still creates every drafted player', async () => {
+    await seedDraftedDynastyLeague()
+    const first = await syncCompletedDraftToRedraftSeason(LEAGUE)
+    expect(first.redraftPlayersCreated).toBeGreaterThan(0)
+    const again = await syncCompletedDraftToRedraftSeason(LEAGUE)
+    expect(again.redraftPlayersCreated).toBe(0)
+  })
+
   it('links every team in a native dynasty league, not only Survivor', async () => {
     await seedDraftedDynastyLeague()
     const summary = await syncCompletedDraftToRedraftSeason(LEAGUE)

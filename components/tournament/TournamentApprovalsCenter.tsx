@@ -71,7 +71,7 @@ export function TournamentApprovalsCenter({ tournamentId }: { tournamentId: stri
   return (
     <div className="space-y-4" data-testid="tournament-approvals-center">
       <p className="text-sm text-white/55">
-        Co-commissioners propose changes to their league&apos;s settings. Nothing changes until you approve it.
+        Nothing changes in a league until you approve its request.
       </p>
       {loading ? (
         <p className="text-sm text-white/45">Loading requests…</p>

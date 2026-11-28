@@ -3,6 +3,8 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
+import { primeCommissionerHealthSnapshot } from '@/lib/decision-os/commissioner-os'
+import { inactiveFlagHubRecord, loadInactiveFlagRecord } from '@/lib/commissioner-hub/inactiveFlagRecord'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
@@ -595,7 +597,7 @@ export async function getCommissionerHub(input: {
 
   const platform = String(league.platform ?? 'manual').toLowerCase()
   const sport = String(league.sport ?? 'NFL')
-  const native = resolveWriteAuthority(platform) === 'NATIVE'
+  const native = resolveWriteAuthority({ platform, settings: league.settings }) === 'NATIVE'
   const platformName = platformLabel(platform)
   const seasonStatus = (league.status ?? '').toLowerCase()
   // Dynasty-family leagues get the dynasty health signals; nothing else changes for anyone else.
@@ -880,9 +882,17 @@ export async function getCommissionerHub(input: {
       ]
     : []
 
+  /*
+   * The "no moves in 14 days" warning's graded record (2026-11-20), in a league AllFantasy hosts — the one clock it is
+   * graded on. The same loader and bands as the commissioner's health decision in Chimmy (`inactiveFlagRecord.ts`), so
+   * the hub and Chimmy say the same thing about how far to trust it. Memoised by its store; a failure reads as none.
+   */
+  const inactiveRecord = native ? inactiveFlagHubRecord(await loadInactiveFlagRecord().catch(() => null)) : null
+
   const flags = rankFlags([
     abandonedTeamsFlag({
       managers: memberRows,
+      inactiveRecord,
       activityReason: memberActivity.available ? null : memberActivity.reason,
       orphanTeams: unownedTeamNames(teams, language),
       totalTeams: teamCount,
@@ -997,6 +1007,12 @@ export async function getCommissionerHub(input: {
   // ── Canonical health score ─────────────────────────────────────────────
   // A stale import is NOT scored — see resolveHubHealthScore for the measured contradiction.
   const snapshot = healthSnapshots.find((s) => s.leagueId === leagueId) ?? null
+  /*
+   * What this page shows is what Chimmy reads (2026-11-20): the snapshot goes to Commissioner OS's five-minute fact,
+   * so "how healthy is my league?" asked right after opening the hub gets these numbers, not a second build. Access
+   * was proved above. Not awaited and never throws — a failed write only means Chimmy derives as before.
+   */
+  void primeCommissionerHealthSnapshot({ userId, leagueId }, snapshot, { dynastySignals: dynastyLeague, dynastyLeague })
   const healthScore: CommissionerHubData['health']['score'] = resolveHubHealthScore({
     snapshot,
     unread,

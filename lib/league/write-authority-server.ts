@@ -9,6 +9,7 @@
 import { prisma } from '@/lib/prisma'
 import {
   buildWriteAuthorityEnvelope,
+  type LeagueAuthoritySource,
   type WriteAuthorityAction,
   type WriteAuthorityEnvelope,
 } from './write-authority'
@@ -19,12 +20,12 @@ import {
  * Kept as a narrow single-column read so mutation routes can add it without inflating an
  * existing `select` (several of them deliberately select the minimum).
  */
-async function getLeaguePlatform(leagueId: string): Promise<string | null> {
+async function getLeagueAuthoritySource(leagueId: string): Promise<LeagueAuthoritySource> {
   const row = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { platform: true },
+    select: { platform: true, settings: true },
   })
-  return row?.platform ?? null
+  return { platform: row?.platform ?? null, settings: row?.settings ?? null }
 }
 
 /**
@@ -40,6 +41,6 @@ export async function resolveWriteAuthorityEnvelope(
   leagueId: string,
   action: WriteAuthorityAction,
 ): Promise<WriteAuthorityEnvelope> {
-  const platform = await getLeaguePlatform(leagueId).catch(() => null)
-  return buildWriteAuthorityEnvelope(action, platform)
+  const league = await getLeagueAuthoritySource(leagueId).catch(() => ({ platform: null, settings: null }))
+  return buildWriteAuthorityEnvelope(action, league)
 }

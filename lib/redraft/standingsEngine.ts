@@ -6,7 +6,9 @@ import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { byeWeekMedianCredits, computeWeeklyMedianResults, isMatchupComplete, medianEligibleRows, readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { extraMatchupResults } from '@/lib/redraft/oddTeamExtraMatchupRules'
+import { countedStandingsMatchups, isPreLeagueMatchup, readPreLeagueWeeksCount } from '@/lib/redraft/preLeagueWeeksRules'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { runsOnAllFantasy } from '@/lib/league/switching/switchingLeague'
 import { readTiebreakerOrder, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { rankNflRedraftTeamsByTiebreakers } from '@/lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime'
 
@@ -52,10 +54,19 @@ export async function updateStandings(
     })
   }
 
-  const matchups = await prisma.redraftMatchup.findMany({
+  const allMatchups = await prisma.redraftMatchup.findMany({
     where: { seasonId, week: { lte: week } },
     orderBy: [{ week: 'asc' }, { id: 'asc' }],
   })
+  // Weeks played before a late-starting league existed count only when the commissioner says so
+  // (lib/redraft/preLeagueWeeksRules.ts). A failed read of the toggle means "do not count them".
+  const countPreLeague = allMatchups.some(isPreLeagueMatchup)
+    ? await prisma.redraftSeason
+        .findUnique({ where: { id: seasonId }, select: { league: { select: { settings: true } } } })
+        .then((s) => readPreLeagueWeeksCount(s?.league?.settings))
+        .catch(() => false)
+    : false
+  const matchups = countedStandingsMatchups(allMatchups, countPreLeague)
 
   const rotoStats = new Map<string, TeamStatTotals[]>()
   const seenRotoPeriods = new Set<string>()
@@ -197,7 +208,7 @@ export async function updateStandings(
     pointsOnlySeeding = isPointsOnlySeeding(resolveConfiguredPlayoffSeedingRule(seasonRow?.league ?? {}))
     // The commissioner's tiebreaker order (lib/standings/tiebreakerOrder.ts), AllFantasy-run leagues only —
     // the standings board reads it under the same gate, and an imported league follows its platform.
-    customTiebreakers = seasonRow?.league && isNativePlatform(seasonRow.league.platform) ? readTiebreakerOrder(seasonRow.league.settings) : null
+    customTiebreakers = seasonRow?.league && runsOnAllFantasy(seasonRow.league) ? readTiebreakerOrder(seasonRow.league.settings) : null
     coinSeed = `${seasonRow?.leagueId ?? ''}:${seasonRow?.season ?? ''}`
     const mode = (seasonRow?.league?.settings as Record<string, unknown> | null | undefined)?.scoring_mode
     pointsScoring = seasonRow != null && (mode == null || mode === 'points')
@@ -407,18 +418,41 @@ async function mirrorNativeLeagueTeamRecords(
     const season = await prisma.redraftSeason.findUnique({ where: { id: seasonId }, select: { leagueId: true, season:true } })
     if (!season) return
     const league = await prisma.league.findFirst({ where: { id: season.leagueId }, select: { platform: true, settings:true } })
-    if (!league || !isNativePlatform(league.platform)) return
+    // Native leagues, and imported leagues made official here (rule 3: AllFantasy scoring is official).
+    if (!league || !runsOnAllFantasy(league)) return
 
     const seasonRosters = await prisma.redraftRoster.findMany({ where: { seasonId }, select: { id: true, ownerId: true } })
-    const leagueRosters = await prisma.roster.findMany({
-      where: { leagueId: season.leagueId, platformUserId: { in: seasonRosters.map((r) => r.ownerId) } },
-      select: { id: true, platformUserId: true },
-    })
-    const rosterIdByOwner = new Map(leagueRosters.map((r) => [r.platformUserId, r.id]))
+    /*
+     * The team's `LeagueTeam.externalId` differs by kind. Native: the generic `Roster.id`, found through the
+     * owner. Imported and official: the platform's team id, which is the linked `Roster`'s
+     * `playerData.source_team_id` — what the platform copy wrote, and what every imported screen reads.
+     */
+    const externalIdByRedraftRoster = new Map<string, string>()
+    if (isNativePlatform(league.platform)) {
+      const leagueRosters = await prisma.roster.findMany({
+        where: { leagueId: season.leagueId, platformUserId: { in: seasonRosters.map((r) => r.ownerId) } },
+        select: { id: true, platformUserId: true },
+      })
+      const rosterIdByOwner = new Map(leagueRosters.map((r) => [r.platformUserId, r.id]))
+      for (const sr of seasonRosters) {
+        const id = rosterIdByOwner.get(sr.ownerId)
+        if (id) externalIdByRedraftRoster.set(sr.id, id)
+      }
+    } else {
+      const linked = await prisma.roster.findMany({
+        where: { leagueId: season.leagueId, redraftRosterId: { in: seasonRosters.map((r) => r.id) } },
+        select: { redraftRosterId: true, playerData: true },
+      })
+      for (const r of linked) {
+        const pd = r.playerData && typeof r.playerData === 'object' ? (r.playerData as Record<string, unknown>) : {}
+        const id = String(pd.source_team_id ?? '')
+        if (r.redraftRosterId && id) externalIdByRedraftRoster.set(r.redraftRosterId, id)
+      }
+    }
 
     for (const sr of seasonRosters) {
       const row = rows.get(sr.id)
-      const externalId = rosterIdByOwner.get(sr.ownerId)
+      const externalId = externalIdByRedraftRoster.get(sr.id)
       if (!row || !externalId) continue
       const mode=(league.settings as Record<string,unknown> | null)?.scoring_mode
       if(mode === 'h2h_category' || mode === 'roto') {

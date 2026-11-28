@@ -8,6 +8,7 @@
  */
 
 import { diffImportAgainstPrevious } from './importReviewDiff'
+import { rookieDraftStateFromPlatform } from '@/lib/dynasty-core/rookieDraftDone'
 import type {
   ImportReview,
   ImportReviewCanonicalInput,
@@ -412,6 +413,7 @@ export function buildImportReview(input: BuildImportReviewInput): ImportReview {
       season: preview.league.season,
       leagueType: leagueType.id,
       leagueTypeLabel: leagueType.label,
+      rookieDraftFromPlatform: rookieDraftStateFromPlatform(input.platform, facts.providerStatus),
       declaredTeamCount: declared,
       importedTeamCount: teams.length,
       rosterSize: expected,

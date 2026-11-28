@@ -742,11 +742,17 @@ describe('🛑 a roster that is not in Sleeper ids is never subtracted raw', () 
     expect(out).not.toContain('Achane')
   })
 
-  it('a non-NFL ESPN league with players the map cannot place refuses rather than guessing', async () => {
+  /*
+   * This used to reach the other-sport pool when the NFL ESPN map placed every id — subtracting NFL
+   * Sleeper ids from an NBA pool (ESPN 15847 → Sleeper 1466: NFL Travis Kelce, NBA JaVale McGee). An
+   * ESPN league of another sport is refused before any roster read now (`rosterIdSpaceOf`).
+   */
+  it('a non-NFL ESPN league refuses rather than guessing — before the NFL crosswalk is ever asked', async () => {
     h.leagueFind.mockResolvedValue({ name: 'ESPN Hoops', sport: 'NBA', platform: 'espn' })
     h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['3112335'] } }])
     const out = await buildAvailablePlayersContext(LEAGUE, USER)
-    expect(out).toMatch(/could not be matched from ESPN/)
+    expect(out).toMatch(/cannot yet match espn roster entries/)
+    expect(out).toMatch(/do NOT name anyone as available/)
     expect(h.otherSport).not.toHaveBeenCalled()
   })
 })

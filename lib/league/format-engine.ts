@@ -447,7 +447,7 @@ export function resolveLeagueFormat(options: {
   const roster = resolveFormatRosterDefaults({ sport, formatId: format.id, modifiers: scopedModifiers })
   const scoring = resolveFormatScoringDefaults({ sport, formatId: format.id, modifiers: scopedModifiers })
   const leagueDefaults = getLeagueDefaults(sport)
-  const draftDefaults = getDraftDefaults(
+  const sportDraftDefaults = getDraftDefaults(
     sport,
     scopedModifiers.includes('idp')
       ? 'IDP'
@@ -463,6 +463,9 @@ export function resolveLeagueFormat(options: {
                 ? 'SUPERFLEX'
                 : null
   )
+  const draftDefaults = sport === 'NCAAB' && format.id === 'zombie'
+    ? { ...sportDraftDefaults, rounds_default: roster.rosterSize }
+    : sportDraftDefaults
   const waiverDefaults = getWaiverDefaults(sport, format.id)
   const playoffDefaults = resolveDefaultPlayoffConfig(sport, format.id)
   const scheduleDefaults = resolveDefaultScheduleConfig(sport, format.id)
@@ -552,7 +555,8 @@ export function getFormatIntroMetadata(options: {
 
   return {
     title: `${resolution.sport} ${resolution.format.label}`,
-    subtitle: `${resolution.format.description}${modifierLabel}.`,
+    // Descriptions end in a period; appending another printed "formats.." (2026-11-24 audit).
+    subtitle: `${resolution.format.description.replace(/\.$/, '')}${modifierLabel}.`,
     introVideo: resolution.media.introVideo,
     thumbnail: resolution.media.thumbnail,
     fallbackCopy: `Welcome to ${resolution.format.label} on AllFantasy. Your ${resolution.sport} format is configured and ready to customize.`,

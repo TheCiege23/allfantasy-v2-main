@@ -106,6 +106,11 @@ export async function validateRedraftTradeProposalAtCreation(
   input: RedraftProposalValidationInput,
   db: ValidationDb = prisma,
 ): Promise<RedraftProposalValidation> {
+  // Guilly: a chopped team never trades, and trades close once few enough teams are left
+  // (lib/guillotine/guillotineTrades.ts). Ahead of the format check, so the refusal says which.
+  const { guillotineTradeRefusal } = await import('@/lib/guillotine/guillotineTrades')
+  const guilly = await guillotineTradeRefusal(input.leagueId, [input.proposerRosterId, input.receiverRosterId, ...(input.additionalRosterIds ?? [])])
+  if (guilly) return { ok: false, code: 'GUILLOTINE_TRADE_CLOSED', message: guilly, source: 'league_lock' }
   const formatRefusal = await formatTradesDisabledRefusal(input.leagueId, db)
   if (formatRefusal) return formatRefusal
   const base = await validateRedraftTradeProposalCore(input, db)

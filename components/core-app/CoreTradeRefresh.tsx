@@ -21,6 +21,9 @@ export default function CoreTradeRefresh() {
         if (!response.ok) return
         const next = (await response.json()).version
         if (typeof next !== 'string' || controller.signal.aborted) return
+        // The first answer describes the page just rendered: a baseline, not a change. Treating it as
+        // one rebuilt Home on every open (measured on prod 2026-11-19: ~20s after load, every time).
+        if (version === null) { version = next; return }
         if (version !== next) {
           version = next
           // Guarded: after a deploy a background refresh is a full page reload (lib/core-app/deployGuard).

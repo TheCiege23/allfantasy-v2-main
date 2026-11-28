@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ArrowLeft, BookOpen } from "lucide-react"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
+import { StoryAiLockNotice, type StoryAiLock } from "@/components/league-story-ai/StoryAiLockNotice"
 
 interface EntryDetail {
   id: string
@@ -39,6 +40,7 @@ export default function HallOfFameEntryDetailPage() {
   const [whyInductedPrompt, setWhyInductedPrompt] = useState<string | null>(null)
   const [narrative, setNarrative] = useState<string | null>(null)
   const [narrativeLoading, setNarrativeLoading] = useState(false)
+  const [narrativeLock, setNarrativeLock] = useState<StoryAiLock>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -70,6 +72,7 @@ export default function HallOfFameEntryDetailPage() {
   const tellStory = () => {
     if (!leagueId || !entryId) return
     setNarrative(null)
+    setNarrativeLock(null)
     setNarrativeLoading(true)
     fetch(`/api/leagues/${encodeURIComponent(leagueId)}/hall-of-fame/tell-story`, {
       method: "POST",
@@ -81,7 +84,11 @@ export default function HallOfFameEntryDetailPage() {
         if (!r.ok) throw new Error(data?.error ?? "Could not load explanation.")
         return data
       })
-      .then((data) => setNarrative(data?.narrative ?? "No explanation available."))
+      .then((data) => {
+        setNarrative(data?.narrative ?? "No explanation available.")
+        // The fact-built narrative is shown either way; `aiLocked` says why Chimmy did not write it.
+        setNarrativeLock(data?.aiLocked ?? null)
+      })
       .catch(() => setNarrative("Could not load explanation."))
       .finally(() => setNarrativeLoading(false))
   }
@@ -163,6 +170,7 @@ export default function HallOfFameEntryDetailPage() {
             {narrative}
           </div>
         )}
+        {narrative && <StoryAiLockNotice lock={narrativeLock} featureName="Chimmy Hall of Fame write-ups" />}
         {whyInductedPrompt && (
           <details className="rounded-lg border border-zinc-700 bg-zinc-900/50 p-3 text-xs text-zinc-300">
             <summary className="cursor-pointer text-zinc-200">Induction evidence prompt context</summary>

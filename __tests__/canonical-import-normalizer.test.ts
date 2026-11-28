@@ -70,7 +70,21 @@ describe('buildCanonicalImportBundle', () => {
     expect(b.warnings.some((x) => x.code === 'source_fetch_incomplete')).toBe(false)
   })
 
-  it('detects devy signal from taxi rosters', () => {
+  it('a dynasty league named C2C imports as C2C, and one named Devy as devy (Sleeper has neither type)', () => {
+    const dynasty = (name: string) =>
+      buildCanonicalImportBundle(
+        baseNormalized({ league: { ...baseNormalized().league, name, isDynasty: true, league_type: undefined } }),
+      )
+    expect(dynasty('Peach Bowl (C2C)').inferredConcept).toBe('c2c')
+    expect(dynasty('Peach Bowl (C2C)').derivedFlags.c2c).toBe(true)
+    expect(dynasty('Campus to Canton').inferredConcept).toBe('c2c')
+    expect(dynasty('Road To Glory Devy').inferredConcept).toBe('devy')
+    expect(dynasty('Big Dawgs Dynasty').inferredConcept).toBe('dynasty')
+    // A dynasty name that only mentions another format stays dynasty — only C2C and devy are dynasty kinds.
+    expect(dynasty('Guillotine Dynasty').inferredConcept).toBe('dynasty')
+  })
+
+  it('a taxi squad alone is not devy', () => {
     const b = buildCanonicalImportBundle(
       baseNormalized({
         rosters: [
@@ -91,7 +105,8 @@ describe('buildCanonicalImportBundle', () => {
         ],
       }),
     )
-    expect(b.derivedFlags.devy).toBe(true)
+    expect(b.derivedFlags.devy).toBe(false)
+    expect(b.settingsSnapshot.rosterSettings?.devyCollegeSlots).toBeUndefined()
   })
 
   it('uses a custom Fantrax league\'s actual reception and IDP rules', () => {

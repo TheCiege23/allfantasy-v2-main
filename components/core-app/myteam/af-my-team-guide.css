@@ -110,3 +110,39 @@
   max-width: 160px;
 }
 .af-core .af-mt-pick[data-round='1'] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+
+/*
+ * 2026-11-23 ("crowded"): the "What to do" card's sentence inherited the page's 18px — the same size as
+ * the card's own heading — so a hedge read like a second headline. Body size, secondary colour.
+ */
+.af-core .af-mt-decision > div > p { font-size: 14px; line-height: 1.5; color: var(--text2); }
+
+/* Clips and highlights, one closed row; its panels mount only when it is opened (MyTeam.tsx LazyFold). */
+.af-core .af-mt-media-fold { margin-top: 16px; padding: 0 16px; }
+.af-core .af-mt-media-fold > summary {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-mt-media-fold > summary::-webkit-details-marker { display: none; }
+.af-core .af-mt-media-fold > summary::after { content: '▸'; margin-left: auto; color: var(--muted); }
+.af-core .af-mt-media-fold[open] > summary::after { content: '▾'; }
+.af-core .af-mt-media-fold[open] { padding-bottom: 16px; }
+
+/*
+ * "Refresh lineup" under the team name is a standalone control, 32px tall on a touch phone. An
+ * invisible box lifts the hit area to 44px without moving the line (the `.af-info-tip` convention).
+ * Its own top-level @media at depth 0.
+ */
+@media (pointer: coarse) {
+  .af-core .af-lv-refresh-link { position: relative; }
+  .af-core .af-lv-refresh-link::after {
+    content: '';
+    position: absolute;
+    inset: -6px -4px;
+  }
+}

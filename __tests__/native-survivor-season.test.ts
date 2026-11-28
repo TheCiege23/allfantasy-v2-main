@@ -153,7 +153,8 @@ describe('native workspace navigation', () => {
   const tabs = ['native_home', 'home', 'draft', 'roster', 'matchups', 'players', 'waivers', 'trades', 'standings', 'league_chat', 'survivor', 'survivor_tribal', 'commissioner', 'settings'].map(id => ({ id, label: id }))
   it('retains functional tools, gives home one entry, and keeps commissioner tools from members', () => {
     const ids = nativeNavLeafIds(buildNativeLeagueNavigation(tabs, false))
-    expect(ids).toContain('native_home'); expect(ids).toContain('draft'); expect(ids).toContain('survivor_tribal')
+    // League is one page (2026-11-27): the standings id carries it; the old overview is not a sub-tab.
+    expect(ids).toContain('standings'); expect(ids).not.toContain('native_home'); expect(ids).toContain('draft'); expect(ids).toContain('survivor_tribal')
     expect(ids).not.toContain('commissioner'); expect(ids).not.toContain('home')
     // A member reaches the read-only League settings page, as Sleeper's Settings tab does for everyone.
     expect(ids).toContain('settings')

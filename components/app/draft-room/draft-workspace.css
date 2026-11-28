@@ -23,7 +23,8 @@
  .draft-touch-room{height:var(--draft-visible-height,100dvh);box-sizing:border-box}
  .draft-touch-room [data-testid="draft-mobile-content"]{padding:0;overflow:hidden}
  .draft-touch-room [data-testid="draft-mobile-content"]:not([data-active-tab="players"]){overflow-y:auto;padding:0 8px 8px}
- .draft-touch-room [data-testid="draft-mobile-tray-handle"]{min-height:32px}
+ /* 44px touch minimum: this rule set the handle's rendered height (it overrides the component's own min-h). */
+ .draft-touch-room [data-testid="draft-mobile-tray-handle"]{min-height:44px}
  .draft-touch-room [data-testid="draft-player-toolbar"]>div:first-child{flex-basis:100%;min-width:0}
  .draft-touch-room [data-testid="draft-player-toolbar"] [data-testid="draft-position-filter"]{order:3;width:100%}
  .draft-touch-room [data-testid="draft-team-filter"]{flex:1;max-width:calc(100% - 100px)}

@@ -29,6 +29,7 @@ import { SmsConsentCheckbox } from "@/components/legal/SmsConsentCheckbox"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
 import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { useConfirm } from "./ConfirmDialog"
+import PasskeysCard from "./PasskeysCard"
 
 /**
  * A rejected fetch (offline, a dropped phone connection) becomes an ordinary failed result.
@@ -175,6 +176,8 @@ export function SecuritySettingsSection({
         return t("settings.security.phoneError.notConfigured")
       case "INVALID_PHONE":
         return t("settings.security.phoneError.invalidPhone")
+      case "PHONE_REGION_NOT_SUPPORTED":
+        return t("settings.security.phoneError.regionNotSupported")
       case "UNAUTHENTICATED":
         return t("settings.security.phoneError.unauthenticated")
       case "SEND_FAILED":
@@ -380,10 +383,12 @@ export function SecuritySettingsSection({
         <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>{t("settings.security.subtitle")}</p>
       </div>
 
-      <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
-        <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{t("settings.security.twoFactorTitle")}</p>
-        <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.security.twoFactorBody")}</p>
-      </div>
+      {/*
+        No two-factor card (2026-11-25, the simplify pass): it said 2FA "is not enabled yet" and had no
+        control. Passkeys, below, are the stronger sign-in that does exist.
+      */}
+
+      <PasskeysCard />
 
       <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
         <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{t("settings.security.sessionsTitle")}</p>

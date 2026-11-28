@@ -14,6 +14,10 @@
  *
  * A pick decision also carries `context`: the scoring window, any position run and the open
  * starting slots among the teams picking before the user's next turn — the specifics of THIS draft.
+ *
+ * Off the clock — before the draft, or while another team picks — the decision is for the user's OWN next
+ * turn, with the players ADP says go before it left out (`plannedFor`, lib/shared-services/draft/planForOwnPick.ts).
+ * Before 2026-11-19 it ranked the pick on the clock, so a manager drafting tenth was told to take pick 1's player.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -60,13 +64,17 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   let context: Awaited<ReturnType<typeof buildDraftDecisionContext>>
   try {
-    context = await buildDraftDecisionContext({ leagueId, rosterId })
+    context = await buildDraftDecisionContext({ leagueId, rosterId, planForOwnTurn: true })
   } catch {
     // League, session or roster vanished between the reads above and this one.
     return NextResponse.json({ error: 'The draft could not be loaded.', reason: 'context_unavailable' }, { status: 409 })
   }
-  // Forward test of replacement value — background only, never awaited (recommendationRecorder.ts).
-  scheduleDraftRecommendationRecord({
+  /*
+   * Forward test of replacement value — background only, never awaited (recommendationRecorder.ts). Only the pick
+   * being made is recorded: the recorder keeps the FIRST read of a pick, so a plan made picks earlier, on a pool
+   * that ADP thinned, would stand in for what the room actually showed at that pick.
+   */
+  if (!context.plannedFor) scheduleDraftRecommendationRecord({
     surface: 'decision_card',
     sport: context.sport,
     leagueId,
@@ -102,6 +110,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
       dataCompleteness: decision.data_completeness,
       uncertaintySources: decision.uncertainty_sources,
       forOverall: snapshot.currentPick?.overall ?? null,
+      /** The user's own next turn this was planned for, when they are not on the clock; null on the clock. */
+      plannedFor: context.plannedFor ?? null,
       generatedAt: new Date().toISOString(),
       context: {
         scoringWindow: (engineResult as RecommendationResult | null)?.scoringWindowInsight ?? null,

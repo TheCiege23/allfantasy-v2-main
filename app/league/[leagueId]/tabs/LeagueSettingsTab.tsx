@@ -1,5 +1,6 @@
 'use client'
 
+import { platformOnlyAuthority } from '@/lib/league/write-authority'
 import Link from 'next/link'
 import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -568,7 +569,7 @@ export function LeagueSettingsTab({
         description="Control how the draft handles timers, pauses, and auto-picks."
       >
         {/* Native redraft drafts start at their time whatever this says, so it is hidden for them. */}
-        {startsAtScheduledTimeRegardlessOfAutostart(league) ? (
+        {startsAtScheduledTimeRegardlessOfAutostart({ ...league, ...platformOnlyAuthority(league.platform) }) ? (
           <p className="border-b border-white/[0.04] py-2 text-[12px] text-white/60" data-testid="draft-autostart-scheduled-note">
             {t('draft.autostartScheduledNote')}
           </p>
@@ -1163,19 +1164,21 @@ export function LeagueSettingsTab({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="flex items-center gap-2 text-sm font-bold text-white">
-                  ⚡ AutoCoach Chimmy
+                  ⚡ Chimmy Auto-Swap
                   <span className="rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2 py-0.5 text-[11px] font-bold text-[#ff3d81]">
-                    FREE FOR LEAGUES
+                    LEAGUE-WIDE
                   </span>
                 </p>
                 <p className="mt-0.5 text-xs text-white/50">
-                  Allow managers to use Chimmy AutoCoach in this league. AutoCoach automatically swaps injured or
-                  inactive starters before games. Managers must have AF Pro to use it.
+                  Allow Chimmy Auto-Swap in this league: AutoCoach, auto-subs, benching starters on bye, switching
+                  injured starters and filling empty spots. Each manager still needs AF Pro or Supreme and must turn
+                  Auto-Swap on for themselves. A player whose game has started is never moved. Chimmy-managed and
+                  unclaimed seats are always kept playable.
                 </p>
               </div>
               <button
                 type="button"
-                aria-label="Toggle AutoCoach Chimmy for this league"
+                aria-label="Toggle Chimmy Auto-Swap for this league"
                 onClick={() => void handleAutoCoachLeagueToggle()}
                 className={[
                   'relative h-6 w-11 shrink-0 rounded-full border transition-colors',
@@ -1192,7 +1195,8 @@ export function LeagueSettingsTab({
             </div>
             {!(league.autoCoachEnabled ?? true) ? (
               <p className="text-[11px] text-amber-400/80">
-                AutoCoach is disabled for this league. Managers cannot use AutoCoach here even with AF Pro.
+                Chimmy Auto-Swap is off for this league. No manager's lineup is changed automatically, even with AF
+                Pro or Supreme and Auto-Swap turned on.
               </p>
             ) : null}
           </div>

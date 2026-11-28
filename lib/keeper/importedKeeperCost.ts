@@ -29,8 +29,15 @@ export type KeeperDraftPick = {
 
 /** Flagged keepers needed before a league's rule counts as measured. */
 export const MIN_MEASURED_KEEPERS = 5
-/** Share of them that must sit at their previous round for the same-round rule. */
-const SAME_ROUND_SHARE = 0.7
+/**
+ * Share of them that must sit at their previous round for the same-round rule.
+ *
+ * Two thirds since 2026-11-20 (owner's decision; it was 0.7). Measured on the eight keeper leagues in
+ * production: three clear it easily (31/35, 27/33, 18/18) and one sat at 24 of 35, 69%, a single
+ * keeper short. Its other eleven are scattered one to seven rounds LATER, which is what keepers
+ * bumped by a same-round clash look like, not a different rule. No league sits between 50% and 66%.
+ */
+const SAME_ROUND_SHARE = 2 / 3
 
 export type KeeperCostRule =
   | { rule: 'same_round'; season: number; measured: number; agreeing: number }

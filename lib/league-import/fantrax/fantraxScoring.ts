@@ -83,6 +83,22 @@ const GROUP_CATEGORY_KEYS: Record<string, Record<string, string[]>> = {
     INDIVIDUAL_STEALS: ['stl'],
     INDIVIDUAL_BLOCKS: ['blk'],
     INDIVIDUAL_TURNOVERS: ['to'],
+    // 2026-11-26 (the Road To Glory leagues score these): every code below is a stat the basketball box carries
+    // (lib/scoring-runtime/dailySportStatNormalization.ts). Fantrax's "double doubles" already counts the triple
+    // ones (its name: DOUBLE_DOUBLES_PLUS_TRIPLE_DOUBLES), which is how dbl_dbl is counted here too.
+    // Not in the box, so still reported as gaps: ejections, technical and flagrant fouls, fouls drawn,
+    // game-winning buzzer beaters, team wins and losses.
+    INDIVIDUAL_FREE_THROWS_MADE: ['ftm'],
+    INDIVIDUAL_FREE_THROWS_MISSED: ['ft_miss'],
+    INDIVIDUAL_THREE_POINTERS_MADE: ['threes'],
+    INDIVIDUAL_THREE_POINTERS_MISSED: ['fg3_miss'],
+    INDIVIDUAL_TWO_POINTERS_MADE: ['fg2m'],
+    INDIVIDUAL_TWO_POINTERS_MISSED: ['fg2_miss'],
+    INDIVIDUAL_MINUTES_PLAYED: ['min'],
+    INDIVIDUAL_PERSONAL_FOULS: ['pf'],
+    INDIVIDUAL_DOUBLE_DOUBLES_PLUS_TRIPLE_DOUBLES: ['dbl_dbl'],
+    INDIVIDUAL_TRIPLE_DOUBLES: ['trpl_dbl'],
+    INDIVIDUAL_QUADRUPLE_DOUBLES: ['quad_dbl'],
   },
   HOCKEY_SKATING: {
     INDIVIDUAL_GOALS: ['goals'],

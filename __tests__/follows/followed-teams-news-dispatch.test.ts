@@ -106,6 +106,33 @@ describe('team followers', () => {
     expect(out.noRoster).toBe(1)
   })
 
+  it('🛑 a fantasy column is not sent to team followers — player followers still get it (2026-11-24)', async () => {
+    h.newsFind.mockResolvedValue([{ ...ROW, impact: 'high', headline: 'Fantasy notebook: Karabell on Jordan Love, Jayden Reed, more' }])
+    h.classify.mockReturnValue('player_news')
+    h.playerFollowers.mockResolvedValue(['pfan-1'])
+    h.teamFollowers.mockResolvedValue(['tfan-1'])
+    const out = await dispatchPendingPlayerNewsNotifications()
+    expect(h.teamFollowers).not.toHaveBeenCalled()
+    expect(h.cap).not.toHaveBeenCalledWith(['tfan-1'])
+    const everyone = h.dispatch.mock.calls.flatMap((c) => c[0].userIds)
+    expect(everyone).toContain('pfan-1')
+    expect(everyone).not.toContain('tfan-1')
+    expect(out).toMatchObject({ teamFollowFantasySkipped: 1, teamFollowerRecipients: 0 })
+  })
+
+  it('🛑 a sportsbook ad is not sent to team followers — player followers still get it (2026-11-24)', async () => {
+    h.newsFind.mockResolvedValue([{ ...ROW, impact: 'high', headline: 'Packers vs. Bears odds, picks, prediction: Jordan Love best bets from expert' }])
+    h.classify.mockReturnValue('player_news')
+    h.playerFollowers.mockResolvedValue(['pfan-1'])
+    h.teamFollowers.mockResolvedValue(['tfan-1'])
+    const out = await dispatchPendingPlayerNewsNotifications()
+    expect(h.teamFollowers).not.toHaveBeenCalled()
+    const everyone = h.dispatch.mock.calls.flatMap((c) => c[0].userIds)
+    expect(everyone).toContain('pfan-1')
+    expect(everyone).not.toContain('tfan-1')
+    expect(out).toMatchObject({ teamFollowSportsbookSkipped: 1, teamFollowFantasySkipped: 0, teamFollowerRecipients: 0 })
+  })
+
   it('people over today\'s cap are not told, and are counted', async () => {
     h.teamFollowers.mockResolvedValue(['fan-1', 'fan-2'])
     h.cap.mockImplementation(async (ids: string[]) => ids.filter((id) => id !== 'fan-2'))

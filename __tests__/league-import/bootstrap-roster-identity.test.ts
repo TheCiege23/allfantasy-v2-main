@@ -18,6 +18,8 @@ const db = vi.hoisted(() => ({
   /** Full-row roster rewrites, and `updatedAt`-only touches, so a no-op sync can be told apart. */
   rosterUpdates: 0,
   rosterTouches: [] as string[][],
+  /** `League.settings` of league-1; null is a league that never started switching. */
+  leagueSettings: null as unknown,
 }))
 
 function uniqueViolation(): Error {
@@ -83,6 +85,7 @@ vi.mock('@/lib/prisma', () => {
     prisma: {
       roster,
       leagueTeam,
+      league: { findUnique: () => lazy(() => ({ settings: db.leagueSettings })) },
       appUser: { findMany: () => lazy(() => []) },
       userProfile: {
         findMany: () => lazy(() => [...db.linked].map(([sleeperUserId, userId]) => ({ sleeperUserId, userId }))),
@@ -147,6 +150,7 @@ beforeEach(() => {
   db.teams = []
   db.seq = 0
   db.linked = new Map()
+  db.leagueSettings = null
 })
 
 describe('🛑 a provider that reports no commissioner cannot clear one', () => {
@@ -311,5 +315,38 @@ describe('what it leaves alone', () => {
     const out = await run([team('1', 'mgr-b', ['a'])])
     expect(rowsOf('1')).toEqual([expect.objectContaining({ id: 'r1', platformUserId: 'mgr-a' })])
     expect(out.rosterKeyConflicts).toBe(1)
+  })
+})
+
+describe("🛑 a switched team in an official league is AllFantasy's, so the re-sync leaves it alone", () => {
+  const stamp = { at: '2026-11-27T00:00:00.000Z', byUserId: 'u' }
+  async function seedTwoTeams() {
+    await run([team('1', 'mgr-1', ['a']), team('2', 'mgr-2', ['b'])])
+    // Manager 1 switched and has since made a move on AllFantasy.
+    rowsOf('1')[0]!.playerData = { ...rowsOf('1')[0]!.playerData, players: ['a', 'af-pickup'] }
+    ;(db.teams.find((t) => t.externalId === '1') as any).teamName = 'Renamed on AllFantasy'
+  }
+
+  it('official league: the switched team keeps its AllFantasy roster and name; the other team still syncs', async () => {
+    await seedTwoTeams()
+    db.leagueSettings = { switching: { official: stamp, teams: { 't-1': stamp } } }
+
+    const out = await run([team('1', 'mgr-1', ['a', 'platform-only']), team('2', 'mgr-2', ['b', 'c'])])
+
+    expect(rowsOf('1')[0]!.playerData.players).toEqual(['a', 'af-pickup'])
+    expect((db.teams.find((t) => t.externalId === '1') as any).teamName).toBe('Renamed on AllFantasy')
+    expect(rowsOf('2')[0]!.playerData.players).toEqual(['b', 'c'])
+    expect(out.teamsKeptOnAllFantasy).toBe(1)
+  })
+
+  it('[control] before the league is official, the same switch is practice only and the re-sync overwrites it', async () => {
+    await seedTwoTeams()
+    db.leagueSettings = { switching: { official: null, teams: { 't-1': stamp } } }
+
+    const out = await run([team('1', 'mgr-1', ['a', 'platform-only']), team('2', 'mgr-2', ['b'])])
+
+    expect(rowsOf('1')[0]!.playerData.players).toEqual(['a', 'platform-only'])
+    expect((db.teams.find((t) => t.externalId === '1') as any).teamName).toBe('Team 1')
+    expect(out.teamsKeptOnAllFantasy).toBe(0)
   })
 })

@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { rosterManagerKey } from '@/lib/league/rosterManager'
 import 'server-only'
 
@@ -892,7 +893,7 @@ export class DraftWorker {
     })
     const managerId = roster ? rosterManagerKey(roster) : null
 
-    if (managerId && !managerId.startsWith('orphan-')) {
+    if (managerId && !isSeatPlaceholderUserId(managerId)) {
       const intel = await publishDraftIntelState({
         leagueId: context.leagueId,
         userId: managerId,

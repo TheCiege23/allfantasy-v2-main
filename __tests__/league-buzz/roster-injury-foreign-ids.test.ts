@@ -23,7 +23,7 @@ const ROSTERS: Row[] = [
   { id: 'r-espn', leagueId: 'L-espn', platformUserId: 'u1', playerData: { players: ['4040404', '5050505'] }, league: { platform: 'espn', sport: 'NFL' } },
   { id: 'r-other-user', leagueId: 'L-x', platformUserId: 'u2', playerData: { players: ['4046'] }, league: { platform: 'sleeper', sport: 'NFL' } },
 ]
-const IDENTITY_MAP: Row[] = [{ espnId: '4040404', sleeperId: '4046' }]
+const IDENTITY_MAP: Row[] = [{ sport: 'NFL', espnId: '4040404', sleeperId: '4046' }] // the ESPN crosswalk is NFL
 /** Sleeper's own `SportsPlayer` rows: 6038 and 1332 ARE Sleeper ids — for strangers. */
 const SLEEPER_NAMES: Record<string, string> = { '4046': 'Mapped Guy', '6038': 'Sleeper Stranger', '1332': 'Ifeanyi Momah', '9228': 'Bryce Young' }
 /** The live injury feed, by name: the strangers are hurt too, so naming one would announce him. */

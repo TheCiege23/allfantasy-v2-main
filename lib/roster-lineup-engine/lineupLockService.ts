@@ -13,6 +13,7 @@ import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonS
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
 import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week/effectiveRedraftWeek'
 
 export type LineupLockResolveArgs = {
   leagueId: string
@@ -168,14 +169,30 @@ async function resolveNbaSurvivorGameDayLocks(args: LineupLockResolveArgs, now: 
  * `per_player_kickoff`, honouring the league's lock mode and commissioner overrides). This applies the
  * same derivation here, so both save paths agree. NBA Survivor keeps its own pick-aware lock above.
  */
-const DAILY_LOCK_SPORTS: ReadonlySet<string> = new Set(['NBA', 'MLB', 'NHL', 'NCAAB'])
+/*
+ * 🛑 AND NFL, NCAAF AND SOCCER HAD NO SCHEDULE LOCK ON THIS PATH AT ALL (2026-11-23). They relied on the
+ * whole-lineup time windows in `evaluateLineupLock` — whose Thursday branch could never run (Wed–Sat
+ * returned "unlocked" first), so a Thursday-night starter could be benched on Friday and his points erased,
+ * and NCAAF Saturdays never locked — plus the client-sent `gameTime` heuristic below. Owner's rule: in every
+ * sport, a player whose game has started cannot be moved in or out; only best ball is exempt. Every sport
+ * the schedule lock knows (lib/redraft/lineupLock.ts) is locked from the schedule now.
+ */
+const SCHEDULE_LOCK_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NCAAF', 'NBA', 'MLB', 'NHL', 'NCAAB', 'SOCCER'])
+
+/** The schedule told us nothing: no games stored for the week, or a sport it cannot read. */
+const SCHEDULE_UNKNOWN = /no .* games found|not locked|fall open/i
+
+export type ScheduleLocks = { lockedPlayerIds: string[]; reasons: Record<string, string>; scheduleKnown: boolean }
 
 export async function resolveDailySportWeeklyLocks(
   args: LineupLockResolveArgs,
   now: Date,
-): Promise<{ lockedPlayerIds: string[]; reasons: Record<string, string> } | null> {
+): Promise<ScheduleLocks | null> {
   const sport = args.sport.toUpperCase()
-  if (!DAILY_LOCK_SPORTS.has(sport) || args.editingWeek !== args.leagueWeek) return null
+  // A past week is view-only already. A FUTURE week is locked by THIS week's schedule: a save writes the
+  // roster's current slots (syncRedraftSlotTypesForLineup), so "editing week 13" moved week 12's lineup
+  // with no lock at all.
+  if (!SCHEDULE_LOCK_SPORTS.has(sport) || args.editingWeek < args.leagueWeek) return null
   const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { redraftRosterId: true } })
   if (!roster?.redraftRosterId) return null
   const players: Array<{ playerId: string; team: string | null; isLocked?: boolean | null }> =
@@ -183,10 +200,10 @@ export async function resolveDailySportWeeklyLocks(
       where: { rosterId: roster.redraftRosterId, droppedAt: null },
       select: { playerId: true, team: true },
     })
-  const { players: stamped } = await hydrateRedraftLineupLocks(prisma, {
+  const { players: stamped, warnings } = await hydrateRedraftLineupLocks(prisma, {
     sport,
     season: args.season,
-    week: args.editingWeek,
+    week: args.leagueWeek,
     rosterId: roster.redraftRosterId,
     leagueSettings: args.settings,
     players,
@@ -201,8 +218,11 @@ export async function resolveDailySportWeeklyLocks(
       ? "This player's game today has started; he is locked until tomorrow."
       : "This player's first game of the fantasy week has started; he is locked until the week ends."
   }
-  return { lockedPlayerIds, reasons }
+  return { lockedPlayerIds, reasons, scheduleKnown: !warnings.some((w) => SCHEDULE_UNKNOWN.test(w)) }
 }
+
+/** The whole-lineup time-of-day guesses that a known schedule replaces. */
+const TIME_WINDOW_POLICIES: ReadonlySet<string> = new Set(['football_weekly', 'soccer_matchday', 'daily_slate'])
 
 export async function resolveSpecialtyLineupGuard(
   leagueId: string,
@@ -267,8 +287,92 @@ export async function upsertAfLineupLockState(input: {
   })
 }
 
-export async function resolveFullLineupLockContext(args: LineupLockResolveArgs): Promise<LineupLockContext> {
-  const now = args.now ?? new Date()
+const LOCK_WEEK_TTL_MS = 60_000
+const lockWeekCache = new Map<string, { at: number; week: number | null }>()
+
+/**
+ * The week the league is actually playing, for the lock: the roster's redraft season, read the way
+ * every other reader reads it (`resolveEffectiveRedraftWeek` — a native season's own week, an imported
+ * one's from the schedule). Null when there is no redraft season or it cannot be read; the caller's
+ * week then stands. Cached a minute per roster, since the automations resolve locks roster by roster.
+ */
+async function resolveCurrentLockWeek(leagueId: string, rosterId: string, nowMs: number): Promise<number | null> {
+  const hit = lockWeekCache.get(rosterId)
+  if (hit && nowMs - hit.at < LOCK_WEEK_TTL_MS) return hit.week
+  let week: number | null = null
+  try {
+    const [roster, league] = await Promise.all([
+      prisma.roster.findUnique({ where: { id: rosterId }, select: { redraftRosterId: true } }),
+      prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }),
+    ])
+    if (roster?.redraftRosterId && league) {
+      const redraft = await prisma.redraftRoster.findUnique({
+        where: { id: roster.redraftRosterId },
+        select: { season: { select: { id: true, currentWeek: true } } },
+      })
+      if (redraft?.season) week = await resolveEffectiveRedraftWeek(redraft.season, league.platform)
+    }
+  } catch {
+    week = null
+  }
+  lockWeekCache.set(rosterId, { at: nowMs, week })
+  return week
+}
+
+export function clearLineupLockWeekCache(): void {
+  lockWeekCache.clear()
+}
+
+/*
+ * 🛑 EVERY LOCK PATH BUT ONE READ THE WEEK FROM `League.settings`, AND THAT IS NOT WHERE THE WEEK IS
+ * (2026-11-25). The native lineup screen, its save, the lock-state route, Chimmy's lineup action, the
+ * lineup automations and waiver eligibility all passed `settings.currentWeek` as the league week — and the
+ * schedule lock below locks each player against THAT week's games. Measured on production the night
+ * before the Wednesday NFL game of 2026 week 12:
+ *
+ *     hosted (manual) NFL leagues   7 of 7 with NO settings week  -> read as week 1   (season says 12)
+ *     Sleeper NFL leagues           696 of 795 at settings week 11, the rest 1, 8, 10 or 12
+ *
+ * Week 1's games are all long finished, so a hosted league's lock "found" every player's game started and
+ * locked the whole roster; and had a settings week ever lagged to the week before a midweek game, that
+ * game's players would have been checked against last week's slate. The redraft lineup route already
+ * read the right week (`resolveEffectiveRedraftWeek`); now every path does, here, once.
+ *
+ * A caller asking about "the current week" (editing week == the week it passed as current) is moved to
+ * the real current week with it; one asking about another week explicitly keeps that week.
+ */
+async function withCurrentLockWeek(args: LineupLockResolveArgs, now: Date): Promise<LineupLockResolveArgs> {
+  const current = await resolveCurrentLockWeek(args.leagueId, args.rosterId, now.getTime())
+  if (current == null || current === args.leagueWeek) return args
+  return {
+    ...args,
+    leagueWeek: current,
+    editingWeek: args.editingWeek === args.leagueWeek ? current : args.editingWeek,
+  }
+}
+
+/**
+ * The players whose game this week has started, from the schedule, at the league's real current week —
+ * for a path that moves players without a lineup save (a waiver or free-agent drop). Null when the
+ * schedule could not be read or the sport has no schedule lock; the caller keeps its own fallback.
+ */
+export async function resolveScheduleLockedPlayerIds(
+  input: Pick<LineupLockResolveArgs, 'leagueId' | 'rosterId' | 'sport' | 'leagueVariant' | 'settings' | 'season' | 'leagueWeek' | 'now'>,
+): Promise<string[] | null> {
+  const now = input.now ?? new Date()
+  try {
+    const args = await withCurrentLockWeek({ ...input, editingWeek: input.leagueWeek, playerData: null }, now)
+    const weekly = await resolveDailySportWeeklyLocks(args, now)
+    return weekly ? weekly.lockedPlayerIds : null
+  } catch (err) {
+    console.warn('[lineupLockService] schedule locks unavailable:', err instanceof Error ? err.message : String(err))
+    return null
+  }
+}
+
+export async function resolveFullLineupLockContext(rawArgs: LineupLockResolveArgs): Promise<LineupLockContext> {
+  const now = rawArgs.now ?? new Date()
+  const args = await withCurrentLockWeek(rawArgs, now)
   const nbaSurvivor = args.sport.toUpperCase() === 'NBA' && String(args.leagueVariant ?? '').toLowerCase() === 'survivor'
   const dailyLineups = isDailyLineupScoringEnabled(args.settings, args.sport)
   const base: LineupLockResult = evaluateLineupLock({
@@ -328,10 +432,22 @@ export async function resolveFullLineupLockContext(args: LineupLockResolveArgs):
      * the schedule-derived lock is its ONLY lock. Failing open here would let a player who has
      * already played today be moved out of today's lineup. Refuse the save until it can be checked.
      */
-    if (weeklyFailed && dailyLineups && args.editingWeek === args.leagueWeek) {
+    const scheduleSport = SCHEDULE_LOCK_SPORTS.has(args.sport.toUpperCase())
+    if (weeklyFailed && scheduleSport && args.editingWeek >= args.leagueWeek) {
+      // The schedule lock is the lock now, in every sport: failing open would let a player whose game
+      // has started be moved. Refuse the save until the start times can be read.
       locked = true
       reason = "Game start times could not be checked, so lineup changes are paused. Try again in a minute."
-      policy = 'daily_lock_unavailable'
+      policy = 'schedule_lock_unavailable'
+    } else if (weekly?.scheduleKnown && locked && TIME_WINDOW_POLICIES.has(policy)) {
+      /*
+       * A known schedule replaces the time-of-day guess. The football window locked EVERY player from
+       * Sunday 1 PM ET to Tuesday, so a Sunday-night or Monday-night starter could not be swapped before
+       * his game; the owner's rule is per player — only those whose game has started are locked.
+       */
+      locked = false
+      reason = undefined
+      policy = 'per_player_schedule'
     }
     if (weekly && weekly.lockedPlayerIds.length > 0) {
       const ids = new Set(kick.lockedPlayerIds)

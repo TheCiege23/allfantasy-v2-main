@@ -3,15 +3,17 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { Fragment, useMemo } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useTournamentUi } from '@/app/tournament/[tournamentId]/TournamentUiContext'
 import { useTournamentParticipantState } from '@/lib/tournament/useTournamentParticipantState'
 import { CutlineRow } from '@/app/tournament/components/CutlineRow'
 import { BubbleLine } from '@/app/tournament/components/BubbleLine'
-import { StandingsRow } from '@/app/tournament/components/StandingsRow'
+import { StandingsHeaderRow, StandingsRow } from '@/app/tournament/components/StandingsRow'
 
 export default function TournamentMyLeaguePage() {
   const tournamentId = useParams<{ tournamentId: string }>()?.tournamentId ?? ''
   const base = `/tournament/${tournamentId}`
+  const { t, tInterpolate } = useLanguage()
   const ctx = useTournamentUi()
   const state = useTournamentParticipantState(ctx)
   const { shell, conferences } = ctx
@@ -71,28 +73,22 @@ export default function TournamentMyLeaguePage() {
                   {state.standingsRound?.roundLabel ?? 'Round'}
                 </span>
                 <span className="rounded-full bg-white/5 px-3 py-0.5 text-[11px] text-[var(--tournament-text-mid)]">
-                  {league.teamSlots} teams · Top {adv} advance
+                  {tInterpolate('tournament.league.teamsAdvance', { teams: String(league.teamSlots), adv: String(adv) })}
                 </span>
               </div>
               <p className="mt-3 text-[12px] text-[var(--tournament-text-dim)]">
-                Bubble pool ~{bubbleCap} · Tiebreaker: {shell.tiebreakerMode.replace(/_/g, ' ')}
+                {bubbleCap > 0 ? `${tInterpolate('tournament.league.bubbleNext', { n: String(bubbleCap) })} · ` : ''}
+                {['points_for', 'points_against_inverse'].includes(shell.tiebreakerMode)
+                  ? t(`tournament.league.tiebreak.${shell.tiebreakerMode}`)
+                  : tInterpolate('tournament.league.tiebreak.other', { mode: shell.tiebreakerMode.replace(/_/g, ' ') })}
               </p>
             </div>
           </div>
 
           <div className="tournament-panel overflow-x-auto">
-            <table className="w-full border-collapse sm:min-w-[560px]">
+            <table className="w-full border-collapse lg:min-w-[560px]">
               <thead>
-                <tr className="border-b border-[var(--tournament-border)] text-left text-[11px] uppercase text-[var(--tournament-text-dim)]">
-                  <th className="py-2 pl-2">#</th>
-                  <th className="py-2" />
-                  <th className="py-2">Team</th>
-                  <th className="hidden py-2 sm:table-cell">Status</th>
-                  <th className="hidden py-2 md:table-cell">Mv</th>
-                  <th className="py-2">W-L</th>
-                  <th className="py-2 text-right">PF</th>
-                  <th className="hidden py-2 text-right lg:table-cell">Conf</th>
-                </tr>
+                <StandingsHeaderRow />
               </thead>
               <tbody>
                 {rows.map((row, idx) => {
@@ -114,24 +110,13 @@ export default function TournamentMyLeaguePage() {
             </table>
           </div>
 
-          <details className="tournament-panel group p-4">
-            <summary className="cursor-pointer text-[13px] font-bold text-white">
-              Cutline detail <span className="text-[var(--tournament-text-dim)]">(tap to expand)</span>
-            </summary>
-            <p className="mt-3 text-[12px] text-[var(--tournament-text-mid)]">
-              You need enough wins and points for to pass the qualification line. Tiebreaker:{' '}
-              <strong className="text-white">{shell.tiebreakerMode.replace(/_/g, ' ')}</strong>. Remaining weeks follow
-              the round template configured for this shell.
-            </p>
-          </details>
-
           {league.leagueId ? (
             <Link
               href={`/league/${league.leagueId}`}
               className="flex min-h-[52px] w-full items-center justify-center rounded-xl bg-cyan-500/20 text-[15px] font-bold text-cyan-100 hover:bg-cyan-500/30"
               data-testid="tournament-open-full-league"
             >
-              Open full league workspace (tabs, waivers, draft)
+              {t('tournament.league.openLeague')}
             </Link>
           ) : null}
         </>

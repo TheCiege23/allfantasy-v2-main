@@ -31,11 +31,16 @@ import { upsertSubscriptionPlanForCatalogItem } from "@/lib/subscription/webhook
  * Apple and Google Play subscriptions are never touched: they cannot be switched from the web.
  */
 
-/** Plan families Supreme includes (`SUPREME_INCLUDED_PLAN_IDS`: pro, commissioner). */
-export const SUPREME_BUNDLED_FAMILIES: ReadonlySet<SubscriptionPlanFamily> = new Set(["af_pro", "af_commissioner"])
+/**
+ * Plan families Supreme includes (`SUPREME_INCLUDED_PLAN_IDS`: pro, commissioner and — since 2026-11-27 —
+ * war_room, AF Legacy). A Legacy subscriber buying Supreme is switched in place like a Pro one; holding
+ * Legacy beside another, the extra subscription is cancelled with a prorated credit, because Supreme now
+ * includes it.
+ */
+export const SUPREME_BUNDLED_FAMILIES: ReadonlySet<SubscriptionPlanFamily> = new Set(["af_pro", "af_commissioner", "af_war_room"])
 
 /** Most expensive first: the one switched is the one whose price is closest to Supreme's. */
-const SWITCH_ORDER: readonly SubscriptionPlanFamily[] = ["af_commissioner", "af_pro"]
+const SWITCH_ORDER: readonly SubscriptionPlanFamily[] = ["af_commissioner", "af_pro", "af_war_room"]
 
 export type SwitchSourceRow = {
   id: string

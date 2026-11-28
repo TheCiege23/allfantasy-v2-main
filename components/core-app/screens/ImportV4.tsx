@@ -4,6 +4,7 @@ import Link from 'next/link'
 import posthog from 'posthog-js'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { IMPORT_SEARCH_MIN_ROWS, matchesImportSearch } from '@/lib/league-import/importListSearch'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING — the same omission that shipped on the landing
  * page and again on LeagueHome. This screen's root is <div className="af-core af-im">, and the
@@ -38,6 +39,7 @@ import { EspnLeagueCheck, type EspnLeagueCheckStatus } from '@/components/core-a
 import { EspnTeamCodeVerify } from '@/components/core-app/import/EspnTeamCodeVerify'
 import { ImportGuide } from '@/components/core-app/import/ImportGuide'
 import { ImportInviteCard } from '@/components/core-app/import/ImportInviteCard'
+import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
@@ -60,6 +62,17 @@ import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
 import { detectProviderFromLink } from '@/lib/league-import/detectProviderFromLink'
 import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
 import { ImportReviewPanel, type ImportReviewState } from '@/components/import/ImportReviewPanel'
+import { ImportLeagueTypePicker } from '@/components/import/ImportLeagueTypePicker'
+import { ImportOtherHalfPicker } from '@/components/import/ImportOtherHalfPicker'
+import { ImportRookieDraftQuestion } from '@/components/import/ImportRookieDraftQuestion'
+import { hasRookieDraft } from '@/lib/dynasty-core/rookieDraftDone'
+import {
+  asksForOtherHalf,
+  importOtherHalfHref,
+  NO_OTHER_HALF,
+  pairWithLeagueIdFor,
+  type OtherHalfChoice,
+} from '@/lib/league-import/otherHalf'
 import { readImportReview } from '@/lib/league-import/review/readImportReview'
 import type { ImportReview, ImportReviewOverrides } from '@/lib/league-import/review/types'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
@@ -262,6 +275,11 @@ type Phase =
        * theirs was imported, and the league was not new.
        */
       joinedExisting: boolean
+      /** A team-less league mate: co-owner of a shared team, or a viewer. Null for a team claim. */
+      joinedAs?: 'co_owner' | 'viewer' | null
+      /** The confirm screen's other half: linked (or why not), or "I'll import it next". */
+      pairLink?: { ok: true; otherName: string | null } | { ok: false; error: string } | null
+      importOtherHalfNext?: boolean
     }
 
 interface PreviewTeam {
@@ -928,6 +946,8 @@ export type ImportV4Props = {
   yahooConnected?: boolean
   /** The signed-in account's email, so the verify step can say where its link went. */
   viewerEmail?: string | null
+  /** `/import?pairWith=` — this import is the other half of that AF league, which is preselected. */
+  initialPairWith?: string
 }
 
 /**
@@ -950,10 +970,11 @@ type VerifyResume =
   | { k: 'row'; sourceId: string }
 
 /** Where the emailed link lands: this screen, already pointed at what was being imported. */
-function verifyReturnTo(provider: ImportProvider, resume: VerifyResume): string {
+function verifyReturnTo(provider: ImportProvider, resume: VerifyResume, pairWith?: string): string {
   const qs = new URLSearchParams({ provider })
   if (resume.k === 'discover' && resume.identifier.trim()) qs.set('username', resume.identifier.trim())
   if (resume.k === 'preview' || resume.k === 'commit') qs.set('leagueId', resume.sourceId)
+  if (pairWith) qs.set('pairWith', pairWith)
   return `/import?${qs.toString()}`
 }
 
@@ -967,6 +988,7 @@ export function ImportV4({
   yahooErrorDesc,
   yahooConnected,
   viewerEmail,
+  initialPairWith,
 }: ImportV4Props) {
   const [provider, setProvider] = useState<ImportProvider>(defaultProvider ?? 'sleeper')
   const [account, setAccount] = useState(initialAccount ?? '')
@@ -974,6 +996,12 @@ export function ImportV4({
   const [accountLabel, setAccountLabel] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>({ k: 'idle' })
   const [error, setError] = useState<string | null>(null)
+  /* Search boxes for the two long lists. Each clears when its list is replaced. */
+  const [leagueSearch, setLeagueSearch] = useState('')
+  const [teamSearch, setTeamSearch] = useState('')
+  useEffect(() => setLeagueSearch(''), [leagues])
+  const previewSourceId = phase.k === 'preview' ? phase.sourceId : null
+  useEffect(() => setTeamSearch(''), [previewSourceId])
   /* The step an unverified account was refused at, or null. Cleared by any other outcome. */
   const [verifyGate, setVerifyGate] = useState<VerifyResume | null>(null)
   /*
@@ -1281,12 +1309,63 @@ export function ImportV4({
     reviewOverridesRef.current = next.overrides
     setReviewState(next)
   }, [])
+  /*
+   * The league type the commissioner picked on the confirm screen; null means "keep what we detected".
+   * A ref for the same reason as the review edits above: the commit can be re-entered from a gate.
+   */
+  const leagueTypeChoiceRef = useRef<string | null>(null)
+  const [leagueTypeChoice, setLeagueTypeChoiceState] = useState<string | null>(null)
+  const setLeagueTypeChoice = useCallback((next: string | null) => {
+    leagueTypeChoiceRef.current = next
+    setLeagueTypeChoiceState(next)
+  }, [])
+  /*
+   * The other half of a C2C / devy league, picked on the same screen. A ref for the same reason: the
+   * commit can be re-entered from a gate. Only sent while the question is on screen (see the effect
+   * by the picker), so switching the type away from C2C cannot link a league nobody is looking at.
+   */
+  const otherHalfRef = useRef<OtherHalfChoice>(NO_OTHER_HALF)
+  const [otherHalf, setOtherHalfState] = useState<OtherHalfChoice>(NO_OTHER_HALF)
+  const setOtherHalf = useCallback((next: OtherHalfChoice) => {
+    otherHalfRef.current = next
+    setOtherHalfState(next)
+  }, [])
+  const askOtherHalf =
+    phase.k === 'preview' && phase.review
+      ? asksForOtherHalf({
+          leagueType: leagueTypeChoice ?? phase.review.league.leagueType,
+          sport: phase.review.league.sport,
+          pairWith: initialPairWith ?? null,
+        })
+      : false
+  useEffect(() => {
+    if (phase.k === 'preview' && !askOtherHalf && otherHalfRef.current.kind !== 'none') setOtherHalf(NO_OTHER_HALF)
+  }, [phase.k, askOtherHalf, setOtherHalf])
+  /*
+   * "Had your rookie draft?" — for a league type with one, asked only when the platform cannot say
+   * (lib/dynasty-core/rookieDraftDone.ts). Null is unanswered and sends nothing. A ref for the gates.
+   */
+  const rookieDraftDoneRef = useRef<boolean | null>(null)
+  const [rookieDraftDone, setRookieDraftDoneState] = useState<boolean | null>(null)
+  const setRookieDraftDone = useCallback((next: boolean | null) => {
+    rookieDraftDoneRef.current = next
+    setRookieDraftDoneState(next)
+  }, [])
+  const showRookieDraft =
+    phase.k === 'preview' && phase.review ? hasRookieDraft(leagueTypeChoice ?? phase.review.league.leagueType) : false
+  const askRookieDraft = showRookieDraft && phase.k === 'preview' && !phase.review?.league.rookieDraftFromPlatform
+  useEffect(() => {
+    if (phase.k === 'preview' && !askRookieDraft && rookieDraftDoneRef.current !== null) setRookieDraftDone(null)
+  }, [phase.k, askRookieDraft, setRookieDraftDone])
 
   const runPreview = useCallback(
     async (sourceId: string, attest = false) => {
       setError(null)
       reviewOverridesRef.current = null
       setReviewState(null)
+      setLeagueTypeChoice(null)
+      setOtherHalf(NO_OTHER_HALF)
+      setRookieDraftDone(null)
       setPhase({ k: 'previewing', sourceId })
       const res = await fetchImportPreview(
         provider,
@@ -1369,7 +1448,7 @@ export function ImportV4({
         review: readImportReview(payload?.review),
       })
     },
-    [provider, espnConnected]
+    [provider, espnConnected, setLeagueTypeChoice]
   )
 
   useEffect(() => {
@@ -1400,13 +1479,25 @@ export function ImportV4({
         sourceId,
         '',
         attested ? { accepted: true } : undefined,
-        force || confirmReimportOfDeleted || claimTeamId || espnRunBy || reviewOverridesRef.current
+        force ||
+          confirmReimportOfDeleted ||
+          claimTeamId ||
+          espnRunBy ||
+          reviewOverridesRef.current ||
+          leagueTypeChoiceRef.current ||
+          pairWithLeagueIdFor(otherHalfRef.current) ||
+          rookieDraftDoneRef.current !== null
           ? {
               ...(force ? { force: true } : {}),
               ...(confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
               ...(claimTeamId ? { claimSourceTeamId: claimTeamId } : {}),
               ...(espnRunBy ? { espnLeagueRunBy: espnRunBy } : {}),
               ...(reviewOverridesRef.current ? { reviewOverrides: reviewOverridesRef.current } : {}),
+              ...(leagueTypeChoiceRef.current ? { leagueType: leagueTypeChoiceRef.current } : {}),
+              ...(pairWithLeagueIdFor(otherHalfRef.current)
+                ? { pairWithLeagueId: pairWithLeagueIdFor(otherHalfRef.current) }
+                : {}),
+              ...(rookieDraftDoneRef.current !== null ? { rookieDraftDone: rookieDraftDoneRef.current } : {}),
             }
           : undefined
       )
@@ -1473,6 +1564,8 @@ export function ImportV4({
         league_existed?: boolean
         skipped?: boolean
         joinedExisting?: boolean
+        joinedAs?: 'co_owner' | 'viewer' | null
+        pairLink?: { ok: boolean; otherName?: string | null; error?: string } | null
       }
       const leagueId = data?.leagueId || data?.league?.id || ''
       /*
@@ -1515,6 +1608,13 @@ export function ImportV4({
            still reports existed:true, because the league does still exist. */
         skipped: Boolean(data?.skipped),
         joinedExisting: Boolean(data?.joinedExisting),
+        joinedAs: data?.joinedAs === 'co_owner' || data?.joinedAs === 'viewer' ? data.joinedAs : null,
+        pairLink: data?.pairLink
+          ? data.pairLink.ok
+            ? { ok: true, otherName: data.pairLink.otherName ?? null }
+            : { ok: false, error: data.pairLink.error || 'We couldn’t link the other half.' }
+          : null,
+        importOtherHalfNext: otherHalfRef.current.kind === 'later' && !data?.joinedExisting,
       })
     },
     // `leagues` is read for the deleted-league confirmation; see importOneLeague.
@@ -2393,8 +2493,27 @@ export function ImportV4({
             </p>
           ) : null}
 
+          {leagues.length >= IMPORT_SEARCH_MIN_ROWS ? (
+            <div className="af-im-field af-im-list-search">
+              <input
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                value={leagueSearch}
+                onChange={(e) => setLeagueSearch(e.target.value)}
+                placeholder={rowsAreTeams ? 'Search by team name' : 'Search by league name'}
+                aria-label={rowsAreTeams ? 'Search teams' : 'Search leagues'}
+                data-testid="import-league-search"
+              />
+            </div>
+          ) : null}
+          {leagueSearch.trim() && !leagues.some((l) => matchesImportSearch(leagueSearch, [l.name, l.season, l.sport])) ? (
+            <p className="af-im-field-help" role="status" data-testid="import-league-search-empty">
+              Nothing matches &ldquo;{leagueSearch.trim()}&rdquo;. Check the spelling or clear the search.
+            </p>
+          ) : null}
           <ul className="af-im-league-list">
-            {leagues.map((l) => {
+            {leagues.filter((l) => matchesImportSearch(leagueSearch, [l.name, l.season, l.sport])).map((l) => {
               /*
                * ⚠ THE PER-ROW "Reading…" STATE IS GONE, AND THAT IS THE TAKEOVER'S
                * DOING. It marked the one row being previewed or committed while the
@@ -3107,7 +3226,7 @@ export function ImportV4({
             {verifyGate ? (
               <ImportVerifyGate
                 email={viewerEmail ?? null}
-                returnTo={verifyReturnTo(provider, verifyGate)}
+                returnTo={verifyReturnTo(provider, verifyGate, initialPairWith)}
                 step={verifyGate.k === 'row' ? 'bulk' : verifyGate.k}
                 autoResume={verifyGate.k === 'discover' || verifyGate.k === 'preview'}
                 resuming={verifyResuming}
@@ -3366,6 +3485,31 @@ export function ImportV4({
               onReviewStateChange={onReviewStateChange}
             />
           ) : null}
+          {phase.review && !phase.importBlockedReason && !previewImportState(provider, phase).espnMember ? (
+            <ImportLeagueTypePicker
+              detectedId={phase.review.league.leagueType}
+              detectedLabel={phase.review.league.leagueTypeLabel}
+              value={leagueTypeChoice}
+              onChange={setLeagueTypeChoice}
+            />
+          ) : null}
+          {phase.review && !phase.importBlockedReason && !previewImportState(provider, phase).espnMember && askOtherHalf ? (
+            <ImportOtherHalfPicker
+              sport={phase.review.league.sport}
+              preferLeagueId={initialPairWith ?? null}
+              value={otherHalf}
+              onChange={setOtherHalf}
+            />
+          ) : null}
+          {phase.review && !phase.importBlockedReason && !previewImportState(provider, phase).espnMember && showRookieDraft ? (
+            <ImportRookieDraftQuestion
+              season={phase.review.league.season}
+              fromPlatform={phase.review.league.rookieDraftFromPlatform}
+              platformLabel={providerLabel}
+              value={rookieDraftDone}
+              onChange={setRookieDraftDone}
+            />
+          ) : null}
           {/*
             ── What you are about to get ──────────────────────────────────────────
             Rendered ONLY when the preview actually said something. `phase.coverage` is null both
@@ -3488,8 +3632,28 @@ export function ImportV4({
                   </>
                 )}
               </p>
+              {phase.teams.length >= IMPORT_SEARCH_MIN_ROWS ? (
+                <div className="af-im-field af-im-list-search">
+                  <input
+                    type="search"
+                    inputMode="search"
+                    enterKeyHint="search"
+                    value={teamSearch}
+                    onChange={(e) => setTeamSearch(e.target.value)}
+                    placeholder="Search by team or manager name"
+                    aria-label="Search teams"
+                    data-testid="import-preview-team-search"
+                  />
+                </div>
+              ) : null}
+              {teamSearch.trim() && !phase.teams.some((t) => matchesImportSearch(teamSearch, [t.teamName, t.ownerName])) ? (
+                <p className="af-im-field-help" role="status" data-testid="import-preview-team-search-empty">
+                  No team matches &ldquo;{teamSearch.trim()}&rdquo;. Try the manager&rsquo;s name, or clear the search.
+                </p>
+              ) : null}
               <ul className="af-im-league-list">
-                {phase.teams.map((t) => {
+                {/* The picked team stays on screen whatever is typed, so the choice is never hidden. */}
+                {phase.teams.filter((t) => phase.claimTeamId === t.teamId || matchesImportSearch(teamSearch, [t.teamName, t.ownerName])).map((t) => {
                   const picked = phase.claimTeamId === t.teamId
                   /* A commissioner's team is claimable only with proof — the server refuses it too. */
                   const locked = previewImportState(provider, phase).espnMember && t.commissionerTeam === true
@@ -3652,7 +3816,11 @@ export function ImportV4({
             issue={doneIssue}
             noteText={
               phase.joinedExisting
-                ? `${phase.leagueName} was already on AllFantasy — you've been added as your team. Nothing was changed on ${providerLabel}, and nothing of yours was re-imported.`
+                ? phase.joinedAs === 'co_owner'
+                  ? `${phase.leagueName} was already on AllFantasy. You've been added to the team you share, as its co-owner. Nothing was changed on ${providerLabel}.`
+                  : phase.joinedAs === 'viewer'
+                    ? `${phase.leagueName} was already on AllFantasy. You don't have a team in it right now, so you've been added as a viewer: you can follow the league and its chat. Nothing was changed on ${providerLabel}.`
+                    : `${phase.leagueName} was already on AllFantasy — you've been added as your team. Nothing was changed on ${providerLabel}, and nothing of yours was re-imported.`
                 : phase.skipped
                   ? 'This league was already imported, so nothing was re-read and nothing was overwritten. Re-import it below if it is missing data.'
                   : `${phase.leagueName} is in. Nothing was changed on ${providerLabel}.`
@@ -3675,6 +3843,33 @@ export function ImportV4({
             }}
             extraActions={
               <>
+            {/*
+              The other half from the confirm screen. Linked: say so, by name. Not linked: say why, and
+              where to do it instead. "Import it next": the next import opens with this league waiting.
+            */}
+            {phase.pairLink?.ok ? (
+              <p className="af-im-field-help af-im-pair-note" data-testid="import-pair-linked">
+                Linked with {phase.pairLink.otherName ?? 'your other league'}. Both halves now open as one league.
+              </p>
+            ) : phase.pairLink && !phase.pairLink.ok ? (
+              <p className="af-im-field-help af-im-pair-note" data-testid="import-pair-failed">
+                {phase.pairLink.error} You can link them from{' '}
+                <Link href="/core/connect-leagues">Connect leagues</Link>.
+              </p>
+            ) : null}
+            {phase.leagueId && phase.importOtherHalfNext ? (
+              <Link
+                href={importOtherHalfHref(phase.leagueId)}
+                className="af-btn af-done-alt"
+                data-testid="import-other-half-next"
+                onClick={() => {
+                  setAccount('')
+                  reset()
+                }}
+              >
+                Import the other half
+              </Link>
+            ) : null}
             {phase.leagueId && !phase.joinedExisting ? (
               <>
                 <Link
@@ -3745,6 +3940,16 @@ export function ImportV4({
           sourceId={phase.sourceId}
           leagueName={phase.leagueName}
         />
+      ) : null}
+
+      {/*
+        Someone who just joined a league already here: who else made it over, and the league's invite
+        link to bring the rest (owner's ask, 2026-11-21). The panel names the managers already in it.
+      */}
+      {phase.k === 'done' && phase.leagueId && phase.joinedExisting ? (
+        <section className="af-im-card" data-testid="import-joined-league-mates">
+          <LeagueInvitePanel leagueId={phase.leagueId} leagueName={phase.leagueName} />
+        </section>
       ) : null}
 
       {/* ── Static result frame, design preview only ────────────────── */}

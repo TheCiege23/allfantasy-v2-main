@@ -1,10 +1,13 @@
 'use client'
 
 import Link from 'next/link'
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import { useMessages } from '@/components/i18n/useMessages'
 import { homeGuideMessages } from '@/lib/core-app/messages/homeGuide'
 import { InactiveLadderList } from '@/components/core-app/commissioner/InactiveLadderList'
-import type { LadderEntry } from '@/lib/core-app/commissioner/inactiveLadder'
+import { ladderCounts, type LadderEntry } from '@/lib/core-app/commissioner/inactiveLadder'
+import { inactiveLadderMessages } from '@/lib/core-app/messages/inactiveLadder'
+import { PartnerCodeNudge } from '@/components/partner-codes/PartnerCodeNudge'
 import '@/components/core-app/home/af-home-guide.css'
 
 /**
@@ -30,6 +33,11 @@ const RISK_LIMIT = 3
 /** Ladder rows on the home; the rest are on the Commissioner Hub, which draws every one. */
 const LADDER_LIMIT = 3
 
+function ladderSummary(entries: LadderEntry[]): [number, number, number] {
+  const c = ladderCounts(entries)
+  return [c.replace, c.warn, c.nudge]
+}
+
 export function HomeCommishCard({
   runCount,
   stats,
@@ -48,6 +56,7 @@ export function HomeCommishCard({
   ladder?: LadderEntry[] | 'off-season' | null
 }) {
   const g = useMessages(homeGuideMessages)
+  const lt = useMessages(inactiveLadderMessages)
   const shown = risks.slice(0, RISK_LIMIT)
   return (
     <section className="af3a-card af-hg-card" aria-labelledby="af-run-title">
@@ -98,18 +107,31 @@ export function HomeCommishCard({
         </ul>
       )}
       {/* The card's own "why it matters" line explains the ladder, so the list does not repeat it. */}
+      {/*
+        The ladder is closed on the home (2026-11-24): its rows, messages and copy buttons were most of
+        this card's height on a phone. The summary still says how many to replace, warn and nudge, and
+        the Commissioner Hub draws the full ladder.
+      */}
       {ladder === 'off-season' ? (
         <InactiveLadderList entries={[]} offSeason showTeach={false} />
+      ) : ladder && ladder.length === 0 ? (
+        <InactiveLadderList entries={[]} showTeach={false} />
       ) : ladder ? (
-        <InactiveLadderList entries={ladder} limit={LADDER_LIMIT} showTeach={false} />
+        <details className="af-hg-foldrow" data-testid="home-ladder-fold">
+          <summary>
+            <b>{lt.title}</b>
+            <span>{lt.summary(...ladderSummary(ladder))}</span>
+          </summary>
+          <InactiveLadderList entries={ladder} limit={LADDER_LIMIT} showTeach={false} showHead={false} />
+        </details>
       ) : null}
       {partial ? <p className="af-hg-note">{g.runPartial}</p> : null}
-      <p className="af-decision-why af-hg-why">
-        <b>{g.why}</b> {g.runTeach}
-      </p>
+      <WhyFold label={g.why}>{g.runTeach}</WhyFold>
       <Link className="af-hg-more" href="/core/commissioner">
         {g.runOpen} →
       </Link>
+      {/* Partner Codes: draws nothing unless the program is on (the server decides). */}
+      <PartnerCodeNudge variant="row" />
     </section>
   )
 }

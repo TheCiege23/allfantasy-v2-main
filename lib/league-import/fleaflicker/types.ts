@@ -239,13 +239,19 @@ export type FleaflickerScoreboardGame = {
   id: number
   home: FleaflickerScoreboardTeam
   away: FleaflickerScoreboardTeam
-  /** Absent for a game with no score — see G-05(b); the shape is unobserved, so this is optional both levels down. */
+  /**
+   * A side that has not scored yet carries `score: { formatted: "0" }` with NO `value` (observed
+   * in-progress, fixtures/scoreboard.NFL.2026.live.json) — zero is omitted like `false` is. A week
+   * that has not STARTED is still unobserved (G-05(b)), so this stays optional both levels down.
+   */
   homeScore?: { score?: { value?: number; formatted?: string } } | null
   awayScore?: { score?: { value?: number; formatted?: string } } | null
   /** Observed values only. A TIE WAS NOT OBSERVED — do not add a third from memory. */
   homeResult?: string
   awayResult?: string
   isFinalScore?: true
+  /** Present on every game of the current week once it has started; never together with `isFinalScore` in a capture. */
+  isInProgress?: true
   isDivisional?: true
   isPlayoffs?: true
   isConsolation?: true
@@ -265,6 +271,10 @@ type FleaflickerSchedulePeriod = {
      * (last season 2021) returns byte-identical games for 2021, 2024, 2025, 2026
      * and 2099. And standings' top-level `season` echoes the REQUEST back, so
      * reading that to learn what you got is circular.
+     *
+     * ⚠ ABSENT ON A LEAGUE IN ITS CURRENT SEASON (fixtures/scoreboard.NFL.2026.live.json, and the
+     * pre-draft scoreboard.NFL.json). Absence is not a mismatch and not a pass: the fetch service
+     * then checks the request against `startEpochMilli` of the earliest period.
      */
     season?: number
     startEpochMilli?: string

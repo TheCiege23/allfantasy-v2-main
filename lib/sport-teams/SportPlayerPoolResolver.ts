@@ -1,4 +1,5 @@
 import { reconcileCurrentProRows } from '@/lib/draft-room/currentProRoster'
+import { loadPlayedThisSeasonIds } from '@/lib/draft-room/playedThisSeason'
 /**
  * Resolves player pool by sport so leagues only load players for their sport.
  * Uses SportsPlayer and PlayerIdentityMap; draft room and waiver wire filter by league sport.
@@ -16,6 +17,10 @@ import { formatNflTeamDefenseName } from '@/lib/redraft/teamDefenseIdentity'
 import { cachedFetch, cacheKey } from '@/lib/api-cache'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { createTtlMemo } from '@/lib/ttl-memo'
+import { filterPoolByCollegeScope, loadCollegeTeamConferences, loadLeagueCollegeScope } from '@/lib/college/collegeTeamConferences'
+import { loadNcaabSeasonBoxes, type NcaabSeasonBoxes } from './ncaabSeasonBoxes'
+import { currentNcaabSeasonYear, readEspnNcaabHeadshots } from '@/lib/espn/ncaabRosterSnapshot'
+import { buildNcaabTransferPhotoIndex, ncaabPoolRowImage, ncaabPoolRowVerdict, ncaabProductionPerGame } from './ncaabPlayerPoolRules'
 import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
 import { buildPlayerKey, normalizeStoredPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
@@ -24,6 +29,7 @@ import { mergeKnownYearsExp } from '@/lib/draft-room/nonNflRookieFields'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { rowsDescribeSamePlayer, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import { isSleeperPlaceholderName } from '@/lib/sleeper/placeholderPlayers'
+import { isEspnProHeadshot } from '@/lib/espn/espnProHeadshots'
 
 /**
  * In-process memos in front of the DB-backed cache. That cache saved CPU but not egress: the NFL
@@ -50,6 +56,8 @@ const POOL_PLAYER_SELECT = {
   externalId: true,
   age: true,
   imageUrl: true,
+  // The jersey number: with the name, what matches a college basketball row to its ESPN roster entry.
+  number: true,
   source: true,
   // `0` is a rookie, NULL is unknown — carried as `experience` for every sport (see nonNflRookieFields).
   yearsExp: true,
@@ -113,10 +121,44 @@ function expandNflIdpPositions(positions: string[]): string[] {
   return [...expanded]
 }
 
-function normalizePoolPosition(sport: string, position: string | null): string {
+/**
+ * 🛑 ROLLING INSIGHTS SENDS SOCCER POSITIONS AS WORDS, AND THE DRAFT ONLY ACCEPTS GKP / DEF / MID / FWD.
+ * Measured on production 2026-11-27: of 4,331 Rolling Insights soccer players, 1,396 were "Defender",
+ * 1,305 "Midfielder", 1,098 "Forward", 531 "Goalkeeper" and ONE "FWD". The draft's position filter
+ * dropped every word-labelled row, so a new soccer league's pool held exactly one player (Viktor
+ * Gyökeres, the one "FWD"). Only Rolling Insights rows reach a soccer pool (`scorableSoccerRowsOnly`).
+ */
+export const SOCCER_POSITION_WORDS: Readonly<Record<string, 'GKP' | 'DEF' | 'MID' | 'FWD'>> = {
+  GK: 'GKP', GOALKEEPER: 'GKP', KEEPER: 'GKP',
+  DEFENDER: 'DEF', DEFENCE: 'DEF', DEFENSE: 'DEF',
+  MIDFIELDER: 'MID', MIDFIELD: 'MID',
+  FORWARD: 'FWD', ATTACKER: 'FWD', STRIKER: 'FWD',
+}
+
+/**
+ * 🛑 COLLEGE FOOTBALL: A ROW ITS OWN SOURCE MARKS INACTIVE IS A FORMER PLAYER, NOT A DRAFTABLE ONE.
+ * Rolling Insights keeps every man who ever played as a row: measured on production 2026-11-27, 54,189
+ * of its 69,338 NCAAF rows were "INACT" (14,991 "ACT"), beside CFBD's 7,158 current ones. The pool
+ * query reads the table in NAME order and cuts at its limit, so a new college football league's pool
+ * was 1,547 rows of which 462 started with "A", with a man listed once per school he ever played for
+ * (A.J. Barner at Indiana and Michigan — now in the NFL) and none of them ranked. College basketball
+ * already drops departed players (ncaabPlayerPoolRules.ts); this is football's equivalent. Only a
+ * status the source itself wrote is read: a row with no status stays.
+ */
+export function isFormerCollegeFootballRow(sport: string, row: { source?: string | null; status?: string | null }): boolean {
+  if (String(sport).trim().toUpperCase() !== 'NCAAF') return false
+  const source = String(row.source ?? '').trim().toLowerCase()
+  const status = String(row.status ?? '').trim().toUpperCase()
+  if (!status) return false
+  if (source === 'rolling_insights') return status === 'INACT'
+  if (source === 'thesportsdb') return status !== 'ACTIVE'
+  return false
+}
+
+export function normalizePoolPosition(sport: string, position: string | null): string {
   const raw = String(position ?? '').trim().toUpperCase()
   if (!raw) return ''
-  if (sport === 'SOCCER' && raw === 'GK') return 'GKP'
+  if (sport === 'SOCCER') return SOCCER_POSITION_WORDS[raw] ?? raw
   if (sport === 'NFL') return normalizeNflIdpPosition(raw)
   return raw
 }
@@ -312,6 +354,8 @@ function sportsPlayerQuality(row: {
 }): number {
   let score = 0
   if (isHttpImage(row.imageUrl)) score += 100
+  // A current-team ESPN headshot (GAPS E-08) outranks any other photo: TheSportsDB keeps a traded player's old jersey.
+  if (isEspnProHeadshot(row.imageUrl)) score += 200
   if (String(row.sleeperId ?? '').trim()) score += 50
   score += sourceRank(row.source) * 10
   return score
@@ -551,7 +595,7 @@ async function buildPlayerPoolRecords(
   )
   // Sleeper's placeholder entries ("Duplicate Player", "Player Invalid") are not players; they
   // never reach a draft pool or waiver wire. After the cache, so the cached set stays the table.
-  const rows = cachedRows.filter((row) => !isSleeperPlaceholderName(row.name))
+  const rows = cachedRows.filter((row) => !isSleeperPlaceholderName(row.name) && !isFormerCollegeFootballRow(sport, row))
 
   // De-dupe by (name, position, team), preferring rows that have real image URLs
   // and explicit sleeper IDs. Some imports write duplicate players across sources,
@@ -562,8 +606,59 @@ async function buildPlayerPoolRecords(
   // row that won.
   // Filtered here, after the cache, so the cached row set stays the whole table for every caller.
   const isNfl = sport === 'NFL'
-  const sourceRows = isNfl ? collapseNflRowsOntoSleeper(rows) : scorableSoccerRowsOnly(sport, rows)
-  const poolRows = reconcileCurrentProRows(sport, sourceRows, rows, options?.currentRosterOnly === true)
+  /*
+   * College basketball (ncaabPlayerPoolRules.ts): departed players leave the pool, a row's photo
+   * is ESPN's or none, and this season's production decides who a size-limited pool keeps. A
+   * failed box-score read changes nothing but the photos.
+   */
+  const isNcaab = sport === 'NCAAB'
+  const ncaabBoxes: NcaabSeasonBoxes | null = isNcaab
+    ? await loadNcaabSeasonBoxes().catch((err) => {
+        console.warn('[player-pool] NCAAB box scores unavailable:', err instanceof Error ? err.message : String(err))
+        return null
+      })
+    : null
+  const ncaabPlayed = ncaabBoxes?.season != null
+    ? new Set([...ncaabBoxes.byRiId].flatMap(([riId, lines]) => (lines.current ? [riId] : [])))
+    : null
+  const ncaabPhotoOnlyIds = new Set<string>()
+  // A player's ESPN photo, found by ESPN id through his current ESPN roster entry (buildNcaabTransferPhotoIndex).
+  // The photo comes from a stored row (a transfer's old school) OR from ESPN's own roster snapshot: measured on
+  // production 2026-11-28, ESPN sent a photo for 5,278 of 5,526 roster athletes, yet 284 of a 3,977-player pool
+  // showed a placeholder because only photos already on a vendor row were looked up. A failed read carries
+  // nothing: the pool keeps what it had.
+  const ncaabTransferPhoto = isNcaab
+    ? await (async () => {
+        const now = new Date()
+        const [roster, snapshotPhotos] = await Promise.all([
+          prisma.devyPlayer
+            .findMany({ where: { sport: 'NCAAB', source: 'espn_ncaab_roster' }, select: { id: true, name: true, jerseyNumber: true } })
+            .catch(() => []),
+          readEspnNcaabHeadshots(prisma, currentNcaabSeasonYear(now), now).catch(() => new Map<string, string>()),
+        ])
+        return buildNcaabTransferPhotoIndex({
+          roster,
+          storedImageUrls: [...rows.map((row) => row.imageUrl), ...snapshotPhotos.values()],
+        })
+      })()
+    : null
+  const ncaabRows = isNcaab
+    ? rows.flatMap((row) => {
+        const verdict = ncaabPoolRowVerdict(row, ncaabPlayed)
+        if (verdict === 'drop') return []
+        if (verdict === 'photo_only') ncaabPhotoOnlyIds.add(row.id)
+        const own = ncaabPoolRowImage(row.imageUrl)
+        const carried = !own && verdict === 'keep' ? ncaabTransferPhoto?.(row as { name?: string | null; number?: number | null }) ?? null : null
+        return [{ ...row, imageUrl: own ?? carried }]
+      })
+    : null
+  const sourceRows = isNfl ? collapseNflRowsOntoSleeper(rows) : ncaabRows ?? scorableSoccerRowsOnly(sport, rows)
+  // Who has played this season, for the current-roster filter. A failed read is "no such evidence":
+  // the pool is then what it was before this evidence existed, never an error.
+  const playedThisSeason = options?.currentRosterOnly === true
+    ? await loadPlayedThisSeasonIds(sport).catch(() => new Set<string>())
+    : new Set<string>()
+  const poolRows = reconcileCurrentProRows(sport, sourceRows, rows, options?.currentRosterOnly === true, Date.now(), playedThisSeason)
   // NFL keys on the club CODE, so the vendor rows left over after the collapse still merge across
   // "PHI" / "Philadelphia Eagles"; other sports' team strings are not NFL clubs and stay as they are.
   const teamKeyOf = (team: string | null) =>
@@ -582,6 +677,8 @@ async function buildPlayerPoolRecords(
     if (isHttpImage(row.imageUrl) && quality > (bestImageByKey.get(key)?.quality ?? -1)) {
       bestImageByKey.set(key, { url: String(row.imageUrl), quality })
     }
+    // Its photo was offered above; the row itself is never a player the pool offers.
+    if (ncaabPhotoOnlyIds.has(row.id)) continue
     const current = bestByKey.get(key)
     const rowScorable = isScorablePoolId(sport, row)
     const currentScorable = current ? isScorablePoolId(sport, current) : false
@@ -625,6 +722,11 @@ async function buildPlayerPoolRecords(
   const adpRankByKey = await loadAdpRankByPlayerKey(sport)
   const dedupedRows = [...bestByKey.values()]
     .sort((a, b) => {
+      if (ncaabBoxes) {
+        const aProduction = ncaabProductionPerGame(ncaabBoxes.byRiId.get(String(a.externalId ?? ''))?.current?.rates)
+        const bProduction = ncaabProductionPerGame(ncaabBoxes.byRiId.get(String(b.externalId ?? ''))?.current?.rates)
+        if (aProduction !== bProduction) return bProduction - aProduction
+      }
       const aRank = adpRankByKey.get(buildPlayerKey(String(a.name ?? ''), a.position))
       const bRank = adpRankByKey.get(buildPlayerKey(String(b.name ?? ''), b.position))
       if (aRank === undefined && bRank === undefined) return rosteredPlayerSignal(b) - rosteredPlayerSignal(a)
@@ -816,7 +918,22 @@ export async function getPlayerPoolForLeague(
 ): Promise<PoolPlayerRecord[]> {
   const sportType = leagueSportToSportType(leagueSport)
   const sportStr = SPORT_STR[leagueSport] ?? sportType
-  return getPlayerPoolForSport(sportStr, options)
+  /*
+   * A college league can draft from a subset of schools (Power 4, Group of 6, FBS only, or the
+   * commissioner's conferences: lib/college/conferenceScope.ts). Filtering here covers the draft room,
+   * autopick and the waiver wire at once. The limit is applied AFTER the filter: limiting first would
+   * take the best N players from every school and leave a Big Ten + SEC league a fraction of them.
+   * An unreadable setting drafts from every school rather than failing the pool.
+   */
+  const scoped = await loadLeagueCollegeScope(leagueId, String(sportStr)).catch(() => null)
+  if (!scoped) return getPlayerPoolForSport(sportStr, options)
+  const { limit, ...rest } = options ?? {}
+  const [pool, index] = await Promise.all([
+    getPlayerPoolForSport(sportStr, rest),
+    loadCollegeTeamConferences(scoped.sport),
+  ])
+  const inScope = filterPoolByCollegeScope(pool, scoped.sport, scoped.scope, index)
+  return limit != null && limit > 0 ? inScope.slice(0, limit) : inScope
 }
 
 /**

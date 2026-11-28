@@ -49,6 +49,7 @@ import {
 } from '@/lib/core-app/leagueOverviewGuide'
 import type { RailMatchup } from '@/lib/core-app/railMatchups'
 import '@/components/core-app/af-league-overview-guide.css'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 
 /**
  * "Your season at a glance": record and rank, points for, FAAB left, trade deadline (the redesign's KPI
@@ -624,9 +625,12 @@ export function LeagueHome({
           </span>
         </>
       )}
-      <Link href="/core" className="af-btn af-btn--ghost af-lh-back">
-        {copy('Back to home')} →
-      </Link>
+      {/* In the shell the tab bar and sidebar carry Home, so a second "Back to home" was one more button (2026-11-23). */}
+      {identityInShell ? null : (
+        <Link href="/core" className="af-btn af-btn--ghost af-lh-back">
+          {copy('Back to home')} →
+        </Link>
+      )}
     </>
   )
   const importedActions = !isNativePlatform(league.platform) ? (
@@ -664,7 +668,15 @@ export function LeagueHome({
               ? g.headH2h(head.rank, head.teams, head.record, null)
               : league.name
   /* This week, once, under the headline: the game (h2h) or the cut (elimination). */
-  const weekLine = overviewWeekLine(head)
+  /*
+   * 2026-11-24: between seasons (the dynasty deck's Offseason) there is no week — the page still said
+   * "This week vs …", "Review your starters · Check before the first kickoff" and drew a week's games.
+   * The deck's timeline is what this window is about.
+   */
+  const betweenSeasons = Boolean(data.dynasty?.offseason)
+  /** The redraft deck's playoff race lists every team: Home then carries no second standings table. */
+  const raceShown = Boolean(data.redraft?.playoffRace)
+  const weekLine = betweenSeasons ? null : overviewWeekLine(head)
   const winPct = pWin != null ? Math.round(Math.max(0, Math.min(1, pWin)) * 100) : null
   const chips: Array<{ key: string; label: string; href: string }> = []
   // The win chance is said once, on the week's Matchup cell below — not again as a chip here.
@@ -730,6 +742,7 @@ export function LeagueHome({
             <LeagueScoreboardPanel
               board={board}
               winProbability={data.matchup.available ? data.matchup.data.winProbability : null}
+              foldOthers
             />
           </>
         )}
@@ -843,7 +856,8 @@ export function LeagueHome({
         {toolsAtFoot ? null : <div className="af-lh-headside">{headActions}</div>}
       </header>
       <section className="af-lho-head" data-testid="league-overview-guide" data-format={elimination ? 'elimination' : 'h2h'}>
-        <span className="af-label">{g.eyebrow}</span>
+        {/* No "League overview" label in the shell (2026-11-23, "crowded"): the Home tab already says where you are. */}
+        {identityInShell ? null : <span className="af-label">{g.eyebrow}</span>}
         <p className="af-display af-lho-title">{headline}</p>
         {/*
           2026-11-14: the intro ("This league at a glance … Official moves are made on Sleeper") and the
@@ -881,13 +895,20 @@ export function LeagueHome({
       <LeagueInvitePanel leagueId={league.id} leagueName={league.name} compact hideWhenFull />
 
       {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
-      {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}
+      {data.redraft ? (
+        <RedraftHomeDeck
+          deck={data.redraft}
+          leagueId={league.id}
+          season={league.season}
+          under={raceShown ? <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} /> : undefined}
+        />
+      ) : null}
 
       {/* Dynasty Era deck — dynasty leagues only (lib/core-app/dynastyLeagueHome.ts); absent otherwise. */}
       {data.dynasty ? <DynastyHomeDeck deck={data.dynasty} leagueId={league.id} /> : null}
 
       {/* The record tile only when the headline does not already say it ("say each number once"). */}
-      <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} />
+      {raceShown ? null : <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} />}
 
       {toolsAtFoot ? null : importedActions}
 
@@ -900,9 +921,9 @@ export function LeagueHome({
         </section>
       )}
 
-      <LeagueSection id="week"><section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
+      {betweenSeasons ? null : <LeagueSection id="week"><section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
         <div className="af-lh-week-summary-head">
-          <div><span className="af-label">{g.nextSteps}</span><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
+          <div><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
           <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
         </div>
         <div className="af-lh-week-summary-grid" data-cells="2">
@@ -918,9 +939,9 @@ export function LeagueHome({
             <span><Link href={`/core/trades?league=${league.id}`}>{copy('Trades')} →</Link><Link href={`/core/waivers?league=${league.id}`}>{copy('Waivers')} →</Link></span>
           </div>
         </div>
-      </section></LeagueSection>
+      </section></LeagueSection>}
 
-      {elimination ? null : scoreboardSection}
+      {elimination || betweenSeasons ? null : scoreboardSection}
 
       {/* ── Main / side ─────────────────────────────────────────────── */}
       <div className="af-lh-grid">
@@ -977,8 +998,9 @@ export function LeagueHome({
             {showCommish ? commishSection : null}
           </div>
 
-          {/* Standings */}
-          <LeagueSection id="standings"><StatePanel title={copy('Standings')} state={data.standings}>
+          {/* Standings — not when the redraft deck above already lists every team in its playoff race
+              (2026-11-24, the simplify pass): the same twelve names twice, ~330px apart on a phone. */}
+          {data.redraft?.playoffRace ? null : <LeagueSection id="standings"><StatePanel title={copy('Standings')} state={data.standings}>
             {(rows) => (
               <div className="af-standings-wrap" data-faab={data.faabEnabled === true}>
                 {/*
@@ -1023,7 +1045,7 @@ export function LeagueHome({
                 </Link>
               </div>
             )}
-          </StatePanel></LeagueSection>
+          </StatePanel></LeagueSection>}
         </div>
 
         {/*
@@ -1040,8 +1062,11 @@ export function LeagueHome({
         rivalry radar and the prediction leaderboard — plus Draft HQ once the draft is done, and the
         league's every-game board in an elimination league, which has no head-to-head games.
       */}
-      <details className="af-lho-more" data-testid="league-overview-more">
-        <summary>{g.more}</summary>
+      {/*
+        2026-11-20: now the shared "More detail" fold (MoreDetail.tsx) — the same word and look on every
+        /core page. The old "More about this league" line survives as its `note`. Contents unchanged.
+      */}
+      <MoreDetail className="af-lho-more" testId="league-overview-more" note={g.more}>
         <div className="af-lho-more-body">
       {/*
         ── What this import could not bring across ───────────────────
@@ -1116,7 +1141,7 @@ export function LeagueHome({
         )}
       </StatePanel></LeagueSection>}
 
-      {elimination ? scoreboardSection : null}
+      {elimination && !betweenSeasons ? scoreboardSection : null}
 
       {/* ── Power board: all-play + movement ────────────────────────── */}
       {/*
@@ -1331,7 +1356,7 @@ export function LeagueHome({
       <LeagueSection id="insights">{isNativePlatform(league.platform) ? <PredictionLeaderboard leagueId={league.id} /> : null}</LeagueSection>
 
         </div>
-      </details>
+      </MoreDetail>
 
       {/*
         ── All leagues ──────────────────────────────────────────────────

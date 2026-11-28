@@ -151,16 +151,16 @@ describe('buildNativeStarters', () => {
     { playerId: 'p-bn', playerName: 'Bench Guy', position: 'RB', team: 'NYG', slotType: 'bench' },
     { playerId: 'p-gone', playerName: 'Dropped Since', position: 'RB', team: 'SF', slotType: 'RB' },
   ]
-  it('a scored week draws the lineup the scoring counted, with its points, in lineup order', () => {
+  it('a finished week draws the lineup the scoring counted, with its points, in lineup order', () => {
     const rows = buildNativeStarters({
       players,
       // Today's lineup has the bench player starting: it must not rewrite a week already played.
       currentStarterIds: new Set(['p-bn', 'p-qb']),
       scores: [
-        { playerId: 'p-wr', points: 14.2, isStarter: true },
-        { playerId: 'p-gone', points: 9, isStarter: true },
-        { playerId: 'p-qb', points: 22.4, isStarter: true },
-        { playerId: 'p-bn', points: 30, isStarter: false },
+        { playerId: 'p-wr', points: 14.2, isStarter: true, isFinalized: true },
+        { playerId: 'p-gone', points: 9, isStarter: true, isFinalized: true },
+        { playerId: 'p-qb', points: 22.4, isStarter: true, isFinalized: true },
+        { playerId: 'p-bn', points: 30, isStarter: false, isFinalized: true },
       ],
     })
     expect(rows.map((r) => [r.name, r.points])).toEqual([
@@ -169,6 +169,51 @@ describe('buildNativeStarters', () => {
       ['Wide Out', 14.2],
     ])
   })
+  it('a LIVE week lists every current starter: points for those who have played, a dash for the rest', () => {
+    // Owner report, 2026-11-22 (Zombie Chimmy Test, week 11): mid-Sunday the matchup listed only the
+    // starters whose games had started — 4 of 8 — while the roster page showed all 8.
+    const live = [
+      { playerId: 'qb', playerName: 'Jalen Hurts', position: 'QB', team: 'PHI', slotType: 'QB' },
+      { playerId: 'rb1', playerName: 'Breece Hall', position: 'RB', team: 'NYJ', slotType: 'RB' },
+      { playerId: 'rb2', playerName: 'Jonathan Taylor', position: 'RB', team: 'IND', slotType: 'RB' },
+      { playerId: 'te', playerName: 'Colston Loveland', position: 'TE', team: 'CHI', slotType: 'TE' },
+      { playerId: 'wr', playerName: 'Malik Nabers', position: 'WR', team: 'NYG', slotType: 'WR' },
+      { playerId: 'bn', playerName: 'Bench', position: 'WR', team: 'CAR', slotType: 'bench' },
+    ]
+    const rows = buildNativeStarters({
+      players: live,
+      currentStarterIds: new Set(['qb', 'rb1', 'rb2', 'te', 'wr']),
+      scores: [
+        { playerId: 'qb', points: 0, isStarter: true, isFinalized: false },
+        { playerId: 'rb2', points: 4.7, isStarter: true, isFinalized: false },
+        { playerId: 'te', points: 11.9, isStarter: true, isFinalized: false },
+        { playerId: 'bn', points: 8, isStarter: false, isFinalized: false },
+      ],
+    })
+    expect(rows.map((r) => [r.name, r.points])).toEqual([
+      ['Jalen Hurts', 0],
+      ['Breece Hall', null],
+      ['Jonathan Taylor', 4.7],
+      ['Malik Nabers', null],
+      ['Colston Loveland', 11.9],
+    ])
+  })
+
+  it('a LIVE week keeps a counted starter who has since left the lineup: his points are in the total', () => {
+    const rows = buildNativeStarters({
+      players,
+      currentStarterIds: new Set(['p-qb']),
+      scores: [
+        { playerId: 'p-qb', points: 20, isStarter: true },
+        { playerId: 'p-gone', points: 9, isStarter: true },
+      ],
+    })
+    expect(rows.map((r) => [r.playerId, r.points])).toEqual([
+      ['p-qb', 20],
+      ['p-gone', 9],
+    ])
+  })
+
   it('a week not scored yet draws today’s starters with no points', () => {
     const rows = buildNativeStarters({ players, currentStarterIds: new Set(['p-wr', 'p-qb']), scores: null })
     expect(rows.map((r) => [r.playerId, r.points])).toEqual([
@@ -179,5 +224,33 @@ describe('buildNativeStarters', () => {
   it('a scored player nobody can name still gets a row', () => {
     const rows = buildNativeStarters({ players: [], currentStarterIds: new Set(), scores: [{ playerId: 'x', points: 3, isStarter: true }] })
     expect(rows).toEqual([{ playerId: 'x', name: 'Player', position: 'FLEX', team: null, points: 3 }])
+  })
+})
+
+describe('withBoardProjections (scoreboard projections, 2026-11-28)', () => {
+  const game = (id: string, home: string, away: string | null): import('@/lib/matchup-center/nativeMatchupModel').NativeBoardGame => ({
+    id, kind: 'regular', label: null, status: 'upcoming', mine: false,
+    home: { rosterId: home, teamName: home, totalPoints: null },
+    away: away ? { rosterId: away, teamName: away, totalPoints: null } : null,
+  })
+  it('adds each team projection and a win chance when both sides are fully projected', async () => {
+    const { withBoardProjections } = await import('@/lib/matchup-center/nativeMatchupModel')
+    const [g] = withBoardProjections([game('g', 'a', 'b')], new Map([['a', { total: 155.63, complete: true }], ['b', { total: 146.4, complete: true }]]))
+    expect(g.home.projectedPoints).toBe(155.6)
+    expect(g.away?.projectedPoints).toBe(146.4)
+    expect(g.homeWinProbability).toBeCloseTo(155.63 / (155.63 + 146.4), 6)
+  })
+  it('draws no win chance from a partial projection, but still shows the number', async () => {
+    const { withBoardProjections } = await import('@/lib/matchup-center/nativeMatchupModel')
+    const [g] = withBoardProjections([game('g', 'a', 'b')], new Map([['a', { total: 80, complete: false }], ['b', { total: 146.4, complete: true }]]))
+    expect(g.home.projectedPoints).toBe(80)
+    expect(g.homeWinProbability).toBeNull()
+  })
+  it('leaves a team with no projection null, and a bye alone', async () => {
+    const { withBoardProjections } = await import('@/lib/matchup-center/nativeMatchupModel')
+    const [g, bye] = withBoardProjections([game('g', 'a', 'b'), game('h', 'c', null)], new Map())
+    expect(g.home.projectedPoints).toBeNull()
+    expect(g.homeWinProbability).toBeNull()
+    expect(bye.away).toBeNull()
   })
 })

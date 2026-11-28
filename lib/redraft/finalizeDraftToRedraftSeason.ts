@@ -1,6 +1,8 @@
 import { resolveMissingNflPickPlayerId } from '@/lib/draft/resolveMissingPickPlayerId'
 import { placeDraftedRookiesOnTaxi, type DraftedRookieRow } from '@/lib/redraft/offseason/placeDraftedRookiesOnTaxi'
 import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
+import { createScheduleRowsOnce } from '@/lib/redraft/scheduleWriteLock'
+import { sgDraftScoringCalendar } from '@/lib/survivor-guillotine/draftSeason'
 import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
@@ -13,6 +15,7 @@ import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceS
 import { resolveCreatedSeasonWeeks, resolveGuillotineSeasonWeeks } from './createdSeasonLength'
 import { maxPlayoffStartWeekFor } from './regularSeasonCap'
 import { prisma } from '@/lib/prisma'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
@@ -28,6 +31,10 @@ import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeason
 import { afterDynastyNewSeasonActivated } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
 import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
+import { matchStarterSlots } from '@/lib/redraft/nativeDraftRosterTemplate'
+import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
+import { relabelSeasonStarters } from '@/lib/redraft/relabelStarters'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -48,6 +55,7 @@ const EMPTY_SUMMARY: RedraftDraftFinalizationSummary = {
 }
 
 type DraftPickForRedraftSync = {
+  assetType?: string | null
   id: string
   overall: number
   round: number
@@ -201,7 +209,10 @@ export async function ensureRedraftSeason(leagueId: string) {
     ? await getGuillotineConfig(leagueId).catch(() => null)
     : null
   const createdWeeks = resolveCreatedSeasonWeeks(league, cfg?.defaultSeasonWeeks ?? 17)
-  const totalWeeks = guillotine ? resolveGuillotineSeasonWeeks(guillotine.eliminationEndWeek, createdWeeks) : createdWeeks
+  const combined = league.leagueVariant === 'survivor_guillotine'
+    ? sgDraftScoringCalendar((await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId }, select: { config: true } })).config)
+    : null
+  const totalWeeks = combined?.totalWeeks ?? (guillotine ? resolveGuillotineSeasonWeeks(guillotine.eliminationEndWeek, createdWeeks) : createdWeeks)
   // The commissioner's playoff start week, when it fits the season; the sport default otherwise.
   // A divisions-tournament conference league has no league playoffs: its bracket weeks are regular
   // weeks the tournament scores (lib/tournament/divisions/conferenceSeasonPlan.ts).
@@ -209,7 +220,7 @@ export async function ensureRedraftSeason(leagueId: string) {
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
   const playoffStartCap = maxPlayoffStartWeekFor(league)
-  const playoffStartWeek = guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' || isBestBallNoPlayoffLeague(league) ? totalWeeks + 1 :
+  const playoffStartWeek = combined || guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' || isBestBallNoPlayoffLeague(league) ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks &&
     // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts).
     (playoffStartCap == null || leaguePlayoffStart <= playoffStartCap)
@@ -463,9 +474,12 @@ export async function ensureScheduleForNewSeason(params: {
       isMedianMatchup: false,
     }))
 
-  if (rows.length > 0) {
-    await prisma.redraftMatchup.createMany({ data: rows })
-  }
+  // Re-checked under a per-season lock: two draft syncs racing used to write the schedule twice.
+  await createScheduleRowsOnce({
+    seasonId: params.seasonId,
+    alreadyWritten: async (tx) => (await tx.redraftMatchup.count({ where: { seasonId: params.seasonId } })) > 0,
+    rows,
+  })
 }
 
 /**
@@ -483,7 +497,7 @@ export async function syncCompletedDraftToRedraftSeason(
 ): Promise<RedraftDraftFinalizationSummary> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, survivorMode: true, settings: true },
+    select: { id: true, survivorMode: true, settings: true, leagueVariant: true, sport: true },
   })
 
   if (!league) return { ...EMPTY_SUMMARY, reason: 'league_not_found' }
@@ -570,9 +584,26 @@ export async function syncCompletedDraftToRedraftSeason(
   const draftedBenchRows: DraftedRookieRow[] = []
 
   const redraftRosterByGenericRosterId = new Map<string, Awaited<ReturnType<typeof ensureRedraftRosterForGenericRoster>>>()
+  const survivorSlotsByPick = new Map<string, string>()
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const sport = String(league.sport ?? 'NFL')
+    const config = resolveRedraftRosterConfig(sport, league.settings)
+    const slots = [...config.starterCapacities].flatMap(([slotName, count]) =>
+      Array.from({ length: count }, () => ({ slotName, allowedPositions: allowedPositionsForSlot(sport, slotName) })))
+    const groups = new Map<string, DraftPickForRedraftSync[]>()
+    for (const pick of session.picks as DraftPickForRedraftSync[]) {
+      if (isDraftPickSkipped(pick) || isDraftPickRowEmpty({ playerName: pick.playerName, position: pick.position, pickMetadata: pick.pickMetadata ?? null })) continue
+      groups.set(pick.rosterId, [...(groups.get(pick.rosterId) ?? []), pick])
+    }
+    for (const picks of groups.values()) {
+      const matching = matchStarterSlots(picks.map(pick => pick.position), slots)
+      picks.forEach((pick, index) => survivorSlotsByPick.set(pick.id, matching[index] == null ? 'bench' : slots[matching[index]!].slotName))
+    }
+  }
 
   for (const pick of session.picks as DraftPickForRedraftSync[]) {
     if (
+      (session.draftModeLabel === ANNUAL_C2C_DRAFT && pick.assetType === 'c2c_college') ||
       isDraftPickSkipped(pick) ||
       isDraftPickRowEmpty({
         playerName: pick.playerName,
@@ -629,21 +660,37 @@ export async function syncCompletedDraftToRedraftSeason(
       : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
     const playerId = registryId ?? stablePlayerId(session.id, pick)
 
-    const existingActive = await prisma.redraftRosterPlayer.findFirst({
-      where: {
-        rosterId: mapping.redraftRoster.id,
-        playerId,
-        droppedAt: null,
-      },
-      select: { id: true },
-    })
+    /*
+     * 🛑 A REPLAY MUST NOT RESURRECT A DRAFTED PLAYER WHO WAS LATER DROPPED OR TRADED — IN ANY FORMAT.
+     * Any row for this pick on this season roster, active OR dropped, means the pick was already
+     * materialized; a dropped one means a roster move happened after it. This replay runs on every
+     * post-draft artifact pass (roster and draft-room requests, the draft-room poll), so a filter on
+     * `droppedAt: null` re-created the player every time someone opened the league.
+     *
+     * Measured 2026-11-22, Zombie Chimmy Test (NFL redraft): Kyren Williams dropped for Bhayshul
+     * Tuten at 21:02:55, back on the roster as "drafted" at 21:08:36 — the second the next pass ran.
+     * `33e4a268e` had fixed exactly this for Survivor Guillotine only; the rule was never format-specific.
+     *
+     * ⚠ AND A TRADE LEAVES NO ROW BEHIND: it MOVES the row to the receiving roster (applyRedraftRosterMoves,
+     * tradeSettlement), so the drafting roster has nothing to find. A player active anywhere in this
+     * season is already placed, and re-creating him here puts one player on two teams.
+     */
+    const existingActive =
+      (await prisma.redraftRosterPlayer.findFirst({
+        where: { rosterId: mapping.redraftRoster.id, playerId },
+        select: { id: true },
+      })) ??
+      (await prisma.redraftRosterPlayer.findFirst({
+        where: { playerId, droppedAt: null, roster: { seasonId: season.id } },
+        select: { id: true },
+      }))
 
     if (existingActive) {
       redraftPlayersAlreadyPresent += 1
       continue
     }
 
-    const slotType = inferSlotTypeFromGenericRosterPlayerData(mapping.genericRoster?.playerData ?? null, pick)
+    const slotType = survivorSlotsByPick.get(pick.id) ?? inferSlotTypeFromGenericRosterPlayerData(mapping.genericRoster?.playerData ?? null, pick)
 
     const createdRow = await prisma.redraftRosterPlayer.create({
       data: {
@@ -736,6 +783,20 @@ export async function syncCompletedDraftToRedraftSeason(
     })
   }
 
+  /*
+   * Starter labels that fit the league's layout (./relabelStarters.ts): the picks above are written as
+   * each starter's POSITION, so a FLEX starter read as a third RB and the lineup looked illegal. Labels
+   * only — who starts is unchanged. This pass re-runs on roster and draft-room views, so a season
+   * drafted before it heals on its next view. Must not fail draft completion.
+   */
+  await relabelSeasonStarters(prisma, { seasonId: season.id, sport: season.sport || String(session.sportType ?? 'NFL'), leagueSettings: league.settings }).catch((err) => {
+    console.warn('[syncCompletedDraftToRedraftSeason] starter labels not normalized', {
+      leagueId,
+      seasonId: season.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  })
+
   await ensureScheduleForNewSeason({
     seasonId: season.id,
     leagueId,
@@ -751,6 +812,27 @@ export async function syncCompletedDraftToRedraftSeason(
       error: err instanceof Error ? err.message : String(err),
     })
   })
+
+  /*
+   * A late start: load the weeks played before the draft, scored on the drafted rosters, so managers
+   * can look back at them (lib/redraft/preLeagueWeeks.ts). Not awaited — it pulls one stat payload per
+   * missed week, and draft completion must not wait on that or fail with it. Idempotent, so a re-sync
+   * fills any week it missed. `scheduleStartWeek > 1` only happens for the formats that start late.
+   */
+  if (scheduleStartWeek > 1) {
+    void import('@/lib/redraft/preLeagueWeeks')
+      .then(({ backfillPreLeagueWeeks }) => backfillPreLeagueWeeks({ seasonId: season.id, firstLeagueWeek: scheduleStartWeek }))
+      .then((r) => {
+        if (r.failures.length > 0) console.warn('[syncCompletedDraftToRedraftSeason] pre-league weeks partly loaded', r)
+      })
+      .catch((err) => {
+        console.warn('[syncCompletedDraftToRedraftSeason] pre-league weeks not loaded', {
+          leagueId,
+          seasonId: season.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+  }
 
   // G15.2 / G12: DRAFT_COMPLETED is now emitted generically from completeDraftSession
   // (all league types). SEASON_ACTIVATED remains here — it carries the season-specific

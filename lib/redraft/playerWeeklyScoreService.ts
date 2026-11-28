@@ -290,6 +290,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         season: seasonYear,
         week,
         platform: survivorLeague?.platform ?? null,
+        settings: survivorLeague?.settings ?? null,
       })
       const current = new Set(ordinaryRosterPlayers.map((p) => p.playerId))
       const added = new Set<string>()

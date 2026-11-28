@@ -46,12 +46,15 @@ support_matrix:
       captured: 2026-10-31
       fixtures: [fixtures/scoreboard.NBA.20261106.json, fixtures/scoreboard.NBA.20251209.json, fixtures/scoreboard.NBA.20251213.json, fixtures/scoreboard.NBA.20251216.json]
     teams: { status: probed_full, fixture: fixtures/teams.NBA.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+    roster: { status: probed, fixture: fixtures/roster.NBA.team12.json, captured: 2026-11-27, see: roster.measured_2026_11_27 }
   NHL:
     sport_path: hockey/nhl
     teams: { status: probed_full, fixture: fixtures/teams.NHL.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+    roster: { status: probed, fixture: fixtures/roster.NHL.team13.json, captured: 2026-11-27, see: roster.measured_2026_11_27 }
   MLB:
     sport_path: baseball/mlb
     teams: { status: probed_full, fixture: fixtures/teams.MLB.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+    roster: { status: probed, fixture: fixtures/roster.MLB.team10.json, captured: 2026-11-27, see: roster.measured_2026_11_27 }
     fantasy_league: { status: probed, fixture: fixtures/fantasy-league.MLB.2026.json, captured: 2026-10-03, see: fantasy_mlb }
   NCAAB:
     sport_path: basketball/mens-college-basketball
@@ -71,6 +74,8 @@ support_matrix:
       fixtures: [fixtures/scoreboard.NFL.20260110.json, fixtures/scoreboard.NFL.20260117.json, fixtures/scoreboard.NFL.20260125.json, fixtures/scoreboard.NFL.20260208.json]
     fantasy_league: { status: probed, fixture: fixtures/fantasy-league.NFL.2026.json, captured: 2026-11-08, see: fantasy_nfl }
     fantasy_communication: { status: http_401_without_cookies, captured: 2026-11-08, see: fantasy_nfl.communication }
+    fantasy_matchup: { status: probed, fixture: fixtures/fantasy-matchup.NFL.2026.week11.json, captured: 2026-11-24, see: fantasy_nfl_matchup }
+    fantasy_pending_transactions: { status: probed, fixture: fixtures/fantasy-pending.NFL.2026.json, captured: 2026-11-27, see: fantasy_nfl_pending }
   # Every other sport: not in this contract. Adding one = probe + fixture + this
   # matrix, in one commit.
 
@@ -180,6 +185,14 @@ endpoints:
     note: >
       `athletes` is a FLAT array for NCAAB (not grouped by position as some
       ESPN sports are). Do not assume the grouped shape.
+    measured_2026_11_27:
+      # Pro-league current-team headshots (owner OK 2026-11-27, GAPS E-08). One team per sport, full
+      # bodies measured here, then trimmed with contracts/fleaflicker/scripts/trim-fixture.mjs.
+      NBA: { team: "12 LAC", http_status: 200, season: 2027, shape: flat, athletes: 19, with_headshot: 19, with_jersey: 19, full_body_bytes: 171056 }
+      NHL: { team: "13 NYR", http_status: 200, season: 2027, shape: grouped, groups: [Centers, Left Wings, Right Wings, Defense, Goalies], athletes: 34, with_headshot: 34, with_jersey: 34, full_body_bytes: 244126 }
+      MLB: { team: "10 NYY", http_status: 200, season: 2026, shape: grouped, groups: [Pitchers, Catchers, Infielders, Outfielders, Designated Hitter], athletes: 39, with_headshot: 38, with_jersey: 39, full_body_bytes: 377016 }
+      grouped_shape: "athletes: [ { position: <group name>, items: [ <athlete> ] } ] — NHL and MLB. NBA and NCAAB are flat. A parser must accept both."
+      trade_check: "Darius Garland, traded CLE -> LAC, is on the LAC roster: id 4396907, jersey '10', headshot.href https://a.espncdn.com/i/headshots/nba/players/full/4396907.png (TheSportsDB's cutout still shows the Cavaliers jersey)."
     fields:
       athletes[].id: { type: string, note: "ESPN athlete id; equals alternateIds.sdr in every probed row" }
       athletes[].fullName: { type: string }
@@ -226,6 +239,11 @@ endpoints:
 # ============================================================================
 headshot_cdn:
   url: https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/{athlete_id}.png
+  pro_urls:
+    # roster headshot.href, measured 2026-11-27 (roster.measured_2026_11_27)
+    NBA: https://a.espncdn.com/i/headshots/nba/players/full/{athlete_id}.png
+    NHL: https://a.espncdn.com/i/headshots/nhl/players/full/{athlete_id}.png
+    MLB: https://a.espncdn.com/i/headshots/mlb/players/full/{athlete_id}.png
   note: >
     Equal to roster headshot.href whenever that field is present. A 404 returns
     a 1-byte text/html body, so a fetcher must check content-type AND size,
@@ -298,3 +316,93 @@ fantasy_nfl:
     note: The activity feed needs a signed-in ESPN account even for a PUBLIC league. Not captured.
   notes:
     - Public read only. A private league, prior seasons, keepers, IDP, EDR and trades are not in this capture (GAPS.md).
+
+fantasy_nfl_matchup:
+  # One week's per-player fantasy points, bench included (GAPS.md PS-01). Captured with the owner's
+  # explicit approval 2026-11-24 ~01:00Z (Monday night ET), public league chosen by the owner.
+  path: /seasons/{season}/segments/0/leagues/{league_id}
+  base_url: https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl
+  query: view=mTeam&view=mMatchup&view=mMatchupScore&scoringPeriodId={week}
+  captured_season: 2026
+  captured_week: 11              # status.currentMatchupPeriod = latestScoringPeriod = 11
+  captured_state: in_progress    # Monday night: all five week-11 matchups winner UNDECIDED
+  http_status: 200
+  full_body_bytes: {pretty: 18398687, compact: 6006930}
+  full_counts: {members: 10, teams: 10, schedule_entries: 70, week_matchups: 5, roster_entries: 164, bench_entries: 70, bench_entries_with_points: 36}
+  fixture: fixtures/fantasy-matchup.NFL.2026.week11.json
+  fixture_bytes: 995962
+  sanitization: scripts/redact-fantasy.mjs via probe.sh (10 member ids, 10 member names, 10 teams; 21 values verified absent; league id -> 123456).
+  trim: trim-fixture.mjs --keep-all entries (3146 key paths before and after), then compacted. All five week-11 matchups and every roster entry kept.
+  lineup_slots_seen: {0: QB 10, 2: RB 20, 4: WR 20, 6: TE 10, 16: D/ST 10, 17: K 10, 20: BE 70, 21: IR 4, 23: FLEX 10}
+  fields:
+    schedule[].home|away.rosterForCurrentScoringPeriod:
+      shape: "{ appliedStatTotal, entries[] }"
+      note: >
+        THE BLOCK TO READ. Every rostered player of that side, bench (20) and IR (21) included, with his
+        REAL lineupSlotId and his own points in entries[].playerPoolEntry.appliedStatTotal. Measured on
+        all 10 sides: the sum over non-bench, non-IR entries equals the block's appliedStatTotal exactly,
+        and equals the side's totalPointsLive and pointsByScoringPeriod["11"]. Bench players carry their
+        own points (36 of 70 bench entries > 0), which is what grades a bench call.
+    schedule[].home|away.rosterForMatchupPeriod:
+      note: >
+        🛑 DO NOT READ SLOTS FROM THIS. It holds only the starters who have recorded stats (70 entries
+        across 10 sides, none of them bench/IR in the current block) and reports lineupSlotId 0 for EVERY
+        entry, QB or not. Its points agree with the current block; its slots are not slots.
+    schedule[].home|away.rosterForMatchupPeriodDelayed: { example: "{entries: []}" }
+    entries[].playerPoolEntry.lineupLocked:
+      note: >
+        false <=> the player's game has not started. All 37 unlocked entries had no actual stat line and
+        appliedStatTotal 0; every locked entry had one. So 0 with lineupLocked false is "not played yet",
+        NOT a zero-point game. A writer stores a player's points only once lineupLocked is true.
+    entries[].playerPoolEntry.player.stats[]:
+      note: >
+        Only scoringPeriodId 11, statSplitTypeId 1 (that single week). statSourceId 0 = ACTUAL (present
+        only once the game has started; appliedTotal equals playerPoolEntry.appliedStatTotal),
+        statSourceId 1 = ESPN's PROJECTION. Never read appliedTotal without filtering statSourceId 0.
+    entries[].playerId:
+      note: >
+        ESPN player id. D/ST is NEGATIVE, -16000 - proTeamId (-16014 Rams, -16034 Texans). 🛑 Not a
+        Sleeper id: ESPN 12483 is Matthew Stafford, Sleeper 12483 is Jack Bech. Crosswalk before storing.
+    schedule[].home|away.totalPoints: { note: "0 while winner is UNDECIDED. totalPointsLive carries the running score." }
+    schedule[] (other weeks): { note: "Past weeks carry only totals (totalPoints, pointsByScoringPeriod, winner); no roster block. Future weeks the same with 0." }
+  unverified:
+    - Whether scoringPeriodId=N returns week N's roster block for a PAST N (GAPS S-01). Here N was the current week, so the parameter's effect is not shown. A writer that reads the current week on each sync and keeps the last value for locked players does not need it.
+    - Stat corrections ESPN applies after the week rolls over are not seen by such a writer.
+
+fantasy_nfl_pending:
+  # GAPS.md T-03. CAPTURED 2026-11-27 with the owner-only capture button (app/api/admin/contract-capture,
+  # lib/league-import/espn/espnContractCapture.ts): the owner's OWN league, his OWN stored cookies, one
+  # redacted file, committed unmodified as the fixture below.
+  base_url: https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl
+  path: /seasons/{season}/segments/0/leagues/{league_id}
+  fixture: fixtures/fantasy-pending.NFL.2026.json
+  captured: 2026-11-27
+  sanitization: server-side (lib/admin/contractCapture/redactContractCapture.ts) — 29 synthetic values, league id -> 123456, 10 images, 3 credential values verified absent
+  requests:
+    league_teams_transactions:
+      query: view=mTeam&view=mTransactions2
+      status: probed (HTTP 200)
+      shape: >
+        A pending offer appears in teams[].pendingTransactions of BOTH teams involved (and no other team),
+        and in the top-level transactions[] as type TRADE_PROPOSAL, status PENDING. There is NO top-level
+        pendingTransactions key in this body.
+    pending_transactions:
+      query: view=mPendingTransactions
+      status: probed (HTTP 200) — CONFIRMED real view (the capture file's own note still calls it a candidate; that note predates the read)
+      shape: top-level pendingTransactions[] beside draftDetail, gameId, id, scoringPeriodId, seasonId, segmentId, status
+  offer:
+    fields: { id: uuid string, type: TRADE_PROPOSAL, status: PENDING, isPending: true, teamId: proposer team id, memberId: proposer member id, proposedDate: epoch ms, expirationDate: epoch ms, teamActions: '{"<teamId>": "ACCEPTED"}', scoringPeriodId: int, bidAmount: 0, executionType: EXECUTE, rating: 0 }
+    items[]: { type: "TRADE | DROP", playerId: ESPN player id, fromTeamId: int, toTeamId: "int; 0 on a DROP", fromLineupSlotId: int, toLineupSlotId: "-1", isKeeper: false, overallPickNumber: 0 }
+    drop: >
+      A DROP item (toTeamId 0) is the PROPOSING side's conditional drop: released when the trade executes,
+      received by nobody. Stored as asset type `drop` (lib/provider-trades/espnTradeOffers.ts) and counted
+      as a cost to the dropping side only in the grade.
+    observed: >
+      One offer: team 7 gives 4360761 (Michael Wilson) to team 2, gets 4426515 (Puka Nacua), drops
+      4432708 (Marvin Harrison Jr.); teamActions {"7": "ACCEPTED"}; expires 2026-11-28T22:43:50Z.
+  auth: owner's espn_s2 + SWID cookies, Cookie header only. The sweep never falls back to a cookieless read for this view.
+  unverified:
+    - Offers between two OTHER teams — not observable in this league (GAPS T-03a). Owner rule keeps only the reader's team's offers.
+    - Whether ESPN sends pendingTransactions [] or omits it when nothing is pending (GAPS T-03b).
+    - Any status other than PENDING (GAPS T-03c). Accept/decline/counter are not captured (T-03d).
+  privacy: owner rule 2026-11-25 — keep and show only offers the signed-in user sent or received (GAPS.md T-03)

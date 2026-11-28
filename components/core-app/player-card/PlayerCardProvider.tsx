@@ -4,7 +4,9 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState } fro
 import type { ReactNode } from 'react'
 
 import type { PlayerCardData } from '@/lib/core-app/playerCard'
+import type { PlayerCardMore } from '@/lib/core-app/playerCardMore'
 import PlayerCardSheet from './PlayerCardSheet'
+import { collectPlayerCardList, type PlayerCardList } from './playerCardSiblings'
 import '@/components/core-app/af-player-card.css'
 
 /**
@@ -37,8 +39,22 @@ export type PlayerCardRef = {
   leagueId?: string | null
 }
 
+export type PlayerCardOpenOptions = {
+  /** The control that was tapped. Its screen's other player names become the swipe list. */
+  origin?: Element | null
+}
+
+/** Moving between the players of the list the card was opened from. */
+export type PlayerCardNav = {
+  index: number
+  total: number
+  prev: PlayerCardRef | null
+  next: PlayerCardRef | null
+  go: (step: -1 | 1) => void
+}
+
 type PlayerCardState = {
-  open: (ref: PlayerCardRef) => void
+  open: (ref: PlayerCardRef, opts?: PlayerCardOpenOptions) => void
   close: () => void
   isOpen: boolean
 }
@@ -98,6 +114,14 @@ export default function PlayerCardProvider({
   const [ref, setRef] = useState<PlayerCardRef | null>(null)
   const [data, setData] = useState<PlayerCardData | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [more, setMore] = useState<PlayerCardMore | null>(null)
+  const [list, setListState] = useState<PlayerCardList | null>(null)
+  // Mirrored in a ref so a step reads the CURRENT list without a side effect inside a state updater.
+  const listRef = useRef<PlayerCardList | null>(null)
+  const setList = useCallback((next: PlayerCardList | null) => {
+    listRef.current = next
+    setListState(next)
+  }, [])
 
   /*
    * ⚠ EVERY FETCH IS SEQUENCED AND A STALE ONE IS DISCARDED. Clicking two names
@@ -111,14 +135,17 @@ export default function PlayerCardProvider({
     seq.current += 1
     setRef(null)
     setData(null)
+    setMore(null)
     setStatus('idle')
-  }, [])
+    setList(null)
+  }, [setList])
 
-  const open = useCallback(
+  const load = useCallback(
     (next: PlayerCardRef) => {
       const mine = ++seq.current
       setRef(next)
       setData(null)
+      setMore(null)
       setStatus('loading')
 
       const params = new URLSearchParams({ sport: next.sport })
@@ -133,6 +160,21 @@ export default function PlayerCardProvider({
           if (seq.current !== mine) return
           setData(json)
           setStatus('ready')
+          /*
+           * The Game log, Career and Depth chart tabs: a second read once the card has painted, under
+           * the same sequence guard, so a slow one never lands on the next player's card.
+           */
+          const mq = new URLSearchParams({ sport: json.player.sport, name: json.player.name })
+          if (json.player.position) mq.set('position', json.player.position)
+          if (json.player.team) mq.set('team', json.player.team)
+          if (json.player.sleeperId) mq.set('sleeperId', json.player.sleeperId)
+          if (json.player.externalId) mq.set('externalId', json.player.externalId)
+          fetch(`/api/core/player-card/more?${mq.toString()}`, { headers: { accept: 'application/json' } })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((m: PlayerCardMore | null) => {
+              if (seq.current === mine && m && Array.isArray(m.gameLog)) setMore(m)
+            })
+            .catch(() => {})
         })
         .catch(() => {
           if (seq.current !== mine) return
@@ -140,6 +182,45 @@ export default function PlayerCardProvider({
         })
     },
     [leagueId]
+  )
+
+  /*
+   * A tap on a name: load him, and take the screen's other names as the swipe list. A card opened
+   * from inside the card (a comp, a trade row) passes no origin and so drops the list — a side trip
+   * is not a step through the roster.
+   */
+  const open = useCallback(
+    (next: PlayerCardRef, opts?: PlayerCardOpenOptions) => {
+      setList(collectPlayerCardList(opts?.origin ?? null, next))
+      load(next)
+    },
+    [load, setList]
+  )
+
+  const go = useCallback(
+    (step: -1 | 1) => {
+      const cur = listRef.current
+      if (!cur) return
+      const index = cur.index + step
+      if (index < 0 || index >= cur.refs.length) return
+      setList({ refs: cur.refs, index })
+      load(cur.refs[index])
+    },
+    [load, setList]
+  )
+
+  const nav = useMemo<PlayerCardNav | null>(
+    () =>
+      list
+        ? {
+            index: list.index,
+            total: list.refs.length,
+            prev: list.refs[list.index - 1] ?? null,
+            next: list.refs[list.index + 1] ?? null,
+            go,
+          }
+        : null,
+    [list, go]
   )
 
   /*
@@ -163,7 +244,7 @@ export default function PlayerCardProvider({
   return (
     <Ctx.Provider value={value}>
       {children}
-      {ref ? <PlayerCardSheet subject={ref} data={data} status={status} onClose={close} onOpen={open} /> : null}
+      {ref ? <PlayerCardSheet subject={ref} data={data} status={status} onClose={close} onOpen={open} more={more} nav={nav} leagueId={ref.leagueId ?? leagueId} /> : null}
     </Ctx.Provider>
   )
 }

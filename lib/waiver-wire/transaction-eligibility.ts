@@ -4,9 +4,12 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { activeFaLockWindow, faLockMessage, readWaiverExtras } from '@/lib/waivers/waiverExtras'
 import { evaluateLegalityForProjectedRoster } from '@/lib/roster-legality/loadLegalityEvaluationContext'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
-import { computePerPlayerKickoffLocks } from '@/lib/roster-lineup-engine/lineupLockService'
+import { computePerPlayerKickoffLocks, resolveScheduleLockedPlayerIds } from '@/lib/roster-lineup-engine/lineupLockService'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
+import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import {
   addPlayerToRosterData,
   removePlayerFromRosterData,
@@ -16,7 +19,7 @@ import { countTowardRosterLimit, importedIrOverflow, leagueRosterLimit } from '@
 import type { RosterLegalityBlockingReason } from '@/lib/roster-legality/types'
 import { getEffectiveLeagueWaiverSettings } from './settings-service'
 import { normalizeWaiverTypeForEngine, parseWaiverEngineConfig } from './waiver-engine-config'
-import { assertWeeklyDropLimit } from './waiver-validation'
+import { assertWeeklyDropLimit, startOfWeekUtc } from './waiver-validation'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
 import { assertCurrentNbaWaiverPlayer } from './current-nba-player-pool'
 import { assertNhlProspectFreeAgencyAdd } from './nhlProspectFreeAgency'
@@ -53,6 +56,8 @@ export type WaiverClaimEligibilityInput = {
    * A first-come add in an offseason the commissioner opened to free agency
    * (lib/waiver-wire/season-phase-policy.ts): a `completed` season does not lock it.
    */
+  /** True only for the immediate-add service, not a submitted waiver claim. */
+  freeAgent?: boolean
   offseasonFreeAgency?: boolean
   /** Told what the gate let through but wants said — an imported roster's IR findings. Never a refusal. */
   onNotice?: (message: string) => void
@@ -96,6 +101,71 @@ function sectionForPlayerId(playerData: unknown, pid: string): RosterSectionKey 
 /**
  * Deterministic checks before creating a waiver claim. Throws `Error` with a user-facing message.
  */
+/**
+ * The drop rules, checked again WHEN THE CLAIM IS PROCESSED (2026-11-26). They were checked only when
+ * the claim was placed, so a claim filed on Tuesday could drop on Sunday a player whose game had
+ * started by then, a player the commissioner had since made undroppable, or — several claims each
+ * passing the weekly limit when filed — more players than the weekly limit allows.
+ *
+ * Returns the refusal message, or null when the drop is allowed. Read failures fail OPEN on the lock
+ * (as at claim time) and never block a run on infrastructure.
+ */
+export async function waiverRunDropRefusal(input: {
+  leagueId: string
+  rosterId: string
+  dropPlayerId: string | null | undefined
+  playerData: unknown
+  league: { sport?: string | null; leagueVariant?: string | null; leagueType?: string | null; settings?: unknown; season?: number | null; name?: string | null; bestBallMode?: boolean | null }
+  engineConfig: { undroppable_player_ids?: unknown; can_drop_starters_after_game_start?: unknown; can_drop_bench_after_lock?: unknown }
+  maxDropsPerWeek?: number | null
+  /** The claim's commissioner override allows passing the weekly drop limit. */
+  bypassWeeklyDropLimit?: boolean
+  now?: Date
+}): Promise<string | null> {
+  const dropId = input.dropPlayerId && String(input.dropPlayerId).trim() ? String(input.dropPlayerId).trim() : null
+  if (!dropId) return null
+  const undroppable = new Set(
+    (Array.isArray(input.engineConfig.undroppable_player_ids) ? input.engineConfig.undroppable_player_ids : []).map((x) => String(x).trim()),
+  )
+  if (undroppable.has(dropId)) return 'This player is on the commissioner undroppable list and cannot be dropped.'
+
+  if (input.maxDropsPerWeek != null && input.maxDropsPerWeek > 0 && !input.bypassWeeklyDropLimit) {
+    // At the run, only drops that HAPPENED count (this run's earlier awards are already written):
+    // other pending claims may still fail, so counting them here would refuse a legal drop.
+    const done = await (prisma as any).waiverTransaction
+      .count({ where: { leagueId: input.leagueId, rosterId: input.rosterId, dropPlayerId: { not: null }, processedAt: { gte: startOfWeekUtc(input.now ?? new Date()) } } })
+      .catch(() => 0)
+    if (done >= input.maxDropsPerWeek) return `Weekly drop limit reached (${input.maxDropsPerWeek} max).`
+  }
+
+  if (isBestBallLeagueRow(input.league)) return null
+  const now = input.now ?? new Date()
+  const kick = computePerPlayerKickoffLocks(input.playerData as never, now)
+  const scheduleLocked = await resolveScheduleLockedPlayerIds({
+    leagueId: input.leagueId,
+    rosterId: input.rosterId,
+    sport: String(input.league.sport ?? 'NFL'),
+    leagueVariant: input.league.leagueVariant ?? null,
+    settings: input.league.settings,
+    season: input.league.season ?? now.getFullYear(),
+    leagueWeek: leagueWeekFromSettings(input.league.settings) ?? 1,
+    now,
+  }).catch(() => null)
+  const locked = new Set([...kick.lockedPlayerIds, ...(scheduleLocked ?? [])])
+  if (!locked.has(dropId)) return null
+  const sec = sectionForPlayerId(input.playerData, dropId)
+  if (sec === 'starters' && input.engineConfig.can_drop_starters_after_game_start !== true) {
+    return 'This starter is locked because their game has started.'
+  }
+  if (sec === 'bench' && input.engineConfig.can_drop_bench_after_lock !== true) {
+    return 'This bench player is locked because their game has started.'
+  }
+  if ((sec === 'ir' || sec === 'taxi' || sec === 'devy') && input.engineConfig.can_drop_bench_after_lock === false) {
+    return 'You cannot drop this player while this slot is locked for the period.'
+  }
+  return null
+}
+
 export async function assertWaiverClaimEligibility(input: WaiverClaimEligibilityInput): Promise<void> {
   await checkWaiverEligibility(input)
 }
@@ -130,6 +200,10 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
         leagueVariant: true,
         lockAllMoves: true,
         lifecycleState: true,
+        season: true,
+        name: true,
+        bestBallMode: true,
+        timezone: true,
       },
     }),
     prisma.roster.findFirst({
@@ -153,6 +227,13 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
     throw new Error('This league season is complete; roster moves are locked.')
   }
 
+  if (league.leagueVariant === 'survivor_guillotine' && input.freeAgent) throw new Error('Survivor Guilly acquisitions use blind FAAB waivers; immediate free-agent adds are disabled.')
+  // AF Commissioner free-agent lock windows (lib/waivers/waiverExtras.ts): hours in league time when
+  // free-agent adds are locked league-wide. Waiver CLAIMS stay open — they settle at the next run.
+  if (input.freeAgent) {
+    const lockWindow = activeFaLockWindow(readWaiverExtras(league.settings), new Date(), (league as { timezone?: string | null }).timezone)
+    if (lockWindow) throw new Error(faLockMessage(lockWindow))
+  }
   await assertCurrentNbaWaiverPlayer(league, addId)
 
   const engineConfig = parseWaiverEngineConfig(settingsRow?.waiverEngineConfig ?? null)
@@ -222,17 +303,45 @@ async function checkWaiverEligibility(input: WaiverClaimEligibilityInput, projec
 
   const now = new Date()
   const kick = computePerPlayerKickoffLocks(roster.playerData, now)
-  if (dropId && kick.lockedPlayerIds.includes(dropId)) {
+  /*
+   * 🛑 A PLAYER WHOSE GAME HAD STARTED COULD BE DROPPED (2026-11-25). The only check here read the
+   * `gameTime` the CLIENT stored on its last lineup save — '—' when the screen had none, so it never
+   * locked. The lineup save locks from the schedule (`resolveFullLineupLockContext`); a drop is the same
+   * "moved out" under the owner's rule, so it locks from the same schedule. Best ball is exempt, as
+   * everywhere. A schedule read that fails keeps the old check rather than failing every claim.
+   */
+  const scheduleLocked =
+    dropId && !isBestBallLeagueRow(league)
+      ? await resolveScheduleLockedPlayerIds({
+          leagueId,
+          rosterId,
+          sport: String(league.sport ?? 'NFL'),
+          leagueVariant: league.leagueVariant,
+          settings: league.settings,
+          season: league.season ?? now.getFullYear(),
+          leagueWeek: leagueWeekFromSettings(league.settings) ?? 1,
+          now,
+        })
+      : null
+  const dropLocked = new Set([...kick.lockedPlayerIds, ...(scheduleLocked ?? [])])
+  if (dropId && dropLocked.has(dropId)) {
     const sec = sectionForPlayerId(roster.playerData, dropId)
     const canDropStarters = engineConfig.can_drop_starters_after_game_start === true
-    const canDropBench = engineConfig.can_drop_bench_after_lock !== false
+    /*
+     * Owner's call, 2026-11-25: a BENCH player whose game has started is locked too, by default — "can't
+     * be moved in or out" makes no exception for the bench. A commissioner can still allow it by setting
+     * `can_drop_bench_after_lock: true` (no league had set it either way: 861 of 861 rows blank).
+     * IR, taxi and devy keep the old default — those players are not in the lineup at all.
+     */
+    const canDropBench = engineConfig.can_drop_bench_after_lock === true
+    const canDropReserve = engineConfig.can_drop_bench_after_lock !== false
     if (sec === 'starters' && !canDropStarters) {
       throw new Error('This starter is locked because their game has started.')
     }
     if (sec === 'bench' && !canDropBench) {
-      throw new Error('This bench player is locked until the league allows drops after lock.')
+      throw new Error('This bench player is locked because their game has started.')
     }
-    if ((sec === 'ir' || sec === 'taxi' || sec === 'devy') && !canDropBench) {
+    if ((sec === 'ir' || sec === 'taxi' || sec === 'devy') && !canDropReserve) {
       throw new Error('You cannot drop this player while this slot is locked for the period.')
     }
   }

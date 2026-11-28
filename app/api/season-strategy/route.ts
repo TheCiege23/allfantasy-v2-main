@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { authOptions } from '@/lib/auth'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import {
   getLeagueInfo,
   getLeagueMatchups,
@@ -425,10 +426,18 @@ Return JSON only.
 `
 
 export async function POST(request: NextRequest) {
-  const session = (await getServerSession(authOptions)) as { user?: { id?: string | null } } | null
+  const session = (await getServerSession(authOptions)) as { user?: { id?: string | null; email?: string | null } } | null
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  /*
+   * 🛑 AF PRO (`planning_tools`) — the same key as its twin /api/legacy/season-strategy (owner's decision
+   * 2026-11-27; gating audit H5). This route ran gpt for any signed-in user. Refused before the rate
+   * limit, the body and the model.
+   */
+  const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: session.user.email ?? null, featureId: 'planning_tools' })
+  if (!plan.ok) return plan.response
 
   const ip = getClientIp(request)
   const rateLimit = consumeRateLimit({

@@ -24,6 +24,7 @@ import {
 } from './settings-ui'
 import { ImportedKeeperGrid } from '@/components/import-assist/ImportedKeeperGrid'
 import LeaguePrivacyAndInvitesPanel from '@/components/app/settings/LeaguePrivacyAndInvitesPanel'
+import { KEEPER_AUTO_BOARD_SETTING, readKeeperAutoBoard } from '@/lib/keeper/keeperAutoBoardSetting'
 
 /** `League.keeperRoundPenalty`: rounds EARLIER than last season; 0 = same round, negative = later. */
 const KEEPER_ROUND_SHIFTS = [5, 4, 3, 2, 1, 0, -1, -2, -3]
@@ -71,6 +72,8 @@ export function LeagueSettingsPanel({
   const [medianGame, setMedianGame] = useState(Boolean(initialData.medianGame))
   const [medianInPlayoffs, setMedianInPlayoffs] = useState(initialData.medianGameInPlayoffs === true)
   const [multiTeamManagers, setMultiTeamManagers] = useState(initialData.allowMultiTeamManagers === true)
+  const [preLeagueCounts, setPreLeagueCounts] = useState(initialData.preLeagueWeeksCount === true)
+  const preLeagueWeekCount = initialData.preLeagueWeekCount ?? 0
   const [leagueType, setLeagueType] = useState((initialData.leagueType ?? 'redraft') as string)
   const [leagueSize, setLeagueSize] = useState(initialData.leagueSize ?? 12)
   const [allowPreDraft, setAllowPreDraft] = useState(Boolean(initialData.allowPreDraftMoves))
@@ -93,6 +96,7 @@ export function LeagueSettingsPanel({
   const [keeperMissedDeadlineRule, setKeeperMissedDeadlineRule] = useState(initialData.keeperMissedDeadlineRule ?? 'auto_no_keepers')
   const [keeperWaiverRound, setKeeperWaiverRound] = useState<number | null>(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
   const [keeperMinCostRound, setKeeperMinCostRound] = useState<number | null>(roundOrNull(settingsSnapshot.keeper_min_cost_round))
+  const [keeperAutoBoard, setKeeperAutoBoard] = useState(readKeeperAutoBoard(settingsSnapshot))
 
   useEffect(() => {
     setName(initialData.name ?? '')
@@ -103,6 +107,7 @@ export function LeagueSettingsPanel({
     setMedianGame(Boolean(initialData.medianGame))
     setMedianInPlayoffs(initialData.medianGameInPlayoffs === true)
     setMultiTeamManagers(initialData.allowMultiTeamManagers === true)
+    setPreLeagueCounts(initialData.preLeagueWeeksCount === true)
     setLeagueType(initialData.leagueType ?? 'redraft')
     setLeagueSize(initialData.leagueSize ?? 12)
     setAllowPreDraft(Boolean(initialData.allowPreDraftMoves))
@@ -122,6 +127,7 @@ export function LeagueSettingsPanel({
     setKeeperMissedDeadlineRule(initialData.keeperMissedDeadlineRule ?? 'auto_no_keepers')
     setKeeperWaiverRound(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
     setKeeperMinCostRound(roundOrNull(settingsSnapshot.keeper_min_cost_round))
+    setKeeperAutoBoard(readKeeperAutoBoard(settingsSnapshot))
     if (initialData.keeperSelectionDeadline) {
       const d = new Date(initialData.keeperSelectionDeadline)
       setKeeperDeadlineLocal(d.toISOString().slice(0, 16))
@@ -374,6 +380,17 @@ export function LeagueSettingsPanel({
                   A pick a team traded away is handled the same way: the keeper moves to the next pick the team still owns.
                 </p>
               </div>
+
+              <KeeperAutoBoardSetting
+                enabled={keeperAutoBoard}
+                disabled={disabled}
+                hasAccess={hasAfCommissionerSub}
+                onUpgrade={() => subscriptionGate?.gate('commissioner_automation')}
+                onChange={(v) => {
+                  setKeeperAutoBoard(v)
+                  void save({ settingsMerge: { [KEEPER_AUTO_BOARD_SETTING]: v } })
+                }}
+              />
             </>
           )}
 
@@ -635,6 +652,19 @@ export function LeagueSettingsPanel({
             }}
           />
         ) : null}
+        {/* A league drafted mid-season: the weeks before the draft are loaded for viewing (lib/redraft/preLeagueWeeks.ts). */}
+        {preLeagueWeekCount > 0 ? (
+          <SettingsToggleRow
+            label="Count weeks before the draft"
+            description={`Weeks 1–${preLeagueWeekCount} were played before this league drafted. Each team was scored on those weeks with the players it drafted. Off: those scores are for viewing only. On: they count toward every team's record${medianGame ? ', including the league median' : ''}.`}
+            checked={preLeagueCounts}
+            disabled={disabled}
+            onChange={(v) => {
+              setPreLeagueCounts(v)
+              void save({ preLeagueWeeksCount: v })
+            }}
+          />
+        ) : null}
         <SettingsToggleRow
           label="A manager may run more than one team"
           description="For leagues where one person runs several franchises. With this on, a manager can be given another team, and each team owes its own dues. Managers cannot trade between their own teams."
@@ -808,6 +838,55 @@ function ExtraMatchupSettingsBlock({
             ]}
           />
         </>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * "Place keepers on the draft board for me" — AF Commissioner / AF Supreme (lib/keeper/keeperAutoBoard.ts).
+ * Without the plan the commissioner keeps the manual flow (add each keeper to the board) and sees why.
+ */
+export function KeeperAutoBoardSetting({
+  enabled,
+  disabled,
+  hasAccess,
+  onUpgrade,
+  onChange,
+}: {
+  enabled: boolean
+  disabled: boolean
+  hasAccess: boolean
+  onUpgrade: () => void
+  onChange: (value: boolean) => void
+}) {
+  const locked = !hasAccess && !enabled
+  return (
+    <div data-testid="kp-auto-board">
+      <label className="flex cursor-pointer items-start gap-2 text-white/80">
+        <input
+          type="checkbox"
+          data-testid="kp-auto-board-toggle"
+          className="mt-0.5 rounded border-white/20 bg-[#0a1220]"
+          checked={enabled}
+          disabled={disabled || locked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span>
+          Place keepers on the draft board for me
+          <span className="mt-0.5 block text-[11px] text-white/40">
+            As soon as keepers lock, each one takes his team&apos;s pick in the round he costs. Two keepers in one round and
+            traded picks follow the rules above; anyone AF cannot place is flagged for you on the board.
+          </span>
+        </span>
+      </label>
+      {locked ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/[0.06] px-3 py-2" data-testid="kp-auto-board-locked">
+          <p className="text-[11px] text-amber-300/90">
+            Part of AF Commissioner and AF Supreme. Until then, add each keeper to the draft board by hand.
+          </p>
+          <SubscriptionGateBadge featureId="commissioner_automation" onClick={onUpgrade} />
+        </div>
       ) : null}
     </div>
   )

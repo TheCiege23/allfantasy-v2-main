@@ -51,6 +51,12 @@ export async function PATCH(
     if (message.includes("locked")) {
       return claimMutationError(message, 423)
     }
+    // A rule the edit broke ("Insufficient FAAB", a full roster, a frozen roster…) is the manager's to fix,
+    // not a server error: say it, as a 400. A database error is still thrown (and never shown).
+    const isDbError = e instanceof Error && (e.name.startsWith("PrismaClient") || typeof (e as { code?: unknown }).code === "string")
+    if (e instanceof Error && !isDbError) {
+      return claimMutationError(message, 400)
+    }
     throw e
   }
 }

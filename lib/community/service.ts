@@ -23,7 +23,20 @@ import {
   type IdeaStatus,
 } from './ideas'
 import { newAccountLimitMessage } from './validation'
-import { notifyCommunityMentions, notifyIdeaAuthorOfStatus, notifyPostAuthorOfReply } from './notify'
+import {
+  TOP_CONTRIBUTOR_COUNT,
+  contributionCountsSql,
+  rankContributions,
+  type LeaderboardRowCounts,
+  type LeaderboardWindow,
+} from './leaderboard'
+import {
+  notifyCommunityMentions,
+  notifyIdeaAuthorOfMilestone,
+  notifyIdeaAuthorOfStatus,
+  notifyPostAuthorOfReply,
+  upvoteMilestoneReached,
+} from './notify'
 
 /**
  * Clubhouse reads and writes. Every page and route goes through here, so the rules that
@@ -46,7 +59,8 @@ export class CommunityError extends Error {
 export type CommunityViewer = { userId: string | null; isModerator: boolean }
 
 /** `shipped`: at least one of their League Lab ideas has shipped — the public credit. */
-export type AuthorBadge = 'staff' | 'commish' | 'shipped' | 'new'
+/** `top`: in the 30-day top three on the contributor leaderboard. */
+export type AuthorBadge = 'staff' | 'commish' | 'shipped' | 'top' | 'new'
 
 export type CommunityAuthor = {
   id: string
@@ -198,12 +212,13 @@ async function commissionerIds(userIds: string[]): Promise<Set<string>> {
 
 export function badgesFor(
   author: Pick<AuthorRow, 'id' | 'email' | 'createdAt'>,
-  ctx: { staff: Set<string>; commish: Set<string>; shipped?: Set<string>; now: number },
+  ctx: { staff: Set<string>; commish: Set<string>; shipped?: Set<string>; top?: Set<string>; now: number },
 ): AuthorBadge[] {
   const badges: AuthorBadge[] = []
   if (author.email && ctx.staff.has(author.email.toLowerCase())) badges.push('staff')
   if (ctx.commish.has(author.id)) badges.push('commish')
   if (ctx.shipped?.has(author.id)) badges.push('shipped')
+  if (ctx.top?.has(author.id)) badges.push('top')
   if (ctx.now - author.createdAt.getTime() < NEW_MEMBER_BADGE_MS) badges.push('new')
   return badges
 }
@@ -220,8 +235,8 @@ async function shippedIdeaAuthorIds(userIds: string[]): Promise<Set<string>> {
 
 async function authorShaper(rows: AuthorRow[]): Promise<(row: AuthorRow) => CommunityAuthor> {
   const ids = Array.from(new Set(rows.map((r) => r.id)))
-  const [commish, shipped] = await Promise.all([commissionerIds(ids), shippedIdeaAuthorIds(ids)])
-  const ctx = { staff: staffEmailSet(), commish, shipped, now: Date.now() }
+  const [commish, shipped, top] = await Promise.all([commissionerIds(ids), shippedIdeaAuthorIds(ids), topContributorIds()])
+  const ctx = { staff: staffEmailSet(), commish, shipped, top, now: Date.now() }
   return (row) => ({
     id: row.id,
     username: row.username,
@@ -337,6 +352,18 @@ async function shapePosts(rows: PostListRow[], viewer: CommunityViewer): Promise
 type PostListPage = { pinned: PostSummary[]; posts: PostSummary[]; nextCursor: string | null }
 
 /**
+ * The automatic news-desk and Game Day threads, until someone has replied to one. The Clubhouse
+ * writes them every day whether anyone shows up, so on the home feed and in the headline numbers
+ * they made a quiet room look abandoned: 53 of the first 59 posts were these, with 0 replies
+ * (measured 2026-11-26). They stay in their own channels; the weekly prompt is a question for
+ * members and always shows.
+ */
+export const UNANSWERED_AUTO_THREAD: Prisma.CommunityPostWhereInput = {
+  replyCount: 0,
+  OR: [{ systemKey: { startsWith: 'news:' } }, { systemKey: { startsWith: 'gameday:' } }],
+}
+
+/**
  * Pinned posts come first and only on the first page; the rest are ordered by last
  * activity, so a thread someone just replied to rises. `before` is the previous page's
  * last `lastActivityAt`.
@@ -357,6 +384,8 @@ export async function listPosts(args: {
     ...(args.channel ? { channel: args.channel } : {}),
     ...(args.kind ? { kind: args.kind } : {}),
     ...(blocked.size ? { authorUserId: { notIn: Array.from(blocked) } } : {}),
+    // The home feed (no channel) hides automatic threads nobody has answered yet.
+    ...(args.channel ? {} : { NOT: UNANSWERED_AUTO_THREAD }),
   }
 
   const firstPage = !before || Number.isNaN(before.getTime())
@@ -910,6 +939,8 @@ export async function createIdea(viewer: CommunityViewer, input: CreateIdeaInput
       body: input.body,
       tags: details.sport ? [details.sport] : [],
       ideaDetails: details as Prisma.InputJsonObject,
+      // The staff build plan starts queued; the form or the cron sweep writes it.
+      ideaPlan: { create: {} },
     },
     select: { id: true },
   })
@@ -961,7 +992,12 @@ export async function toggleIdeaVote(
     return true
   })
   const row = await prisma.communityPost.findUnique({ where: { id: postId }, select: { upvoteCount: true } })
-  return { upvotes: Math.max(0, row?.upvoteCount ?? 0), votedByMe }
+  const upvotes = Math.max(0, row?.upvoteCount ?? 0)
+  if (votedByMe) {
+    const milestone = upvoteMilestoneReached(upvotes - 1, upvotes)
+    if (milestone) await notifyIdeaAuthorOfMilestone({ post: idea, milestone }).catch(() => {})
+  }
+  return { upvotes, votedByMe }
 }
 
 /** Staff only. Tells the author whenever the status actually changes to something. */
@@ -1129,12 +1165,13 @@ export async function getClubhouseOverview(viewer: CommunityViewer, now = Date.n
   const monthAgo = new Date(now - 30 * DAY_MS)
   const [blocked, postsThisWeek, ideas, shippedIdeas, postAuthors, replyAuthors, prompt, board] = await Promise.all([
     blockedFor(viewer),
-    prisma.communityPost.count({ where: { removedAt: null, createdAt: { gte: weekAgo } } }),
+    // Member posts only: the automatic threads would count every day whether anyone came.
+    prisma.communityPost.count({ where: { removedAt: null, systemKey: null, createdAt: { gte: weekAgo } } }),
     prisma.communityPost.count({ where: { removedAt: null, kind: IDEA_KIND } }),
     prisma.communityPost.count({ where: { removedAt: null, kind: IDEA_KIND, ideaStatus: 'shipped' } }),
     prisma.communityPost.groupBy({
       by: ['authorUserId'],
-      where: { removedAt: null, createdAt: { gte: monthAgo } },
+      where: { removedAt: null, systemKey: null, createdAt: { gte: monthAgo } },
       _count: { _all: true },
     }),
     prisma.communityReply.groupBy({
@@ -1174,4 +1211,86 @@ export async function getClubhouseOverview(viewer: CommunityViewer, now = Date.n
       return row ? [{ author: shape(row), contributions: tally.get(id) ?? 0 }] : []
     }),
   }
+}
+
+// ─── contributors ────────────────────────────────────────────────────────────
+
+const STAFF_AUTHOR_CACHE: { at: number; ids: Set<string> } = { at: 0, ids: new Set() }
+
+/**
+ * Staff accounts never rank: the founder posting the welcome thread and answering every
+ * question would top the board forever and push members off it.
+ */
+async function staffUserIds(): Promise<Set<string>> {
+  if (Date.now() - STAFF_AUTHOR_CACHE.at < 10 * 60 * 1000) return STAFF_AUTHOR_CACHE.ids
+  const emails = Array.from(staffEmailSet())
+  const rows = emails.length
+    ? await prisma.appUser.findMany({ where: { email: { in: emails, mode: 'insensitive' } }, select: { id: true } })
+    : []
+  STAFF_AUTHOR_CACHE.at = Date.now()
+  STAFF_AUTHOR_CACHE.ids = new Set(rows.map((r) => r.id))
+  return STAFF_AUTHOR_CACHE.ids
+}
+
+async function rankedContributors(window: LeaderboardWindow, now = Date.now()) {
+  const since = window === '30d' ? new Date(now - 30 * DAY_MS) : null
+  const rows = await prisma.$queryRaw<Array<{ u: string; posts: number; replies: number; upvotes: number; shipped: number }>>(
+    contributionCountsSql(since),
+  )
+  return rankContributions(rows, await staffUserIds())
+}
+
+const TOP_CACHE: { at: number; ids: Set<string> } = { at: 0, ids: new Set() }
+
+/**
+ * Who wears the "Top contributor" badge. Read on every page that shows an author, so it is
+ * cached for five minutes per process; a badge that lags a few minutes costs nothing.
+ * A failed read means no badges, never a broken page.
+ */
+export async function topContributorIds(): Promise<Set<string>> {
+  if (Date.now() - TOP_CACHE.at < 5 * 60 * 1000) return TOP_CACHE.ids
+  try {
+    const ranked = await rankedContributors('30d')
+    TOP_CACHE.ids = new Set(ranked.slice(0, TOP_CONTRIBUTOR_COUNT).map((r) => r.userId))
+  } catch {
+    TOP_CACHE.ids = new Set()
+  }
+  TOP_CACHE.at = Date.now()
+  return TOP_CACHE.ids
+}
+
+export type LeaderboardEntry = LeaderboardRowCounts & { rank: number; author: CommunityAuthor }
+
+export async function getLeaderboard(viewer: CommunityViewer, window: LeaderboardWindow, limit = 25): Promise<LeaderboardEntry[]> {
+  const blocked = await blockedFor(viewer)
+  const ranked = (await rankedContributors(window)).filter((r) => !blocked.has(r.userId)).slice(0, limit)
+  if (ranked.length === 0) return []
+  const rows = await prisma.appUser.findMany({ where: { id: { in: ranked.map((r) => r.userId) } }, select: AUTHOR_SELECT })
+  const shape = await authorShaper(rows)
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  return ranked.flatMap((r, i) => {
+    const row = byId.get(r.userId)
+    return row ? [{ ...r, rank: i + 1, author: shape(row) }] : []
+  })
+}
+
+export type ShippedIdea = { id: string; title: string; hook: string; shippedAt: string | null; author: CommunityAuthor }
+
+/** Shipped League Lab ideas, newest first, with the member who pitched them. */
+export async function listShippedIdeas(limit = 6): Promise<ShippedIdea[]> {
+  const rows = await prisma.communityPost.findMany({
+    where: { kind: IDEA_KIND, ideaStatus: 'shipped', removedAt: null },
+    orderBy: { ideaStatusAt: 'desc' },
+    take: limit,
+    select: { id: true, title: true, ideaDetails: true, ideaStatusAt: true, author: { select: AUTHOR_SELECT } },
+  })
+  if (rows.length === 0) return []
+  const shape = await authorShaper(rows.map((r) => r.author))
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    hook: parseIdeaDetails(r.ideaDetails).hook,
+    shippedAt: r.ideaStatusAt?.toISOString() ?? null,
+    author: shape(r.author),
+  }))
 }

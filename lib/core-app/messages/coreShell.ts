@@ -72,11 +72,12 @@ export const coreShellMessages = defineMessages({
       'Your plan includes a monthly allowance of Chimmy requests — grades, projections and recommendations. Resets on your billing date.',
 
     // Home bracket promo
-    bracketKicker: 'BRACKET LEAGUES',
-    bracketTitle: 'Build a bracket. Bring your friends.',
-    bracketBody: 'Pick winners, share your bracket, and climb the leaderboard.',
-    bracketExplore: 'Explore and create',
-    bracketJoin: 'Join a league',
+    // The College Football Playoff card (2026-11-23): replaced the generic "Bracket leagues" ad.
+    cfpKicker: 'COLLEGE FOOTBALL PLAYOFF',
+    cfpTitle: 'Who makes the 12? Pick your playoff bracket.',
+    cfpBody: "See the projected 12-team bracket from this week's rankings, then start a challenge with your league.",
+    cfpPreview: 'See the projected bracket',
+    cfpStart: 'Start a CFP challenge',
 
     // Phone tab bar and More sheet
     mainNavAria: 'Main',
@@ -136,11 +137,11 @@ export const coreShellMessages = defineMessages({
     planTokensBody:
       'Tu plan incluye una cantidad mensual de solicitudes a Chimmy: calificaciones, proyecciones y recomendaciones. Se renueva en tu fecha de facturación.',
 
-    bracketKicker: 'LIGAS DE BRACKETS',
-    bracketTitle: 'Crea un bracket. Invita a tus amigos.',
-    bracketBody: 'Elige ganadores, comparte tus picks y compite en la clasificación.',
-    bracketExplore: 'Explorar y crear',
-    bracketJoin: 'Unirme a una liga',
+    cfpKicker: 'PLAYOFF DE FÚTBOL AMERICANO UNIVERSITARIO',
+    cfpTitle: '¿Quiénes son los 12? Elige tu bracket del playoff.',
+    cfpBody: 'Mira el bracket proyectado de 12 equipos con el ranking de esta semana y luego crea un reto con tu liga.',
+    cfpPreview: 'Ver el bracket proyectado',
+    cfpStart: 'Crear un reto del CFP',
 
     mainNavAria: 'Principal',
     closeMenu: 'Cerrar el menú',

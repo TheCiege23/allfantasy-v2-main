@@ -151,6 +151,15 @@ const REASON_PATTERNS_ES: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   // whoStartsHimLoader.ts — a lineup with slots the engine does not model
   [/^lineup slot (\S+) isn’t modelled$/, (m) => `el puesto de alineación ${m[1]} no está modelado`],
   [/^lineup slots (.+) aren’t modelled$/, (m) => `los puestos de alineación ${m[1]} no están modelados`],
+  // whoStartsHimLoader.ts — a pasted Yahoo league below the coverage bar (foreignIdSpaceCopy.ts)
+  [
+    /^1 player on its rosters couldn't be matched to ours, so we can’t compare its teams yet$/,
+    () => 'no pudimos emparejar 1 jugador de sus plantillas con los nuestros, así que todavía no podemos comparar sus equipos',
+  ],
+  [
+    /^(\d+) players on its rosters couldn't be matched to ours, so we can’t compare its teams yet$/,
+    (m) => `no pudimos emparejar ${m[1]} jugadores de sus plantillas con los nuestros, así que todavía no podemos comparar sus equipos`,
+  ],
 ]
 
 /** Every loader sentence `infoReasonText` translates whole — exported so a test can hold each to its source. */

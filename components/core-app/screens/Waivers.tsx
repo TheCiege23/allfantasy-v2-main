@@ -9,7 +9,7 @@ import { WaiverLineupBoard } from '@/components/core-app/WaiverLineupBoard'
 import { WaiverRunClock } from '@/components/core-app/WaiverRunClock'
 import { OrphanAuctionBids } from '@/components/core-app/OrphanAuctionBids'
 import { TaxiStealCard } from '@/components/core-app/TaxiStealCard'
-import { ResponsiveDetails } from '@/components/core-app/ResponsiveDetails'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import { StatStrip, type StatItem } from '@/components/core-app/primitives/StatStrip'
 import '@/components/core-app/af-waivers.css'
@@ -398,9 +398,19 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             state from the API's response rather than this screen deciding who may
             see it. A client-side entitlement check is a suggestion, not a gate.
           */}
-          <section className="af-wv-ai">
-            <AIWaiverRecommendationsPanel leagueId={data.league.id} surface="core" />
-          </section>
+          {/*
+            🛑 FOLDED SINCE 2026-11-23, BY THE OWNER, REVERSING THE NOTE BELOW. The rules box's comment said
+            Chimmy's picks and Competitive Edge "stay OPEN in the main column: they are what a paid plan buys,
+            and folding them would hide the reason to have it". The owner weighed that against user feedback
+            that the page read as crowded and chose the fold. Each row says what is inside, and a locked
+            panel still shows its upgrade card once opened. Contents unchanged.
+          */}
+          <details className="af-card af-wv-fold" data-testid="waiver-fold-chimmy">
+            <summary className="af-wv-fold-summary">{m.foldChimmy}</summary>
+            <section className="af-wv-ai">
+              <AIWaiverRecommendationsPanel leagueId={data.league.id} surface="core" />
+            </section>
+          </details>
 
           {/*
             ── Competitive Edge ─────────────────────────────────────────────
@@ -409,7 +419,13 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             other manager's FAAB left and what they have actually won this season — counts, never a
             label (lib/competitive-edge/waiverEdge.ts).
           */}
-          <WaiverCompetitiveEdge access={edgeAccess} edge={edge} />
+          {/* Only when it has something to draw — the panel itself returns nothing without data or a lock. */}
+          {(edgeAccess && !edgeAccess.unlocked) || edge ? (
+            <details className="af-card af-wv-fold" data-testid="waiver-fold-edge">
+              <summary className="af-wv-fold-summary">{m.foldEdge}</summary>
+              <WaiverCompetitiveEdge access={edgeAccess} edge={edge} />
+            </details>
+          ) : null}
 
         </div>
 
@@ -419,16 +435,16 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             Reference, not action: in the side column on a wide page, and folded to ONE LINE on a phone
             (it was four rows of rules — ~260px — between the tiles and the first thing to act on).
             The summary carries the two facts people check most, so folding hides nothing urgent.
+
+            2026-11-20: the page's one "More detail" fold (MoreDetail.tsx), same class and test id, with
+            the old summary as its note. On a phone the side column comes after the main one, so it is the
+            bottom of the page there. (Chimmy's picks and Competitive Edge were kept open in the main column
+            as "what a paid plan buys"; the owner folded both on 2026-11-23 — see the note above them.)
           */}
-          <ResponsiveDetails
+          <MoreDetail
             className="af-card af-wv-section af-wv-rules-box"
             testId="waiver-rules"
-            summary={
-              <>
-                <span className="af-label">{copy('How waivers run here')}</span>
-                {rulesSummary ? <span className="af-wv-rules-summary">{rulesSummary}</span> : null}
-              </>
-            }
+            note={`${copy('How waivers run here')}${rulesSummary ? `: ${rulesSummary}` : ''}`}
           >
             <ul className="af-wv-rules">
               <li>
@@ -517,7 +533,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 )}
               </li>
             </ul>
-          </ResponsiveDetails>
+          </MoreDetail>
 
         </aside>
       </div>

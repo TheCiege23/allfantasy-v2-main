@@ -4,6 +4,7 @@ import { buildEnvelopeForTool, formatToolResult, validateToolOutput } from '@/li
 import { buildAIRelationshipContext } from '@/lib/relationship-insights'
 import { normalizeOptionalSportForRelationship } from '@/lib/relationship-insights/SportRelationshipResolver'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
+import { checkLeagueStoryAiGate } from '@/lib/league-story-ai/leagueStoryAiGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,11 +89,20 @@ export async function POST(
       userMessage:
         'Explain the top relationship storyline in 3-5 concise sentences using graph intensity, rivalry context, and drama timeline evidence only.',
     })
-    const orchestration = await runUnifiedOrchestration({
-      envelope,
-      mode: 'consensus',
-      options: { timeoutMs: 20_000, maxRetries: 1 },
+    // AF Commissioner write-up (owner, 2026-11-27): the league's commissioner's plan unlocks it for every
+    // member, capped per league per day. Locked or capped → the fact-built narrative above, no model call.
+    const aiGate = await checkLeagueStoryAiGate({
+      leagueId: gate.leagueId,
+      kind: 'relationship_explain',
+      lang: body?.lang,
     })
+    const orchestration = aiGate.ok
+      ? await runUnifiedOrchestration({
+          envelope,
+          mode: 'consensus',
+          options: { timeoutMs: 20_000, maxRetries: 1 },
+        })
+      : null
 
     let narrative = fallback
     let source: 'ai' | 'template' = 'template'
@@ -107,7 +117,7 @@ export async function POST(
       | undefined
     let factGuardWarnings: string[] | undefined
 
-    if (orchestration.ok) {
+    if (orchestration?.ok) {
       const formatted = formatToolResult({
         toolKey: 'rivalries',
         primaryAnswer: orchestration.response.primaryAnswer || fallback,
@@ -137,6 +147,7 @@ export async function POST(
       sections,
       factGuardWarnings,
       context: context.payload,
+      aiLocked: aiGate.ok ? null : aiGate.body,
     })
   } catch (e) {
     console.error('[relationship-insights/explain POST]', e)

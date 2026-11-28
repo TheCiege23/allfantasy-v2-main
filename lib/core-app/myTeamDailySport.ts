@@ -27,7 +27,7 @@ import type { LineupPlayer } from './myTeam'
  */
 export async function applyDailySportToLineup(
   resolved: Map<string, LineupPlayer>,
-  league: { sport: string; season: number | string | null; settings: unknown; platform: string | null },
+  league: { sport: string; season: number | string | null; settings: unknown; platform: string | null; afIntelligence?: boolean },
   now: Date = new Date(),
 ): Promise<DailyLineupPeriod | null> {
   const sport = String(league.sport ?? '').trim().toUpperCase()
@@ -127,6 +127,8 @@ export async function applyDailySportToLineup(
     league: { sport, season: Number.isInteger(season) ? season : null, settings: league.settings },
     players,
     now,
+    // Without AF Intelligence the lineup and its totals are priced without AF's learned factors.
+    afIntelligence: league.afIntelligence,
   }).catch(() => null)
   if (!outlook) return null
 
@@ -139,6 +141,7 @@ export async function applyDailySportToLineup(
       p.afProjectedPoints = p.ruledOut ? 0 : o.projectedPoints
       p.projectionSource = 'allfantasy'
     }
+    p.periodGames = o.periodGames
     if (p.gameContext == null) p.gameContext = dailyGameContext(p.team, o, kind)
     /*
      * The period's slate WAS read for him and holds no game for his team: an off day (daily lineup) or
@@ -148,12 +151,15 @@ export async function applyDailySportToLineup(
     if (o.periodGames === 0 && kind && !o.opponent) p.noGamePeriod = kind
   }
   return outlook.period
-    ? { kind: outlook.period.kind, day: outlook.period.day ?? null, week: outlook.period.week ?? null }
+    ? { kind: outlook.period.kind, day: outlook.period.day ?? null, week: outlook.period.week ?? null, season: outlook.period.season ?? null }
     : null
 }
 
-/** The period the outlook priced — one day in a daily-lineup league, else the sport's week. */
-export type DailyLineupPeriod = { kind: 'day' | 'week'; day: string | null; week: number | null }
+/**
+ * The period the outlook priced — one day in a daily-lineup league, else the sport's week. `season` is the sport
+ * season that week number belongs to (the bench-check ledger records a call under it); absent where unknown.
+ */
+export type DailyLineupPeriod = { kind: 'day' | 'week'; day: string | null; week: number | null; season?: number | null }
 
 /**
  * The row's game line. A daily-lineup league knows the day's opponent ("BOS vs NYR"); a weekly one knows

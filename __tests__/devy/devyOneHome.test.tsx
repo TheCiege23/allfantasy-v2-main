@@ -59,7 +59,15 @@ describe('Devy home, lower half', () => {
   })
   it('the promotion panel appears when someone can be promoted', async () => {
     current = summary(2)
+    // The panel lists only players the viewer may promote (2026-11-23), so the route marks them.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => (String(url).includes('/devy/summary') ? current : {
+        eligible: [{ rightsId: 'r1', rosterId: 'r', platformUserId: 'u', devyPlayerId: 'd1', devyPlayer: { name: 'Arch Manning', position: 'QB', school: 'Texas', draftEligibleYear: 2027 }, promotedProPlayerId: 'p1', seasonYear: 2026, mine: true, canPromote: true }],
+        seasonYear: 2026, config: null, overrides: [],
+      }),
+    })))
     render(<DevyHome leagueId="l" />)
-    expect(await screen.findByText('Offseason promotion')).toBeTruthy()
+    expect(await screen.findByText('Ready to promote')).toBeTruthy()
   })
 })

@@ -155,3 +155,32 @@
     font-size: 12px;
   }
 }
+
+/*
+ * The quiet-managers fold (2026-11-23): one row under the to-do list, opened for the messages. The panel
+ * already draws the border, so the summary is just the row.
+ */
+.af-core .cmg-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--text);
+  font: 700 14px/1.3 var(--font-archivo, 'Archivo'), sans-serif;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .cmg-fold > summary::-webkit-details-marker { display: none; }
+.af-core .cmg-fold > summary::after { content: '▾'; margin-left: auto; color: var(--muted); }
+.af-core .cmg-fold:not([open]) > summary::after { transform: rotate(-90deg); }
+.af-core .cmg-fold-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--warn-soft, rgba(240, 180, 60, 0.15));
+  color: var(--warn);
+  font-size: 12px;
+  text-align: center;
+}
+/* Closed, it is one row: the panel's own vertical padding on top of a 44px row read as an empty box. */
+.af-core .afh-panel.cmg-fold:not([open]) { padding-top: 4px; padding-bottom: 4px; gap: 0; }

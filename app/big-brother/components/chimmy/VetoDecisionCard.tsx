@@ -51,15 +51,15 @@ export function VetoDecisionCard({
   }
 
   return (
-    <div className="rounded-xl border border-sky-500/35 bg-[#0a1228] p-4" data-testid="bb-veto-decision-card">
-      <h3 className="text-base font-bold text-white">🏅 You hold the Power of Veto.</h3>
-      {deadline ? <p className="mt-1 text-[11px] text-white/45">Decision window: {deadline}</p> : null}
+    <div className="rounded-xl border border-[var(--accent-line)] bg-[var(--surface)] p-4" data-testid="bb-veto-decision-card">
+      <h3 className="text-base font-bold text-[var(--text)]">🏅 You hold the Power of Veto.</h3>
+      {deadline ? <p className="mt-1 text-[11px] text-[var(--muted)]">Decision window: {deadline}</p> : null}
       <div className="mt-3 space-y-2">
         <button
           type="button"
           disabled={busy}
           onClick={() => void act('use', n1)}
-          className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 py-2.5 text-[13px] font-semibold text-cyan-100 disabled:opacity-40"
+          className="w-full rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] py-2.5 text-[13px] font-semibold text-[var(--accent)] disabled:opacity-40"
         >
           Save Nominee 1: {names[n1] ?? n1}
         </button>
@@ -67,7 +67,7 @@ export function VetoDecisionCard({
           type="button"
           disabled={busy}
           onClick={() => void act('use', n2)}
-          className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 py-2.5 text-[13px] font-semibold text-cyan-100 disabled:opacity-40"
+          className="w-full rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] py-2.5 text-[13px] font-semibold text-[var(--accent)] disabled:opacity-40"
         >
           Save Nominee 2: {names[n2] ?? n2}
         </button>
@@ -75,12 +75,12 @@ export function VetoDecisionCard({
           type="button"
           disabled={busy}
           onClick={() => void act('pass')}
-          className="w-full rounded-xl border border-white/10 bg-white/[0.05] py-2.5 text-[13px] font-semibold text-white/80 disabled:opacity-40"
+          className="w-full rounded-xl border border-[var(--line)] bg-white/[0.05] py-2.5 text-[13px] font-semibold text-[var(--text)] disabled:opacity-40"
         >
           Pass — Nominations Stand
         </button>
       </div>
-      {err ? <p className="mt-2 text-[12px] text-rose-300">{err}</p> : null}
+      {err ? <p className="mt-2 text-[12px] text-[var(--bad)]">{err}</p> : null}
     </div>
   )
 }

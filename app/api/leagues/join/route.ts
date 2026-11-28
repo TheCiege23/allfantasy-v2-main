@@ -21,7 +21,8 @@ import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
-import { notifyCommissionerOfJoin, notifyInviterOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+import { managersHere } from '@/lib/league/managersHere'
+import { notifyCommissionerOfJoin, notifyInviterOfJoin, notifyLeagueMatesOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
 
 /**
  * Give a week, get a week (lib/referral/proWeek.ts): a referred leaguemate JOINING a league through an
@@ -36,6 +37,7 @@ function rewardReferredJoin(userId: string): void {
 import { resolveGuillotineSeatSummary } from '@/lib/guillotine/lateStartSeats'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
+import { assignLeagueSeat } from '@/lib/league/leagueSeats'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
@@ -364,7 +366,26 @@ export async function POST(req: NextRequest) {
     const userEmail = await tx.appUser
       .findUnique({ where: { id: userId }, select: { email: true } })
       .then((u: { email: string | null } | null) => u?.email ?? null)
-    const claim = await claimPlaceholderRoster({
+    /*
+     * A seat-specific invite link (`/join?code=…&team=<Roster.id>`, built by the invite panel for each open team) names
+     * the team this person was invited to take: the case is a league switched to AllFantasy whose open seats belong to
+     * provider managers who never joined (docs/league-import/IN_PLACE_NATIVE_CONVERSION_PLAN.md, step 4b-3, Q7). It
+     * grants nothing new — anyone with the league's code can already take any open team — it only names which one, so
+     * the automatic match below cannot hand them a different seat. A team someone has taken since is refused by name
+     * rather than swapped for another.
+     */
+    const requestedSeat = typeof body.rosterId === 'string' ? body.rosterId.trim() : ''
+    if (requestedSeat) {
+      const seat = await assignLeagueSeat(tx as Prisma.TransactionClient, { leagueId: result.leagueId, rosterId: requestedSeat, userId })
+      if (!seat.ok) {
+        return {
+          success: false as const,
+          status: seat.code === 'ROSTER_NOT_FOUND' ? 404 : 409,
+          error: seat.code === 'ROSTER_TAKEN' ? 'That team has already been claimed. Ask your commissioner for a new link.' : seat.message,
+        }
+      }
+    }
+    const claim = requestedSeat ? { claimed: true, rosterId: requestedSeat } : await claimPlaceholderRoster({
       tx: tx as Prisma.TransactionClient,
       leagueId: result.leagueId,
       candidate: {
@@ -568,6 +589,9 @@ export async function POST(req: NextRequest) {
     void notifyInviterOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
       console.warn('[league-join] inviter join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
     })
+    void notifyLeagueMatesOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
+      console.warn('[league-join] league mates join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
   }
 
   return NextResponse.json(joinResult)
@@ -631,12 +655,23 @@ export async function GET(req: NextRequest) {
     resolveGuillotineSeatSummary(leagueId).catch(() => null),
   ])
 
+  // Who is already here (lib/league/managersHere.ts): names for the people in this league to see.
+  const claimedTeams = await prisma.leagueTeam.findMany({
+    where: { leagueId, claimedByUserId: { not: null } },
+    select: { teamName: true, ownerName: true, claimedByUserId: true },
+  }).catch(() => [])
+  const claimedIds = [...new Set(claimedTeams.map((t) => t.claimedByUserId).filter((id): id is string => Boolean(id)))]
+  const profiles = claimedIds.length
+    ? await prisma.userProfile.findMany({ where: { userId: { in: claimedIds } }, select: { userId: true, displayName: true, sleeperUsername: true } }).catch(() => [])
+    : []
+  const nameById = new Map(profiles.map((p) => [p.userId, p.displayName?.trim() || p.sleeperUsername?.trim() || '']))
+
   return NextResponse.json({
     leagueName: league.name,
     inviteCode: result.inviteCode,
     inviteLink: result.inviteLink,
     inviteExpiresAt: result.inviteExpiresAt,
-    claim: { teamCount, claimedCount },
+    claim: { teamCount, claimedCount, managersHere: managersHere(claimedTeams, nameById, userId) },
     guillotineSeats,
   })
 }

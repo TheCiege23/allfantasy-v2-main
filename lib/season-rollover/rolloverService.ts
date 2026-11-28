@@ -61,7 +61,7 @@ export async function readRolloverView(leagueId: string, userId: string | null |
   })
   if (!league) return { ok: false, status: 404 }
   if (league.userId !== userId) return { ok: false, status: 403 }
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: true, view: { applies: false, reason: 'not_native' } }
+  if (resolveWriteAuthority(league) !== 'NATIVE') return { ok: true, view: { applies: false, reason: 'not_native' } }
   const settings = (league.settings as Record<string, unknown> | null) ?? {}
   const kind = renewalKindFromSelection({
     leagueVariant: league.leagueVariant,
@@ -202,7 +202,7 @@ export async function readRolloverDue(leagueId: string): Promise<{ season: numbe
     where: { id: leagueId },
     select: { season: true, status: true, settings: true, platform: true, leagueVariant: true, isDynasty: true, lifecycleState: true, lifecycleMetadata: true },
   })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return null
+  if (!league || resolveWriteAuthority(league) !== 'NATIVE') return null
   const settings = (league.settings as Record<string, unknown> | null) ?? {}
   const kind = renewalKindFromSelection({
     leagueVariant: league.leagueVariant,

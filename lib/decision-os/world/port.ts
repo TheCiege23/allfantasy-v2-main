@@ -35,8 +35,8 @@ import { projectRosterSlots } from './derive'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
-import { sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
-import { applyBridgeKeepingSlots, bridgeColumnFor, loadBridgedLeagues } from '@/lib/core-app/bridgedRosterIds'
+import { espnSportOf, sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
+import { applyBridgeKeepingSlots, bridgeColumnFor, isDeclaredBridge, loadBridgedLeagues } from '@/lib/core-app/bridgedRosterIds'
 import { nonSleeperExternalIdWhere } from '@/lib/player-identity/externalIdNamespace'
 
 export interface CanonicalWorldPort {
@@ -183,7 +183,7 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
         faabRemaining: true,
         waiverPriority: true,
         settings: true,
-        league: { select: { platform: true } },
+        league: { select: { platform: true, sport: true } },
       },
     })
     /*
@@ -195,11 +195,25 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
      * on any failure, the roster is stripped exactly as before.
      */
     const platformOfLeague = rawRows[0]?.league?.platform ?? null
+    /*
+     * 🛑 THE BRIDGE IS NFL, SO THE SPORT IS CHECKED HERE TOO (2026-11-27). It reads NFL
+     * `PlayerIdentityMap` rows only; a Fleaflicker / MFL league of another sport put through it would
+     * read its ids as NFL players, and only the coverage rule happened to stop that. `bridgeColumnFor`
+     * and `loadBridgedLeagues` both refuse a known non-NFL sport, so such a league is stripped below
+     * (unreadable), never bridged — `espnSportOf` is the same rule for ESPN.
+     */
+    const sportOfLeague = rawRows[0]?.league?.sport ?? null
     let bridgedMap: ReadonlyMap<string, string> | null = null
-    if (bridgeColumnFor(platformOfLeague)) {
-      const bridged = await loadBridgedLeagues([{ id: leagueId, platform: platformOfLeague }]).catch(() => null)
+    if (bridgeColumnFor(platformOfLeague, sportOfLeague)) {
+      const bridged = await loadBridgedLeagues([{ id: leagueId, platform: platformOfLeague, sport: sportOfLeague }]).catch(() => null)
       const verdict = bridged?.get(leagueId)
-      if (verdict?.readable) bridgedMap = verdict.map
+      /*
+       * A pasted Yahoo league (declared `sleeper:<id>` ids) is bridged even BELOW the coverage bar. The
+       * strip it would otherwise get keeps its declared ids and silently drops the unmatched ones, so a
+       * lineup reader would see a short roster; bridged, each unmatched player stays in his slot as
+       * `unbridged:<id>`, which every reader can count and none can read as a Sleeper id.
+       */
+      if (verdict?.readable || (verdict && isDeclaredBridge(verdict.column))) bridgedMap = verdict.map
     }
     const prepared: Array<Omit<(typeof rawRows)[number], 'playerData'> & { playerData: unknown }> = bridgedMap
       ? rawRows.map((r) => ({ ...r, playerData: applyBridgeKeepingSlots(r.playerData, bridgedMap!) }))
@@ -208,6 +222,10 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
       prepared,
       // Bridged rows are already in Sleeper's space; anything else goes through the one translator.
       (row: { league: { platform: string | null } | null }) => (bridgedMap ? 'sleeper' : row.league?.platform),
+      // An ESPN league of another sport is stripped, never put through the NFL crosswalk (rosterIdSpace.ts).
+      // ESPN's sport only: a native league of another sport keeps its catalog ids, which the other-sport
+      // readers of this world (start/sit, lineup builder) read by sport.
+      (row: { league: { platform: string | null; sport?: string | null } | null }) => espnSportOf(row.league?.platform, row.league?.sport),
     )
     const canonical: RawRosterRow[] = rows.map((row: {
       id: string
@@ -1397,6 +1415,17 @@ export async function loadAfProjectionRows(
   ids: string[],
   season: number,
   week: number | null,
+  /**
+   * Which id space the caller's ids are in. `sleeper` (the default, and every caller before this
+   * existed) crosses through `PlayerIdentityMap.sleeperId`. `rolling_insights` is a NATIVE NBA /
+   * NCAAB / NHL league's roster: its ids are Rolling Insights numbers, and the registry rows they
+   * reach carry NO Sleeper id at all (measured 2026-11-26: 0 of 874), so the Sleeper crossing found
+   * nothing and every such player was unpriced.
+   *
+   * 🛑 NEVER BOTH. A Rolling Insights number is a valid Sleeper id for somebody else ("1232" is Deni
+   * Avdija in RI and Robert Covington in Sleeper), so the crossing follows the caller's one space.
+   */
+  idSpace: 'sleeper' | 'rolling_insights' = 'sleeper',
 ): Promise<RawAfProjectionRow[]> {
   const clean = Array.from(new Set(ids.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
   if (clean.length === 0) return []
@@ -1422,14 +1451,20 @@ export async function loadAfProjectionRows(
    */
   const registryRows = await prisma.playerIdentityMap
     .findMany({
-      where: { sleeperId: { in: clean } },
-      select: { id: true, sleeperId: true },
+      // Rolling Insights numbers are per sport, so that crossing is scoped to the sport.
+      where: idSpace === 'rolling_insights'
+        ? { sport, rollingInsightsId: { in: clean } }
+        : { sleeperId: { in: clean } },
+      select: { id: true, sleeperId: true, rollingInsightsId: true },
     })
-    .catch(() => [] as Array<{ id: string; sleeperId: string | null }>)
+    .catch(() => [] as Array<{ id: string; sleeperId: string | null; rollingInsightsId: string | null }>)
 
   /** registry id -> the id the caller asked with, so rows come back in the caller's space. */
   const backToCaller = new Map<string, string>()
-  for (const r of registryRows) if (r.sleeperId) backToCaller.set(r.id, r.sleeperId)
+  for (const r of registryRows) {
+    const asked = idSpace === 'rolling_insights' ? r.rollingInsightsId : r.sleeperId
+    if (asked) backToCaller.set(r.id, asked)
+  }
 
   const lookupIds = Array.from(new Set([...clean, ...backToCaller.keys()]))
 

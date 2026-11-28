@@ -50,9 +50,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const gated = await aiCostGate(req, 'start_sit_ai', session.user.id)
-  if (gated) return gated
-
   let body: {
     sport?: string
     playerA?: MatchupPlayerSlot
@@ -69,6 +66,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   if (!body.playerA || !body.playerB) {
     return NextResponse.json({ error: 'playerA and playerB required' }, { status: 400 })
   }
+
+  /*
+   * After the body is validated (2026-11-27): a free account's start/sit AI is ONE answer a day now (the
+   * `start_sit_ai` free taste), so a malformed request must not spend it. Still before any model call.
+   */
+  const gated = await aiCostGate(req, 'start_sit_ai', session.user.id)
+  if (gated) return gated
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },

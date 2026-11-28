@@ -66,7 +66,7 @@ function boardFor(f: SportFixture, week: number, scored: boolean, seed: number):
     games.push({
       matchupId: i / 2 + 1,
       teams: [a, b],
-      winProbability: scored ? null : 0.64,
+      winProbability: scored || a.projected == null || b.projected == null ? null : Math.round(Math.min(0.9, Math.max(0.1, 0.5 + (a.projected - b.projected) / 40)) * 100) / 100,
       unplayed: !scored,
       margin: scored && a.points != null && b.points != null ? Math.abs(a.points - b.points) : null,
     })

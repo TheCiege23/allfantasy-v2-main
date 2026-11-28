@@ -269,6 +269,13 @@ export async function getCommissionerWaiverOversight(input: {
   let runOut: Extract<WaiverOversight, { available: true }>['lastRun'] = null
   if (lastRun) {
     const playerIds = [...new Set(lastRun.results.map((r) => r.addPlayerId))]
+    // The league's sport bounds the read: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+    const leagueSport = playerIds.length
+      ? await prisma.league
+          .findUnique({ where: { id: leagueId }, select: { sport: true } })
+          .then((l) => (l?.sport ? String(l.sport) : 'NFL'))
+          .catch(() => 'NFL')
+      : 'NFL'
     const players = playerIds.length
       ? await prisma.sportsPlayer.findMany({
           /*
@@ -277,7 +284,7 @@ export async function getCommissionerWaiverOversight(input: {
            * ever match a Rolling Insights row for SOMEBODY ELSE there, because Sleeper's own rows
            * store `sleeper:<id>`. See externalIdNamespace.ts.
            */
-          where: ourIdOrSleeperIdWhere(playerIds),
+          where: ourIdOrSleeperIdWhere(playerIds, leagueSport),
           select: { id: true, sleeperId: true, source: true, name: true, position: true },
         })
       : []

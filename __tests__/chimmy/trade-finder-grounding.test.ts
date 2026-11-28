@@ -14,6 +14,9 @@ const h = vi.hoisted(() => ({
   sportsPlayerFindMany: vi.fn(),
   getMarketValues: vi.fn(),
   readTradeBlock: vi.fn(),
+  createGrader: vi.fn(),
+  gradeDeal: vi.fn(),
+  gradeValue: { fn: null as null | ((id: string) => number | null), pick: null as null | ((year: number, round: number) => number | null) },
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -33,6 +36,16 @@ vi.mock('@/lib/trade-block/importedTradeBlock', async () => {
   return { ...actual, readTradeBlock: h.readTradeBlock }
 })
 vi.mock('@/lib/engine/trade', () => ({ runTradeAnalysis: vi.fn() }))
+/*
+ * 2026-11-26: every value and band said is THE grade's. The grader is mocked at its module boundary
+ * and, by default, prices each asset at the fixture's chart value (`h.gradeValue`), so the ranking
+ * below is the same one a real grade on these values would give. Tests that need the grade and the
+ * market chart to DISAGREE override `h.gradeValue`.
+ */
+vi.mock('@/lib/decision-os/trade/leagueTradeGrader', () => ({
+  createLeagueTradeGrader: (...a: unknown[]) => h.createGrader(...a),
+  gradeDeal: (...a: unknown[]) => h.gradeDeal(...a),
+}))
 
 import {
   buildTradeFinder,
@@ -107,6 +120,25 @@ beforeEach(() => {
   h.sportsPlayerFindMany.mockReset().mockResolvedValue(PLAYERS)
   h.getMarketValues.mockReset().mockResolvedValue(VALUES)
   h.readTradeBlock.mockReset().mockResolvedValue({ support: { supported: true }, listings: [] })
+  h.gradeValue.fn = (id) => VALUES.bySleeperId[id as keyof typeof VALUES.bySleeperId]?.value ?? null
+  h.gradeValue.pick = () => null
+  h.createGrader.mockReset().mockResolvedValue({ leagueId: 'L1' })
+  h.gradeDeal.mockReset().mockImplementation(async (grader: unknown, args: { give: { assets: Array<{ playerId?: string; name?: string }> }; get: { assets: Array<{ playerId?: string; name?: string }> } }) => {
+    if (!grader) return { graded: false, reason: 'This league’s values could not be loaded just now.', basis: null }
+    const price = (a: { playerId?: string; kind?: string; year?: number; round?: number }) =>
+      a.kind === 'pick' ? h.gradeValue.pick!(a.year!, a.round!) : a.playerId ? h.gradeValue.fn!(a.playerId) : null
+    const all = [...args.give.assets, ...args.get.assets]
+    if (all.some((a) => price(a) == null)) return { graded: false, reason: '1 asset has no value on this league’s chart.', basis: null }
+    const giveValue = args.give.assets.reduce((t, a) => t + price(a)!, 0)
+    const getValue = args.get.assets.reduce((t, a) => t + price(a)!, 0)
+    const lines = [
+      ...args.give.assets.map((a) => ({ side: 'give', name: a.name ?? '', marketValue: price(a), leagueValue: price(a) })),
+      ...args.get.assets.map((a) => ({ side: 'get', name: a.name ?? '', marketValue: price(a), leagueValue: price(a) })),
+    ]
+    const percentDiff = ((getValue - giveValue) / Math.max(giveValue, getValue, 1)) * 100
+    const letter = Math.abs(percentDiff) <= 8 ? 'C' : percentDiff > 0 ? 'B' : 'D'
+    return { graded: true, letter, partnerLetter: letter === 'B' ? 'D' : letter === 'D' ? 'B' : 'C', percentDiff, label: `graded ${letter}`, giveValue, getValue, lines }
+  })
 })
 
 const find = (extra: { position?: 'QB' | 'RB' | 'WR' | 'TE' | null; tradeAway?: string | null } = {}) =>
@@ -269,6 +301,7 @@ describe('buildTradeFinder — win now and draft picks', () => {
   beforeEach(() => {
     h.leagueFindUnique.mockResolvedValue(DYNASTY_LEAGUE)
     h.getMarketValues.mockImplementation(async (ctx: { variant: { dynasty: boolean } }) => chart(ctx.variant.dynasty ? 'dynasty' : 'redraft'))
+    h.gradeValue.pick = (year, round) => (chart('dynasty').pickByRound as Record<string, number>)[`${year}:${round}`] ?? null
   })
 
   it('a win-now ask returns only packages that raise this season’s value, never the dynasty-only swap', async () => {
@@ -326,8 +359,61 @@ describe('buildTradeFinder — win now and draft picks', () => {
   it('tells the model the goal, this season’s values and the pick caveat', async () => {
     const block = renderTradeFinderBlock(await buildTradeFinder({ leagueId: 'L1', userId: 'me', goal: 'win_now', includePicks: true }))
     expect(block).toContain('Asked for: WIN NOW.')
-    expect(block).toMatch(/This season \(redraft chart\): you give [\d,]+, you get [\d,]+/)
+    // 2026-11-26: the redraft chart only FILTERS a win-now search; the numbers said are THE grade's.
+    expect(block).not.toMatch(/This season \(redraft chart\)/)
+    expect(block).toMatch(/League grade: [A-F] for you, [A-F] for them/)
     expect(block).toMatch(/Draft picks: offered by the user — .*assumes you still own that pick/)
     expect(block).toMatch(/grade that version with evaluate_trade/)
+  })
+})
+
+describe('buildTradeFinder — every value and band is THE grade’s (2026-11-26)', () => {
+  it('grades with ONE grader for the league, from the asker’s side', async () => {
+    const r = await find()
+    if (r.status !== 'ready') throw new Error(r.reason)
+    expect(h.createGrader).toHaveBeenCalledTimes(1)
+    expect(h.createGrader).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'me' })
+    expect(h.gradeDeal.mock.calls.length).toBeGreaterThan(0)
+    for (const [grader, args] of h.gradeDeal.mock.calls) {
+      expect(grader).toEqual({ leagueId: 'L1' })
+      expect(args.viewerSide).toBe(true)
+    }
+    for (const idea of r.ideas) expect(idea.grade?.graded).toBe(true)
+  })
+
+  it('when THE grade disagrees with the market chart, the grade decides the values, the band and the order', async () => {
+    const before = await find()
+    if (before.status !== 'ready') throw new Error(before.reason)
+    const lead = before.ideas[0]!
+    const leadGetId = lead.get[0]!.name
+    // The grade prices the lead idea's target at triple the chart — lopsided on the grade only.
+    const idOf = Object.fromEntries(P.map(([id, name]) => [name, id]))
+    const targetId = idOf[leadGetId]!
+    h.gradeValue.fn = (id) => (VALUES.bySleeperId[id as keyof typeof VALUES.bySleeperId]?.value ?? 0) * (id === targetId ? 3 : 1)
+    const after = await find()
+    if (after.status !== 'ready') throw new Error(after.reason)
+    const moved = after.ideas.find((i) => i.get.some((a) => a.name === leadGetId))
+    expect(after.ideas[0]!.get[0]!.name).not.toBe(leadGetId)
+    if (moved) {
+      expect(moved.fairness).toBe('lopsided')
+      expect(moved.getTotal).toBe(VALUES.bySleeperId[targetId as keyof typeof VALUES.bySleeperId]!.value * 3)
+      expect(moved.sendable).toBe(false)
+    }
+    const block = renderTradeFinderBlock(after)
+    expect(block).toMatch(/League grade: [A-F] for you/)
+  })
+
+  it('a withheld grade is said as not graded, with no value or balance quoted', async () => {
+    h.gradeDeal.mockResolvedValue({ graded: false, reason: '1 asset has no value on this league’s chart.', basis: null })
+    const r = await find()
+    if (r.status !== 'ready') throw new Error(r.reason)
+    expect(r.ideas.length).toBeGreaterThan(0)
+    for (const idea of r.ideas) {
+      expect(idea).toMatchObject({ giveTotal: null, getTotal: null, fairness: 'low confidence', sendable: false })
+      for (const a of [...idea.give, ...idea.get]) expect(a.value).toBeNull()
+    }
+    const block = renderTradeFinderBlock(r)
+    expect(block).toContain('Not graded: 1 asset has no value on this league’s chart. Quote no value or balance for this one.')
+    expect(block).not.toMatch(/   Value: you give/)
   })
 })

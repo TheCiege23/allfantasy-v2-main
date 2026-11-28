@@ -7,7 +7,7 @@
  * survivor wrote NULL beside 26 (playoffSettings) and 22 (playoff_structure), so the resolver read 22
  * inside a season that runs to week 25; guillotine, zombie and roto wrote NULL beside the sport default.
  */
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({
   prisma: {
@@ -27,6 +27,15 @@ import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffSt
 import { getOrCreateExileLeague } from '@/lib/survivor/SurvivorExileEngine'
 
 type Obj = Record<string, any>
+
+// Survivor's season-fit check reads the clock: pinned to an early-season date so the calendar cannot decide it (2026-11-24: by late November no
+// NFL Survivor cast fits the remaining season, and this went red on main with no code change).
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-02T16:00:00Z') })
+})
+afterAll(() => {
+  vi.useRealTimers()
+})
 
 function buildTx() {
   let n = 0

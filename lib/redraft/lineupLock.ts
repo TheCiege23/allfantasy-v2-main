@@ -223,7 +223,7 @@ function setEarliestForDay(byTeamDay: Map<string, Map<string, Date>>, team: stri
  */
 export async function buildWeekKickoffMap(
   prisma: PrismaClient,
-  args: { sport: string; season: number; week: number },
+  args: { sport: string; season: number; week: number; scoringWindow?: { start: Date; end: Date } },
 ): Promise<WeekKickoffs> {
   const warnings: string[] = []
   const byTeam = new Map<string, Date>()
@@ -335,8 +335,8 @@ export async function buildWeekKickoffMap(
    */
   if (DATE_WINDOWED_SPORTS.includes(sport) && RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
     // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
-    await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
-    const window = resolveDailySportWeekWindow(sport, args.season, args.week)
+    if (!args.scoringWindow) await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
+    const window = args.scoringWindow ?? resolveDailySportWeekWindow(sport, args.season, args.week)
     if (!window) {
       warnings.push(`${sport} season ${args.season} has no recorded opener; lineup locks fall open (no player locked).`)
       return { byTeam, firstKickoff, warnings }
@@ -401,9 +401,9 @@ export async function buildWeekKickoffMap(
     !RI_SCHEDULE_SLATE_SPORTS.includes(sport)
   ) {
     // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
-    await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
+    if (!args.scoringWindow) await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
-    const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
+    const window = args.scoringWindow ?? (seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null)
     if (!window) {
       warnings.push(`${sport} season ${args.season} has no recorded opener; lineup locks fall open (no player locked).`)
       return { byTeam, firstKickoff, warnings }
@@ -450,11 +450,16 @@ export async function buildWeekKickoffMap(
 
   const rows = (await prisma.sportsGame.findMany({
     where: { sport: 'NFL', season: args.season, week: args.week, startTime: { not: null } },
-    select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true },
-  })) as Array<{ homeTeam: string; awayTeam: string; startTime: Date | null; seasonType?: string | null }>
-  const games = nflRegularSlate(rows)
-  if (games.length < rows.length) {
-    warnings.push(`Ignored ${rows.length - games.length} NFL preseason/postseason row(s) filed under season ${args.season} week ${args.week}.`)
+    select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, source: true, fetchedAt: true },
+  })) as NflKickoffRow[]
+  const regular = nflRegularSlate(rows)
+  if (regular.length < rows.length) {
+    warnings.push(`Ignored ${rows.length - regular.length} NFL preseason/postseason row(s) filed under season ${args.season} week ${args.week}.`)
+  }
+  const games = nflConsensusKickoffs(regular)
+  const outvoted = regular.filter((r) => !games.some((g) => sameNflFixture(g, r) && g.startTime?.getTime() === r.startTime?.getTime()))
+  if (outvoted.length > 0) {
+    warnings.push(`${outvoted.length} NFL schedule row(s) for season ${args.season} week ${args.week} disagreed with the other feeds' kickoff and were not used.`)
   }
 
   for (const g of games) {
@@ -508,6 +513,75 @@ export function nflRegularSlate<T extends { startTime: Date | null; seasonType?:
   const from = Math.min(...regular) - NFL_SLATE_MARGIN_MS
   const to = Math.max(...regular) + NFL_SLATE_MARGIN_MS
   return kept.filter((r) => typed(r.seasonType) === 'regular' || (r.startTime!.getTime() >= from && r.startTime!.getTime() <= to))
+}
+
+type NflKickoffRow = {
+  homeTeam: string
+  awayTeam: string
+  startTime: Date | null
+  seasonType?: string | null
+  source?: string | null
+  fetchedAt?: Date | null
+}
+
+/** A row this much older than the newest row for its game is a feed that has stopped updating it. */
+const NFL_KICKOFF_STALE_MS = 24 * 60 * 60 * 1000
+
+function nflFixtureKey(row: { homeTeam: string | null; awayTeam: string | null }): string {
+  return [normalizeNflTeam(row.homeTeam), normalizeNflTeam(row.awayTeam)].sort().join('|')
+}
+
+function sameNflFixture(a: NflKickoffRow, b: NflKickoffRow): boolean {
+  return nflFixtureKey(a) === nflFixtureKey(b)
+}
+
+/**
+ * ONE kickoff per NFL game when the feeds disagree about it. Pure.
+ *
+ * 🛑 A FLEXED GAME LOCKED ITS PLAYERS SEVEN HOURS EARLY (2026-11-25). Every feed keeps its own row per
+ * game and a team locks at its EARLIEST row, so one feed that missed a schedule change decided the lock
+ * for both teams. Measured on production for 2026 week 12: CLE–LV was flexed to Sunday night, and
+ * Rolling Insights (refreshed 19:57 UTC) and TheSportsDB (18:12) both say 8:20 PM ET, while API-Sports
+ * (07:01, the same day) still says 1:00 PM — so every Browns and Raiders player locked at 1:00 PM.
+ * JAX–TEN and LAC–NE were swapped in the same flex, and API-Sports has each of them in the other slot.
+ *
+ * The rule, per game:
+ *   1. Rows more than a day older than that game's newest row are a feed that stopped updating it, and
+ *      are dropped (`NFL_KICKOFF_STALE_MS`). A row with no `fetchedAt` is never dropped.
+ *   2. Of the rest, the kickoff MOST rows carry wins — one feed lagging is outvoted by two that agree.
+ *   3. A tie takes the EARLIEST kickoff: when nothing settles it, locking a player early only costs a
+ *      swap, while locking him late lets him be moved after his game started.
+ *
+ * So the old earliest-row rule is still what happens whenever the feeds cannot outvote each other.
+ * Every row carrying the winning kickoff is kept (same input order), so `nflRegularSlate`'s callers see
+ * the same shape; rows with a losing kickoff are dropped.
+ */
+export function nflConsensusKickoffs<T extends NflKickoffRow>(rows: readonly T[]): T[] {
+  const byGame = new Map<string, T[]>()
+  for (const row of rows) {
+    if (!row.startTime) continue
+    const key = nflFixtureKey(row)
+    const list = byGame.get(key)
+    if (list) list.push(row)
+    else byGame.set(key, [row])
+  }
+  const keep = new Set<T>()
+  for (const list of byGame.values()) {
+    const stamps = list.map((r) => (r.fetchedAt ? r.fetchedAt.getTime() : null))
+    const newest = Math.max(...stamps.map((s) => s ?? -Infinity))
+    const current = list.filter((r, i) => stamps[i] == null || !Number.isFinite(newest) || stamps[i]! >= newest - NFL_KICKOFF_STALE_MS)
+    const votes = new Map<number, number>()
+    for (const r of current) {
+      const t = r.startTime!.getTime()
+      votes.set(t, (votes.get(t) ?? 0) + 1)
+    }
+    let winner: number | null = null
+    for (const [t, n] of votes) {
+      if (winner == null || n > votes.get(winner)! || (n === votes.get(winner)! && t < winner)) winner = t
+    }
+    for (const r of current) if (r.startTime!.getTime() === winner) keep.add(r)
+  }
+  return rows.filter((r) => keep.has(r))
 }
 
 type LockOverride = { week?: number; rosterId?: string; playerId?: string }
@@ -593,11 +667,18 @@ async function loadLockContext(
 ): Promise<LockContext> {
   const settings = readLineupLockSettings(args.leagueSettings, args.sport)
   const { mode, manualLockedWeeks, overrides } = settings
+  const leagueSettings = args.leagueSettings as { survivorGuillotine?: { scoringWindow?: { period?: number; startsAt?: string; endsAt?: string } } } | null
+  const configured = leagueSettings?.survivorGuillotine?.scoringWindow
+  const startsAt = configured?.startsAt ? new Date(configured.startsAt) : null
+  const endsAt = configured?.endsAt ? new Date(configured.endsAt) : null
+  const start = startsAt && Number.isFinite(startsAt.getTime()) ? easternCalendarDay(startsAt) : null
+  const end = endsAt && Number.isFinite(endsAt.getTime()) ? easternCalendarDay(new Date(endsAt.getTime() - 1)) : null
+  const scoringWindow = configured?.period === args.week && start && end && end >= start ? { start, end: new Date(end.getTime() + 86400000) } : undefined
   // manual mode needs no schedule; kickoff-based modes do.
   const schedule: WeekKickoffs =
     mode === 'manual'
       ? { byTeam: new Map<string, Date>(), firstKickoff: null as Date | null, warnings: [] as string[] }
-      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week })
+      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week, scoringWindow })
   const kickoffs: WeekKickoffs = settings.warnings.length
     ? { ...schedule, warnings: [...settings.warnings, ...schedule.warnings] }
     : schedule

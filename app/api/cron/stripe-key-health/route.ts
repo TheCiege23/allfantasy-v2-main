@@ -4,6 +4,8 @@ import { checkStripeKeyHealth, type StripeKeyHealth } from "@/lib/billing/stripe
 import { sendNotificationEmail } from "@/lib/resend-client"
 import { OWNER_EMAIL } from "@/lib/notifications/notifyOwnerOfNewSignup"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { isPartnerCodesEnabled } from "@/lib/partner-codes/flags"
+import { runPartnerScheduled } from "@/lib/partner-codes/jobs"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -148,8 +150,23 @@ export async function GET(req: NextRequest) {
     }),
   )
 
+  /*
+   * Commissioner Partner Codes' daily work rides this job instead of taking a cron slot (the repo is
+   * at its ceiling, docs/crons.md; billing work beside a billing check). It is isolated on purpose:
+   * its own heartbeat (`partner-codes`), errors caught, and it never changes this route's status or
+   * `ok`, which belong to the Stripe key check. Off unless PARTNER_CODES_ENABLED=1.
+   */
+  let partnerCodes: unknown = undefined
+  if (isPartnerCodesEnabled()) {
+    partnerCodes = await withSyncJobRun(
+      { jobName: "partner-codes", trigger: "cron" },
+      () => runPartnerScheduled(),
+      (r) => ({ status: r.errors.length ? "partial" : "success", ...(r.errors.length ? { errors: r.errors } : {}), metadata: { daily: r.daily, monthly: r.monthly } }),
+    ).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }))
+  }
+
   return NextResponse.json(
-    { ok: allOk, results, ...(emailed ? { emailed: emailed.ok, emailError: emailed.error ?? null } : {}) },
+    { ok: allOk, results, ...(emailed ? { emailed: emailed.ok, emailError: emailed.error ?? null } : {}), ...(partnerCodes !== undefined ? { partnerCodes } : {}) },
     { status: allOk ? 200 : 503 },
   )
 }

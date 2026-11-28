@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /** `draft_as_me` (AF Pro): as soon as the manager is on the clock, the queue goes first, then Chimmy picks the way they draft. */
 type AutopickMode = 'standard' | 'ai_queue' | 'draft_as_me'
@@ -32,7 +32,46 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
     mode: viewerAutopick?.mode ?? 'standard',
   })
 
+  // The server also switches this on by itself: a missed clock puts the team on auto for the rest of
+  // the draft (lib/live-draft-engine/instantAutopick.ts). Follow the server's value when it changes,
+  // or the seat reads AUTO beside an unchecked switch and the manager cannot turn it off. A snapshot
+  // older than the last value confirmed here is ignored, so a poll in flight cannot undo a click.
+  const committedAtRef = useRef<string | null>(viewerAutopick?.updatedAt ?? null)
+  const serverEnabled = viewerAutopick?.enabled ?? false
+  const serverMode: AutopickMode = viewerAutopick?.mode ?? 'standard'
+  const serverUpdatedAt = viewerAutopick?.updatedAt ?? null
+  useEffect(() => {
+    if (committedAtRef.current && (!serverUpdatedAt || serverUpdatedAt < committedAtRef.current)) return
+    committedAtRef.current = serverUpdatedAt
+    committedRef.current = { enabled: serverEnabled, mode: serverMode }
+    setLocalEnabled(serverEnabled)
+    setLocalMode(serverMode)
+  }, [serverEnabled, serverMode, serverUpdatedAt])
+
   const isProEligible = viewerAutopick?.isProEligible ?? false
+
+  // "Draft like me": where Chimmy learned this manager's style, or why it cannot yet (2026-11-21).
+  const [style, setStyle] = useState<{ ready: boolean; summary: string } | null>(null)
+  const draftingLikeMe = localEnabled && localMode === 'draft_as_me'
+  useEffect(() => {
+    if (!draftingLikeMe) {
+      setStyle(null)
+      return
+    }
+    let cancelled = false
+    Promise.resolve()
+      .then(() => fetch(`/api/leagues/${leagueId}/draft/autopick/me/style`, { cache: 'no-store' }))
+      .then((res) => (res?.ok ? res.json() : null))
+      .then((data: { style?: { ready: boolean; summary: string } } | null) => {
+        if (!cancelled) setStyle(data?.style ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setStyle(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [draftingLikeMe, leagueId])
 
   const save = useCallback(
     async (enabled: boolean, mode: AutopickMode) => {
@@ -65,6 +104,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             enabled: data.viewerAutopick.enabled,
             mode: data.viewerAutopick.mode,
           }
+          committedAtRef.current = data.viewerAutopick.updatedAt ?? committedAtRef.current
           setLocalEnabled(data.viewerAutopick.enabled)
           setLocalMode(data.viewerAutopick.mode)
           onUpdate(data.viewerAutopick)
@@ -161,6 +201,15 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             Draft like me{!isProEligible ? ' (Pro)' : ''}
           </button>
         </>
+      ) : null}
+
+      {draftingLikeMe && style ? (
+        <p
+          data-testid="autopick-draft-like-me-summary"
+          className={`basis-full text-[11px] leading-snug ${style.ready ? 'text-white/60' : 'text-amber-200/80'}`}
+        >
+          {style.summary}
+        </p>
       ) : null}
 
       {error ? (

@@ -1,3 +1,5 @@
+import { fetchNflWeekPlayerMap } from '@/lib/workers/providers/survivorSleeper'
+export { fetchNflWeekPlayerMap } from '@/lib/workers/providers/survivorSleeper'
 /**
  * NFL live-stats provider (G11 Phase 3b) — concrete `LiveStatsProvider` for NFL.
  *
@@ -124,22 +126,7 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
      * empty payload that is indistinguishable from "nobody has scored yet".
      */
     const seasonType = resolveSeasonType(query)
-    const url = `https://api.sleeper.com/stats/nfl/${encodeURIComponent(query.season)}/${encodeURIComponent(query.week)}?season_type=${encodeURIComponent(seasonType)}`
-    let payload: unknown = null
-    try {
-      const { rateLimitManager } = await import('@/lib/workers/rate-limit-manager')
-      const endpoint = 'stats/nfl/week'
-      const canCall = await rateLimitManager.canCall('sleeper', endpoint).catch(() => true)
-      if (!canCall) return out
-      const res = await fetch(url, { headers: { accept: 'application/json' } })
-      await rateLimitManager.recordCall('sleeper', endpoint, res.ok ? 1 : 0, 0, { cached: false }).catch(() => undefined)
-      if (!res.ok) return out
-      payload = await res.json()
-    } catch {
-      return out // no fabrication on failure
-    }
-
-    const byId = asPlayerStatMap(payload)
+    const byId = await fetchNflWeekPlayerMap(query.season, query.week, seasonType)
     if (!byId) return out
     const want = new Set(query.playerIds)
     const strict = query.certifyAbsentPlayers === true
@@ -164,21 +151,4 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
   }
 }
 
-/** Sleeper week-wide payload may be an object keyed by id, or an array of rows. */
-function asPlayerStatMap(payload: unknown): Map<string, unknown> | null {
-  if (!payload || typeof payload !== 'object') return null
-  const map = new Map<string, unknown>()
-  if (Array.isArray(payload)) {
-    for (const row of payload) {
-      const id = row && typeof row === 'object' ? String((row as { player_id?: unknown }).player_id ?? '') : ''
-      const stats = row && typeof row === 'object' ? (row as { stats?: unknown }).stats ?? row : row
-      if (id) map.set(id, stats)
-    }
-    return map
-  }
-  for (const [id, row] of Object.entries(payload as Record<string, unknown>)) {
-    const stats = row && typeof row === 'object' ? (row as { stats?: unknown }).stats ?? row : row
-    map.set(id, stats)
-  }
-  return map
-}
+/** One measured week-wide response; callers own atomic persistence and coverage. */

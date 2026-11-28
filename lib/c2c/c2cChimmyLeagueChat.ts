@@ -4,6 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { c2cScoreModeDescription } from '@/lib/c2c/c2cUiLabels'
+import { loadC2CLeagueSettings } from '@/lib/c2c/c2cLeagueSettings'
 import {
   evaluateCampusPlayer,
   getCampusRankings,
@@ -58,8 +59,8 @@ export async function processC2cLeagueChatInput(
   userId: string,
   rawMessage: string,
 ): Promise<C2cLeagueChatProcessResult | null> {
-  const c2cRow = await prisma.c2CLeague.findUnique({ where: { leagueId }, select: { id: true } })
-  if (!c2cRow) return null
+  const cfg = await loadC2CLeagueSettings(leagueId)
+  if (!cfg) return null
 
   if (!rawMessage.toLowerCase().includes('@chimmy')) {
     return null
@@ -73,7 +74,6 @@ export async function processC2cLeagueChatInput(
     privateNotice: text,
   })
 
-  const cfg = await prisma.c2CLeague.findUnique({ where: { leagueId } })
 
   try {
     if (low.trim() === 'help' || (low.includes('help') && !low.includes('evaluate'))) {

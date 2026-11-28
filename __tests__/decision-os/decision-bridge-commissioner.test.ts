@@ -119,7 +119,28 @@ describe('R2.3 — the commissioner health bridge', () => {
       'at_risk · health 62 · alerts: Two teams inactive 3 weeks · suggested: Message inactive managers',
     ])
     // The snapshot is reused, not recomputed — buildProductionCommissionerHealthDecisionDeps wraps it.
-    expect(buildDeps).toHaveBeenCalledWith(snapshot)
+    // …with the inactive flag's graded record (the learning loop, 2026-11-20) — null here: no outcome snapshot in tests.
+    expect(buildDeps).toHaveBeenCalledWith(snapshot, { inactiveFlags: null })
+  })
+
+  it('🛑 alerts and suggestions past the bound are COUNTED, never silently cut (2026-11-23)', async () => {
+    assertCommish.mockResolvedValue({ ok: true })
+    loadHealth.mockResolvedValue([snapshot])
+    const many = {
+      ...decision,
+      recommended_actions: [
+        {
+          ...decision.recommended_actions[0],
+          topAlerts: ['A1', 'A2', 'A3', 'A4', 'A5'],
+          suggestedActions: ['S1', 'S2', 'S3', 'S4'].map((label) => ({ key: label, label, href: '/x', tone: 'urgent' })),
+        },
+      ],
+    }
+    runCommish.mockResolvedValue({ decision: many })
+    const s = await loadCommissionerHealthDecisionSlice({ userId: 'u1', leagueId: 'L1' })
+    expect(s.value?.actionSummary).toEqual([
+      'at_risk · health 62 · alerts: A1; A2; A3 (+2 more alerts not shown) · suggested: S1, S2, S3 (+1 more suggestion not shown)',
+    ])
   })
 
   it('picks the snapshot for THIS league, not merely the first returned', async () => {

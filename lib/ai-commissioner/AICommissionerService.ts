@@ -448,7 +448,9 @@ function buildDeterministicCommissionerAnswer(input: {
       .slice(0, 3)
       .map(
         (trade) =>
-          `- ${trade.summary} (fairness ${trade.fairnessScore}/100, controversy ${trade.controversyLevel})`
+          trade.graded
+            ? `- ${trade.summary} (fairness ${trade.fairnessScore}/100, controversy ${trade.controversyLevel})`
+            : `- ${trade.summary}`
       )
       .join('\n')
   }

@@ -201,7 +201,8 @@ export function formatDraftStatDisplay(value: number | null, column: DraftStatCo
   if (value == null || !Number.isFinite(value)) return '—'
   if (column.category === 'hitter' && column.key === 'avg') return value.toFixed(3)
   if (column.key === 'obp') return value.toFixed(3)
-  if (column.key === 'avg' && column.category === 'offense') return value.toFixed(1)
+  // Fantasy points per game read to one decimal, offense and team defense alike ("7.8", not "7.80").
+  if (column.key === 'avg' && (column.category === 'offense' || column.category === 'defense')) return value.toFixed(1)
   if (column.type === 'percent') return `${(value * 100).toFixed(1)}%`
   if (column.type === 'number') {
     const abs = Math.abs(value)
@@ -257,7 +258,9 @@ const NFL_DST: DraftStatColumnDef[] = [
   col('dst_int', 'INT', 'number', 'defense', ['dst_interceptions', 'def_interceptions', 'interceptions']),
   col('dst_fr', 'FR', 'number', 'defense', ['dst_fumble_recoveries', 'fumble_recoveries', 'fumbles_recovered']),
   col('dst_td', 'TD', 'number', 'defense', ['dst_td', 'defensive_touchdowns']),
-  col('dst_pa', 'PA', 'number', 'defense', ['dst_points_allowed', 'points_allowed']),
+  // Points allowed PER GAME (nflTeamDefenseSeason.ts): a season total ranks a 17-game defense below a
+  // 16-game one for nothing but the schedule.
+  col('dst_pa', 'PA/G', 'number', 'defense', ['dst_points_allowed_per_game', 'points_allowed_per_game']),
 ]
 
 /** Kickers: the season box carries FG / XP made (`kicking` splits), nothing else. */
@@ -375,17 +378,6 @@ export function findSleeperPoolStatDef(
   return buildSleeperPoolStatColumnDefs(draftSport, opts).find((c) => c.key === key) ?? null
 }
 
-const NBA_LIKE: DraftStatColumnDef[] = [
-  col('pts', 'PPG', 'number', 'offense', ['pointsPerGame', 'points_per_game', 'ppg', 'points', 'pts', 'nba_points']),
-  col('reb', 'RPG', 'number', 'offense', ['reboundsPerGame', 'rebounds_per_game', 'rpg', 'rebounds', 'reb', 'total_rebounds']),
-  col('mpg', 'MPG', 'number', 'offense', ['minutesPerGame', 'minutes_per_game', 'mpg']),
-  col('ast', 'AST', 'number', 'offense', ['assists', 'ast']),
-  col('stl', 'STL', 'number', 'offense', ['steals', 'stl']),
-  col('blk', 'BLK', 'number', 'offense', ['blocks', 'blk']),
-  col('fg3m', '3PM', 'number', 'offense', ['threePointersMade', 'fg3m', 'fg3_made', 'threes']),
-  col('nba_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points', 'season_projection']),
-]
-
 const NBA_OBSERVED: DraftStatColumnDef[] = [
   col('pts', 'PPG', 'number', 'offense', ['pointsPerGame', 'points_per_game', 'ppg', 'points', 'pts', 'nba_points']),
   col('reb', 'RPG', 'number', 'offense', ['reboundsPerGame', 'rebounds_per_game', 'rpg', 'rebounds', 'reb', 'total_rebounds']),
@@ -398,6 +390,16 @@ const NBA_OBSERVED: DraftStatColumnDef[] = [
   col('ft_pct', 'FT%', 'percent', 'offense', ['freeThrowPercentage']),
   col('gp', 'GP', 'number', 'offense', ['gamesPlayed']),
   col('nba_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points', 'season_projection']),
+]
+
+/**
+ * College basketball: the same per-game line as the NBA board, read from our own stored box scores
+ * (`ncaabDraftSeason.ts`). The last column is this league's fantasy points per game — it carries a
+ * per-game key and label, like MLB and NHL, rather than borrowing the season-total `projectedPoints`.
+ */
+const NCAAB_OBSERVED: DraftStatColumnDef[] = [
+  ...NBA_OBSERVED.filter((c) => c.key !== 'nba_proj'),
+  col('ncaab_proj', 'Proj/G', 'number', 'offense', ['projectedPointsPerGame']),
 ]
 
 /*
@@ -425,15 +427,27 @@ const MLB_PITCHER: DraftStatColumnDef[] = [
   col('p_proj', 'Proj/G', 'number', 'pitcher', ['projectedPointsPerGame']),
 ]
 
+/*
+ * GP first and FP/G (last season, on this league's scoring) next: a hockey manager reads every
+ * total against games played, and "sort by last year's points per game" was the one sort Yahoo's
+ * 2026 room took away. HIT and PPP sit beside BLK because "couldn't see Hits or Blocks" was the
+ * other half of that complaint.
+ */
 const NHL_SKATER: DraftStatColumnDef[] = [
+  col('gp_nhl', 'GP', 'number', 'skater', ['gamesPlayed']),
+  col('fppg_nhl', 'FP/G', 'number', 'skater', ['seasonFantasyPointsPerGame']),
   col('g', 'G', 'number', 'skater', ['goals', 'g']),
   col('a', 'A', 'number', 'skater', ['assists', 'a']),
   col('sog', 'SOG', 'number', 'skater', ['shots', 'shots_on_goal', 'sog']),
   col('blk_nhl', 'BLK', 'number', 'skater', ['blocks', 'blocked_shots']),
+  col('hit_nhl', 'HIT', 'number', 'skater', ['hits']),
+  col('ppp_nhl', 'PPP', 'number', 'skater', ['power_play_points']),
   col('nhl_sk_proj', 'Proj/G', 'number', 'skater', ['projectedPointsPerGame']),
 ]
 
 const NHL_GOALIE: DraftStatColumnDef[] = [
+  col('gp_nhl_g', 'GP', 'number', 'goalie', ['gamesPlayed']),
+  col('fppg_nhl_g', 'FP/G', 'number', 'goalie', ['seasonFantasyPointsPerGame']),
   col('sv_nhl', 'SV', 'number', 'goalie', ['saves', 'goalie_saves']),
   col('w_nhl', 'W', 'number', 'goalie', ['wins', 'goalie_wins']),
   col('sho', 'SO', 'number', 'goalie', ['shutouts', 'shutout']),
@@ -556,7 +570,7 @@ export function getDraftStatColumnsForSport(
     case 'NBA':
       return [...NBA_OBSERVED]
     case 'NCAAB':
-      return [...NBA_LIKE]
+      return [...NCAAB_OBSERVED]
     case 'MLB':
       return isLikelyPitcherPosition(pos ?? undefined) ? [...MLB_PITCHER] : [...MLB_HITTER]
     case 'NHL':

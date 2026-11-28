@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { resolveRecipients } from '@/lib/notifications/resolveAppUserIds'
 import type { PendingProviderTrade, PendingTradeAsset } from '@/lib/provider-trades/scanPendingSleeperTrades'
@@ -54,7 +55,7 @@ function playerDetail(position: string | null, team: string | null): string | nu
 
 /** One AF user id for one member id (our id on a native league, a Sleeper id on an import). */
 async function appUserIdFor(memberId: string | null | undefined): Promise<string | null> {
-  if (!memberId || memberId.startsWith('orphan-')) return null
+  if (!memberId || isSeatPlaceholderUserId(memberId)) return null
   const { userIds } = await resolveRecipients([memberId])
   return userIds[0] ?? null
 }
@@ -69,6 +70,12 @@ async function namesFor(userIds: string[]): Promise<Map<string, string>> {
 async function leagueNameOf(leagueId: string): Promise<string | null> {
   const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } }).catch(() => null)
   return str(row?.name)
+}
+
+/** The league's sport, which a Sleeper-id lookup must be held to (Sleeper reuses ids across sports). */
+async function leagueSportOf(leagueId: string): Promise<string | null> {
+  const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } }).catch(() => null)
+  return row?.sport ? String(row.sport).toUpperCase() : null
 }
 
 // ── Native AF league (lib/league-trade-engine/tradeService.ts) ──────────────────────────────────
@@ -127,9 +134,11 @@ export async function loadNativeTradeOffer(tradeId: string): Promise<Loaded | nu
     .filter((i) => String(i.itemType).toLowerCase() === 'player' && i.itemReference)
     .filter((i) => !str(obj(i.metadata).playerName) && !str(obj(i.metadata).name))
     .map((i) => i.itemReference as string)
-  const players = playerIds.length
+  // 🛑 Held to the league's sport: NFL 1466 is Travis Kelce, NBA 1466 is JaVale McGee. No sport → no lookup.
+  const sport = playerIds.length ? await leagueSportOf(trade.leagueId) : null
+  const players = playerIds.length && sport
     ? await prisma.sportsPlayer
-        .findMany({ where: { sleeperId: { in: playerIds } }, select: { sleeperId: true, name: true, position: true, team: true } })
+        .findMany({ where: { sport, sleeperId: { in: playerIds } }, select: { sleeperId: true, name: true, position: true, team: true } })
         .catch(() => [] as Array<{ sleeperId: string | null; name: string; position: string | null; team: string | null }>)
     : []
   const playerById = new Map<string, { name: string; position: string | null; team: string | null }>()

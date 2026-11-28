@@ -8,6 +8,7 @@ import { requireAfSubUserIdOrThrow } from '@/lib/redraft/ai/requireAfSub'
 import { openaiChatJson, openaiChatText, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { c2cScoreModeDescription } from '@/lib/c2c/c2cUiLabels'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
+import { loadC2CLeagueSettings } from '@/lib/c2c/c2cLeagueSettings'
 
 const CHIMMY_C2C = `You are Chimmy for AllFantasy Campus 2 Canton (C2C) dynasty leagues.
 Leagues score BOTH college (campus) and pro (canton) sides. Label projections vs confirmed facts. Never invent statistics or player game lines.`
@@ -97,18 +98,7 @@ export async function buildC2CAiCacheContextSummary(input: {
 
   const leagueId = input.leagueId
   const [cfg, totalPlayers, campusPlayers, cantonPlayers, playerRow] = await Promise.all([
-    prisma.c2CLeague.findUnique({
-      where: { leagueId },
-      select: {
-        sportPair: true,
-        scoringMode: true,
-        campusScoreWeight: true,
-        cantonScoreWeight: true,
-        startupDraftFormat: true,
-        futureDraftFormat: true,
-        devyScoringEnabled: true,
-      },
-    }),
+    loadC2CLeagueSettings(leagueId),
     prisma.c2CPlayerState.count({ where: { leagueId } }),
     prisma.c2CPlayerState.count({ where: { leagueId, playerSide: 'campus' } }),
     prisma.c2CPlayerState.count({ where: { leagueId, playerSide: 'canton' } }),
@@ -177,7 +167,7 @@ async function requireAfSub(): Promise<void> {
 }
 
 async function loadC2CLeague(leagueId: string) {
-  const row = await prisma.c2CLeague.findUnique({ where: { leagueId } })
+  const row = await loadC2CLeagueSettings(leagueId)
   if (!row) throw new Error('C2C league not found')
   return row
 }

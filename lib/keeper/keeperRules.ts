@@ -8,7 +8,10 @@
  *                    round, negative = rounds later). `inflation` moves `keeperInflationRate`
  *                    rounds earlier for every season already kept.
  *   waiver pickups   cost `keeper_waiver_cost_round` (League.settings), else the last round. That
- *                    round IS the cost — no penalty on top.
+ *                    round IS the cost — no penalty on top. Owner's rule (2026-11-27): a team keeping
+ *                    SEVERAL undrafted pickups stacks them — the first costs that round, the second the
+ *                    round before, the third two before… (`stackWaiverKeeperCosts`), in the order the
+ *                    manager listed them. `keeper_waiver_stack: false` turns stacking off.
  *   round floor      `keeper_min_cost_round`: a keeper whose cost lands earlier than this round
  *                    cannot be kept (2 = "first-rounders can't be kept").
  *   same round       `League.keeperConflictRule`: two keepers costing one round —
@@ -108,7 +111,53 @@ function floorCheck(rules: KeeperRules, round: number, basis: 'drafted' | 'waive
   if (rules.minCostRound != null && round < rules.minCostRound) {
     return { ok: false, reason: 'above_round_floor', costRound: round, label: roundLabel(round) }
   }
-  return { ok: true, costRound: round, label: roundLabel(round), basis }
+  return { ok: true, costRound: round, label: basis === 'waiver' ? waiverCostLabel(round) : roundLabel(round), basis }
+}
+
+const WAIVER_NOTE = ' (not drafted)'
+
+/** "Round 15 (not drafted)" — the eligibility label of an undrafted pickup, which is how a save tells him apart. */
+export function waiverCostLabel(round: number): string {
+  return `${roundLabel(round)}${WAIVER_NOTE}`
+}
+
+export function isWaiverCostLabel(label: string | null | undefined): boolean {
+  return typeof label === 'string' && label.endsWith(WAIVER_NOTE)
+}
+
+/** `keeper_waiver_stack` (League.settings): stacking of several undrafted keepers; on unless set false. */
+export function readWaiverStack(settings: unknown): boolean {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return true
+  return (settings as Record<string, unknown>).keeper_waiver_stack !== false
+}
+
+/**
+ * ONE team's keepers with the undrafted pickups stacked (owner, 2026-11-27): in the order given (the
+ * manager's list), the first pickup costs the waiver round (`costRound` as priced — the last round, or
+ * the commissioner's fixed round), the second the round before it, and so on. A stacked pickup never
+ * lands on a round a drafted keeper (or an earlier pickup) already costs: it walks to the next earlier
+ * free round — the board's same-round default — and later only when nothing earlier is free. Drafted
+ * keepers are returned unchanged. Never below Round 1.
+ */
+export function stackWaiverKeeperCosts<T extends { costRound: number; waiver: boolean }>(
+  keepers: readonly T[],
+  options: { totalRounds: number },
+): T[] {
+  const total = Math.max(1, options.totalRounds)
+  const used = new Set(keepers.filter((k) => !k.waiver).map((k) => Math.min(Math.max(1, k.costRound), total)))
+  let next: number | null = null
+  return keepers.map((k) => {
+    if (!k.waiver) return k
+    const base = Math.min(Math.max(1, k.costRound), total)
+    const want = next == null ? base : Math.min(base, next)
+    let round: number | null = null
+    for (let r = want; r >= 1; r--) if (!used.has(r)) { round = r; break }
+    for (let r = want + 1; round == null && r <= total; r++) if (!used.has(r)) round = r
+    if (round == null) round = want
+    used.add(round)
+    next = Math.max(1, round - 1)
+    return { ...k, costRound: round }
+  })
 }
 
 type KeeperToPlace = { playerId: string; costRound: number }

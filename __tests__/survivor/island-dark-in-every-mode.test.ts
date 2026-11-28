@@ -10,6 +10,10 @@ import { describe, expect, it } from 'vitest'
  * draft room (__tests__/draft-room/draft-room-dark-in-every-mode.test.tsx). The island root did not carry
  * it, so in light mode its text went dark on the dark island: player names, tribe scores, the bottom nav
  * labels, nearly all of Intel — and its tiles turned white (2026-11-07 Survivor audit).
+ *
+ * ⚠ 2026-11-23: the island now HAS a light mode — app/survivor/survivor-island.css re-points its own
+ * tokens under html[data-mode='light']. The opt-out stays on purpose: it keeps globals.css's generic
+ * clamp out, so that one file decides island colour in both modes.
  */
 const read = (p: string) => readFileSync(path.join(process.cwd(), p), 'utf8')
 

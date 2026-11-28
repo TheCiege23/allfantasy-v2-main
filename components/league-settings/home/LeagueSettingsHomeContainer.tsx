@@ -16,9 +16,8 @@ import { findScoringPresetRule } from '@/lib/league-creation-preset/scoring-pres
 import { leagueJoinUrl, nativeLeagueInviteCode } from '@/lib/league/league-invite-link'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { LeagueSettingsHome, type SettingsSubPageRender } from './LeagueSettingsHome'
-import { GuillotineFirstChopEditor, patchFirstChopWeek } from './GuillotineFirstChopEditor'
-import { GuillotineRulesEditor } from './GuillotineRulesEditor'
-import { GuillotineChopRulesEditor, patchChopRules } from './GuillotineChopRulesEditor'
+import { PlayerCsvDownload } from '@/components/league-export/PlayerCsvDownload'
+import { GuillotineRulesPage } from './GuillotineRulesPage'
 import { PirateRulesEditor } from './PirateRulesEditor'
 import type { PirateRules } from '@/lib/pirate/rules'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
@@ -165,6 +164,7 @@ export function LeagueSettingsHomeContainer({
       league: effectiveLeague,
       teams: effectiveLeague.teams ?? [],
       canEdit: ctx.isCommissioner,
+      canDelete: Boolean(ctx.isHeadCommissioner),
       formatLabel: getLeagueTypeMedia(conceptKey).label,
       scoringLabel:
         savedScoringLabel ?? (effectiveLeague.scoringPresetId ? findScoringPresetRule(effectiveLeague.scoringPresetId)?.label : null) ?? null,
@@ -174,7 +174,7 @@ export function LeagueSettingsHomeContainer({
       pirateRules,
       inviteUrl: leagueJoinUrl(nativeLeagueInviteCode(effectiveLeague.settings, effectiveLeague.invites)),
     })
-  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState, savedScoringLabel, pirateRules])
+  }, [effectiveLeague, ctx.isCommissioner, ctx.isHeadCommissioner, rosterSlots, draft, guillotineState, savedScoringLabel, pirateRules])
 
   const subCtx = useMemo(() => ({ ...ctx, league: effectiveLeague, hasAfCommissionerSub }), [ctx, effectiveLeague, hasAfCommissionerSub])
 
@@ -196,48 +196,31 @@ export function LeagueSettingsHomeContainer({
           content: <ScoreAdjustmentsWithCorrections leagueId={leagueId} />,
         }
       }
-      if (id === 'guillotine-first-chop') {
-        if (!guillotineState) return null
+      // One Guilly rules page (2026-11-25). It was three: the two older ids still open it, so a saved link or a
+      // "First chop week" button lands on the same page rather than a 404.
+      if (id === 'guillotine-rules' || id === 'guillotine-first-chop' || id === 'guillotine-chop-rules') {
         const profile = getGuillotineSportConfig(String(league.sport ?? 'NFL'))
         return {
-          title: SUB_PAGE_TITLES[id],
+          title: SUB_PAGE_TITLES['guillotine-rules'],
           content: (
-            <GuillotineFirstChopEditor
-              initialWeek={guillotineState.firstChopWeek}
-              endWeek={guillotineState.endWeek ?? profile?.regularSeasonWeeks ?? 18}
-              locked={guillotineState.locked}
-              chopLabel={profile?.chopLabel ?? null}
-              save={patchFirstChopWeek(leagueId)}
-              onSaved={(week) => setGuillotineState((s) => (s ? { ...s, firstChopWeek: week } : s))}
-            />
-          ),
-        }
-      }
-      if (id === 'guillotine-chop-rules') {
-        if (!guillotineState) return null
-        const profile = getGuillotineSportConfig(String(league.sport ?? 'NFL'))
-        return {
-          title: SUB_PAGE_TITLES[id],
-          content: (
-            <GuillotineChopRulesEditor
-              initial={guillotineState.advanced ?? null}
-              baseChops={guillotineState.teamsPerChop ?? 1}
-              startWeek={guillotineState.firstChopWeek}
-              endWeek={guillotineState.endWeek ?? profile?.regularSeasonWeeks ?? 18}
-              hasAfCommissionerSub={guillotineState.canEditPaidRules ?? hasAfCommissionerSub}
-              save={patchChopRules(leagueId)}
-              onSaved={(advanced, lines) => setGuillotineState((s) => (s ? { ...s, advanced, scheduleLines: lines } : s))}
-            />
-          ),
-        }
-      }
-      if (id === 'guillotine-rules') {
-        return {
-          title: SUB_PAGE_TITLES[id],
-          content: (
-            <GuillotineRulesEditor
+            <GuillotineRulesPage
               leagueId={leagueId}
-              onSaved={(rules) => setGuillotineState((s) => (s ? { ...s, teamsPerChop: rules.teamsPerChop, endWeek: rules.eliminationEndWeek } : s))}
+              chopLabel={profile?.chopLabel ?? null}
+              waiverLabel={profile?.waiverLabel ?? null}
+              onSaved={(saved) =>
+                setGuillotineState((state) =>
+                  state
+                    ? {
+                        ...state,
+                        firstChopWeek: saved.firstChopWeek,
+                        teamsPerChop: saved.rules.teamsPerChop,
+                        endWeek: saved.rules.eliminationEndWeek,
+                        advanced: saved.advanced,
+                        ...(saved.scheduleLines ? { scheduleLines: saved.scheduleLines } : {}),
+                      }
+                    : state,
+                )
+              }
             />
           ),
         }
@@ -250,7 +233,7 @@ export function LeagueSettingsHomeContainer({
         content: <LeagueSettingsSubPageBody id={id} ctx={subCtx} hasAfCommissionerSub={hasAfCommissionerSub} />,
       }
     },
-    [ctx.isCommissioner, guillotineState, league.sport, leagueId, subCtx, hasAfCommissionerSub],
+    [ctx.isCommissioner, league.sport, leagueId, subCtx, hasAfCommissionerSub],
   )
 
   const phase = nativeLeaguePhase(ctx.displayLeague)
@@ -301,6 +284,7 @@ export function LeagueSettingsHomeContainer({
         onSubPageClosed={() => setReloadKey((k) => k + 1)}
         header={header}
         redraft={redraft}
+        footer={<PlayerCsvDownload leagueId={leagueId} />}
       />
     )
   }
@@ -317,6 +301,7 @@ export function LeagueSettingsHomeContainer({
       initialSubPage={ctx.isCommissioner ? initialSubPage : null}
       header={header}
       redraft={redraft}
+      footer={<PlayerCsvDownload leagueId={leagueId} />}
     />
   )
 }

@@ -38,7 +38,11 @@ export type OfferStatus =
   | 'unknown'
 
 export type NormalizedOfferAsset = {
-  assetType: 'player' | 'pick' | 'faab'
+  /**
+   * `drop` is an ESPN conditional drop: a player the sending team RELEASES when the trade executes
+   * (`toRosterId` null — nobody receives him). See `lib/provider-trades/espnTradeOffers.ts`.
+   */
+  assetType: 'player' | 'pick' | 'faab' | 'drop'
   playerId: string | null
   pickSeason: number | null
   pickRound: number | null
@@ -57,6 +61,11 @@ export type NormalizedOffer = {
   rosterIds: string[]
   consentedRosterIds: string[]
   proposedAt: Date | null
+  /**
+   * Only when the provider states one (ESPN's `expirationDate`). Undefined leaves the column alone,
+   * which is what every Sleeper row does — Sleeper states no expiry.
+   */
+  expiresAt?: Date | null
   weekOrPeriod: number | null
   assets: NormalizedOfferAsset[]
   /** The provider record as fetched — `ProviderTradeOffer.payload`. Undefined leaves the column alone. */
@@ -297,6 +306,7 @@ export async function persistProviderTradeOffers(args: {
       rosterIds: offer.rosterIds,
       consentedRosterIds: offer.consentedRosterIds,
       proposedAt: offer.proposedAt,
+      ...(offer.expiresAt !== undefined ? { expiresAt: offer.expiresAt } : {}),
       lastSeenAt: seenAt,
       ...(offer.payload !== undefined ? { payload: offer.payload as object } : {}),
     }

@@ -5,11 +5,13 @@ import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
+import { runCampusSeasonTicks } from '@/lib/c2c/campusSeason/runCampusSeason'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
 import { getZombieWeekReadiness, type ZombieWeekReadiness } from '@/lib/zombie/matchupCompletion'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { runZombieHousekeeping } from '@/lib/zombie/zombieAutomation'
+import { activateDraftedZombieLeagues } from '@/lib/zombie/activateDraftedZombieLeagues'
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
@@ -21,6 +23,8 @@ import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
 import { checkStatCorrectionsForSeason } from '@/lib/stat-corrections/statCorrectionDetector'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { applyDueRosterChanges } from '@/lib/guillotine/rosterScheduleApply'
+import { ROSTER_SCHEDULE_KEY } from '@/lib/guillotine/rosterSchedule'
 import { checkGuillotineStatCorrectionsForSeason } from '@/lib/guillotine/statCorrectionHandler'
 import { maintainPirateClaims, queuePirateProtectionReminders, seedPirateClaims } from '@/lib/pirate/service'
 import { capturePirateLineupEvidence } from '@/lib/pirate/lineupEvidence'
@@ -32,6 +36,12 @@ import { runPlannedSurvivorSeasonBatch } from '@/lib/survivor/survivorPlannedSea
 import { runNbaTribeSitOutDeadlineBatch } from '@/lib/survivor/SurvivorSitOutEngine'
 import { processDueSurvivorNotifications } from '@/lib/survivor/notificationEngine'
 import { reportSurvivorAutomationError } from '@/lib/survivor/survivorAutomationReporting'
+
+/** A league with scheduled roster changes saved (a guillotine league's Guilly rules page). */
+function hasRosterSchedule(settings: unknown): boolean {
+  const list = settings && typeof settings === 'object' ? (settings as Record<string, unknown>)[ROSTER_SCHEDULE_KEY] : null
+  return Array.isArray(list) && list.length > 0
+}
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -86,6 +96,17 @@ async function runLegacyAutomationBridge() {
     if (r.status === 'fulfilled') survivorBridge.synced++
     else survivorBridge.failed++
   }
+
+  /*
+   * Start any zombie league that has drafted but is still in setup, BEFORE reading the active ones, so a
+   * league activated here resolves on the same tick. Activation otherwise ran only when someone opened
+   * the league (see activateDraftedZombieLeagues.ts), and a once-failed league waited for a page view.
+   */
+  const zombieActivation = await activateDraftedZombieLeagues().catch((e: unknown) => ({
+    checked: 0,
+    activated: 0,
+    failures: [{ leagueId: '*', error: e instanceof Error ? e.message : String(e) }],
+  }))
 
   const zombieLeagues = await prisma.zombieLeague.findMany({
     where: { status: 'active' },
@@ -164,11 +185,19 @@ async function runLegacyAutomationBridge() {
     }
   }
 
+  // NFL C2C leagues on the "separate" standings model: the college side's own schedule, scores,
+  // standings and playoff (lib/c2c/campusSeason). Never fails the bridge.
+  const c2cCollegeSeasons = await runCampusSeasonTicks().catch((e: unknown) => ({
+    leagues: 0, ok: 0, failed: 1, error: e instanceof Error ? e.message : String(e),
+  }))
+
   return {
     updated: 0,
     matchupsRecalculated: c2cMatchupsRecalculated,
+    c2cCollegeSeasons,
     message: 'Survivor/zombie/C2C automation bridge ran. The scheduled GET also runs the redraft reconciliation sweep; POST with a leagueId or seasonId to reconcile one league on demand.',
     survivorBridge,
+    zombieActivation,
     zombieResolutionAttempts: zombieRes.length,
     zombieResolutionFailed: zombieRes.filter((r) => r.status === 'rejected').length,
     zombieWeeksWaiting,
@@ -235,6 +264,8 @@ async function runRedraftReconciliation() {
   const tournamentOutcomes: Record<string, number> = {}
   let guillotineChops = 0
   let guillotineFailed = 0
+  let rosterChangesApplied = 0
+  let rosterChangesFailed = 0
   const guillotineOutcomes: Record<string, number> = {}
   let pirateClaimsCreated = 0
   let pirateSeedFailed = 0
@@ -448,6 +479,26 @@ async function runRedraftReconciliation() {
         tournamentOutcomes[outcome] = (tournamentOutcomes[outcome] ?? 0) + 1
       } catch { tournamentFailed += 1 }
     }
+    /*
+     * A guillotine league's scheduled roster changes (lib/guillotine/rosterScheduleApply.ts). Before the chop,
+     * and for the week whose lineups are open: the next week once this one's games are over, so a change set
+     * for week 10 lands when week 9 ends and not after week 10 has kicked off. Only a league that has a
+     * schedule saved is looked at; applying is guarded inside, so every pass is safe.
+     */
+    if (hasRosterSchedule(season.league?.settings)) {
+      try {
+        const run = await applyDueRosterChanges({
+          leagueId: season.leagueId,
+          week: resolved.sportWeekComplete ? resolved.fantasyWeek + 1 : resolved.fantasyWeek,
+          // A change that moves a player (a starting spot taken away) runs only between weeks.
+          betweenWeeks: resolved.sportWeekComplete === true,
+        })
+        if (run) rosterChangesApplied += run.applied.length
+      } catch (e) {
+        rosterChangesFailed += 1
+        console.error('[score-sync roster schedule]', season.leagueId, e instanceof Error ? e.message : 'unknown error')
+      }
+    }
     try {
       const guillotine = await runNativeGuillotineWeek(
         { seasonId: season.id, currentFantasyWeek: resolved.fantasyWeek, currentWeekComplete: resolved.sportWeekComplete },
@@ -473,6 +524,19 @@ async function runRedraftReconciliation() {
           if (warning.outcome === 'sent') guillotineOutcomes.chop_zone_warning = (guillotineOutcomes.chop_zone_warning ?? 0) + 1
         } catch {
           guillotineOutcomes.chop_zone_warning_failed = (guillotineOutcomes.chop_zone_warning_failed ?? 0) + 1
+        }
+        /*
+         * The live danger alert (lib/guillotine/survivalAlerts.ts): earlier in the week, a team whose chance of
+         * surviving has fallen low is told, and told once more if it climbs back. It stops when the warning
+         * above takes over for the last day. Throttled and recorded inside; most ticks stop at the schedule read.
+         */
+        try {
+          // Loaded here: it brings the chop preview and the outlook with it, which no other part of this route needs.
+          const { sendSurvivalOddsAlertsForSeason } = await import('@/lib/guillotine/survivalAlerts')
+          const alert = await sendSurvivalOddsAlertsForSeason({ seasonId: season.id, week: guillotine.week })
+          if (alert.outcome === 'sent') guillotineOutcomes.survival_alert = (guillotineOutcomes.survival_alert ?? 0) + 1
+        } catch {
+          guillotineOutcomes.survival_alert_failed = (guillotineOutcomes.survival_alert_failed ?? 0) + 1
         }
       }
     } catch {
@@ -502,6 +566,8 @@ async function runRedraftReconciliation() {
     tournamentOutcomes,
     guillotineChops,
     guillotineFailed,
+    rosterChangesApplied,
+    rosterChangesFailed,
     guillotineOutcomes,
     pirateClaimsCreated,
     pirateSeedFailed,
@@ -654,6 +720,7 @@ export async function GET(request: Request) {
         r.survivorSitOuts.failed > 0 ||
         r.survivorNotifications.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
+        r.zombieActivation.failures.length > 0 ||
         r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
         r.redraft.finalizeFailed > 0 ||
@@ -672,6 +739,7 @@ export async function GET(request: Request) {
         survivorSeason: r.survivorSeason,
         survivorSitOuts: r.survivorSitOuts,
         survivorNotifications: r.survivorNotifications,
+        zombieActivation: { ...r.zombieActivation, failures: r.zombieActivation.failures.slice(0, 10) },
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
         zombieWeeksWaiting: r.zombieWeeksWaiting.length,

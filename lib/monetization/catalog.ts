@@ -203,7 +203,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     type: "subscription",
     title: "AF Supreme Monthly",
     // Supreme is the ONE bundling tier, and saying so is accurate here where it is
-    // not on the others: it inherits Pro and Commissioner — NOT Legacy.
+    // not on the others: it inherits Pro, Commissioner and — since 2026-11-27 — Legacy.
     /*
      * ⚠ NO LONGER "Pro, Commissioner and Legacy … largest token allowance". Both
      * halves went stale the same morning: SUPREME_INCLUDED_PLAN_IDS dropped
@@ -213,7 +213,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
      * holes are now closed.
      */
     description:
-      "AF Pro and AF Commissioner in one tier, for less than buying both.",
+      "AF Pro, AF Commissioner and AF Legacy in one tier, for less than buying them separately.",
     amountUsd: 19.99,
     currency: "usd",
     interval: "month",
@@ -238,7 +238,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     type: "subscription",
     title: "AF Supreme Yearly",
     // Supreme is the ONE bundling tier, and saying so is accurate here where it is
-    // not on the others: it inherits Pro and Commissioner — NOT Legacy.
+    // not on the others: it inherits Pro, Commissioner and — since 2026-11-27 — Legacy.
     /*
      * ⚠ NO LONGER "Pro, Commissioner and Legacy … largest token allowance". Both
      * halves went stale the same morning: SUPREME_INCLUDED_PLAN_IDS dropped
@@ -248,7 +248,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
      * holes are now closed.
      */
     description:
-      "AF Pro and AF Commissioner in one tier, for less than buying both.",
+      "AF Pro, AF Commissioner and AF Legacy in one tier, for less than buying them separately.",
     /*
      * ⚠ NOT 179.99. At that price Supreme's YEARLY bundle saved only 14.3%
      * against buying Pro + Commissioner yearly ($209.98), while its MONTHLY

@@ -21,11 +21,13 @@ export function HomeFormatGuide({ formats }: { formats: FormatCount[] }) {
   const panelId = 'af-formats-panel'
   if (formats.length === 0) return null
   return (
-    <section className="af3a-card af-hg-card" aria-labelledby="af-formats-title">
-      <header className="af-hg-cardhead">
+    <section className="af3a-card af-hg-card af-hg-cardfold" aria-labelledby="af-formats-title">
+      {/* Closed by default (2026-11-24): a glossary, opened when you want it. */}
+      <details data-testid="home-formats-fold">
+      <summary className="af-hg-cardhead">
         <h2 id="af-formats-title">{t.formatsTitle}</h2>
         <span>{t.formatsSub}</span>
-      </header>
+      </summary>
       <ul className="af-format-chips">
         {formats.map(({ key, count }) => (
           <li key={key}>
@@ -58,6 +60,7 @@ export function HomeFormatGuide({ formats }: { formats: FormatCount[] }) {
           </>
         ) : null}
       </div>
+      </details>
     </section>
   )
 }

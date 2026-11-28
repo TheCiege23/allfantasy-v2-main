@@ -8,11 +8,14 @@ import {
   getDecisionSummary,
   getDecisionLogsForCoach,
   getUnresolvedDecisions,
+  decisionUserWhere,
   DecisionType,
   RiskProfile,
 } from '@/lib/decision-log'
 import { prisma } from '@/lib/prisma'
-import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+import { decisionGradeLine, decisionTradeGrade, withoutServerOnlyDecisionKeys } from '@/lib/decision-log-trade-grade'
+import { requireLegacySleeperIdentity, type LegacyIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 /*
  * 🛑 THIS ROUTE USED `requireAuthOrOrigin` AS ITS ONLY GATE and then read or wrote the
@@ -27,15 +30,39 @@ import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperI
  * legacy gate, and the caller's `userId` is accepted only when it is one of the caller's OWN
  * two keys — anything else is a visible 403, never a silent swap to someone else's view.
  */
-async function ownDecisionKeyMatcher(sleeperUsername: string): Promise<(key: string) => boolean> {
+async function ownDecisionKeys(sleeperUsername: string): Promise<{ keys: string[]; isOwnKey: (key: string) => boolean }> {
   const linked = await prisma.legacyUser
     .findUnique({ where: { sleeperUsername }, select: { sleeperUserId: true } })
     .catch(() => null)
   const username = sleeperUsername.trim().toLowerCase()
   const sleeperUserId = linked?.sleeperUserId?.trim() || null
-  return (key: string) => {
-    const k = key.trim()
-    return k.toLowerCase() === username || (sleeperUserId != null && k === sleeperUserId)
+  return {
+    keys: sleeperUserId ? [sleeperUsername.trim(), sleeperUserId] : [sleeperUsername.trim()],
+    isOwnKey: (key: string) => {
+      const k = key.trim()
+      return k.toLowerCase() === username || (sleeperUserId != null && k === sleeperUserId)
+    },
+  }
+}
+
+async function ownDecisionKeyMatcher(sleeperUsername: string): Promise<(key: string) => boolean> {
+  return (await ownDecisionKeys(sleeperUsername)).isOwnKey
+}
+
+/*
+ * 🛑 READING THE LOG IS AF PRO (2026-11-26, `decision_log_history`): AF Pro and AF Supreme, NOT AF
+ * Commissioner alone and not free. Every GET view is gated — the list and summary feed /core/decisions,
+ * and `coach`/`unresolved` return the same rows. POST stays open: the analyzers log for every plan, so a
+ * history exists the moment someone upgrades. The email only lets an admin/QA account through the same
+ * bypass /core's paywall read applies, so the page and this route agree for them too.
+ */
+async function viewerEmail(identity: LegacyIdentity): Promise<string | null> {
+  if (identity.source !== 'session') return null
+  try {
+    const row = await prisma.appUser.findUnique({ where: { id: identity.actorId }, select: { email: true } })
+    return row?.email ?? null
+  } catch {
+    return null
   }
 }
 
@@ -94,7 +121,8 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/decision-log", tool: "
       userId: parsed.data.userId,
       leagueId: parsed.data.leagueId,
       decisionType: parsed.data.decisionType as DecisionType,
-      aiRecommendation: parsed.data.aiRecommendation,
+      // The one-trade-grade stamp is written by the analyzer only; a client cannot plant one.
+      aiRecommendation: withoutServerOnlyDecisionKeys(parsed.data.aiRecommendation),
       confidenceScore: parsed.data.confidenceScore,
       riskProfile: parsed.data.riskProfile as RiskProfile,
       contextSnapshot: parsed.data.contextSnapshot,
@@ -113,22 +141,37 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/decision-log", tool: "L
   if (!gate.ok) return gate.response
 
   const { searchParams } = new URL(req.url)
-  const userId = searchParams?.get('userId')
+  const requestedUserId = searchParams?.get('userId')
+  /*
+   * `scope=mine` (2026-11-26, /core/decisions): every row keyed on ANY of the caller's own two keys —
+   * the writers use the Sleeper username or, from waiver/analyze, the Sleeper user id — resolved on the
+   * server, so the screen needs no key of its own and does not miss half its rows.
+   */
+  const mine = searchParams?.get('scope') === 'mine'
   const leagueId = searchParams?.get('leagueId') || undefined
   const view = searchParams?.get('view') || 'list'
   const limit = Math.min(100, Math.max(1, parseInt(searchParams?.get('limit') || '20', 10)))
 
-  if (!userId) {
+  if (!requestedUserId && !mine) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
   }
 
+  const plan = await requireFeatureEntitlement({
+    userId: gate.identity.actorId,
+    userEmail: await viewerEmail(gate.identity),
+    featureId: 'decision_log_history',
+  })
+  if (!plan.ok) return plan.response
+
   // Compared, never trusted: the key must be one of the caller's own.
-  const isOwnKey = await ownDecisionKeyMatcher(gate.identity.sleeperUsername)
-  if (!isOwnKey(userId)) return notYourDecisionLog()
+  const own = await ownDecisionKeys(gate.identity.sleeperUsername)
+  if (requestedUserId && !own.isOwnKey(requestedUserId)) return notYourDecisionLog()
+  const userId = requestedUserId || gate.identity.sleeperUsername
+  const userKeys: string | string[] = mine ? own.keys : userId
 
   try {
     if (view === 'summary') {
-      const summary = await getDecisionSummary(userId, leagueId)
+      const summary = await getDecisionSummary(userKeys, leagueId)
       return NextResponse.json({ ok: true, summary })
     }
 
@@ -144,7 +187,7 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/decision-log", tool: "L
 
     const logs = await prisma.decisionLog.findMany({
       where: {
-        userId,
+        ...decisionUserWhere(userKeys),
         ...(leagueId ? { leagueId } : {}),
       },
       include: { outcome: true },
@@ -152,7 +195,18 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/decision-log", tool: "L
       take: limit,
     })
 
-    return NextResponse.json({ ok: true, decisions: logs })
+    return NextResponse.json({
+      ok: true,
+      decisions: logs.map((log) => {
+        const tradeGrade = decisionTradeGrade(log)
+        return {
+          ...log,
+          tradeGrade: tradeGrade?.letter ?? null,
+          tradeGradeWithheld: tradeGrade?.withheldReason ?? null,
+          gradeLine: decisionGradeLine(tradeGrade, log.outcome),
+        }
+      }),
+    })
   } catch (err: any) {
     console.error('[DECISION-LOG] GET error:', err)
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 })

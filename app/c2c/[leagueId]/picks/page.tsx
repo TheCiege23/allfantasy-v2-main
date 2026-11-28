@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
+import { C2CPageFrame } from '@/app/c2c/components/C2CPageFrame'
 import { authOptions } from '@/lib/auth'
-import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { C2CPicksClient } from './C2CPicksClient'
 
@@ -23,17 +23,8 @@ export default async function C2CPicksPage({ params }: { params: Promise<{ leagu
   const rosterId = season?.rosters?.find((r) => r.ownerId === userId)?.id ?? null
 
   return (
-    <div className="min-h-screen bg-[#040915]">
-      <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#0c0c1e]/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2">
-          <Link href={`/league/${leagueId}`} className="text-[12px] font-semibold text-cyan-300/90 hover:text-cyan-200">
-            ← League
-          </Link>
-          <span className="truncate text-[13px] font-bold text-white">C2C Picks</span>
-          <span className="w-12" />
-        </div>
-      </header>
+    <C2CPageFrame leagueId={leagueId} title="C2C picks">
       <C2CPicksClient leagueId={leagueId} rosterId={rosterId} />
-    </div>
+    </C2CPageFrame>
   )
 }

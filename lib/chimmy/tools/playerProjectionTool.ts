@@ -3,6 +3,7 @@ import 'server-only'
 import { findAfProjectionsByName } from '@/lib/af-projections/readAfProjections'
 import { prisma } from '@/lib/prisma'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { isSupportedSport } from '@/lib/sport-scope'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
@@ -26,8 +27,6 @@ import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
  * this tool also re-scores the provider component line under that league's imported rules.
  */
 
-const SPORTS = new Set(['NFL', 'NCAAF', 'NBA', 'MLB', 'NHL', 'NCAABB', 'SOCCER'])
-
 /**
  * ⚠ THE REFUSAL FORBIDS THE PARAPHRASE, exactly as `playerValueTool` does. The failure it guards
  * is measured: with no league selected, a tool result was rewritten into "No last-season records
@@ -47,21 +46,84 @@ function notFound(asked: string, sport: string): string {
   ].join(' ')
 }
 
+/**
+ * What a viewer WITHOUT AF Intelligence is told (owner, 2026-11-22: AF projections are AF Pro, AF
+ * Commissioner or AF Supreme). The provider / baseline number stays; AF's own engine line, its
+ * rest-of-season line, the factors and the reason on file go, and the model is told not to make one up.
+ */
+export const AF_PROJECTION_LOCKED_NOTE =
+  "AF's own projection (the AllFantasy engine's number and the measured factors behind it) is part of AF Pro, AF Commissioner and AF Supreme, and this user's plan does not include it. Answer with the baseline / provider number above only, labelled as such. Do NOT state, estimate or hint at AF's number. Say in one short line that AF's own projection comes with AF Pro; the app adds the upgrade button itself."
+
+const AF_ONLY_LINE = /^- AF\b|^- AF in |AF's measured factors|^- Reason on file:|^- Confidence:|AF league rank #/
+
 export async function buildPlayerProjectionContext(args: {
   playerName: string
   sport?: string | null
   week?: number | null
   /** Verified session scope from ChimmyToolContext; never accepted from model arguments. */
   leagueId?: string | null
+  /** False for a viewer whose plan does not include AF Intelligence. Defaults to true (callers that predate the gate). */
+  afIntelligence?: boolean
+}): Promise<string> {
+  const full = await buildPlayerProjectionContextFull(args)
+  if (args.afIntelligence !== false) return full
+  const kept = full
+    .split('\n')
+    .map((line) => line.split(' · ').filter((part) => !AF_ONLY_LINE.test(part.trim())).join(' · '))
+    .filter((line) => line.trim() && !AF_ONLY_LINE.test(line.trim()))
+  return [...kept, AF_PROJECTION_LOCKED_NOTE].join('\n')
+}
+
+async function buildPlayerProjectionContextFull(args: {
+  playerName: string
+  sport?: string | null
+  week?: number | null
+  leagueId?: string | null
+  afIntelligence?: boolean
 }): Promise<string> {
   const asked = args.playerName.trim()
   if (!asked) {
     return 'No player name was given, so nothing was looked up. Ask the user which player they mean.'
   }
 
-  const sport = (args.sport ?? 'NFL').trim().toUpperCase()
-  if (!SPORTS.has(sport)) {
+  const sportParam = (args.sport ?? 'NFL').trim().toUpperCase()
+  const sport = sportParam === 'NCAABB' ? 'NCAAB' : sportParam
+  if (!isSupportedSport(sport)) {
     return `"${sport}" is not a sport AllFantasy projects. Say so; do not give a number for it.`
+  }
+
+  if (args.leagueId) {
+    const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
+    const metrics = await loadLeaguePlayerMetrics({
+      afIntelligence: args.afIntelligence !== false,
+      leagueId: args.leagueId,
+      week: args.week,
+      playerName: asked,
+      limit: 10,
+    }).catch(() => null)
+    if (metrics?.rows.length && (args.sport == null || metrics.sport === sport)) {
+      const lines = metrics.rows.map((row) => [
+        `${row.playerName} (${row.position}, ${metrics.sport} ${metrics.season})`,
+        `AF league rank #${row.rank} overall, #${row.positionRank} at ${row.position}, ranked by projected ${metrics.unit} per game`,
+        `${row.perGame.toFixed(2)} ${metrics.unit} per game`,
+        row.weeklyUnavailableReason === 'no_nba_roster'
+          ? 'Weekly estimate unavailable because this player has no current NBA roster assignment'
+          : (() => {
+            // Without AF Intelligence the weekly number is the one before AF's factors moved it.
+            const weekly = args.afIntelligence === false && row.afFactors?.unadjusted ? row.afFactors.unadjusted.weekly ?? null : row.weekly
+            return weekly == null ? 'Weekly estimate unavailable' : `Week ${metrics.week}: ${weekly.toFixed(2)} ${metrics.unit} over ${row.weekGames} scheduled team games`
+          })(),
+        // The learned factors that moved the weekly number, each measured on past games (`lib/af-projections/factors`).
+        row.afFactors?.reasons.length ? `Weekly number adjusted ${row.afFactors.multiplier >= 1 ? 'up' : 'down'} by AF's measured factors: ${row.afFactors.reasons.join('; ')}` : null,
+        row.fullSeason == null ? 'Full-season estimate unavailable' : `${row.fullSeason.toFixed(2)} ${metrics.unit} over the full season using ${row.fullSeasonBasis === 'standard_season' ? 'the standard season length' : 'stored fixtures'}`,
+        row.restOfSeason == null ? 'Rest-of-season estimate unavailable' : `Rest-of-season estimate: ${row.restOfSeason.toFixed(2)} ${metrics.unit}`,
+        row.tradeValue == null ? null : `AF trade value of ${row.tradeValue.toFixed(2)} ${row.tradeValueUnit}`,
+        row.dynastyTradeValue == null ? null : `AF dynasty trade value of ${row.dynastyTradeValue.toFixed(2)} ${row.tradeValueUnit}`,
+      ].filter(Boolean).join(' · '))
+      if (metrics.rows.length > 1) lines.push('Several players match this name. Ask which player the user meant.')
+      return lines.join('\n')
+    }
+    return 'AF has no matching projection for that player, sport and week in this league.'
   }
 
   const { rows, season } = await findAfProjectionsByName({

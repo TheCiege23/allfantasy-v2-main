@@ -17,6 +17,7 @@ import { isSealedWeek } from './weekSealed'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
+import { PRE_LEAGUE_MATCHUP_TYPE } from '@/lib/redraft/preLeagueWeeksRules'
 import {
   MISSING_STAT_BLOCKING_VERDICTS,
   classifyMissingStatPlayers,
@@ -621,6 +622,7 @@ export async function finalizeRedraftWeek(
           season: season.season,
           week: params.week,
           platform: league?.platform ?? null,
+          settings: league?.settings ?? null,
         })
       : rosterPlayers
     for (const p of sealRows) {
@@ -1113,6 +1115,9 @@ export async function finalizeCompletedWeeksForSeason(
       status: { not: 'final' },
       // A bye never goes final (see `finalizeRedraftWeek`), so it must not hold its week open.
       awayRosterId: { not: null },
+      // Weeks before a late-starting league existed are sealed when they load, never this sweep's to
+      // settle (lib/redraft/preLeagueWeeks.ts).
+      type: { not: PRE_LEAGUE_MATCHUP_TYPE },
     },
     select: { week: true },
   })
@@ -1126,7 +1131,7 @@ export async function finalizeCompletedWeeksForSeason(
    */
   if (earliest > 1) {
     const stale = await prisma.redraftMatchup.findFirst({
-      where: { seasonId: params.seasonId, week: { lt: earliest }, status: { not: 'final' }, awayRosterId: { not: null } },
+      where: { seasonId: params.seasonId, week: { lt: earliest }, status: { not: 'final' }, awayRosterId: { not: null }, type: { not: PRE_LEAGUE_MATCHUP_TYPE } },
       orderBy: { week: 'asc' },
       select: { week: true },
     })

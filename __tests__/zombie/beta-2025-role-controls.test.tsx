@@ -59,8 +59,9 @@ describe('combat and Whisperer controls', () => {
     unmount()
     fetchMock.mockResolvedValue(response({}))
     render(<ZombieRoleActions leagueId="B" />)
-    expect(await screen.findByRole('status')).toHaveTextContent('incomplete response')
-    expect(screen.getByRole('button', { name: 'Refresh decisions' })).toBeEnabled()
+    // Said plainly (2026-11-23), not the raw "incomplete response" text; the retry stays available.
+    expect(await screen.findByRole('status')).toHaveTextContent('didn’t load')
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled()
   })
   it('preserves locked matchups and reuses the request ID after an uncertain network result', async () => {
     pack.canAmbush = true

@@ -14,8 +14,10 @@
 
 import type { AIActionType } from './AIActionModel'
 import {
+  asAuthoritySource,
   resolveWriteAuthority,
   sourcePlatformLabel,
+  type LeagueAuthoritySource,
   type WriteAuthority,
   type WriteAuthorityAction,
 } from '@/lib/league/write-authority'
@@ -130,12 +132,13 @@ export type StagedWriteAuthority = {
   shadow: boolean
 }
 
-export function buildStagedWriteAuthority(platform: string | null | undefined): StagedWriteAuthority {
-  const authority = resolveWriteAuthority(platform)
+export function buildStagedWriteAuthority(league: LeagueAuthoritySource): StagedWriteAuthority {
+  const authority = resolveWriteAuthority(league)
+  const source = asAuthoritySource(league)
   return {
     authority,
-    platform: platform ?? null,
-    sourceLabel: sourcePlatformLabel(platform),
+    platform: source.platform ?? null,
+    sourceLabel: sourcePlatformLabel(source.platform),
     shadow: authority === 'SHADOW',
   }
 }
@@ -171,6 +174,8 @@ export function describeStagedAction(input: {
 export type ActionLeagueWrite = {
   /** Raw `League.platform`; null for a native league. */
   platform: string | null
+  /** `League.settings`: whether an imported league was made official on AllFantasy (lib/league/switching). */
+  settings: unknown
   /** Host-platform link, only for a SHADOW league. */
   sourceLink: SourceLink | null
 }

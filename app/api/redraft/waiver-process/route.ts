@@ -1,9 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { processWaiverWindow } from '@/lib/redraft/waiverEngine'
-import { prisma } from '@/lib/prisma'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
-import { SCORING_SEASON_STATUSES, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import {
   expireDueRedraftTradeProposals,
@@ -21,57 +18,28 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 /**
- * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
+ * Heartbeat job name, probed by scripts/cron-freshness-check.mjs and lib/production-health/cronRegistry.ts.
+ * Only the SCHEDULED GET records a run — POST is the admin path.
  *
- * This job is CONDITIONAL: with no active/drafting season there is no waiver window to
- * process, so redraft_waiver_claims can sit untouched for months while the schedule is
- * perfectly healthy. Only the SCHEDULED GET records a run — POST is the admin path.
+ * ⚠ THIS ROUTE NO LONGER PROCESSES WAIVERS (2026-11-26). Its original job was settling claims in
+ * `redraft_waiver_claims` through lib/redraft/waiverEngine.ts. That table takes no new claims
+ * (lib/redraft/legacyWaiverClaimsRetired.ts), a production count found it empty — zero rows of any status —
+ * and the engine was deleted. Every redraft claim goes through the main waiver system and `/api/cron/waivers`.
+ * The route keeps its name and heartbeat because the hourly sweeps below (trade expiry, lineups, taxi, …)
+ * live here.
  */
 const JOB = 'cron-redraft-waiver-process'
-
-// This branch added its own cron GET here; #284 landed an equivalent one further down
-// (kept), so both would have exported `GET` from the same module. Dropped this copy —
-// main's is the shipped, reviewed version and does the same work inline.
-// `runWaiverProcessing()` stays: POST still calls it.
 
 export async function POST(request: Request) {
   const gate = await requireAdminOrBearer(request)
   if (!gate.ok) return gate.res
 
-  return runWaiverProcessing()
+  return NextResponse.json(retiredWaiverStep())
 }
 
-/**
- * The actual work, as plain data. GET and POST ran byte-identical copies of this inline; it is
- * one function now so the cron path can be wrapped in telemetry without the two drifting.
- */
-async function processDueWaiverWindows() {
-  // ⚠ THIS FILTERED OUT 242 OF 246 SEASONS AND NOTHING SAID SO. `'in_season'` —
-  // what the import materializer writes — matched neither arm, so waiver
-  // processing has only ever run for natively drafted leagues. That is a
-  // defensible rule; it just was not one anybody had written. `engineSeasonScope`
-  // states it: both spellings, native leagues only, shadow behind an argument.
-  // Playoff seasons too: waivers keep running in the postseason, as on every host platform, and
-  // the playoff teams are the ones who most need them. See SCORING_SEASON_STATUSES.
-  //
-  // ⚠ ORDERED AND UNCAPPED. This read `take: 20` with no `orderBy`, so once more than twenty
-  // seasons were running, the same twenty (by Postgres' physical order) were processed every
-  // hour and the rest never ran a waiver. `processWaiverWindow` is a no-op read for a season
-  // with no pending claims, so every season is visited instead.
-  const seasons = await prisma.redraftSeason.findMany({
-    where: engineSeasonScope({ statuses: SCORING_SEASON_STATUSES }),
-    orderBy: { id: 'asc' },
-  })
-  const results: { seasonId: string; processed: unknown[] }[] = []
-  for (const s of seasons) {
-    const processed = await processWaiverWindow(s.leagueId, s.id)
-    results.push({ seasonId: s.id, processed })
-  }
-  return { results }
-}
-
-async function runWaiverProcessing() {
-  return NextResponse.json(await processDueWaiverWindows())
+/** What the retired waiver step reports: nothing processed, and why. */
+function retiredWaiverStep() {
+  return { results: [] as never[], legacyWaiverEngine: 'retired' as const }
 }
 
 /**
@@ -326,6 +294,29 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Starters on bye in every hosted weekly league (lib/lineup-automation/autoBenchByeService.ts
+   * runByeStarterSweep): an AI-managed or unclaimed seat is fixed, a manager is alerted. The bye rule was
+   * only ever checked on a save, so a lineup set at the draft started a bye player unchallenged.
+   */
+  let byeStarterSweep: unknown = null
+  try {
+    const { runByeStarterSweep } = await import('@/lib/lineup-automation/autoBenchByeService')
+    byeStarterSweep = await withSyncJobRun(
+      { jobName: 'cron-bye-starter-sweep', trigger: 'cron' },
+      () => runByeStarterSweep(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.aiSeatsSwapped,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, managersAlerted: r.managersAlerted, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] bye starter sweep failed', e)
+    byeStarterSweep = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * "Auto-switch injured starters" (lib/lineup-automation/autoSwitchInjuredService): the commissioner's
    * per-team switch on Member Settings. Hourly, swap a starter at or past the chosen injury level for the
    * best healthy bench player, inside the chosen window before his game, while the owner has Pro.
@@ -481,7 +472,7 @@ export async function GET(request: Request) {
   }
 
   /*
-   * Chimmy autopilot (AF Commissioner): teams on autopilot claim a free agent for a starting slot
+   * Chimmy autopilot (AF Pro / AF Supreme): teams on autopilot claim a free agent for a starting slot
    * nobody healthy on the roster can fill. Before the waiver window below, so a claim made now can be
    * processed in the same run. Guarded and on its own job identity, like the sweeps above.
    */
@@ -501,6 +492,64 @@ export async function GET(request: Request) {
   } catch (e) {
     console.error('[redraft/waiver-process] chimmy autopilot waivers failed', e)
     autopilotWaivers = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Chimmy autopilot answers trade offers made to the teams it runs (lib/inactive-manager/
+   * autopilotTradeService.ts): accept or decline, through the same rules a manager's click goes
+   * through. Guarded and on its own job identity, like the sweeps above.
+   */
+  let autopilotTrades: unknown = null
+  try {
+    const { runAutopilotTradeAnswers } = await import('@/lib/inactive-manager/autopilotTradeService')
+    const { runAutopilotLeagueTradeAnswers } = await import('@/lib/inactive-manager/autopilotLeagueTrades')
+    autopilotTrades = await withSyncJobRun(
+      { jobName: 'cron-chimmy-autopilot-trades', trigger: 'cron' },
+      // Both trade engines: the older redraft proposals, and the league page's trades (AfLeagueTrade).
+      async () => {
+        const [redraft, league] = await Promise.all([runAutopilotTradeAnswers(), runAutopilotLeagueTradeAnswers()])
+        return {
+          offers: redraft.offers + league.offers,
+          accepted: redraft.accepted + league.accepted,
+          rejected: redraft.rejected + league.rejected,
+          countered: redraft.countered + league.countered,
+          skipped: { ...redraft.skipped, ...Object.fromEntries(Object.entries(league.skipped).map(([k, v]) => [`league:${k}`, v])) },
+          failures: [...redraft.failures, ...league.failures.map((f) => ({ leagueId: f.leagueId, proposalId: f.tradeId, error: f.error }))],
+        }
+      },
+      (r) => ({
+        rowsRead: r.offers,
+        rowsWritten: r.accepted + r.rejected,
+        errors: r.failures.map((f) => `${f.leagueId}/${f.proposalId}: ${f.error}`),
+        metadata: { accepted: r.accepted, rejected: r.rejected, countered: r.countered, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] chimmy autopilot trades failed', e)
+    autopilotTrades = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Chimmy autopilot sends a trade offer for a team whose commissioner switched that on: at most one
+   * a day per team, in the team's own hour (lib/inactive-manager/autopilotTradeOffers.ts). Guarded and
+   * on its own job identity.
+   */
+  let autopilotOffers: unknown = null
+  try {
+    const { runAutopilotTradeOffers } = await import('@/lib/inactive-manager/autopilotTradeService')
+    autopilotOffers = await withSyncJobRun(
+      { jobName: 'cron-chimmy-autopilot-offers', trigger: 'cron' },
+      () => runAutopilotTradeOffers(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.sent,
+        errors: r.failures.map((f) => `${f.leagueId}/${f.rosterId}: ${f.error}`),
+        metadata: { skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] chimmy autopilot offers failed', e)
+    autopilotOffers = { error: e instanceof Error ? e.message : String(e) }
   }
 
   /*
@@ -621,11 +670,8 @@ export async function GET(request: Request) {
 
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
-    () => processDueWaiverWindows(),
-    (r) => ({
-      rowsRead: r.results.length,
-      metadata: { seasonsProcessed: r.results.length },
-    }),
+    async () => retiredWaiverStep(),
+    () => ({ rowsRead: 0, metadata: { legacyWaiverEngine: 'retired' } }),
   )
 
   // The native Exile pool has its own roster snapshots. Reuse the waiver heartbeat, with
@@ -644,5 +690,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, byeStarterSweep, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, autopilotTrades, autopilotOffers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

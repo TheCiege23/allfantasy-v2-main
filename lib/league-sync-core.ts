@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { loadTeamsRunOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer';
 import { decrypt, encrypt } from '@/lib/league-auth-crypto';
 import {
   clearDeadYahooCredentials,
@@ -10,6 +11,7 @@ import {
   isLeagueTombstoned,
   LeagueDeletedByUserError,
 } from '@/lib/league-delete/leagueTombstones';
+import { ConvertedLeagueError, findConvertedLeague } from '@/lib/league/nativeConversionLookup';
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings';
 import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity';
 import { XMLParser } from 'fast-xml-parser';
@@ -537,6 +539,9 @@ export async function syncLeague(
       'This league was removed from your account. Re-import it to bring it back.'
     );
   }
+  // Switched to AllFantasy in place: re-syncing would recreate it as an imported copy (conversion plan, step 5).
+  const converted = await findConvertedLeague({ platform, platformLeagueIds: [platformLeagueId] });
+  if (converted) throw new ConvertedLeagueError(converted);
 
   const leaguePayload = await fetchLeaguePayload(userId, platform, platformLeagueId);
   const season = leaguePayload.season;
@@ -597,6 +602,8 @@ export async function syncLeague(
     select: { id: true, platformUserId: true, playerData: true },
   });
 
+  // Switched teams in an official league are AllFantasy's (lib/league/switching): never overwritten here.
+  const runOnAllFantasy = await loadTeamsRunOnAllFantasy(league.id);
   let rosterCount = 0;
   for (const roster of leaguePayload.rosters) {
     /*
@@ -607,6 +614,12 @@ export async function syncLeague(
      * from production on 2026-09-17.
      */
     const stored = findRosterRowForLegacySync(storedRows, roster);
+    if (
+      runOnAllFantasy.externalIds.size > 0 &&
+      [stored?.playerData, roster.playerData].some((d) => runOnAllFantasy.externalIds.has(legacySourceTeamId(d)))
+    ) {
+      continue;
+    }
     const playerData = mergeLegacyPlayerData(stored?.playerData, roster.playerData);
 
     if (stored) {
@@ -641,4 +654,9 @@ export async function syncLeague(
     isDynasty: leaguePayload.isDynasty,
     lastSyncedAt: league.lastSyncedAt,
   };
+}
+
+function legacySourceTeamId(playerData: unknown): string {
+  const r = playerData && typeof playerData === 'object' ? (playerData as Record<string, unknown>) : {};
+  return String(r.source_team_id ?? '');
 }

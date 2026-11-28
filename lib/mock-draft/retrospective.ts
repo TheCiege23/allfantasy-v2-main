@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { IDENTITY_SLEEPER_SELECT, identityMapSleeperIdOf, identityMapSleeperWhere } from '@/lib/player-identity/identityMapSleeperColumn'
 import { getDraftPicks, getLeagueDrafts } from '@/lib/sleeper-client'
 
 interface PredictedTarget {
@@ -180,11 +181,24 @@ export async function runRetrospective(
   const rawPicks = await getDraftPicks(draftId)
   if (!rawPicks.length) return { retrospective: null, calibration: null, error: 'Draft has no picks yet — it may not have started' }
 
-  const playerMap = await prisma.playerIdentityMap.findMany({
-    where: { sleeperId: { in: rawPicks.map((p: any) => String(p.player_id)).filter(Boolean) } },
-    select: { sleeperId: true, canonicalName: true, position: true },
+  /*
+   * 🛑 IN THE DRAFT'S SPORT, FROM THAT SPORT'S COLUMN. Sleeper reuses ids across sports (NFL 1466
+   * Travis Kelce / NBA 1466 JaVale McGee); `sleeperId` is the NFL column, NBA ids live in
+   * `sleeperNbaId`. With no sport to name, picks stay unnamed rather than named as strangers.
+   */
+  const draftLeague = await prisma.league.findFirst({
+    where: { OR: [{ id: leagueId }, { platformLeagueId }] },
+    select: { sport: true },
   })
-  const playerLookup = new Map(playerMap.map(p => [p.sleeperId, p]))
+  const draftSport = String(draftLeague?.sport ?? latestDraft.sport ?? '').toUpperCase() || null
+  const pickWhere = identityMapSleeperWhere(rawPicks.map((p: any) => String(p.player_id)).filter(Boolean), draftSport)
+  const playerMap = pickWhere
+    ? await prisma.playerIdentityMap.findMany({
+        where: pickWhere,
+        select: { ...IDENTITY_SLEEPER_SELECT, canonicalName: true, position: true },
+      })
+    : []
+  const playerLookup = new Map(playerMap.map(p => [identityMapSleeperIdOf(p, draftSport), p]))
 
   const actuals: ActualPick[] = rawPicks.map((p: any) => {
     const ident = playerLookup.get(String(p.player_id))

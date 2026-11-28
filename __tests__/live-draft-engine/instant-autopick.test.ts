@@ -45,7 +45,7 @@ vi.mock('@/lib/draft-notifications', () => ({
 vi.mock('@/lib/draft-intelligence', () => ({ publishDraftIntelForUpcomingManagers: vi.fn(async () => []), sendDraftIntelDm: vi.fn(async () => null) }))
 vi.mock('@/lib/live-draft-engine/auction', () => ({ runAuctionAutomationTick: vi.fn() }))
 
-import { processExpiredDraftPickForLeague, processExpiredDraftPicks } from '@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks'
+import { INSTANT_CHAIN_MAX_PICKS, processExpiredDraftPickForLeague, processExpiredDraftPicks } from '@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks'
 import { shouldPickNow } from '@/lib/live-draft-engine/instantAutopick'
 
 const AUTOPILOT = { af_managed_lineups: { r1: { since: 'x', byUserId: 'c', autopilot: { style: 'dynasty_owner', since: 'x', byUserId: 'c' } } } }
@@ -116,7 +116,24 @@ describe('the draft tick', () => {
     hm.sessionFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ leagueId: 'L', draftType: 'snake' }])
     hm.leagueFindUnique.mockResolvedValue({ settings: AUTOPILOT })
     const summary = await processExpiredDraftPicks({ now })
-    expect(summary).toMatchObject({ scanned: 1, processed: 1 })
+    // The stand-in board never moves on, so the same Chimmy team is "on the clock" every time: the
+    // tick keeps picking for a team that never waits, and stops at its own per-league bound.
+    expect(summary).toMatchObject({ scanned: 1, processed: 1 + INSTANT_CHAIN_MAX_PICKS })
     expect(hm.sessionFindMany.mock.calls[1][0].where).toMatchObject({ status: 'in_progress', OR: [{ timerEndAt: null }, { timerEndAt: { gt: now } }] })
+  })
+
+  it('stops chaining at the first team that has to wait for its clock', async () => {
+    hm.sessionFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ leagueId: 'L', draftType: 'snake' }])
+    // Chimmy's team picks; once it has, the team on the clock is a manager's, who gets the full clock.
+    hm.leagueFindUnique.mockResolvedValue({ settings: AUTOPILOT })
+    hm.bpa.mockImplementationOnce(async () => {
+      hm.leagueFindUnique.mockResolvedValue({ settings: {} })
+      // The pick restarts the clock (the follow-up calls read the real time, not this test's `now`).
+      hm.sessionFindFirst.mockResolvedValue(session({ timerEndAt: new Date('2099-01-01T00:00:00.000Z') }))
+      return { ok: true, pick: { playerName: 'Rookie A', position: 'WR', team: 'X', playerId: 'p', byeWeek: null } }
+    })
+    const summary = await processExpiredDraftPicks({ now })
+    expect(summary).toMatchObject({ scanned: 1, processed: 1 })
+    expect(hm.bpa).toHaveBeenCalledTimes(1)
   })
 })

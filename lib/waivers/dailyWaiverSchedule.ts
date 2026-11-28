@@ -253,6 +253,18 @@ export function deriveEngineProcessingFromSchedule(
   return { processingDaysUtc: [...days].sort((a, b) => a - b), processingTimeUtc: `${hh}:${mm}` }
 }
 
+/**
+ * The schedule's processing days as LOCAL weekday indices (Sunday = 0) — the league-time clock reads
+ * these with `processHour`, so a per-day schedule clears at the same local time all year
+ * (lib/waivers/leagueLocalWaiverClock.ts). Empty when disabled or no day processes.
+ */
+export function localProcessingDayIndices(schedule: DailyWaiverSchedule | null | undefined): number[] {
+  if (!schedule?.enabled) return []
+  return WAIVER_DAY_KEYS.filter((key) => isWaiverProcessingMode(schedule.days[key]))
+    .map((key) => WAIVER_DAY_JS_INDEX[key])
+    .sort((a, b) => a - b)
+}
+
 /* ── Transaction-time enforcement (claims, add/drop, automated runs) ──────────────────────────── */
 
 /** Settings key holding the processing schedule the league had BEFORE the daily schedule was

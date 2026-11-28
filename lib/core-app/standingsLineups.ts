@@ -1,9 +1,11 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
 import { latestProjectionWeek } from './playerProjections'
 import { loadRailProjections } from './railMatchups'
 import type { LeagueContextRow } from './leagueContext'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * Every team's lineup, projected for this week — AllFantasy's own engine (AF) and the provider's
@@ -41,10 +43,15 @@ export type StandingsLineups = {
 }
 
 export async function getStandingsLineups(args: {
-  league: Pick<LeagueContextRow, 'id' | 'platformLeagueId'>
+  league: Pick<LeagueContextRow, 'id' | 'platformLeagueId'> & Partial<Pick<LeagueContextRow, 'sport' | 'season'>>
   userId: string
 }): Promise<StandingsLineups | null> {
-  const when = await latestProjectionWeek().catch(() => null)
+  const period = args.league.sport && args.league.season
+    ? await resolveSportWeek(args.league.sport, Number(args.league.season)).catch(() => null) : null
+  const currentWeek = period?.ok && period.seasonType === 'regular' ? (period.state === 'played' ? period.nextSportWeek : period.sportWeek) : null
+  const when = args.league.season && args.league.sport
+    ? currentWeek != null ? { season: String(args.league.season), week: currentWeek } : null
+    : await latestProjectionWeek().catch(() => null)
   if (!when) return null
   const season = Number(when.season)
   if (!Number.isFinite(season)) return null
@@ -79,12 +86,20 @@ export async function getStandingsLineups(args: {
     ]),
   )
 
-  const priced = await loadRailProjections({
+  const request = {
     fixtures: [{ dbLeagueId: args.league.id, platformLeagueId: leagueKey, rosterIds: withIds.map((t) => String(t.externalId)) }],
     teamByKey,
     season,
     week: when.week,
-  }).catch(() => null)
+  }
+  // AF Intelligence: read first, so both boards start together as before.
+  const afIntelligence = await viewerHasAfIntelligence(args.userId)
+  const [priced, comparison] = await Promise.all([
+    loadRailProjections({ ...request, sharedAf: true, afIntelligence }).catch(() => null),
+    (!args.league.sport || args.league.sport === 'NFL') ? loadRailProjections(request).catch(() => null) : null,
+  ])
+  const apiSides = comparison?.projectionWeek?.week === priced?.projectionWeek?.week && comparison?.projectionWeek?.season === priced?.projectionWeek?.season
+    ? comparison?.byLeague.get(args.league.id)?.sides : null
   const sides = priced?.byLeague.get(args.league.id)?.sides
   if (!sides || sides.size === 0) return null
   // The feed can fall back to another week; state the week actually served.
@@ -99,8 +114,8 @@ export async function getStandingsLineups(args: {
       isYou: t.claimedByUserId === args.userId,
       af: s.afEngine ?? null,
       afFrom: s.afEngineFrom ?? 0,
-      api: s.afProjected,
-      apiFrom: s.pricedFrom,
+      api: apiSides?.get(String(t.externalId))?.afProjected ?? null,
+      apiFrom: apiSides?.get(String(t.externalId))?.pricedFrom ?? 0,
       starterCount: s.starterCount,
     }]
   })

@@ -20,6 +20,7 @@
  * Client-safe: no Prisma.
  */
 
+import { platformOnlyAuthority } from '@/lib/league/write-authority'
 import { resolveActionAuthority } from '@/lib/commissioner-os/authority'
 import { verifiedHandoff, platformLabel, type LinkLeague, type PlatformLink } from '@/lib/core-app/platformLinks'
 import { messagesFor } from '@/lib/i18n/messages'
@@ -201,7 +202,7 @@ export function buildWorkflows(league: HubLeague, language = 'en'): Workflow[] {
    * league — the platform holds the truth and a re-sync can observe the change.
    * One resolution covers all four guides.
    */
-  const authority = resolveActionAuthority({ platform: league.platform, scope: 'external', verifiableFromImport: true })
+  const authority = resolveActionAuthority({ ...platformOnlyAuthority(league.platform), scope: 'external', verifiableFromImport: true })
   const onPlatform = toHubLink(verifiedHandoff(league, 'league'))
   const onPlatformTrade = toHubLink(verifiedHandoff(league, 'trade')) ?? onPlatform
   const chat: HubLink = { label: m.openLeagueChat, href: leaguePage(league.id, 'league_chat'), external: false }

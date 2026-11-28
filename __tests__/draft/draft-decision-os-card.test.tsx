@@ -37,6 +37,15 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('DraftDecisionOsCard', () => {
+  it('says how sure it is on the shared measured line, verbatim', async () => {
+    fetchMock.mockReturnValue(respond(200, { decision: decision({ fourAnswers: { ...decision().fourAnswers, how_confident: 'High confidence. Round 2 tips have beaten the next pick 61% of the time (48 graded).' } }) }))
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="14:in_progress:13" />)
+    const line = await screen.findByTestId('draft-decision-os-how-confident')
+    expect(line.textContent).toBe('High confidence. Round 2 tips have beaten the next pick 61% of the time (48 graded).')
+    const block = line.closest('.af-evidence')!
+    expect(block.querySelector('.af-evidence-label')!.textContent).toBe('How sure this is')
+  })
+
   it('shows the decision: what to do, the verdict, the confidence and the alternatives', async () => {
     fetchMock.mockReturnValue(respond(200, { decision: decision() }))
     render(<DraftDecisionOsCard leagueId="lg1" refreshKey="14:in_progress:13" />)

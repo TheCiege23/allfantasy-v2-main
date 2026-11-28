@@ -84,6 +84,19 @@ beforeEach(() => {
   )
 })
 
+describe('Chimmy sees ESPN offers from the same ledger (2026-11-27)', () => {
+  it('hands an ESPN offer waiting on the user to the evaluator as an espn ref, and drops one past its stated expiry', async () => {
+    m.offers.mockResolvedValue([
+      { provider: 'espn', providerTradeId: 'espn-open', proposedByRosterId: '5', consentedRosterIds: ['5'], expiresAt: new Date(Date.now() + 3_600_000) },
+      { provider: 'espn', providerTradeId: 'espn-lapsed', proposedByRosterId: '5', consentedRosterIds: ['5'], expiresAt: new Date(Date.now() - 60_000) },
+    ])
+    await buildPendingTradeDecisionContext('L', 'me')
+    const refs = m.evaluate.mock.calls.map((c) => c[0].ref)
+    expect(refs).toContainEqual({ kind: 'provider', provider: 'espn', providerTradeId: 'espn-open' })
+    expect(refs).not.toContainEqual(expect.objectContaining({ providerTradeId: 'espn-lapsed' }))
+  })
+})
+
 describe('Chimmy sees native and Sleeper offers', () => {
   it('reads native offers where one of the user\'s rosters is the receiver', async () => {
     await buildPendingTradeDecisionContext('L', 'me')
@@ -98,7 +111,7 @@ describe('Chimmy sees native and Sleeper offers', () => {
 
   it('reads Sleeper offers on the unpadded provider id and keeps only the ones that need the user', async () => {
     const out = (await buildPendingTradeDecisionContext('L', 'me'))!
-    expect(m.offers.mock.calls[0]![0].where).toEqual({ leagueId: 'L', provider: 'sleeper', status: 'pending', rosterIds: { has: '3' } })
+    expect(m.offers.mock.calls[0]![0].where).toEqual({ leagueId: 'L', provider: { in: ['sleeper', 'espn'] }, status: 'pending', rosterIds: { has: '3' } })
     expect(out).toContain('Sleeper offer sl-needs-me from Sleeper Sharks')
     expect(out).not.toContain('sl-i-sent')
     expect(out).not.toContain('sl-i-agreed')
@@ -166,22 +179,50 @@ describe('Chimmy sees native and Sleeper offers', () => {
 
   /*
    * 🛑 THIS PINNED THE BUG (re-score 2026-11-17, build item 6). It asserted that a user with more offers waiting saw
-   * three under a header reading "(3)" — so Chimmy told them they had three. Now the real count is stated, the three
+   * three under a header reading "(3)" — so Chimmy told them they had three. Now the real count is stated, the ones
    * expiring soonest are graded, and the rest are named without a grade.
+   *
+   * 2026-11-20 (owner's call, "grade more than 3"): the soonest three always; up to six while the build is inside its
+   * time budget, because the block is built inside the packet's first-wave deadline. A slow build keeps the three.
    */
-  it('grades the three expiring soonest, names the rest, and states the real count', async () => {
+  const fiveOffers = () => {
     m.offers.mockResolvedValue([])
     m.evaluate.mockImplementation(async ({ ref }: { ref: { tradeId: string } }) => graded(ref.tradeId, 'R-me', 'R-them'))
     const day = (d: number) => new Date(`2026-11-${String(20 + d).padStart(2, '0')}T00:00:00.000Z`)
     m.afTrades.mockResolvedValue(
       [5, 1, 4, 2, 3].map((d) => ({ id: `af-day${d}`, expiresAt: day(d), proposerRoster: { platformUserId: 'u-rival' } })),
     )
-    const out = (await buildPendingTradeDecisionContext('L', 'me'))!
+  }
+
+  it('a slow build grades the three expiring soonest, names the rest, and states the real count', async () => {
+    fiveOffers()
+    // The clock is read at the start and from the fourth offer on; each read is 2s later, past the 1.2s budget.
+    let t = 0
+    const out = (await buildPendingTradeDecisionContext('L', 'me', { now: () => (t += 2000) }))!
     expect(out).toContain('PENDING INCOMING TRADES (5)')
     expect(out).toContain('The 3 expiring soonest are graded below')
     expect(m.evaluate.mock.calls.map((c) => c[0].ref.tradeId)).toEqual(['af-day1', 'af-day2', 'af-day3'])
     expect(out.indexOf('af-day1')).toBeLessThan(out.indexOf('af-day5'))
     expect(out).toMatch(/af-day4[^\n]*\n  Grade: not computed in this answer/)
+    expect(out).toMatch(/af-day5[^\n]*\n  Grade: not computed in this answer/)
+  })
+
+  it('a fast build grades all five, soonest first, and the header says every one is graded', async () => {
+    fiveOffers()
+    const out = (await buildPendingTradeDecisionContext('L', 'me', { now: () => 0 }))!
+    expect(out).toContain('PENDING INCOMING TRADES (5) — awaiting this user\'s answer. Use ONLY these numbers and letters.')
+    expect(out).not.toContain('expiring soonest are graded below')
+    expect(m.evaluate.mock.calls.map((c) => c[0].ref.tradeId)).toEqual(['af-day1', 'af-day2', 'af-day3', 'af-day4', 'af-day5'])
+    expect(out).not.toContain('Grade: not computed in this answer')
+  })
+
+  it('🛑 the graded set is always the soonest prefix: once the budget is spent, no later offer is graded', async () => {
+    fiveOffers()
+    // Reads: the start, the 4th offer (in budget), the 5th (past it).
+    const clock = [0, 0, 5000]
+    const out = (await buildPendingTradeDecisionContext('L', 'me', { now: () => clock.shift() ?? 5000 }))!
+    expect(m.evaluate.mock.calls.map((c) => c[0].ref.tradeId)).toEqual(['af-day1', 'af-day2', 'af-day3', 'af-day4'])
+    expect(out).toContain('The 4 expiring soonest are graded below')
     expect(out).toMatch(/af-day5[^\n]*\n  Grade: not computed in this answer/)
   })
 
@@ -191,10 +232,12 @@ describe('Chimmy sees native and Sleeper offers', () => {
     m.afTrades.mockImplementation(async ({ take }: { take: number }) =>
       Array.from({ length: take }, (_, i) => ({ id: `af-${i}`, expiresAt: null, proposerRoster: { platformUserId: 'u-rival' } })),
     )
-    const out = (await buildPendingTradeDecisionContext('L', 'me'))!
+    const out = (await buildPendingTradeDecisionContext('L', 'me', { now: () => 0 }))!
     expect(m.afTrades.mock.calls[0]![0].take).toBe(10)
     expect(out).toContain('PENDING INCOMING TRADES (at least 10)')
     expect(out).toContain('Do not say this is every offer.')
-    expect(m.evaluate).toHaveBeenCalledTimes(3)
+    // Never more than six graded, however fast: the block must not crowd out the rest of the grounding.
+    expect(m.evaluate).toHaveBeenCalledTimes(6)
+    expect(out).toContain('The 6 expiring soonest are graded below')
   })
 })

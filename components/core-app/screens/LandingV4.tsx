@@ -12,8 +12,10 @@ import {
   getLandingImportSports,
 } from '@/components/core-app/screens/landingConnectPlatforms'
 import { LandingDemoTabs } from '@/components/core-app/screens/LandingDemoTabs'
+import { LandingStoreBadges } from '@/components/core-app/screens/LandingStoreBadges'
 import { TradeMarketMovers } from '@/components/trade-market/TradeMarketMovers'
 import { LaunchBanner } from '@/components/launch/LaunchBanner'
+import { HolidaySaleStrip } from '@/components/launch/HolidaySaleStrip'
 import { FORMAT_DEMO_META } from '@/lib/demo-league/formats/registry'
 import type { FoundingOfferView } from '@/lib/monetization/foundingMember'
 import { BrandShield } from '@/components/brand/BrandShield'
@@ -235,6 +237,10 @@ export function LandingV4({
             {c.nav.pricing}
           </a>
           <Link href="/commissioners">{c.nav.forCommissioners}</Link>
+          {/* Public: anyone can read the community board before signing up. */}
+          <Link href="/clubhouse" className="af-lp-nav-clubhouse" data-testid="landing-nav-clubhouse">
+            {c.nav.clubhouse}
+          </Link>
         </div>
 
         {/*
@@ -290,6 +296,7 @@ export function LandingV4({
                 {c.nav.pricing}
               </a>
               <Link href="/commissioners">{c.nav.forCommissioners}</Link>
+              <Link href="/clubhouse">{c.nav.clubhouse}</Link>
               <Link href="/core/partners" className="af-lp-partners">
                 {c.nav.partners}
                 <span className="af-lp-api-chip af-num">API</span>
@@ -324,14 +331,12 @@ export function LandingV4({
               {c.hero.ctaDemo}
             </Link>
           </div>
-          {signedIn ? null : (
-            <p className="af-lp-have-account">
-              {c.hero.haveAccount}{' '}
-              <Link href="/login" data-testid="landing-hero-sign-in">
-                {c.nav.signIn}
-              </Link>
-            </p>
-          )}
+          {/*
+            No "Already have an account? Sign in" line here (removed 2026-11-23): the bar's Sign in
+            button is visible at every width, and the bar is not sticky, so on first load the line
+            was the same action twice on one screen.
+          */}
+          <LandingStoreBadges page="landing" copy={c.hero.stores} lang={lang} />
         </div>
 
         {/*
@@ -394,6 +399,11 @@ export function LandingV4({
         ⚠ BELOW THE HERO, NOT ABOVE IT — moved 2026-09-29. On a 390px phone it filled the top half
         of the first screen with a pricing note about a product nobody had described yet.
       */}
+      {/* Black Friday → Cyber Monday only (lib/monetization/holidaySale.ts); renders nothing otherwise. */}
+      <div className="af-lp-sale-wrap">
+        <HolidaySaleStrip surface="landing" />
+      </div>
+
       {launch ? (
         <LaunchBanner startsAt={launch.startsAt} lang={lang} signedIn={signedIn} founding={launch.founding} />
       ) : null}
@@ -705,6 +715,7 @@ export function LandingV4({
           </span>
           <nav className="af-lp-footer-links" aria-label="Footer">
             <Link href="/commissioners">{c.nav.forCommissioners}</Link>
+            <Link href="/clubhouse">{c.nav.clubhouse}</Link>
             <Link href="/core/players">{c.footer.playerFinder}</Link>
             <Link href="/blog">{c.footer.blog}</Link>
             <Link href="/core">{c.footer.dashboard}</Link>
@@ -748,6 +759,7 @@ export function LandingV4({
         </p>
         {/* Jurisdiction copy is a compliance statement, not decoration — it stays verbatim. */}
         <p className="af-lp-footer-compliance">{c.footer.compliance}</p>
+        <p className="af-lp-footer-compliance" data-testid="landing-store-trademarks">{c.footer.storeTrademarks}</p>
       </footer>
     </div>
   )

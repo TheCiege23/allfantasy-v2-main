@@ -4,7 +4,6 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { isLeagueNotStarted } from './leagueNotStarted'
 import {
-  computeLeagueProjectedPoints,
   extractScoringSettings,
   hasScoringRules,
   NO_LEAGUE_SCORING_REASON,
@@ -13,8 +12,7 @@ import { resolveCurrentWeekFrom, isScored, type WeekScoreRow } from './currentWe
 import { leagueDisplayName } from './leagueHome'
 import { importedOrphanOwnerKey } from '@/lib/league-import/importedRosterIdentity'
 import { myRosterCandidates } from './myRoster'
-import { latestProjectionWeek, lookupProjections, type PlayerProjection } from './playerProjections'
-import { sleeperReadableRosters } from './rosterIdSpace'
+import { loadLeagueRosterWeeks } from '@/lib/af-projections/leagueRosterWeek'
 import { leagueWeekFromSettings } from './seasonTimeline'
 import { realManagerName, rosterLabel } from './managerName'
 import { leagueWeekProgress } from './leagueWeekProgress'
@@ -24,8 +22,8 @@ import { eliminationFormat } from './railMatchupMode'
 import { weeklyFormat } from './weeklyCapabilities'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { EMPTY_SLOT, forecastMatchup, type ForecastSide } from './matchupForecast'
-import { loadUnavailableBySport } from './unavailableStarters'
 import { isBestBallSettings } from './lineupMode'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * Matchup pulse — the cross-league landing at `/core/matchup`.
@@ -711,23 +709,10 @@ export async function getMatchupPulse(
     ...new Set(pending.flatMap((p) => [...p.yourRosterKeys, ...p.theirRosterKeys])),
   ]
 
-  const platformByLeague = new Map(pending.map((p) => [p.leagueId, p.platform]))
-  const sportByLeague = new Map(pending.map((p) => [p.leagueId, p.sport]))
-  // In Sleeper ids: an ESPN lineup translated, any other foreign one emptied — a Fleaflicker/MFL/
-  // Fantrax/Yahoo starter id (or an untranslatable ESPN one: 12483 is Stafford there, Jack Bech in
-  // Sleeper's space) would be priced as a stranger; such a lineup lands in `unpriceable`.
-  const rosters = rosterKeys.length
-    ? await sleeperReadableRosters(
-        await prisma.roster
-          .findMany({
-            where: { leagueId: { in: leagueIds }, platformUserId: { in: rosterKeys } },
-            select: { leagueId: true, platformUserId: true, playerData: true },
-          })
-          .catch(() => []),
-        (r) => platformByLeague.get(r.leagueId),
-        (r) => sportByLeague.get(r.leagueId),
-      )
-    : []
+  const rosters = rosterKeys.length ? await prisma.roster.findMany({
+    where: { leagueId: { in: leagueIds }, platformUserId: { in: rosterKeys } },
+    select: { leagueId: true, platformUserId: true, playerData: true },
+  }).catch(() => []) : []
   const startersBy = new Map<string, string[]>()
   for (const r of rosters) {
     startersBy.set(`${r.leagueId}:${r.platformUserId}`, startersOf(r.playerData))
@@ -749,58 +734,15 @@ export async function getMatchupPulse(
     ]),
   )
 
-  /* ── 5. Projections and availability, one read per league-week on the board. ──
-   *
-   * 🛑 EACH LEAGUE IS PRICED FOR ITS OWN WEEK. This read the feed's NEWEST week for every league —
-   * and the feed holds the week ahead, so a week-4 matchup could be priced on week-5 numbers while
-   * the league page priced it on week 4. Usually one or two groups for a whole board.
-   *
-   * ⚠ A WEEK THE FEED DOES NOT HOLD STILL GETS A MARGIN, FROM THE NEWEST WEEK, as before — but no
-   * odds and no injury zeros: a probability needs this week's prices, and a current injury says
-   * nothing about another week's projection. The shared forecast refuses an unpriced starter.
-   */
+  /* Read each league's AF scores for its own fixture week. */
   const everyStarter = [
     ...new Set([...lineups.values()].flatMap((l) => [...l.you, ...l.them]).filter((id) => id !== EMPTY_SLOT)),
   ]
-  const weekKeyOf = (p: { sport: string | null; season: number; week: number }) =>
-    `${String(p.sport ?? 'NFL').toUpperCase()}:${p.season}:${p.week}`
-  const groups = new Map<string, { sport: string; season: number; week: number; ids: Set<string> }>()
-  for (const p of pending) {
-    const key = weekKeyOf(p)
-    let g = groups.get(key)
-    if (!g) groups.set(key, (g = { sport: String(p.sport ?? 'NFL').toUpperCase(), season: p.season, week: p.week, ids: new Set() }))
+  // AF Intelligence: a locked viewer's pulse is priced without AF's learned factors.
+  const weekPricesP = viewerHasAfIntelligence(userId).then((afIntelligence) => loadLeagueRosterWeeks(pending.map(p => {
     const lineup = lineups.get(p.leagueId)
-    for (const id of [...(lineup?.you ?? []), ...(lineup?.them ?? [])]) if (id !== EMPTY_SLOT) g.ids.add(id)
-  }
-  type WeekPrices = {
-    /** This week's feed, or the newest week's when this one is missing — see `exact`. */
-    projections: Map<string, PlayerProjection>
-    /** True when `projections` IS this league-week's. Only then may odds or injuries use it. */
-    exact: boolean
-    /** Ruled out or on bye this week, by Sleeper id. Empty unless `exact`. */
-    unavailable: Set<string>
-  }
-  const emptyProjections = (): Map<string, PlayerProjection> => new Map()
-  const weekPricesP: Promise<Map<string, WeekPrices>> = Promise.all(
-    [...groups].map(async ([key, g]): Promise<[string, WeekPrices]> => {
-      const ids = [...g.ids]
-      if (ids.length === 0) return [key, { projections: emptyProjections(), exact: true, unavailable: new Set() }]
-      const at = { season: String(g.season), week: g.week }
-      const [exact, unavailable] = await Promise.all([
-        lookupProjections(ids, at, null, g.sport).catch(emptyProjections),
-        loadUnavailableBySport({ sleeperIds: ids, sports: [g.sport], season: g.season, week: g.week })
-          .then((m) => m.get(g.sport) ?? new Set<string>())
-          .catch(() => new Set<string>()),
-      ])
-      if (exact.size > 0) return [key, { projections: exact, exact: true, unavailable }]
-      const newest = await latestProjectionWeek().catch(() => null)
-      const fallback =
-        newest && !(newest.season === at.season && newest.week === at.week)
-          ? await lookupProjections(ids, newest, null, g.sport).catch(emptyProjections)
-          : emptyProjections()
-      return [key, { projections: fallback, exact: false, unavailable: new Set() }]
-    }),
-  ).then((entries) => new Map(entries))
+    return { leagueId: p.leagueId, season: p.season, week: p.week, ids: [...(lineup?.you ?? []), ...(lineup?.them ?? [])] }
+  }), { afIntelligence }))
 
   /*
    * ── 6. Per-player points and game states, read alongside the projections. ──
@@ -880,20 +822,13 @@ export async function getMatchupPulse(
    * One lineup's per-starter facts: the margin's price, the odds' price, availability and, for NFL,
    * game state.
    *
-   * ⚠ TWO PRICES, ON PURPOSE. `projected` is the MARGIN's: it falls back to the vendor total rather
-   * than dropping a player, because a total missing a starter reads LOW, and low is the direction that
-   * makes someone believe they are losing when they are not. `leagueScored` is the ODDS': only a
-   * number this league's rules produced, exactly what the league page prices with — a PPR total is
-   * not this league's number, and a probability built on one is the 98%-beside-"—" disagreement the
-   * shared forecast exists to end (`matchupForecast.ts`).
+   * The margin and odds share each starter's league-scored AF estimate.
    */
   function starterFacts(p: Pending, ids: string[]) {
     const isNfl = String(p.sport ?? 'NFL').toUpperCase() === 'NFL'
-    const prices = weekPrices.get(weekKeyOf(p))
-    const projections = prices?.projections ?? emptyProjections()
-    const unavailableIds = prices?.unavailable ?? new Set<string>()
+    const projections = weekPrices.get(p.leagueId)
     const filled = ids.filter((id) => id !== EMPTY_SLOT)
-    const players = new Map(filled.map((id) => [id, { team: projections.get(id)?.team ?? null }]))
+    const players = new Map(filled.map((id) => [id, { team: projections?.get(id)?.team ?? null }]))
     const states = isNfl
       ? weekGameStates(players, gamesByWeek.get(`${p.season}:${p.week}`) ?? [], now)
       : new Map<string, StarterGameState>()
@@ -903,20 +838,16 @@ export async function getMatchupPulse(
         return { id, empty: true, unavailable: false, projected: 0, leagueScored: 0, state: 'final' as StarterGameState }
       }
       /* Ruled out or on bye THIS week: a zero, as the league page counts him. */
-      if (unavailableIds.has(id)) {
+      if (projections?.get(id)?.unavailable) {
         return { id, empty: false, unavailable: true, projected: 0, leagueScored: 0, state: 'final' as StarterGameState }
       }
-      const proj = projections.get(id)
-      const league =
-        p.scoringSettings && proj?.componentStats
-          ? computeLeagueProjectedPoints(proj.componentStats, p.scoringSettings)
-          : null
+      const proj = projections?.get(id)
       return {
         id,
         empty: false,
         unavailable: false,
-        projected: league?.points ?? proj?.projectedPoints ?? null,
-        leagueScored: prices?.exact ? league?.points ?? null : null,
+        projected: proj?.points ?? null,
+        leagueScored: proj?.points ?? null,
         state: (states.get(id) ?? 'unknown') as StarterGameState,
         /* His club, for the next-kickoff read below. NFL only, where game states exist. */
         club: isNfl ? normalizeTeamAbbrev(proj?.team ?? null) ?? null : null,

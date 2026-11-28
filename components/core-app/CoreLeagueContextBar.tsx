@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { leagueWorkspaceMode } from '@/lib/league/league-workspace-navigation'
+import { platformOnlyAuthority } from '@/lib/league/write-authority'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
@@ -356,7 +357,7 @@ export default function CoreLeagueContextBar({
 
       <details className="af-lctx-details"><summary>{m.leagueDetails}</summary>
       <div className="af-lctx-statuses">
-        {coverageHref && leagueWorkspaceMode(platform, language).authority !== 'NATIVE' ? (
+        {coverageHref && leagueWorkspaceMode(platformOnlyAuthority(platform), language).authority !== 'NATIVE' ? (
           /*
            * ⚠ A CLIENT NAVIGATION CANNOT BE TRUSTED TO LAND ON THE ANCHOR BY ITSELF. The
            * panel streams in behind its own Suspense boundary, so when Next looks for the
@@ -375,7 +376,7 @@ export default function CoreLeagueContextBar({
           </Link>
         ) : (
           <span className="af-lctx-chip" data-tone="source">
-            {leagueWorkspaceMode(platform, language).badge}
+            {leagueWorkspaceMode(platformOnlyAuthority(platform), language).badge}
           </span>
         )}
         <span className="af-lctx-chip" data-tone={gameDayActive ? 'live' : syncStale ? 'warn' : 'fresh'}>

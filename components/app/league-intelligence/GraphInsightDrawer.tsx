@@ -2,12 +2,15 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { StoryAiLockNotice, type StoryAiLock } from "@/components/league-story-ai/StoryAiLockNotice";
 
 type InsightResponse = {
   metricsInterpretation: string | null;
   momentumStoryline: string | null;
   readableSummary: string | null;
   generatedAt?: string;
+  /** Set when Chimmy did not write it (plan or daily cap); readableSummary is then the fact-built summary. */
+  aiLocked?: StoryAiLock;
 };
 
 export function GraphInsightDrawer({
@@ -88,7 +91,9 @@ export function GraphInsightDrawer({
             <>
               {insight.readableSummary && (
                 <div>
-                  <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-white/50">Summary (OpenAI)</h4>
+                  <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-white/50">
+                    {insight.aiLocked ? "Summary" : "Summary (OpenAI)"}
+                  </h4>
                   <p className="text-sm text-white/90">{insight.readableSummary}</p>
                 </div>
               )}
@@ -107,6 +112,7 @@ export function GraphInsightDrawer({
               {!insight.readableSummary && !insight.metricsInterpretation && !insight.momentumStoryline && (
                 <p className="text-sm text-white/50">Chimmy has no insight for this graph yet. Try regenerating in a moment.</p>
               )}
+              <StoryAiLockNotice lock={insight.aiLocked} featureName="Chimmy league graph insights" />
               {insight.generatedAt && (
                 <p className="text-xs text-white/40">Generated {formatInTimezone(insight.generatedAt)}</p>
               )}

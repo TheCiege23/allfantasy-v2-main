@@ -36,7 +36,8 @@ describe('League shell layout and waivers integration', () => {
   it('sets predraft default center tab to Draft/Draft Setup (draft or home)', () => {
     expect(leagueShell).toContain("const isPredraftLifecycle = useMemo(() =>")
     expect(leagueShell).toContain('Draft setup')
-    expect(leagueShell).toContain("if (isPredraftLifecycle) return renderPredraftDraftSetup()")
+    // A paired college + pro league wraps the screen in its one-league note (CollegeProOneLeague); the predraft fallback is still what renders.
+    expect(leagueShell).toMatch(/if \(isPredraftLifecycle\) return (?:\w+\([^\n]*)?renderPredraftDraftSetup\(\)/)
   })
 
   it('matches the dashboard command-center visual treatment on league pages', () => {
@@ -64,7 +65,7 @@ describe('League shell layout and waivers integration', () => {
 
   it('renders WaiverWirePage in the center workspace when waivers tab is selected', () => {
     expect(leagueShell).toContain("case 'waivers':")
-    expect(leagueShell).toContain("return <SportAwareWaiverWire leagueId={leagueId} />")
+    expect(leagueShell).toMatch(/return (?:\w+\([^\n]*)?<SportAwareWaiverWire leagueId=\{leagueId\} \/>/)
     expect(sportAwareWaiverWire).toContain('return <WaiverWirePage leagueId={leagueId} />')
   })
 
@@ -118,7 +119,7 @@ describe('League shell layout and waivers integration', () => {
   it('keeps predraft leagues on Draft Setup fallback instead of crashing when setup data is missing', () => {
     expect(leagueShell).toContain('const isPredraftLifecycle = useMemo(() =>')
     expect(leagueShell).toContain('const renderPredraftDraftSetup = () => {')
-    expect(leagueShell).toContain('if (isPredraftLifecycle) return renderPredraftDraftSetup()')
+    expect(leagueShell).toMatch(/if \(isPredraftLifecycle\) return (?:\w+\([^\n]*)?renderPredraftDraftSetup\(\)/)
   })
 
   it('renders AF Pro waiver Chimmy locked/recommendations panel within waiver page', () => {

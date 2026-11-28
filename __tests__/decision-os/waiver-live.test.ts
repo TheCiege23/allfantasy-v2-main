@@ -63,9 +63,10 @@ describe('waiver engine route Stage 1 wiring', () => {
     // assert structure -- it fails on insertion, not on regression.
     const liveBlock = routeSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toContain('decisionId: decision.decision_id')
-    expect(liveBlock).toContain('toWaiverCard(attached.decision)')  // NOT toWaiverCard(decision): the card must
-    // render the decision AFTER attachSavedAnalysis, or the AI explanation never reaches it.
-    // This is the property worth pinning, and it is stronger than what this line asserted before.
+    // The card renders the decision itself: the saved three-brain explanation that used to be attached in
+    // between was retired 2026-11-19 (re-score build item 9), and nothing may re-insert it unannounced.
+    expect(liveBlock).toContain('toWaiverCard(decision)')
+    expect(liveBlock).not.toContain('attachSavedAnalysis')
     expect(liveBlock).toContain('confidence: card.confidence')
     expect(liveBlock).toContain('legal: card.legal')
   })

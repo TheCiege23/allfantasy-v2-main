@@ -1,3 +1,4 @@
+import { NCAAB_SLOT_MAP } from '@/lib/ncaab-roster/NcaabRosterTemplates'
 /**
  * Sport-specific configuration for redraft leagues.
  * Defines roster slots, scoring defaults, schedule parameters,
@@ -297,6 +298,8 @@ export const REDRAFT_SPORT_CONFIGS: Record<string, RedraftSportConfig> = {
       'Smaller rosters mean each start slot is high-value',
     ],
     flexPositions: {
+      G: NCAAB_SLOT_MAP.get('G')!.eligiblePositions,
+      F: NCAAB_SLOT_MAP.get('F')!.eligiblePositions,
       UTIL: ['PG', 'SG', 'SF', 'PF', 'C'],
     },
   },

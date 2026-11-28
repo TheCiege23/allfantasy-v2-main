@@ -56,7 +56,13 @@ export async function DELETE(
         await tx.leagueManagerClaim.deleteMany({ where: { leagueId: id } });
         const removed = await tx.league.deleteMany({ where: { id, userId, platform: target.platform, name: target.name } });
         if (removed.count !== 1) throw new Error('League changed during deletion');
-      });
+        /*
+         * Its own allowance, not Prisma's 5s default. Deleting a league cascades through every row it owns
+         * (draft session and picks, rosters, the cached pool, chat, trades), and a league that had drafted
+         * took 9.3s measured 2026-11-27: the default expired the transaction (P2028) and every such delete
+         * failed with "Could not remove league", while an empty league deleted fine.
+         */
+      }, { timeout: 120_000, maxWait: 10_000 });
       return NextResponse.json({ ok: true, deletedLeague: true });
     }
 

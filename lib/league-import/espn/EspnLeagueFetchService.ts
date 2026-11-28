@@ -30,7 +30,14 @@ import type {
   EspnImportTransaction,
 } from '@/lib/league-import/adapters/espn/types'
 
-const ESPN_IMPORT_VIEWS = ['mTeam', 'mRoster', 'mMatchup', 'mScoreboard', 'mSettings']
+/*
+ * `mMatchupScore` (2026-11-24, GAPS.md PS-01) adds each current-week side's `rosterForCurrentScoringPeriod`:
+ * every rostered player's own week points with his real slot, which `espnPlayerWeekScoresWriter.ts` stores
+ * for the bench ledger. Both committed captures that carry that block requested it (`fantasy_nfl`,
+ * `fantasy_nfl_matchup` in ENDPOINTS.yaml); no capture shows the block without it. One more view on the
+ * same request — no extra request, no other host.
+ */
+const ESPN_IMPORT_VIEWS = ['mTeam', 'mRoster', 'mMatchup', 'mMatchupScore', 'mScoreboard', 'mSettings']
 const ESPN_DISCOVERY_VIEWS = ['mTeam', 'mSettings']
 const ESPN_DRAFT_VIEWS = ['mDraftDetail']
 const ESPN_TRANSACTIONS_MIN_SEASON = 2019
@@ -85,12 +92,19 @@ export interface EspnFetchOptions {
   includePreviousSeasons?: boolean
   maxPreviousSeasons?: number
   minSeason?: number
+  /**
+   * Store the current week's per-player points (`espnPlayerWeekScoresWriter.ts`) from this same response.
+   * Opt-in: only the import pipeline passes it (the scheduled collector sync and an import), so a gate check,
+   * a waiver refresh or the historical backfill reading the league never writes.
+   */
+  recordPlayerWeekScores?: boolean
 }
 
 const DEFAULT_FETCH_OPTIONS: Required<EspnFetchOptions> = {
   includePreviousSeasons: true,
   maxPreviousSeasons: 6,
   minSeason: 2010,
+  recordPlayerWeekScores: false,
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
@@ -1435,6 +1449,15 @@ export async function fetchEspnLeagueForImport(
 
   const schedule = parseEspnSchedule(raw, season, currentWeek)
   fillEspnPointsAgainst(teams, schedule)
+  /*
+   * The bench ledger's ESPN scores (GAPS.md PS-01), from THIS response. Fire and forget: never awaited,
+   * never thrown into the import, and a finished season (whose current week is long over) is not read.
+   */
+  if (opts.recordPlayerWeekScores && !league.isFinished) {
+    void import('./espnPlayerWeekScoresWriter')
+      .then(({ recordEspnPlayerWeekScores }) => recordEspnPlayerWeekScores({ platformLeagueId: leagueId, season, raw }))
+      .catch(() => console.warn('[espn-player-week-scores] writer unavailable'))
+  }
   const playerDirectory = buildEspnPlayerDirectory(teams)
   let draftPicks = parseEspnDraftPicks(draftRaw, playerDirectory)
   /*
@@ -1571,6 +1594,46 @@ export async function fetchEspnActivityForSync(
     teams: teams.map((t) => ({ teamId: t.teamId, managerId: t.managerId })),
     transactions,
     transactionsFetched: transactionsRaw != null,
+  }
+}
+
+/**
+ * The league's pending trade offers as the connected user sees them — `view=mPendingTransactions`,
+ * confirmed by the owner's capture (`contracts/espn/fixtures/fantasy-pending.NFL.2026.json`). For the
+ * scheduled offer sweep (`lib/provider-trades/syncEspnTradeOffers.ts`), never a request path.
+ *
+ * 🛑 COOKIES ONLY, NO COOKIELESS FALLBACK. Every other read here retries without cookies, which is
+ * right for a public league's rosters and wrong for this: a pending offer is visible to the teams in
+ * it, so an anonymous read of a public league can answer 200 with no offers in it — and that empty
+ * list would retire every stored offer as gone. With no stored cookies, or cookies ESPN refuses, the
+ * sweep is told it did not read anything.
+ *
+ * Football only: an MLB-coded league id is never read as NFL (#4322).
+ */
+export async function fetchEspnPendingTradeOffersForSync(
+  userId: string,
+  leagueId: string,
+  season: number,
+): Promise<{ ok: true; raw: unknown; swid: string | null } | { ok: false; reason: string }> {
+  if (isEspnMlbSource(leagueId)) return { ok: false, reason: 'not a football league' }
+  const auth = await getEspnAuthForUser(userId)
+  const cookieHeader = buildEspnCookieHeader(auth)
+  if (!cookieHeader) return { ok: false, reason: 'no ESPN cookies stored for the connected user' }
+  try {
+    const raw = await fetchEspnJson(leagueId, season, cookieHeader, ['mPendingTransactions'])
+    void recordEspnCookiesAccepted(userId)
+    return { ok: true, raw, swid: auth.swid }
+  } catch (error) {
+    if (error instanceof EspnApiResponseError) {
+      if (error.status === 401 || error.status === 403) {
+        void recordEspnCookiesRejected(userId)
+        return { ok: false, reason: 'ESPN refused the stored cookies' }
+      }
+      return { ok: false, reason: `ESPN answered ${error.status}` }
+    }
+    // Error text from the client is secret-safe by construction (`espnFantasyClient`), but only the
+    // class name leaves here, so no URL or cookie can ride along.
+    return { ok: false, reason: error instanceof Error ? error.name : 'ESPN read failed' }
   }
 }
 

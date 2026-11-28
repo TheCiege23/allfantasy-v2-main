@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
-import { tOr } from "@/lib/i18n/tInterpolate"
 import {
   HIDDEN_HOME_SECTIONS_KEY,
   HOME_LAYOUT_HIDDEN_KEY,
@@ -13,33 +12,21 @@ import {
   toggleHomeSection,
   type HomeSectionId,
 } from "@/lib/core-app/homeSections"
-import {
-  NOTIFICATION_CATEGORY_LABELS,
-  NOTIFICATION_CATEGORY_LABEL_KEYS,
-} from "@/lib/notification-settings/types"
 import type { SettingsProfile } from "./settings-types"
 
 /**
  * Settings → Home page (2026-10-24): one switch per /core home section.
  *
  * A user loved the app and found the home "way too much information". The ask was a control as
- * plain as the league import picker: every row says what it is, ON is unmistakable, and OFF takes
- * the card AND its notifications away. The mapping lives in lib/core-app/homeSections.ts.
+ * plain as the league import picker: every row says what it is, ON is unmistakable, and OFF hides
+ * the card. Layout only: notifications are decided in Settings → Notifications and nowhere else
+ * (owner, 2026-11-22 — see lib/core-app/homeSections.ts for why the old alert mute was removed).
  *
  * ⚠ EVERY CLICK SAVES — THERE IS NO SAVE BUTTON. The row flips at once and the write follows. Writes
  * run one at a time, each carrying the whole list as it stands after that click, so two quick taps
  * can never land out of order and leave the server holding the older list. A failed write puts the
  * switches back to what the server last confirmed and says so.
  */
-
-/**
- * Sections whose "off" also silences an alert that needs you to act — on the clock in a draft, an offer
- * sent to you. Said on the row in plain words, so nobody discovers it by missing a pick.
- */
-const WARN_KEY: Partial<Record<HomeSectionId, string>> = {
-  drafts: "settings.home.warn.drafts",
-  "league-trades": "settings.home.warn.leagueTrades",
-}
 
 type SaveState = "idle" | "saving" | "saved" | "error"
 
@@ -139,8 +126,6 @@ export function HomeSectionsSettingsSection({
   }
 
   const shownCount = HOME_SECTIONS.length - hidden.size
-  const categoryLabel = (id: (typeof HOME_SECTIONS)[number]["categories"][number]) =>
-    tOr(t, NOTIFICATION_CATEGORY_LABEL_KEYS[id], NOTIFICATION_CATEGORY_LABELS[id])
 
   return (
     <div className="space-y-5" data-testid="settings-home-sections">
@@ -194,7 +179,6 @@ export function HomeSectionsSettingsSection({
             {HOME_SECTIONS.filter((s) => s.group === group).map((section) => {
               const visible = !hidden.has(section.id)
               const title = t(`settings.home.section.${section.id}.title`)
-              const warnKey = WARN_KEY[section.id]
               return (
                 <li key={section.id}>
                   {/*
@@ -207,37 +191,16 @@ export function HomeSectionsSettingsSection({
                     data-home-section={section.id}
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-bold" style={{ color: "var(--text)" }}>
-                          {title}
-                        </span>
-                        {!visible ? (
-                          <span className="af-home-section-hidden-tag">{t("settings.home.hiddenTag")}</span>
-                        ) : null}
+                      {/*
+                        No HIDDEN tag (2026-11-25, the simplify pass): the switch, the "Off" under it and the
+                        dimmed row already said it three ways.
+                      */}
+                      <span className="block text-sm font-bold" style={{ color: "var(--text)" }}>
+                        {title}
                       </span>
                       <span className="mt-1 block text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
                         {t(`settings.home.section.${section.id}.desc`)}
                       </span>
-                      {section.categories.length > 0 ? (
-                        <span className="mt-1.5 block text-xs leading-relaxed" style={{ color: "var(--muted2)" }}>
-                          {tInterpolate(muted.current.has(section.id) ? "settings.home.alsoMuted" : visible ? "settings.home.alsoMutes" : "settings.home.defaultAlertsUnchanged", {
-                            list: section.categories.map(categoryLabel).join(" · "),
-                          })}
-                        </span>
-                      ) : (
-                        <span className="mt-1.5 block text-xs" style={{ color: "var(--muted2)" }}>
-                          {t("settings.home.visualOnly")}
-                        </span>
-                      )}
-                      {warnKey && (visible || muted.current.has(section.id)) ? (
-                        <span
-                          className="mt-1 block text-xs font-semibold"
-                          style={{ color: "var(--ns-warn, #fbbf24)" }}
-                          data-testid={`home-section-warn-${section.id}`}
-                        >
-                          ⚠ {t(warnKey)}
-                        </span>
-                      ) : null}
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
                       <input

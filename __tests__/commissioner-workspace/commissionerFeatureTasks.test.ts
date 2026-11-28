@@ -90,6 +90,22 @@ describe('detectInactiveTeamsToManage', () => {
   it('clears when no team is suggested (managed, or the manager came back)', () => {
     expect(detectInactiveTeamsToManage('L', [])).toBeNull()
   })
+
+  it('names three teams at most, never a paragraph of sixteen', () => {
+    const t = detectInactiveTeamsToManage('L', ['A', 'B', 'C', 'D', 'E'])!
+    expect(t.description).toMatch(/^A, B, C and 2 more look inactive\./)
+  })
+
+  it('calls an open seat a team with no manager, not an inactive manager (owner report, 2026-11-28)', () => {
+    const seats = Array.from({ length: 13 }, (_, i) => `Open Team ${i + 4}`)
+    const only = detectInactiveTeamsToManage('L', [], seats)!
+    expect(only.title).toBe('13 teams have no manager')
+    expect(only.description).toMatch(/^Open Team 4, Open Team 5, Open Team 6 and 10 more have no manager yet\. Invite someone, or let AllFantasy/)
+    const both = detectInactiveTeamsToManage('L', ["Layes's Team"], seats)!
+    expect(both.title).toBe('1 inactive team and 13 open seats need lineups')
+    expect(both.description).toMatch(/^Layes's Team looks inactive\. 13 teams have no manager yet\. You can let AllFantasy/)
+    expect(detectInactiveTeamsToManage('L', [], ['Open Team 1'])!.title).toBe('A team has no manager')
+  })
 })
 
 const matchup = (id: string, fullyApplied: boolean, resultFlipped = false) => ({ matchupId: id, fullyApplied, resultFlipped })
@@ -146,6 +162,21 @@ describe('readCommissionerFeatureTasks', () => {
         { rosterId: 'C', teamName: null, managerName: 'Cy', suggested: true },
       ],
     })
+  })
+
+  it("never suggests the league owner's own team, and counts empty seats apart", async () => {
+    m.inactive.mockResolvedValue({
+      native: true,
+      teams: [
+        { rosterId: 'O', teamName: 'Mine', managerName: 'me', suggested: true, leagueOwnerTeam: true, emptySeat: false },
+        { rosterId: 'C', teamName: 'Cats', managerName: 'Cy', suggested: true, emptySeat: false },
+        { rosterId: 'E', teamName: 'Open Team 2', managerName: null, suggested: true, emptySeat: true },
+      ],
+    })
+    const task = (await readCommissionerFeatureTasks('L', NOW)).find((t) => t.sourceKey === 'inactive-manager-mode-suggestion:v1')!
+    expect(task.title).toBe('1 inactive team and 1 open seat need lineups')
+    expect(task.description).not.toContain('Mine')
+    expect(task.description).toMatch(/^Cats looks inactive\./)
   })
 
   it('reads all three and returns their tasks', async () => {

@@ -40,6 +40,10 @@ describe('permanent native league deletion', () => {
     expect(mocks.claims).toHaveBeenCalledWith({ where: { leagueId: 'l1' } })
     expect(mocks.remove).toHaveBeenCalledWith({ where: { id: 'l1', userId: 'owner', platform: 'allfantasy', name: 'My league' } })
     expect(mocks.transaction).toHaveBeenCalledTimes(1)
+    // A league that has drafted takes ~9s to cascade: never Prisma's 5s default (2026-11-27, P2028).
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ timeout: expect.any(Number) }))
+    expect((mocks.transaction.mock.calls[0] as unknown[])[1]).toMatchObject({ timeout: expect.any(Number) })
+    expect(((mocks.transaction.mock.calls[0] as unknown[])[1] as { timeout: number }).timeout).toBeGreaterThanOrEqual(60_000)
   })
   it('rejects other users, incorrect names, and imported leagues without deleting anything', async () => {
     mocks.session.mockResolvedValueOnce({ user: { id: 'other' } })

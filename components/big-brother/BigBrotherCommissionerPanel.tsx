@@ -114,14 +114,14 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <h3 className="text-sm font-medium text-white/90">Automation</h3>
-        <p className="mt-1 text-xs text-white/50">Run a single automation step. Use when deadlines have passed or for testing.</p>
+      <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4">
+        <h3 className="text-sm font-medium text-[var(--text)]">Automation</h3>
+        <p className="mt-1 text-xs text-[var(--muted)]">Run a single automation step. Use when deadlines have passed or for testing.</p>
         <div className="mt-3">
           <select
             value={action}
             onChange={(e) => setAction(e.target.value)}
-            className="w-full max-w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white sm:w-auto"
+            className="w-full max-w-full rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2 text-sm text-[var(--text)] sm:w-auto"
           >
             {AUTOMATION_ACTIONS.map((a: { value: string; label: string }) => (
               <option key={a.value} value={a.value}>{a.label}</option>
@@ -131,22 +131,22 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
             type="button"
             onClick={runAutomation}
             disabled={running}
-            className="mt-2 rounded-xl bg-amber-500/20 px-4 py-2 text-sm text-amber-200 sm:ml-2 sm:mt-0 hover:bg-amber-500/30 disabled:opacity-50"
+            className="mt-2 rounded-xl bg-[var(--warn-soft)] px-4 py-2 text-sm text-[var(--warn)] sm:ml-2 sm:mt-0 hover:bg-[var(--warn-soft)] disabled:opacity-50"
           >
             {running ? 'Running…' : 'Run'}
           </button>
         </div>
-        {message && <p className="mt-2 text-sm text-white/70">{message}</p>}
+        {message && <p className="mt-2 text-sm text-[var(--text2)]">{message}</p>}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <h3 className="text-sm font-medium text-white/90">Admin tools</h3>
-        <p className="mt-1 text-xs text-white/50">Force-advance, reopen phases, extend vote, rerun tally, force waiver release, resolve veto, replace inactive, repair phases, pause/resume.</p>
+      <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4">
+        <h3 className="text-sm font-medium text-[var(--text)]">Admin tools</h3>
+        <p className="mt-1 text-xs text-[var(--muted)]">Force-advance, reopen phases, extend vote, rerun tally, force waiver release, resolve veto, replace inactive, repair phases, pause/resume.</p>
         <div className="mt-3">
           <select
             value={adminAction}
             onChange={(e) => setAdminAction(e.target.value)}
-            className="w-full max-w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white sm:w-auto"
+            className="w-full max-w-full rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2 text-sm text-[var(--text)] sm:w-auto"
           >
             {ADMIN_ACTIONS.map((a) => (
               <option key={a.value} value={a.value}>{a.label}</option>
@@ -160,11 +160,11 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
               placeholder="Minutes"
               value={adminParams.minutes ?? ''}
               onChange={(e) => setAdminParams((p) => ({ ...p, minutes: e.target.value }))}
-              className="ml-2 w-24 rounded-lg border border-white/20 bg-white/5 px-2 py-2 text-sm text-white"
+              className="ml-2 w-24 rounded-lg border border-[var(--line)] bg-[var(--chip)] px-2 py-2 text-sm text-[var(--text)]"
             />
           )}
-          {adminAction === 'resolve_eviction_tie' && <label className="ml-2 text-sm text-white/80">Evict tied nominee
-            <select aria-label="Evict tied nominee" value={adminParams.rosterId ?? ''} onChange={e => setAdminParams(p => ({...p, rosterId: e.target.value}))} className="ml-2 min-h-11 rounded-lg border border-white/20 bg-white/5 px-3 py-2">
+          {adminAction === 'resolve_eviction_tie' && <label className="ml-2 text-sm text-[var(--text)]">Evict tied nominee
+            <select aria-label="Evict tied nominee" value={adminParams.rosterId ?? ''} onChange={e => setAdminParams(p => ({...p, rosterId: e.target.value}))} className="ml-2 min-h-11 rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2">
               <option value="">Choose nominee</option>{nominees.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
             </select>
           </label>}
@@ -174,33 +174,33 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
               placeholder="Roster ID"
               value={adminParams.rosterId ?? ''}
               onChange={(e) => setAdminParams((p) => ({ ...p, rosterId: e.target.value }))}
-              className="ml-2 w-48 rounded-lg border border-white/20 bg-white/5 px-2 py-2 text-sm text-white"
+              className="ml-2 w-48 rounded-lg border border-[var(--line)] bg-[var(--chip)] px-2 py-2 text-sm text-[var(--text)]"
             />
           )}
           <button
             type="button"
             onClick={runAdminAction}
             disabled={running}
-            className="ml-2 rounded-xl bg-rose-500/20 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
+            className="ml-2 rounded-xl bg-[var(--bad-soft)] px-4 py-2 text-sm text-[var(--bad)] hover:bg-[var(--bad-soft)] disabled:opacity-50"
           >
             {running ? 'Running…' : 'Run admin'}
           </button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <h3 className="text-sm font-medium text-white/90">Audit log</h3>
-        <p className="mt-1 text-xs text-white/50">Recent Big Brother events (phase transitions, noms, veto, eviction, jury).</p>
+      <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4">
+        <h3 className="text-sm font-medium text-[var(--text)]">Audit log</h3>
+        <p className="mt-1 text-xs text-[var(--muted)]">Recent Big Brother events (phase transitions, noms, veto, eviction, jury).</p>
         <button
           type="button"
           onClick={loadAudit}
           disabled={auditLoading}
-          className="mt-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10 disabled:opacity-50"
+          className="mt-2 rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-1.5 text-xs text-[var(--text)] hover:bg-[var(--chip)] disabled:opacity-50"
         >
           {auditLoading ? 'Loading…' : 'Load audit log'}
         </button>
         {audit.length > 0 && (
-          <ul className="mt-2 max-h-48 overflow-y-auto text-xs text-white/60">
+          <ul className="mt-2 max-h-48 overflow-y-auto text-xs text-[var(--text2)]">
             {audit.map((e, i) => (
               <li key={i}>{e.eventType} — {e.createdAt}</li>
             ))}

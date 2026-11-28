@@ -33,7 +33,15 @@ const anonymous = () => ({
   response: NextResponse.json({ error: 'Sign in to use this.' }, { status: 401 }),
 })
 
+// Reading the log is AF Pro (`decision_log_history`, 2026-11-26). These cases are about identity, so
+// the plan gate lets them through; the plan matrix itself is __tests__/decision-log-screen-gate.test.ts.
+vi.mock('@/lib/subscription/entitlement-middleware', () => ({
+  requireFeatureEntitlement: vi.fn(async () => ({ ok: true, decision: {}, tokenSpend: null, tokenPreview: null })),
+}))
+
 vi.mock('@/lib/decision-log', () => ({
+  decisionUserWhere: (keys: string | string[]) =>
+    typeof keys === 'string' ? { userId: keys } : { OR: keys.map((k) => ({ userId: { equals: k, mode: 'insensitive' } })) },
   logDecision: vi.fn(async (input) => ({
     id: 'decision-1',
     userId: input.userId,

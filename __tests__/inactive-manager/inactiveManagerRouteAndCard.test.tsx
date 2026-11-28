@@ -98,16 +98,53 @@ describe('the commissioner card', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body(false) })))
     render(<InactiveManagerCommissioner leagueId="L" />)
     await screen.findByText('Chimmy runs 0 of 1 free team')
-    expect(screen.getByTestId('chimmy-free-upsell').textContent).toBe('Let Chimmy run up to 4 teams (AF Commissioner)')
+    expect(screen.getByTestId('chimmy-free-upsell').textContent).toBe('Let Chimmy run up to 4 teams (AF Pro)')
     const selects = () => screen.getAllByTestId('chimmy-manager-team').map((li) => li.querySelector('select') as HTMLSelectElement)
     expect(selects().map((x) => x.disabled)).toEqual([false, false])
     cleanup()
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => body(true) })))
     render(<InactiveManagerCommissioner leagueId="L" />)
     await screen.findByText('Chimmy runs 1 of 1 free team')
-    expect(screen.getByTestId('chimmy-manager-limit').textContent).toBe('Your free Chimmy team is in use. AF Commissioner lets Chimmy run up to 4 teams.')
+    expect(screen.getByTestId('chimmy-manager-limit').textContent).toBe('Your free Chimmy team is in use. AF Pro or AF Supreme lets Chimmy run up to 4 teams.')
     // The free team can still change style or be switched off; the other is locked.
     expect(selects().map((x) => x.disabled)).toEqual([false, true])
+  })
+
+  it('a Chimmy team shows who its manager is and a trade-offer switch that saves', async () => {
+    const team = (trades: string) => ({ rosterId: 'r1', teamName: 'Alpha', managerName: null, status: 'inactive', suggested: false,
+      managed: { since: 's', byUserId: 'c', autopilot: { style: 'win_now', since: 's' } },
+      chimmy: { personality: 'ADP_VALUE_HUNTER', label: 'Value hunter', summary: 'Hunts bargains and rarely overpays.', trades } })
+    const plain = { rosterId: 'r2', teamName: 'Bravo', managerName: null, status: 'active', suggested: false, managed: null, chimmy: null }
+    let trades = 'answer'
+    const fetchMock = vi.fn(async (_u: string, init?: { method?: string; body?: string }) => {
+      if (init?.method === 'POST') { const b = JSON.parse(init.body ?? '{}'); if (b.trades) trades = b.trades; return { ok: true, json: async () => ({ trades }) } }
+      return { ok: true, json: async () => ({ native: true, autopilotEntitled: true, chimmyLimit: 4, chimmyFreeTeams: 1, chimmyReports: [], chimmyPersonalities: [{ id: 'ADP_VALUE_HUNTER', label: 'Value hunter' }, { id: 'FLOOR_SAFE', label: 'Plays it safe' }], teams: [team(trades), plain] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<InactiveManagerCommissioner leagueId="L" />)
+    const line = await screen.findByTestId('chimmy-manager-personality')
+    // The style is named once, in the picker; the line under it says what it means.
+    expect(line.textContent).toContain('Hunts bargains and rarely overpays.')
+    expect(line.textContent).not.toContain('Manager style')
+    const style = screen.getByTestId('chimmy-manager-style') as HTMLSelectElement
+    expect(style.value).toBe('ADP_VALUE_HUNTER')
+    expect(Array.from(style.options).map((o) => o.textContent)).toEqual(['Value hunter', 'Plays it safe'])
+    fireEvent.change(style, { target: { value: 'FLOOR_SAFE' } })
+    await screen.findByText('Saved. Chimmy runs this team that way from the next hour.')
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'POST', body: JSON.stringify({ rosterId: 'r1', personality: 'FLOOR_SAFE' }) }))
+    expect(line.textContent).toContain('Only commissioners see this.')
+    // Only the team Chimmy runs gets the line and the switch.
+    expect(screen.getAllByTestId('chimmy-manager-profile')).toHaveLength(1)
+    const sw = screen.getByTestId('chimmy-manager-trades') as HTMLSelectElement
+    expect(sw.value).toBe('answer')
+    fireEvent.change(sw, { target: { value: 'off' } })
+    await screen.findByText('Saved. Offers to this team are refused.')
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'POST', body: JSON.stringify({ rosterId: 'r1', trades: 'off' }) }))
+    expect((screen.getByTestId('chimmy-manager-trades') as HTMLSelectElement).value).toBe('off')
+    // The third choice: Chimmy also sends offers of its own.
+    fireEvent.change(screen.getByTestId('chimmy-manager-trades'), { target: { value: 'answer_and_send' } })
+    await screen.findByText('Saved. Chimmy will also send an offer of its own now and then, at most one a day.')
+    expect((screen.getByTestId('chimmy-manager-trades') as HTMLSelectElement).value).toBe('answer_and_send')
   })
 
   it('renders nothing for an imported league', async () => {

@@ -213,7 +213,7 @@ export async function postNativeTradeMoment(input: {
     const playerIds = items.filter((i) => i.itemType === 'player' && i.itemReference).map((i) => i.itemReference as string)
     const players = playerIds.length
       ? await prisma.sportsPlayer
-          .findMany({ where: { sleeperId: { in: playerIds } }, select: { sleeperId: true, name: true, position: true, team: true } })
+          .findMany({ where: { sport: String(league.sport).toUpperCase(), sleeperId: { in: playerIds } }, select: { sleeperId: true, name: true, position: true, team: true } })
           .catch(() => [] as Array<{ sleeperId: string | null; name: string; position: string | null; team: string | null }>)
       : []
     const playerById = new Map<string, { name: string; position: string | null; team: string | null }>()

@@ -1,13 +1,14 @@
 /**
- * Chimmy autopilot: a team nobody is running takes no trade offers. The proposal is refused BEFORE
- * anything is written or anyone is notified.
+ * Chimmy autopilot: a team whose commissioner switched its trades off takes no offers — the proposal
+ * is refused BEFORE anything is written or anyone is notified. A team that answers offers (the
+ * default) lets a two-team offer through for Chimmy to answer on the hourly run.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMockNextRequest } from '../helpers/createMockNextRequest'
 
 const h = vi.hoisted(() => ({
-  onAutopilot: vi.fn(async () => false),
+  tradeMode: vi.fn(async (): Promise<string | null> => null),
   session: vi.fn(),
   dispatch: vi.fn(),
   postOffer: vi.fn(),
@@ -26,7 +27,7 @@ const h = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ isOwnerOnAutopilot: h.onAutopilot }))
+vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ autopilotTradeModeForOwner: h.tradeMode }))
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: h.prisma }))
@@ -106,8 +107,17 @@ beforeEach(() => {
   )
 })
 
+/*
+ * The route is loaded ONCE, before any test, with its own allowance. Loaded inside a test, compiling its
+ * module graph counted against that test's 30s limit: on a loaded machine the compile alone took ~80s,
+ * so every test here timed out without ever reaching the code under test (2026-11-26).
+ */
+let POST: typeof import('@/app/api/redraft/trade-proposals/route').POST
+beforeAll(async () => {
+  POST = (await import('@/app/api/redraft/trade-proposals/route')).POST
+}, 240_000)
+
 async function proposeRedraft() {
-  const { POST } = await import('@/app/api/redraft/trade-proposals/route')
   return POST(
     createMockNextRequest('http://localhost/api/redraft/trade-proposals', {
       method: 'POST',
@@ -124,18 +134,33 @@ async function proposeRedraft() {
 }
 
 describe('trade offers to a team on Chimmy autopilot', () => {
-  it('are refused with a plain reason, and nothing is created or sent', async () => {
-    h.onAutopilot.mockResolvedValue(true)
+  it('are refused with a plain reason when its trades are off, and nothing is created or sent', async () => {
+    h.tradeMode.mockResolvedValue('off')
     const res = await proposeRedraft()
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ code: 'RECEIVER_ON_AUTOPILOT' })
-    expect(h.onAutopilot).toHaveBeenCalledWith('l-1', 'uB')
+    expect(h.tradeMode).toHaveBeenCalledWith('l-1', 'uB')
     expect(h.prisma.$transaction).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
   })
 
-  it('go through as before when the receiver is not on autopilot', async () => {
-    h.onAutopilot.mockResolvedValue(false)
+  it('go through for Chimmy to answer when the team answers offers', async () => {
+    h.tradeMode.mockResolvedValue('answer')
+    expect((await proposeRedraft()).status).toBe(200)
+    h.prisma.redraftRoster.findFirst
+      .mockResolvedValueOnce({ id: 'r-1', ownerId: 'uA', ownerName: 'dana@example.org', teamName: 'Dana Dynasty' })
+      .mockResolvedValueOnce({ id: 'r-2', ownerId: 'uB', ownerName: 'Bob', teamName: null })
+    h.tradeMode.mockResolvedValue('answer_and_send')
+    expect((await proposeRedraft()).status).toBe(200)
+  })
+
+  it('go through as before when the receiver is not on autopilot, or the check itself fails', async () => {
+    h.tradeMode.mockResolvedValue(null)
+    expect((await proposeRedraft()).status).toBe(200)
+    h.prisma.redraftRoster.findFirst
+      .mockResolvedValueOnce({ id: 'r-1', ownerId: 'uA', ownerName: 'dana@example.org', teamName: 'Dana Dynasty' })
+      .mockResolvedValueOnce({ id: 'r-2', ownerId: 'uB', ownerName: 'Bob', teamName: null })
+    h.tradeMode.mockRejectedValue(new Error('db down'))
     expect((await proposeRedraft()).status).toBe(200)
   })
 })

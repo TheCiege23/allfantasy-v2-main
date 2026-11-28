@@ -20,7 +20,10 @@ export function FindLeagueHero() {
       </Link>
       <p className="fl-hero-eyebrow">{m.eyebrow}</p>
       <h1 className="fl-hero-title">{m.title}</h1>
-      <p className="fl-hero-intro">{m.intro}</p>
+      {/*
+        No intro line (2026-11-25, the simplify pass): "Pick a league with an open seat and press Join"
+        repeated the title over a list whose every card has a Join button.
+      */}
     </header>
   )
 }

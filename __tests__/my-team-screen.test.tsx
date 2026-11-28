@@ -155,8 +155,11 @@ describe('My Team — the reported problems', () => {
     fireEvent.error(portrait.querySelector('img.af-mt-teamlogo')!)
     expect(portrait.querySelector('img.af-mt-teamlogo')?.getAttribute('src')).toContain('/den.png')
     fireEvent.error(portrait.querySelector('img.af-mt-teamlogo')!)
-    expect(portrait.querySelector('.af-mt-avatar--none')?.textContent).toBe('B')
+    // Two-letter initials (2026-11-26), the same mark every other player surface draws.
+    expect(portrait.querySelector('.af-mt-avatar--none')?.textContent).toBe('BN')
     expect(portrait.querySelector('img.af-mt-teamlogo')).toBeNull()
+    // With every crest image refused, the club still reads: its abbreviation in the same corner.
+    expect(portrait.querySelector('.af-crest-abbr')?.textContent).toBe('DEN')
   })
   it.each([{ eliminated: true }, { completed: true }])('does not offer lineup fixes for an inactive team: %j', (status) => {
     const t = text(<MyTeam data={data(status)} />)
@@ -435,7 +438,10 @@ describe('My Team — the reported problems', () => {
         })}
       />,
     )
-    expect(t).toContain('years left unknown')
+    // Unknown is not said per row (2026-11-24), and the note does not promise a years count it cannot give.
+    expect(t).not.toContain('years left unknown')
+    expect(t).not.toMatch(/Years left counts/)
+    expect(t).toContain('Not eligible to start.')
   })
 
   it('marks a preseason game so a meaningless projection cannot pose as a week', () => {
@@ -931,4 +937,66 @@ it('renders the latest verified college basketball box score', () => {
   expect(container.textContent).toContain('2026-11-02')
   expect(container.textContent).toContain('14 PTS')
   expect(container.textContent).toContain('0 REB')
+})
+/*
+ * 🛑 A start/sit swap picked but not saved holds the deploy reload (lib/core-app/unsavedWork). After a
+ * deploy the page reloads when it goes into the background, and a reload throws the pick away.
+ */
+describe('unsaved lineup edits hold the deploy reload', () => {
+  it('holds while a bench player is chosen for a slot, and releases when the choice is cleared', async () => {
+    const { hasUnsavedWork } = await import('@/lib/core-app/unsavedWork')
+    const view = render(<MyTeam data={data({ bench: { available: true, data: [player({ sleeperId: 'p2', name: 'Bench QB' })] } })} />)
+    try {
+      const select = view.getByLabelText(/Eligible bench player/) as HTMLSelectElement
+      expect(hasUnsavedWork()).toBe(false)
+      fireEvent.change(select, { target: { value: 'p2' } })
+      expect(hasUnsavedWork()).toBe(true)
+      fireEvent.change(select, { target: { value: '' } })
+      expect(hasUnsavedWork()).toBe(false)
+    } finally {
+      view.unmount()
+    }
+    expect(hasUnsavedWork()).toBe(false)
+  })
+})
+
+describe('unsaved plan and backup edits hold the deploy reload', () => {
+  it('a future-week plan edited but not saved holds', async () => {
+    const { hasUnsavedWork } = await import('@/lib/core-app/unsavedWork')
+    const view = render(<MyTeam data={data()} />)
+    try {
+      expect(hasUnsavedWork()).toBe(false)
+      fireEvent.change(view.getByLabelText(/Acquisitions, contingency plans, and reminders/), { target: { value: 'Grab a QB' } })
+      expect(hasUnsavedWork()).toBe(true)
+    } finally {
+      view.unmount()
+    }
+    expect(hasUnsavedWork()).toBe(false)
+  })
+
+  it('backup choices changed but not saved hold, and a save releases', async () => {
+    const { hasUnsavedWork } = await import('@/lib/core-app/unsavedWork')
+    const { act, waitFor } = await import('@testing-library/react')
+    const fetchMock = vi.fn(async (_u: unknown, init?: { method?: string }) =>
+      new Response(JSON.stringify(init?.method === 'PUT'
+        ? { commissionerEnabled: true, assignment: { enabled: true, backups: {}, version: 1 } }
+        : { commissionerEnabled: true, assignment: null }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const d = data()
+    const view = render(<MyTeam data={data({ league: { ...d.league, platform: 'manual' }, nativeLineup: { rosterId: 'r1', week: 1, starterIds: ['p1'], benchIds: {} } })} />)
+    try {
+      const panel = [...view.container.querySelectorAll('details')].find(d => d.textContent?.includes('Native AutoSubs'))!
+      await act(async () => { panel.open = true; panel.dispatchEvent(new Event('toggle')) })
+      const box = view.getByLabelText(/Authorize my assigned backups/) as HTMLInputElement
+      await waitFor(() => expect(box.disabled).toBe(false))
+      expect(hasUnsavedWork()).toBe(false)
+      fireEvent.click(box)
+      expect(hasUnsavedWork()).toBe(true)
+      await act(async () => { fireEvent.click(view.getByText('Save backup authorization')) })
+      await waitFor(() => expect(hasUnsavedWork()).toBe(false))
+    } finally {
+      view.unmount()
+      vi.unstubAllGlobals()
+    }
+  })
 })

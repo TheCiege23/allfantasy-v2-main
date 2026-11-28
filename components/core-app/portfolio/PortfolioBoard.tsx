@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import type {
   PortfolioInsights,
   PortfolioLeagueFacts,
@@ -611,6 +612,12 @@ export function PortfolioBoard({
             {actions.length > 8 ? <p className="af-pfb-note">{plural(actions.length - 8, 'more league')} with smaller issues.</p> : null}
           </section>
 
+          {/*
+            2026-11-20: the page's one "More detail" fold (MoreDetail.tsx). The overview answers "which
+            leagues need me"; the league-mix chart is background, so it moved in here unchanged. The other
+            views are tabs the reader chose, so their content stays open.
+          */}
+          <MoreDetail note="Where your leagues sit — by platform, format, scoring, sport and stage" testId="portfolio-more">
           <section className="af-pfb-card" aria-labelledby="af-pfb-dist">
             <header className="af-pfb-card-head">
               <div>
@@ -696,6 +703,7 @@ export function PortfolioBoard({
               </div>
             ) : null}
           </section>
+          </MoreDetail>
         </>
       ) : null}
 

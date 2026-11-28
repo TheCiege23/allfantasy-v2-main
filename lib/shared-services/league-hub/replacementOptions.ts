@@ -15,7 +15,8 @@ import { prisma } from '@/lib/prisma'
 import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
 import { resolveLinkedPlatformUserIds } from '../game-day/UserPlayerExposureService'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { collectRosterIds, isForeignIdSpace, stripForeignIds } from '@/lib/core-app/rosterIdSpace'
+import { declaredAvailability } from '@/lib/core-app/declaredAvailability'
 
 export interface ReplacementCandidate {
   playerId: string
@@ -54,8 +55,16 @@ export interface ReplacementOptionsResult {
   claimTarget: ClaimTarget
   /** Slice 9 — where a bench chip can take the user to adjust their lineup. */
   lineupTarget: ClaimTarget
-  /** Non-null when the lists are empty for a structural reason. */
-  limitation: 'no_projection_data' | 'no_user_roster' | 'roster_ids_unreadable' | null
+  /**
+   * Non-null when the lists are empty for a structural reason. `availability_unverified`: a pasted
+   * Yahoo league below the coverage bar (declaredAvailability.ts) — nobody can be called available.
+   */
+  limitation: 'no_projection_data' | 'no_user_roster' | 'roster_ids_unreadable' | 'availability_unverified' | null
+  /**
+   * A pasted Yahoo league only: rostered players no Sleeper-id read can see. With `limitation: null`
+   * the free-agent list stands, each one's own row hidden by name; absent for every other league.
+   */
+  unmatchedRostered?: number
 }
 
 const NATIVE_PLATFORMS = new Set(['', 'allfantasy', 'af', 'manual', 'native'])
@@ -145,8 +154,35 @@ export async function resolveReplacementOptions(args: {
    * projection table is keyed on Sleeper ids: a bench id would carry a stranger's projection, and
    * nobody could be subtracted from the "unrostered" pool. Honest empty lists, with the reason.
    */
+  const [platformUserIds, rawRosters] = await Promise.all([
+    resolveLinkedPlatformUserIds(appUserId),
+    prisma.roster
+      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
+      .catch(() => [] as Array<{ platformUserId: string | null; playerData: unknown }>),
+  ])
+  /*
+   * ⚠ EXCEPT A PASTED YAHOO LEAGUE: its matched players carry declared Sleeper ids. Above the coverage
+   * bar it is read through them (`stripForeignIds` keeps exactly those), its unmatched rostered players
+   * hidden from the free agents by name and counted; below it, no list at all.
+   */
+  const foreign = isForeignIdSpace(league.platform, league.sport)
+  const declared = foreign ? declaredAvailability(league.platform, rawRosters.map((r) => r.playerData)) : null
+  if (declared && !declared.verified) {
+    return {
+      leagueId,
+      affectedPlayerId,
+      affectedProjection: null,
+      projectionWeek: null,
+      benchOptions: [],
+      freeAgentOptions: [],
+      claimTarget,
+      lineupTarget,
+      limitation: 'availability_unverified',
+      unmatchedRostered: declared.unmatched,
+    }
+  }
   // A native league of another sport too: its Rolling Insights ids are not Sleeper ids (rosterIdSpace.ts).
-  if (isForeignIdSpace(league.platform, league.sport)) {
+  if (foreign && !declared) {
     return {
       leagueId,
       affectedPlayerId,
@@ -160,12 +196,7 @@ export async function resolveReplacementOptions(args: {
     }
   }
 
-  const [platformUserIds, rosters] = await Promise.all([
-    resolveLinkedPlatformUserIds(appUserId),
-    prisma.roster
-      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
-      .catch(() => [] as Array<{ platformUserId: string | null; playerData: unknown }>),
-  ])
+  const rosters = declared ? rawRosters.map((r) => ({ ...r, playerData: stripForeignIds(r.playerData) })) : rawRosters
 
   const userRoster = rosters.find((r) => r.platformUserId && platformUserIds.includes(r.platformUserId))
 
@@ -191,6 +222,13 @@ export async function resolveReplacementOptions(args: {
       }
     }
   }
+
+  /*
+   * A pasted Yahoo roster keeps its players in the plain arrays (`players`/`starters`/…), not in
+   * `lineup_sections`, so they are read there too — a rostered player missed here is offered as a free
+   * agent. Only ever adds to the rostered set.
+   */
+  if (declared) for (const id of collectRosterIds(rosters.map((r) => r.playerData))) rosteredIds.add(id)
 
   if (!userRoster) {
     return {
@@ -291,6 +329,8 @@ export async function resolveReplacementOptions(args: {
         : null
     })
     .filter((c): c is NonNullable<typeof c> => c !== null)
+    // A pasted Yahoo league's unmatched rostered player is somebody's, not a free agent.
+    .filter((c) => !declared?.hides({ name: c.name, position: c.position, team: c.team }))
     .filter((c) => !affectedPosition || !c.position || c.position === affectedPosition)
 
   return {
@@ -303,5 +343,6 @@ export async function resolveReplacementOptions(args: {
     claimTarget,
     lineupTarget,
     limitation: null,
+    ...(declared ? { unmatchedRostered: declared.unmatched } : {}),
   }
 }

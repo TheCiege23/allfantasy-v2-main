@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { draftQueueKeyForRoster } from '@/lib/league/teamScopedKey'
 import { rosterManagerKey } from '@/lib/league/rosterManager'
 import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGate'
@@ -102,6 +103,20 @@ function normalizeName(value: string): string {
   return value.trim().toLowerCase()
 }
 
+/**
+ * The `DraftQueue.userId` a team's queue is stored under, or null for a team nobody manages.
+ * Each team has its own queue (lib/league/rosterManager.ts `teamScopedKey`); an unowned team has none.
+ */
+export async function draftQueueUserIdForRoster(rosterId: string): Promise<string | null> {
+  const roster = await prisma.roster.findUnique({
+    where: { id: rosterId },
+    select: { platformUserId: true, managerUserId: true },
+  })
+  const managerId = roster ? rosterManagerKey(roster) : null
+  if (!managerId || isSeatPlaceholderUserId(managerId)) return null
+  return (await draftQueueKeyForRoster(rosterId)) ?? managerId
+}
+
 /** Exported for integration tests (`tryQueueAutoPick` slow-draft path). */
 export async function tryQueueAutoPick(
   leagueId: string,
@@ -116,13 +131,7 @@ export async function tryQueueAutoPick(
   })
   if (!draftSession || draftSession.status !== 'in_progress') return { success: false }
 
-  const onClockRoster = await prisma.roster.findUnique({
-    where: { id: rosterId },
-    select: { platformUserId: true, managerUserId: true },
-  })
-  // Each team has its own queue (lib/league/rosterManager.ts `teamScopedKey`); an unowned team has none.
-  const onClockManagerId = onClockRoster ? rosterManagerKey(onClockRoster) : null
-  const queueUserId = onClockManagerId && !onClockManagerId.startsWith('orphan-') ? (await draftQueueKeyForRoster(rosterId)) ?? onClockManagerId : null
+  const queueUserId = await draftQueueUserIdForRoster(rosterId)
   if (!queueUserId) return { success: false }
 
   const queueRow = draftSession.queues.find((q) => q.userId === queueUserId)
@@ -173,6 +182,7 @@ export async function tryQueueAutoPick(
       rosterId,
       source: 'auto',
       expectedOverall,
+      pickMetadata: { autopick: { strategy: 'queue', reason: 'The next available player in your queue.' } },
     })
     if (attempt.success) {
       return { success: true, playerName: String(entry.playerName ?? '').trim(), queuePlayerUnavailable }

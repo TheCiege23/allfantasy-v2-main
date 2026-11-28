@@ -51,6 +51,12 @@ export interface WorkspaceTaskCandidate {
    * drift here surfaces as a dropped link rather than as a dead route.
    */
   relatedLinks: { label: string; moduleId: 'analytics' | 'managers' | 'settings'; href: string }[]
+  /**
+   * Also tell the commissioners, once, when this condition is FIRST detected (taskStore.ts sends it on
+   * insert only — never again for the same sourceKey). For conditions that need a decision before a
+   * deadline, such as a game day the waiver schedule leaves without a free-agent window.
+   */
+  notifyOnOpen?: { title: string; body: string; actionHref: string; actionLabel: string }
 }
 
 function days(n: number): string {
@@ -304,13 +310,14 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
    * but has never sent any data" — false, and filed on every scan once the daily refresh began
    * discovering native leagues. Orphan seats and the operational checks still apply to it.
    */
-  let platform: string | null | undefined
+  let authoritySource: { platform: string | null; settings: unknown } | null | undefined
   try {
-    platform = (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform
+    authoritySource = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
   } catch {
-    platform = undefined // unknown: fall through to the feed checks, as before
+    authoritySource = undefined // unknown: fall through to the feed checks, as before
   }
-  if (platform !== undefined && resolveWriteAuthority(platform) === 'NATIVE') {
+  // A missing row is not a native league: it falls through to the feed checks, as before.
+  if (authoritySource != null && resolveWriteAuthority(authoritySource) === 'NATIVE') {
     const roster = await readOrphanTeamCounts(leagueId)
     const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
     const { readLineupIntegrityTasks } = await import('@/lib/lineup-integrity/lineupIntegrityService')
@@ -332,6 +339,8 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
     const { readTaxiStealTasks } = await import('@/lib/taxi/taxiStealingService')
     // Managers who have not seen the newest rule change (lib/league-rules-explainer/awareness.ts).
     const { readUnseenRuleChangeTasks } = await import('@/lib/league-rules-explainer/awarenessService')
+    // Game days the per-day waiver schedule leaves without a free-agent window (AF Commissioner only).
+    const { readGameDayWaiverConflictTasks } = await import('@/lib/waivers/gameDayWaiverConflictService')
     return [
       ...(orphans ? [orphans] : []),
       ...await readOperationalTasks(leagueId, now),
@@ -343,6 +352,7 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
       ...await readPickTermsTasks(leagueId),
       ...await readTaxiStealTasks(leagueId, now),
       ...await readUnseenRuleChangeTasks(leagueId, now),
+      ...await readGameDayWaiverConflictTasks(leagueId, now).catch(() => []),
     ]
   }
 
@@ -371,7 +381,9 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
    * advance and useless, so running it would spend the query to throw the result away.
    */
   const moved = stale || neverImported ? [] : await readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS)
-  const managers = withSilentManagers(moved, roster.ownedTeamNames)
+  // A chopped team is out of the league, not inactive; `ownedTeamNames` already leaves it out.
+  const eliminated = new Set(roster.eliminatedTeamNames ?? [])
+  const managers = withSilentManagers(moved.filter((m) => !eliminated.has(m.managerName)), roster.ownedTeamNames)
   const inactive = detectInactiveManagers(managers, window.lastActivityAt, now)
 
   /*

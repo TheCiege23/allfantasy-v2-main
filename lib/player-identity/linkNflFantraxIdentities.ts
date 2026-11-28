@@ -1,6 +1,58 @@
 import { prisma } from '@/lib/prisma'
 import type { FantraxPlayerRef } from '@/lib/league-import/fantrax/fantraxApi'
-import { fantraxNflNameKey, planNflFantraxIdentityLinks } from './nflFantraxIdentityPlan'
+import { normalizePlayerName } from '@/lib/team-abbrev'
+import { fantraxNflNameKey, looseNflNameKey, nflNameParts, planNflFantraxIdentityLinks } from './nflFantraxIdentityPlan'
+
+export type LinkRow = {
+  id: string
+  canonicalName: string
+  currentTeam: string | null
+  position: string | null
+  fantraxId: string | null
+  /** Read for the pasted-Yahoo resolver (`yahooSnapshotPlayerIds.ts`), which links to it; the Fantrax link ignores it. */
+  sleeperId: string | null
+}
+
+/**
+ * NFL registry rows whose stored name equals one of `looseKeys` once punctuation and a trailing
+ * "jr" / "iii" are removed. A failed read finds none.
+ *
+ * ⚠ THE STORED `normalizedName` KEEPS THE SUFFIX on some rows ("marvin mims jr.") while the keys this
+ * module builds drop it ("marvin mims"), so the exact-name read never returned them: 45 NFL rows on
+ * staging, 2026-11-21. Neither pattern contains a backslash, so no layer between here and Postgres
+ * can change it.
+ */
+export async function readRowsByLooseName(looseKeys: string[]): Promise<LinkRow[]> {
+  try {
+    const found = await prisma.$queryRaw<LinkRow[]>`
+      SELECT id, "canonicalName", "currentTeam", position, "fantraxId", "sleeperId" FROM "PlayerIdentityMap"
+      WHERE sport='NFL' AND regexp_replace(regexp_replace("normalizedName", '[^a-z0-9 ]', '', 'g'), ' (jr|sr|ii|iii|iv|v)$', '')
+        = ANY(${looseKeys}::text[])
+    `
+    return Array.isArray(found) ? found : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * EVERY NFL registry row with one of these surnames, for the planner's short-name rule ("Dru" for
+ * "Andru"). The stored name is compared the same way as above; a surname holds only letters, digits
+ * and spaces, so it carries no LIKE wildcard. A failed read finds none, which switches the rule off.
+ */
+async function readRowsBySurname(surnames: string[]): Promise<LinkRow[]> {
+  try {
+    const patterns = surnames.map((surname) => `% ${surname}`)
+    const found = await prisma.$queryRaw<LinkRow[]>`
+      SELECT id, "canonicalName", "currentTeam", position, "fantraxId", "sleeperId" FROM "PlayerIdentityMap"
+      WHERE sport='NFL' AND regexp_replace(regexp_replace("normalizedName", '[^a-z0-9 ]', '', 'g'), ' (jr|sr|ii|iii|iv|v)$', '')
+        LIKE ANY(${patterns}::text[])
+    `
+    return Array.isArray(found) ? found : []
+  } catch {
+    return []
+  }
+}
 
 /**
  * Link the Fantrax NFL ids one import received to `PlayerIdentityMap` rows.
@@ -10,7 +62,8 @@ import { fantraxNflNameKey, planNflFantraxIdentityLinks } from './nflFantraxIden
  * import is the ingestion step, and this is its registry write.
  *
  * ⚠ SCOPED TO THE LEAGUE'S OWN PLAYERS, not the ~whole NFL map, so an import pays for one small
- * registry read rather than walking thousands of ids on every refresh.
+ * registry read (and a second for names that differ only in punctuation) rather than walking
+ * thousands of ids on every refresh.
  *
  * ⚠ THE UPDATE IS ADDITIVE AND RE-CHECKED IN SQL, exactly like `ingestProFantraxIdentities`: it only
  * fills a NULL `fantraxId`, only on an NFL row, and never when another NFL row already carries that
@@ -26,9 +79,33 @@ export async function linkNflFantraxIdentities(refs: FantraxPlayerRef[]) {
     const nameKeys = [...new Set(usable.map((r) => fantraxNflNameKey(r.name)).filter(Boolean))]
     const rows = await prisma.playerIdentityMap.findMany({
       where: { sport: 'NFL', OR: [{ fantraxId: { in: fantraxIds } }, { normalizedName: { in: nameKeys } }] },
-      select: { id: true, canonicalName: true, currentTeam: true, position: true, fantraxId: true },
+      select: { id: true, canonicalName: true, currentTeam: true, position: true, fantraxId: true, sleeperId: true },
     })
-    const { links, ...coverage } = planNflFantraxIdentityLinks(usable, rows)
+    /*
+     * A second read, only for the players the read above found no name for: the registry rows whose
+     * name matches once punctuation is removed (Fantrax "JaMarr", registry "Ja'Marr" — see
+     * `looseNflNameKey`). The pattern has no backslash on purpose, so no layer can change it. This
+     * only FINDS candidates; the planner compares names, clubs and positions itself.
+     */
+    const linkedIds = new Set(rows.map((r) => r.fantraxId?.trim()).filter(Boolean))
+    const namesFound = new Set(rows.map((r) => normalizePlayerName(r.canonicalName ?? '')))
+    const looseKeys = [...new Set(usable
+      .filter((r) => !linkedIds.has(String(r.fantraxId).trim()) && !namesFound.has(fantraxNflNameKey(r.name)))
+      .map((r) => looseNflNameKey(fantraxNflNameKey(r.name)))
+      .filter(Boolean))]
+    const looseRows = looseKeys.length ? await readRowsByLooseName(looseKeys) : []
+    const seen = new Set(rows.map((r) => r.id))
+    const candidates = [...rows, ...looseRows.filter((r) => !seen.has(r.id))]
+    /* A third read, only for players no name read found: every row with their surname (see the planner). */
+    const keysFound = new Set(candidates.map((r) => looseNflNameKey(normalizePlayerName(r.canonicalName ?? ''))))
+    const surnames = [...new Set(usable
+      .filter((r) => !linkedIds.has(String(r.fantraxId).trim()) && String(r.name ?? '').includes(','))
+      .map((r) => looseNflNameKey(fantraxNflNameKey(r.name)))
+      .filter((key) => key && !keysFound.has(key))
+      .map((key) => nflNameParts(key).surname)
+      .filter(Boolean))]
+    const surnameRows = surnames.length ? await readRowsBySurname(surnames) : []
+    const { links, ...coverage } = planNflFantraxIdentityLinks(usable, candidates, surnameRows)
     if (links.length === 0) return { ...coverage, proposed: 0, updated: 0 }
     const updated = await prisma.$executeRaw`
       WITH links AS (SELECT * FROM jsonb_to_recordset(${JSON.stringify(links)}::jsonb) AS l(id text, "fantraxId" text))

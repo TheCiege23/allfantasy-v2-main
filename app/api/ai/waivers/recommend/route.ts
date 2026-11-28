@@ -5,12 +5,16 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { getUserAfProStatus, AfProRequiredError } from "@/lib/entitlements/afAccess"
 import { rosterIdSpaceOf } from "@/lib/core-app/rosterIdSpace"
+import { loadDeclaredAvailability } from "@/lib/core-app/declaredAvailability"
 import { runWaiverClaimDecision } from "@/lib/decision-os/waiver"
-import { loadWaiverWorldFacts, worldInputFromFacts } from "@/lib/decision-os/waiver/loader"
+import { worldInputFromFacts } from "@/lib/decision-os/waiver/loader"
+import { createWaiverOsLoaders } from "@/lib/decision-os/waiver-os"
+import { emitFeedOutcomes } from "@/lib/decision-os/core/parity"
 import { buildLiveWaiverDecisionDeps } from "@/lib/decision-os/waiver/deps"
 import { loadWaiverPool } from "@/lib/decision-os/waiver/pool"
 import { waiverEngineInputFrom } from "@/lib/decision-os/waiver/engineInput"
 import { claimsToPanelRecommendations } from "@/lib/decision-os/waiver/panelRecommendations"
+import { loadWaiverCalibrationForLeague } from "@/lib/decision-os/waiver/calibrationStore"
 import { prisma } from "@/lib/prisma"
 import { schedulePanelWaiverAdvice } from "@/lib/chimmy-advice/panelWaiverAdvice"
 
@@ -62,7 +66,11 @@ export async function POST(request: Request) {
 
   const generatedAt = new Date().toISOString()
   /** An empty answer with its reason — `insufficientData` tells the panel it is a fault, not a picked-over wire. */
-  const empty = (dataGaps: string[], context?: { waiverType: string; faabBudget: number | null; faabRemaining: number | null }) =>
+  const empty = (
+    dataGaps: string[],
+    context?: { waiverType: string; faabBudget: number | null; faabRemaining: number | null },
+    availability?: { verified: boolean; unmatchedRostered: number } | null,
+  ) =>
     NextResponse.json({
       ok: true,
       insufficientData: true,
@@ -71,6 +79,7 @@ export async function POST(request: Request) {
       leagueContext: { leagueId, ...(context ?? { waiverType: "unknown", faabBudget: null, faabRemaining: null }) },
       generatedAt,
       meta: { dataGaps, mode },
+      ...(availability ? { availability } : {}),
     })
 
   try {
@@ -86,7 +95,18 @@ export async function POST(request: Request) {
     const league = await prisma.league
       .findUnique({ where: { id: leagueId }, select: { platform: true } })
       .catch(() => null)
-    if (rosterIdSpaceOf(league?.platform) !== "sleeper") {
+    /*
+     * 🛑 EXCEPT A PASTED YAHOO LEAGUE, AND ONLY ABOVE THE COVERAGE BAR (declaredAvailability.ts). Its
+     * matched players carry declared Sleeper ids the pool subtracts; its unmatched ones are hidden by
+     * name and counted. Below the bar nobody can be called available, and the panel says so with the
+     * count. A Yahoo league with no declared id at all keeps the refusal above.
+     */
+    const declared = league ? await loadDeclaredAvailability({ id: leagueId, platform: league.platform }).catch(() => null) : null
+    const availability = declared ? { verified: declared.verified, unmatchedRostered: declared.unmatched } : null
+    if (declared && !declared.verified) {
+      return empty(["availability_unverified"], undefined, availability)
+    }
+    if (!declared && rosterIdSpaceOf(league?.platform) !== "sleeper") {
       return empty(["roster_ids_not_readable_for_platform"])
     }
 
@@ -103,7 +123,15 @@ export async function POST(request: Request) {
      * projection feed carries, the one week that exists (future weeks are never projected).
      */
     void week
-    const facts = await loadWaiverWorldFacts(userId, leagueId)
+    /*
+     * THROUGH WAIVER OS (2026-11-21 re-score, Kernel ⚠ → ✅): this panel called `loadWaiverWorldFacts` directly while
+     * Chimmy's waiver answer read the same facts through Waiver OS. Both now read the user-level resource entry —
+     * held five minutes because FAAB and priority move on every processed claim, derived by the same
+     * `loadWaiverWorldFacts` on a miss, and a store problem falls through to that derivation.
+     */
+    const { loadWorldFacts, drainOutcomes } = createWaiverOsLoaders()
+    const facts = await loadWorldFacts(userId, leagueId)
+    emitFeedOutcomes("waiver", drainOutcomes())
     if (!facts) return empty(["roster_not_found"])
 
     const context = {
@@ -112,9 +140,13 @@ export async function POST(request: Request) {
       faabRemaining: facts.faabRemaining,
     }
 
-    const pool = await loadWaiverPool(leagueId, facts.sport, facts.rosterId)
+    const [pool, calibration] = await Promise.all([
+      loadWaiverPool(leagueId, facts.sport, facts.rosterId),
+      // The engine's graded record — only in a redraft full-PPR NFL league; elsewhere nothing changes.
+      loadWaiverCalibrationForLeague(leagueId),
+    ])
     if (pool.availablePlayers.length === 0) {
-      return empty([pool.leagueRosterCount === 0 ? "league_rosters_not_loaded" : "free_agent_pool_empty"], context)
+      return empty([pool.leagueRosterCount === 0 ? "league_rosters_not_loaded" : "free_agent_pool_empty"], context, availability)
     }
 
     const result = await runWaiverClaimDecision(
@@ -128,17 +160,18 @@ export async function POST(request: Request) {
         poolIncomplete: pool.poolIncomplete,
         pricing: pool.pricing,
       },
-      { decision: buildLiveWaiverDecisionDeps(facts) },
+      { decision: buildLiveWaiverDecisionDeps(facts, calibration.calibration) },
     )
 
     // The advice ledger: the #1 pickup this panel shows, recorded to be graded later. Background only.
-    schedulePanelWaiverAdvice({ userId, leagueId, claims: result.decision?.recommended_actions ?? [] })
+    schedulePanelWaiverAdvice({ userId, leagueId, claims: result.decision?.recommended_actions ?? [], scored: calibration.inScope })
 
     const isFaab = context.waiverType === "faab"
     const recommendations = claimsToPanelRecommendations(result.decision?.recommended_actions ?? [], {
       leagueId,
       includeFaab: includeFaab ?? isFaab,
       limit: mode === "quick" ? 3 : 5,
+      calibration: calibration.calibration,
     })
 
     /*
@@ -162,6 +195,8 @@ export async function POST(request: Request) {
       leagueContext: { leagueId, sport: facts.sport, ...context },
       generatedAt,
       meta: { dataGaps, mode },
+      // A pasted Yahoo league: how many rostered players the list could not see.
+      ...(availability ? { availability } : {}),
     })
   } catch (error) {
     console.error("[api/ai/waivers/recommend]", error)

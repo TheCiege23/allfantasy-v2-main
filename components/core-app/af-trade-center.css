@@ -1207,6 +1207,9 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-timeline-why { display: grid; gap: 3px; margin: 8px 0 0; padding: 7px 9px; border-radius: var(--af-radius-inner, 12px); background: var(--surface); list-style: none; }
 .af-tc-timeline-why li { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .af-tc-timeline-why li:first-child { color: var(--text2); font-weight: 600; }
+/* Why the values moved, measured from completed trades (TradeMarketEvidence). Text tokens only — never a series color. */
+/* The look is the shared EvidenceLine (primitives/af-evidence.css); only the spacing is this card's. */
+.af-tc-market-evidence { margin-top: 8px; }
 
 .af-tc-timeline-grades {
   display: flex;
@@ -2899,8 +2902,9 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tcp-detail-body { display: flex; flex-direction: column; gap: 12px; }
 .af-tcp-detail-meta { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .af-tcp-grade { margin: 0; font-size: 13px; color: var(--text2); }
-.af-tcp-grade-record { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
-.af-tcp-grade-record[data-verdict="not_held_up"] { color: var(--text2); }
+/* The letter's record and confidence: the shared EvidenceLine (primitives/af-evidence.css). */
+.af-tcp-grade-evidence { margin: 0; }
+/* How sure the letter is, from its graded deals — said beside the grade, never changing it. */
 .af-tcp-team { padding: 12px; border: 1px solid var(--line); border-radius: var(--af-radius-inner, 12px); background: var(--surface2); }
 .af-tcp-team[data-viewer] { border-color: var(--accent-line); }
 .af-tcp-team header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -3541,4 +3545,26 @@ html[data-mode='light'] .af-tc-pos[data-pos='db'] { color: #4338ca; }
   align-items: center;
   min-height: 44px;
   margin-top: 10px;
+}
+
+/*
+ * "Open in Sleeper" under the Trades headline had no link styling at all (2026-11-23, measured): 18px
+ * body-white text, `display: block`, its arrow icon wrapping onto a second line — it read as a stray
+ * sentence. A compact accent link, icon inline, 44px tap height. The truncation rules above still apply.
+ */
+.af-core .af-tc-handoff .af-tc-handoff-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 44px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-tc-handoff .af-tc-handoff-link > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
 }

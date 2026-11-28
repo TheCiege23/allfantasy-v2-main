@@ -1,9 +1,8 @@
 /**
- * Import carryover keeps the imported league's team count for redraft, dynasty, keeper and best
- * ball even when the native create list for that type lacks it (a 9-team best ball import).
- * Dynasty itself now takes every size from 4 to 250 natively.
- * Native creation keeps today's lists, the requested count must still equal the import's, and the
- * special modes (Zombie here) stay on their lists.
+ * POST /api/leagues no longer copies an imported league into a new one (the copy flow is retired,
+ * docs/league-import/IN_PLACE_NATIVE_CONVERSION_PLAN.md §10): any `sourceLeagueId` is refused with
+ * 410 before anything is read. The validator still has its imported-team-count option (the API
+ * no longer passes it); its tests stay below. Dynasty takes every size from 4 to 250.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -64,7 +63,7 @@ function importedLeague(teams: number) {
   leagueTeamCount.mockResolvedValue(teams)
 }
 
-describe('import carryover keeps the imported team count', () => {
+describe('POST /api/leagues no longer copies an imported league (plan §10)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     executeMock.mockResolvedValue({
@@ -73,53 +72,38 @@ describe('import carryover keeps the imported team count', () => {
     })
   })
 
-  it.each([9, 32])('accepts a %i-team dynasty carryover', async (teams) => {
-    importedLeague(teams)
-    const res = await post(body(teams, 'dynasty', { sourceLeagueId: 'imported-1' }))
-    expect(res.status).toBe(200)
-    expect(executeMock).toHaveBeenCalledTimes(1)
-    expect(executeMock.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
-      sourceLeagueId: 'imported-1',
-      body: expect.objectContaining({ teamCount: teams }),
-    }))
+  it.each([
+    ['an imported league id', 'imported-1'],
+    ['an empty id', ''],
+    ['a non-string id', 42],
+  ])('refuses a copy request with %s, before reading or writing anything', async (_label, sourceLeagueId) => {
+    importedLeague(9)
+    const res = await post(body(9, 'dynasty', { sourceLeagueId }))
+    expect(res.status).toBe(410)
+    const json = await res.json()
+    expect(json.errors[0]).toMatchObject({ path: 'sourceLeagueId', code: 'IMPORT_COPY_RETIRED' })
+    expect(json.error).toMatch(/Commissioner tab/)
+    expect(leagueFindUnique).not.toHaveBeenCalled()
+    expect(leagueTeamCount).not.toHaveBeenCalled()
+    expect(executeMock).not.toHaveBeenCalled()
   })
 
-  it('accepts a native 9-team dynasty', async () => {
+  it('refuses it for a test league too', async () => {
+    const res = await post(body(9, 'dynasty', { sourceLeagueId: 'imported-1', testLeague: true }))
+    expect(res.status).toBe(410)
+    expect(executeMock).not.toHaveBeenCalled()
+  })
+
+  it('still creates a native 9-team dynasty, and never passes a copy source on', async () => {
     const res = await post(body(9))
     expect(res.status).toBe(200)
-    expect(leagueFindUnique).not.toHaveBeenCalled()
+    expect(executeMock).toHaveBeenCalledTimes(1)
+    expect(executeMock.mock.calls[0]?.[0]).not.toHaveProperty('sourceLeagueId')
   })
 
-  it('accepts a 9-team best ball carryover, and still refuses it as a native create', async () => {
-    importedLeague(9)
-    expect((await post(body(9, 'best_ball', { sourceLeagueId: 'imported-1' }))).status).toBe(200)
-    vi.clearAllMocks()
+  it('an off-list best ball count is refused as a native create', async () => {
     const res = await post(body(9, 'best_ball'))
     expect(res.status).toBe(400)
-    // Refused for its team count, not for some other field in the body.
-    expect((await res.json()).error).toMatch(/team count/i)
-    expect(executeMock).not.toHaveBeenCalled()
-    expect(leagueFindUnique).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    [9, 10],
-    [9, 32],
-    [32, 31],
-  ])('refuses a carryover of a %i-team import that asks for %i teams', async (imported, requested) => {
-    importedLeague(imported)
-    const res = await post(body(requested, 'dynasty', { sourceLeagueId: 'imported-1' }))
-    expect(res.status).toBe(400)
-    // Refused for its team count, not for some other field in the body.
-    expect((await res.json()).error).toMatch(/team count/i)
-    expect(executeMock).not.toHaveBeenCalled()
-  })
-
-  it('keeps Zombie on its own list even for a carryover', async () => {
-    importedLeague(9)
-    const res = await post(body(9, 'zombie', { sourceLeagueId: 'imported-1' }))
-    expect(res.status).toBe(400)
-    // Refused for its team count, not for some other field in the body.
     expect((await res.json()).error).toMatch(/team count/i)
     expect(executeMock).not.toHaveBeenCalled()
   })
@@ -136,7 +120,16 @@ describe('validateCreatePayload and the imported team count', () => {
   })
 
   it('takes every dynasty size from 4 to 250 natively, and nothing past it', () => {
-    for (const teams of [4, 9, 34, 36, 160, 250]) expect(validateCreatePayload(body(teams)).ok).toBe(true)
+    // College: the whole native range. The owner's own college leagues run 140 and 180 teams.
+    const college = { sport: 'NCAAF', scoringPreset: 'ncaaf_half_ppr' }
+    for (const teams of [4, 9, 34, 36, 160, 250]) expect(validateCreatePayload(body(teams, 'dynasty', college)).ok, `NCAAF ${teams}`).toBe(true)
+    // NFL: never more teams than the NFL has (owner's rule, 2026-11-22: lib/league/teamCountLimits.ts PRO_LEAGUE_TEAMS).
+    for (const teams of [4, 9, 31, 32]) expect(validateCreatePayload(body(teams)).ok, `NFL ${teams}`).toBe(true)
+    for (const teams of [33, 34, 36, 88, 160]) expect(validateCreatePayload(body(teams)).ok, `NFL ${teams}`).toBe(false)
+    // An imported 34- or 36-team pro league (the owner's commissioner runs both on Fantrax) keeps its size.
+    for (const teams of [34, 36]) expect(validateCreatePayload(body(teams), { importedTeamCount: teams }).ok, `NFL import ${teams}`).toBe(true)
+    // An imported league keeps the size it has.
+    expect(validateCreatePayload(body(160), { importedTeamCount: 160 }).ok).toBe(true)
     expect(validateCreatePayload(body(3)).ok).toBe(false)
     expect(validateCreatePayload(body(251)).ok).toBe(false)
     expect(validateCreatePayload(body(251), { importedTeamCount: 251 }).ok).toBe(false)

@@ -22,7 +22,6 @@ import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonS
 import { ensureRedraftSeason, ensureScheduleForNewSeason } from '@/lib/redraft/finalizeDraftToRedraftSeason'
 import { recalculateMatchupsForSeasonWeek, buildLeagueStatScorer, isScoringStarterSlot } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
-import { processWaiverWindow } from '@/lib/redraft/waiverEngine'
 import { EXTRA_MATCHUP_SETTINGS_KEY } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { advanceNflRedraftScheduleWeek } from '@/lib/schedule-runtime/resolveNflRedraftScheduleRuntime'
 import { scoreActivePlayoffRound } from '@/lib/playoff-runtime/playoffRoundScoring'
@@ -68,7 +67,6 @@ export type WeekSnapshot = {
   expectedRecords: Map<string, { wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number }>
   /** Per roster: the week's score re-derived from that day's starters only. */
   dailyStarterPoints: Map<string, number>
-  waivers: Array<{ claimId: string; status: string; reason?: string }>
   seasonStatus: string
 }
 
@@ -517,31 +515,6 @@ export async function runDailyRedraftFullSeason(db: InMemoryPrisma, config: Dail
     return out
   }
 
-  const waiverMoves = async (week: number) => {
-    const claimant = rosterIds[week % rosterIds.length]!
-    const roster = rowsOf(db, 'RedraftRosterPlayer').filter((p) => p.rosterId === claimant && p.droppedAt == null)
-    const benchDrop = roster.filter((p) => p.slotType === 'BN').sort((a, b) => poolById.get(a.playerId)!.quality - poolById.get(b.playerId)!.quality)[0]
-    if (!benchDrop) return []
-    const rostered = new Set(rowsOf(db, 'RedraftRosterPlayer').filter((p) => p.droppedAt == null).map((p) => p.playerId))
-    const target = pool.find((p) => !rostered.has(p.playerId) && p.position === benchDrop.position)
-    if (!target) return []
-    await db.redraftWaiverClaim.create({
-      data: {
-        seasonId,
-        leagueId,
-        rosterId: claimant,
-        addPlayerId: target.playerId,
-        addPlayerName: target.playerName,
-        dropPlayerId: benchDrop.playerId,
-        dropPlayerName: benchDrop.playerName,
-        bidAmount: 3,
-        priority: 1,
-        status: 'pending',
-      },
-    })
-    return processWaiverWindow(leagueId, seasonId)
-  }
-
   const weeks: WeekSnapshot[] = []
   for (let week = 1; week <= regularSeasonWeeks; week += 1) {
     const { window, days } = await statsForWeek(week)
@@ -552,7 +525,6 @@ export async function runDailyRedraftFullSeason(db: InMemoryPrisma, config: Dail
     const starterPoints = dailyStarterPoints(week, days)
     const advanced = await advanceNflRedraftScheduleWeek({ seasonId, action: 'advance_week', week, actorUserId: COMMISSIONER })
     if (!advanced.ok) throw new Error(`advance week ${week} refused: ${advanced.code} ${advanced.message}`)
-    const waivers = week < regularSeasonWeeks ? await waiverMoves(week) : []
     const matchups = rowsOf(db, 'RedraftMatchup').filter((m) => m.seasonId === seasonId)
     const seasonNow = await db.redraftSeason.findUnique({ where: { id: seasonId } })
     weeks.push({
@@ -565,7 +537,6 @@ export async function runDailyRedraftFullSeason(db: InMemoryPrisma, config: Dail
         { medianGame: Boolean(config.medianGame), playoffStartWeek: fresh.playoffStartWeek },
       ),
       dailyStarterPoints: starterPoints,
-      waivers,
       seasonStatus: seasonNow.status,
     })
   }

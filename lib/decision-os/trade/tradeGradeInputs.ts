@@ -31,8 +31,16 @@ type PendingLike = {
   faabAmount?: number
 }
 
-/** A Sleeper/Yahoo pending-offer asset (`PendingTradeAsset`). */
-export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>, provider?: 'sleeper' | 'yahoo'): GradeInputs {
+/**
+ * A Sleeper/Yahoo pending-offer asset (`PendingTradeAsset`).
+ *
+ * ⚠ `espn` IS ACCEPTED AND CARRIES NO PROVIDER IDENTITY. An ESPN player id is not a Sleeper id (ESPN
+ * 12483 is Matthew Stafford, Sleeper 12483 is Jack Bech), and this shape has no crosswalk; ESPN offers
+ * are graded from resolved identities in `lib/provider-trades/espnOfferView.ts`. Here an ESPN asset is
+ * priced by name alone, never under another provider's id space.
+ */
+export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>, providerArg?: 'sleeper' | 'yahoo' | 'espn'): GradeInputs {
+  const provider = providerArg === 'espn' ? undefined : providerArg
   const out: GradeInputs = { assets: [], unpriceable: [] }
   for (const a of assets) {
     if (a.faabAmount != null) {

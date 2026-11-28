@@ -22,6 +22,7 @@ export const draftHqLeagueGuideMessages = defineMessages({
       `${pick != null ? `Pick ${pick}${total != null ? ` of ${total}` : ''}` : 'Drafting now'} · ${next ? `your next pick is ${next}${awayEn(away)}` : 'you have no picks left'}`,
     headBefore: (slot: number | null, teams: number | null) =>
       slot != null ? `Not started · you pick ${ordinalEn(slot)}${teams != null ? ` of ${teams}` : ''}` : 'Not started yet',
+    headBeforeFirst: (label: string) => `Not started · your first pick is ${label}`,
     headDone: (drafted: number | null) =>
       drafted != null && drafted > 0 ? `Draft done · you drafted ${drafted} ${drafted === 1 ? 'player' : 'players'}` : 'This draft is done',
     introBefore: 'Your home for this league’s draft: when you pick, your queue and your prep. The board goes live here when the draft starts.',
@@ -39,6 +40,8 @@ export const draftHqLeagueGuideMessages = defineMessages({
     impDone: (platform: string, picks: number, season: number | null) =>
       `${season != null ? `${season} draft` : 'Draft'} done on ${platform} · ${picks} ${picks === 1 ? 'pick' : 'picks'}`,
     impBefore: (platform: string) => `Not started on ${platform}`,
+    impRecorded: (platform: string, picks: number, season: number | null) =>
+      `${season != null ? `${season} draft` : 'Draft'} on ${platform} · ${picks.toLocaleString('en-US')} ${picks === 1 ? 'pick' : 'picks'} on file`,
     impOther: (status: string) => `Draft status: ${status}`,
     /** When the page could not name the platform the draft runs on. */
     impPlatformFallback: 'the platform',
@@ -55,6 +58,7 @@ export const draftHqLeagueGuideMessages = defineMessages({
       `${pick != null ? `Selección ${pick}${total != null ? ` de ${total}` : ''}` : 'Draft en curso'} · ${next ? `tu próxima es la ${next}${awayEs(away)}` : 'ya no te quedan selecciones'}`,
     headBefore: (slot, teams) =>
       slot != null ? `Sin empezar · eliges ${slot}.º${teams != null ? ` de ${teams}` : ''}` : 'Aún no ha empezado',
+    headBeforeFirst: (label) => `Sin empezar · tu primera selección es la ${label}`,
     headDone: (drafted) =>
       drafted != null && drafted > 0 ? `Draft terminado · elegiste ${drafted} ${drafted === 1 ? 'jugador' : 'jugadores'}` : 'Este draft ha terminado',
     introBefore: 'Tu centro para el draft de esta liga: cuándo eliges, tu cola y tu preparación. El tablero se activa aquí cuando empieza el draft.',
@@ -72,6 +76,8 @@ export const draftHqLeagueGuideMessages = defineMessages({
     impDone: (platform, picks, season) =>
       `${season != null ? `Draft ${season}` : 'Draft'} terminado en ${platform} · ${picks} ${picks === 1 ? 'selección' : 'selecciones'}`,
     impBefore: (platform) => `Sin empezar en ${platform}`,
+    impRecorded: (platform, picks, season) =>
+      `${season != null ? `Draft de ${season}` : 'Draft'} en ${platform} · ${picks.toLocaleString('es-US')} ${picks === 1 ? 'selección registrada' : 'selecciones registradas'}`,
     impOther: (status) => `Estado del draft: ${status}`,
     impPlatformFallback: 'la plataforma',
     impIntro: (platform) =>

@@ -1,3 +1,4 @@
+import { LEAGUE_LOCAL_WAIVER_CLEAR_KEY, defaultLocalWaiverClear, engineScheduleFromLocalClear } from '@/lib/waivers/leagueLocalWaiverClock'
 import { careerXpLevel, decideCareerJoin } from '@/lib/league-join/careerJoinGate'
 import { readSurvivorLateSeasonSettings, withNewLeagueLateSeasonDefaults } from '@/lib/survivor/lateSeasonSettings'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, defaultMedianGameFor } from '@/lib/league/oddTeamLeagues'
@@ -48,7 +49,9 @@ import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashP
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefaults'
 import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
+import { planStartupDrafts, STARTUP_COLLEGE_DRAFT_SETTINGS_KEY, supportsSeparateStartupDrafts } from '@/lib/draft-defaults/startupCollegeDraft'
 import { dailyLineupTablesExist, defaultsToDailyLineups, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
+import { DEVY_COLLEGE_SCORING_KEY } from '@/lib/c2c/collegeLineupLeague'
 
 type Tx = Prisma.TransactionClient
 
@@ -173,6 +176,18 @@ type CanonicalCreateTransactionResult = {
   leagueId: string
   homepageUrl: string
   inviteUrl: string
+}
+
+/** The league invite link's claim limit: every team twice over (replaced managers rejoin), never under 50. */
+export function inviteMaxUsesFor(teamCount: number): number {
+  const n = Number.isFinite(teamCount) && teamCount > 0 ? Math.floor(teamCount) : 0
+  return Math.max(50, n * 2)
+}
+
+/** The C2C standings model a new league starts with. NBA C2C scoring requires unified. */
+function c2cStandingsModelFor(sport: string, requested: unknown): string {
+  if (String(sport).toUpperCase() !== 'NFL') return 'unified'
+  return requested === 'unified' || requested === 'hybrid' ? requested : 'separate'
 }
 
 export async function createCanonicalLeagueInTransaction(
@@ -363,6 +378,9 @@ export async function createCanonicalLeagueInTransaction(
     third_round_reversal: thirdRoundReversal,
     draft_third_round_reversal: thirdRoundReversal,
     draftSettings: { ...engine.settingsSnapshot.draftSettings, rounds: draftRounds, thirdRoundReversal },
+    // Owner's decision, 2026-11-24: a new NFL devy league's college lineup scores, as its own college season
+    // (lib/c2c/collegeLineupLeague.ts). A league made before this stays stash-only until its commissioner opts in.
+    ...(formatId === 'devy' && sport === 'NFL' ? { [DEVY_COLLEGE_SCORING_KEY]: true } : {}),
     ...(formatId === 'dynasty' ? {
       starter_slots: foundationDefaults.rosterSettings.starter_slots,
       bench_slots: foundationDefaults.rosterSettings.benchSlots,
@@ -490,6 +508,14 @@ export async function createCanonicalLeagueInTransaction(
   if (sport === 'NFL' && typeof conceptSetupForPrivacy.tePremiumPoints === 'number') {
     mergedSettings.te_premium_points = conceptSetupForPrivacy.tePremiumPoints
   }
+  // Waivers clear at a time in the LEAGUE'S zone (owner, 2026-11-25), daylight saving included
+  // (lib/waivers/leagueLocalWaiverClock.ts). Redraft and keeper first — the anchor formats; others
+  // keep the UTC schedule until they are moved deliberately.
+  const leagueLocalClear =
+    formatId === 'redraft' || formatId === 'keeper'
+      ? defaultLocalWaiverClear({ dailyRuns: (waiverDefaults.processing_days?.length ?? 0) > 1 })
+      : null
+  if (leagueLocalClear) mergedSettings[LEAGUE_LOCAL_WAIVER_CLEAR_KEY] = leagueLocalClear
 
   const joinCode = await uniqueJoinCode(tx)
   const platformLeagueId = `manual-${randomUUID()}`
@@ -539,13 +565,22 @@ export async function createCanonicalLeagueInTransaction(
     mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoffTeams: 0, playoff_team_count: 0, playoffStartWeek: plan.endWeek + 1 }
   }
 
+  if (sport === 'NCAAB' && formatId === 'zombie') {
+    mergedSettings.ncaab_roster_config = {
+      slots: {
+        ...(foundationDefaults.rosterSettings.starter_slots as Record<string, number>),
+        BN: readNumber(foundationDefaults.rosterSettings, 'benchSlots', 0),
+      },
+    }
+  }
+
   const isGuillotine = formatId === 'guillotine'
   const guillotineEndgame = resolveGuillotineEndgame({ settings: { ...mergedSettings, conceptSetup: body.conceptSetup } })
   if (isGuillotine) mergedSettings.guillotineEndgame = guillotineEndgame.format
   // Best ball Guilly: lineups set themselves (lib/guillotine/guillotineBestBall.ts). The settings flag,
   // never `bestBallMode`, which would make this a Best Ball league everywhere.
   if (isGuillotine && body.conceptSetup?.guillotineBestBall === true) mergedSettings[GUILLOTINE_BEST_BALL_KEY] = true
-  // MLB Guilly: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). Anything else is
+  // Guilly: two-week elimination periods (lib/guillotine/eliminationPeriods.ts), any sport. Anything else is
   // refused by validateCreateLeague; the default (no key) is one week.
   if (isGuillotine && supportsTwoWeekPeriods(sport) && body.conceptSetup?.guillotinePeriodWeeks === 2) mergedSettings[PERIOD_WEEKS_KEY] = 2
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
@@ -708,7 +743,11 @@ export async function createCanonicalLeagueInTransaction(
             ? 'zombie'
             : formatId === 'pirate'
               ? 'pirate'
-              : null,
+              // A pro-sport C2C league carries the C2C variant every C2C surface keys on (2026-11-24: a wizard
+              // C2C league had none, so it had no college lineup). A college-sport C2C league keeps none.
+              : formatId === 'c2c' && (sport === 'NFL' || sport === 'NBA')
+                ? 'c2c'
+                : null,
       timezone: body.timezone ?? 'America/New_York',
       language: body.language ?? 'en',
       joinCode,
@@ -949,21 +988,29 @@ export async function createCanonicalLeagueInTransaction(
 
   if (formatId === 'c2c') {
     const setup = (body.conceptSetup ?? {}) as Record<string, unknown>
+    const c2cSeparateDrafts =
+      supportsSeparateStartupDrafts('c2c', sport) && !(setup.mergedCollegeDraft === true || setup.startupFormat === 'merged')
     await tx.c2CLeagueConfig.upsert({
       where: { leagueId: league.id },
       create: {
         leagueId: league.id,
-        startupFormat: readString(setup, 'startupFormat', 'merged'),
-        mergedStartupDraft: setup.startupFormat !== 'separate',
-        separateStartupCollegeDraft: setup.startupFormat === 'separate',
+        // Two drafts unless the commissioner chose one merged draft, where the pool can keep them apart
+        // (lib/draft-defaults/startupCollegeDraft.ts); a college-sport league keeps its one draft.
+        startupFormat: c2cSeparateDrafts ? 'separate' : 'merged',
+        mergedStartupDraft: !c2cSeparateDrafts,
+        separateStartupCollegeDraft: c2cSeparateDrafts,
         collegeRosterSize: readNumber(setup, 'collegeRosterSize', readNumber(foundationDefaults.rosterSettings, 'collegeRosterSlots', 20)),
-        collegeSports: [sport] as Prisma.InputJsonValue,
+        // The COLLEGE sport (an NFL league's college side is NCAAF); it stored the pro sport before 2026-11-24.
+        collegeSports: [sport === 'NFL' ? 'NCAAF' : sport === 'NBA' ? 'NCAAB' : sport] as Prisma.InputJsonValue,
         collegeScoringSystem: readString(setup, 'collegeScoringSystem', sport === 'NBA' || sport === 'NCAAB' ? 'points' : 'ppr'),
         mixProPlayers: setup.mixProPlayers !== false,
         taxiSize: readNumber(setup, 'taxiSize', readNumber(foundationDefaults.rosterSettings, 'taxiSlots', 6)),
         startupDraftType: coreDraft,
         rookieDraftType: 'linear',
         collegeDraftType: 'snake',
+        // Owner's decision, 2026-11-24: an NFL C2C league plays its college and pro sides as separate
+        // matchups and records (lib/c2c/campusSeason); one combined score is the commissioner's opt-in.
+        standingsModel: c2cStandingsModelFor(sport, setup.standingsModel),
       },
       update: {
         startupDraftType: coreDraft,
@@ -1075,19 +1122,28 @@ export async function createCanonicalLeagueInTransaction(
   })
 
   const defaultWaiverDaysList = defaultProcessingDaysList(waiverDefaults.processing_days)
+  // A league-time clear writes the UTC engine fields it stands for today, so every reader of those
+  // fields agrees; the waiver clock re-derives the real instant each week (DST-correct).
+  const localEngine = leagueLocalClear
+    ? engineScheduleFromLocalClear(leagueLocalClear, body.timezone ?? 'America/New_York', new Date())
+    : null
   await tx.leagueWaiverSettings.create({
     data: {
       leagueId: league.id,
       waiverType: waiverDefaults.waiver_type,
-      processingDayOfWeek: waiverDefaults.processing_days?.[0] ?? null,
-      processingTimeUtc: waiverDefaults.processing_time_utc ?? null,
+      processingDayOfWeek: localEngine ? localEngine.processingDayOfWeek : waiverDefaults.processing_days?.[0] ?? null,
+      processingTimeUtc: localEngine ? localEngine.processingTimeUtc : waiverDefaults.processing_time_utc ?? null,
       claimLimitPerPeriod: waiverDefaults.max_claims_per_period ?? null,
       faabBudget: waiverDefaults.FAAB_budget_default ?? null,
       tiebreakRule: (waiverDefaults.claim_priority_behavior as string) ?? null,
       lockType: (waiverDefaults.game_lock_behavior as string) ?? null,
       instantFaAfterClear: waiverDefaults.free_agent_unlock_behavior === 'instant',
       // Daily sports run on every default day; single-day sports (NFL) write no list — unchanged.
-      ...(defaultWaiverDaysList ? { processingDays: defaultWaiverDaysList } : {}),
+      ...(localEngine && localEngine.processingDays.length > 1
+        ? { processingDays: localEngine.processingDays }
+        : !localEngine && defaultWaiverDaysList
+          ? { processingDays: defaultWaiverDaysList }
+          : {}),
     },
   })
 
@@ -1310,12 +1366,49 @@ export async function createCanonicalLeagueInTransaction(
       : null
   const sessionDevyConfig =
     (draftSettings.devyConfig as Record<string, unknown> | null | undefined) ?? dynastyDevyConfig
+  /*
+   * Devy and C2C: a pro draft, then a college draft, unless the commissioner chose one merged draft
+   * (lib/draft-defaults/startupCollegeDraft.ts). Only where the pool keeps pro and college apart (NFL,
+   * NBA); a college-sport league keeps one draft, as before.
+   */
+  const startupPlan =
+    (formatId === 'devy' || formatId === 'c2c') && supportsSeparateStartupDrafts(formatId, sport)
+      ? planStartupDrafts({
+          format: formatId,
+          rounds: draftRounds,
+          devyConfig: sessionDevyConfig ?? null,
+          c2cConfig: (draftSettings.c2cConfig as Record<string, unknown> | null | undefined) ?? null,
+          collegeDraftRounds:
+            formatId === 'devy'
+              ? readNumber((foundationDefaults.devyConfig ?? {}) as Record<string, unknown>, 'devySlotCount', 4)
+              : readNumber(
+                  ((foundationDefaults as unknown as Record<string, unknown>).c2cSettings ?? {}) as Record<string, unknown>,
+                  'collegeDraftRounds',
+                  6,
+                ),
+          merged:
+            ((body.conceptSetup ?? {}) as Record<string, unknown>).mergedCollegeDraft === true ||
+            ((body.conceptSetup ?? {}) as Record<string, unknown>).startupFormat === 'merged',
+        })
+      : null
+  if (startupPlan) {
+    // The row this transaction just created carries the settings to extend.
+    const created = (league as { settings?: unknown }).settings ?? mergedSettings
+    const settings = created && typeof created === 'object' ? (created as Record<string, unknown>) : {}
+    await tx.league.update({
+      where: { id: league.id },
+      data: { settings: { ...settings, [STARTUP_COLLEGE_DRAFT_SETTINGS_KEY]: startupPlan.state } as Prisma.InputJsonValue },
+    })
+  }
+  const firstDraftDevyConfig = startupPlan ? startupPlan.first.devyConfig : sessionDevyConfig
+  const firstDraftC2cConfig = startupPlan ? startupPlan.first.c2cConfig : (draftSettings.c2cConfig as Record<string, unknown> | null | undefined) ?? null
   await tx.draftSession.create({
     data: {
       leagueId: league.id,
       status: 'pre_draft',
       draftType: coreDraft,
-      rounds: draftRounds,
+      rounds: startupPlan ? startupPlan.first.rounds : draftRounds,
+      ...(startupPlan?.first.draftModeLabel ? { draftModeLabel: startupPlan.first.draftModeLabel } : {}),
       teamCount: managerCount,
       timerSeconds,
       slotOrder: draftSlotOrder as Prisma.InputJsonValue,
@@ -1325,8 +1418,8 @@ export async function createCanonicalLeagueInTransaction(
       thirdRoundReversal,
       cpuAutoPick: true,
       aiAutoPick: isAuto,
-      ...(sessionDevyConfig ? { devyConfig: sessionDevyConfig as Prisma.InputJsonValue } : {}),
-      ...(draftSettings.c2cConfig ? { c2cConfig: draftSettings.c2cConfig as Prisma.InputJsonValue } : {}),
+      ...(firstDraftDevyConfig ? { devyConfig: firstDraftDevyConfig as Prisma.InputJsonValue } : {}),
+      ...(firstDraftC2cConfig ? { c2cConfig: firstDraftC2cConfig as Prisma.InputJsonValue } : {}),
       ...(keeperBootstrap
         ? {
             keeperConfig: keeperBootstrap.draftKeeperConfig as unknown as Prisma.InputJsonValue,
@@ -1400,7 +1493,8 @@ export async function createCanonicalLeagueInTransaction(
       leagueId: league.id,
       createdBy: appUserId,
       createdByRole: 'COMMISSIONER',
-      maxUses: 50,
+      // Enough claims for every team plus spares; a flat 50 stopped a 100+ team league's link halfway (2026-11-24).
+      maxUses: inviteMaxUsesFor(managerCount),
       isActive: true,
       bypassRankGate: false,
     },

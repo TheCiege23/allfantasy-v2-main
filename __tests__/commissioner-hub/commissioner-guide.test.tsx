@@ -212,7 +212,11 @@ describe('<CommissionerOverview /> — the guide layout', () => {
     const { container } = render(<CommissionerOverview data={data} />)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2 things need you across 3 leagues')
     expect(screen.getByRole('heading', { name: 'Your to-do list' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: '1 trade to review' }).getAttribute('href')).toBe('#afh-queue')
+    // Simplified 2026-11-23: with work waiting, the band is the headline alone — the summary chips and the
+    // intro repeated the to-do list directly below them.
+    expect(screen.queryByRole('link', { name: '1 trade to review' })).toBeNull()
+    expect(container.querySelector('.cmg-sub')).toBeNull()
+    expect(container.querySelector('.cmg-teach')).toBeNull()
     expect(container.querySelector('.cmg-top')?.textContent).toBe('1 trade awaiting your review · +1 more')
     // The to-do list comes before the league cards.
     const order = [...container.querySelectorAll('#afh-queue, #afh-run')].map((e) => e.id)
@@ -230,4 +234,20 @@ describe('<CommissionerOverview /> — the guide layout', () => {
     expect(more.querySelector('#afh-mentions')).not.toBeNull()
     expect(container.querySelector('.afh-foot a')).toBeNull()
   })
+
+  it('folds the quiet-manager messages under the to-do list, closed, and says a healthy sync nothing', () => {
+    const ladder = [
+      { id: 'q1', leagueId: 'A', leagueName: 'League A', manager: 'quiet_one', step: 'warn' as const, daysQuiet: 16, href: '#' },
+    ]
+    const { container } = render(<CommissionerOverview data={{ ...data, ladder }} />)
+    const fold = screen.getByTestId('commissioner-ladder')
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.hasAttribute('open')).toBe(false)
+    expect(fold.querySelector('summary')?.textContent).toBe('Messages for quiet managers 1')
+    expect(fold.querySelector('.af-ladder-head')).toBeNull()
+    expect(fold.querySelector('button.af-ladder-copy')).not.toBeNull()
+    // Every card here is synced; a healthy sync draws no chip.
+    expect([...container.querySelectorAll('.afh-chip')].map((c) => c.textContent)).not.toContain('Synced')
+  })
 })
+

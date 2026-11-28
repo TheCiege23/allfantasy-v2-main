@@ -95,7 +95,7 @@ export interface PendingProviderTrade {
    * offer labelled `'sleeper'` would send the manager to the wrong site to
    * answer it, which is a worse failure than not showing it at all.
    */
-  provider: 'sleeper' | 'yahoo'
+  provider: 'sleeper' | 'yahoo' | 'espn'
   /** Provider roster/team ids, used only to join into canonical rosters. */
   viewerRosterExternalId?: string | null
   counterpartyRosterExternalId?: string | null

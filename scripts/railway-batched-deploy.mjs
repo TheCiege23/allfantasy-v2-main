@@ -9,7 +9,9 @@
  * Env: RAILWAY_TOKEN — a PROJECT token scoped to the production environment, sent in the
  * `Project-Access-Token` header and never printed. PROJECT_ID, ENVIRONMENT_ID, SERVICE_ID, REPO_URL.
  * Optional: QUIET_SECONDS (180), POLL_SECONDS (30), WAIT_IDLE_SECONDS (2700), WAIT_BUILD_SECONDS
- * (2700), DEPLOY_SHA (deploy this commit instead of the newest main), RAILWAY_API.
+ * (2700), DEPLOY_SHA (deploy this commit instead of the newest main), RAILWAY_API, SKIP_IF_LIVE
+ * (`1`: start no build when the service already serves the newest main; the workflow sets it for
+ * runs started by a push, never for a manual run or with DEPLOY_SHA).
  *
  * ⚠ THE API REPORTS FAILURE IN AN `errors` ARRAY, OFTEN WITH HTTP 200 — an authorization denial is
  * a 200 (docs.railway.com/integrations/api). Every call checks `errors`; the status code alone is
@@ -69,6 +71,23 @@ export async function inFlightCount(fetchImpl, conn, ids) {
   return edges.filter((e) => IN_FLIGHT.has(e?.node?.status)).length
 }
 
+/**
+ * The commit the service is serving: the newest deployment that reached SUCCESS. Null when the list
+ * does not say (no SUCCESS in it, or no commit recorded on that deployment).
+ */
+export async function liveCommit(fetchImpl, conn, ids) {
+  const data = await gql(
+    fetchImpl,
+    conn,
+    'query($input: DeploymentListInput!) { deployments(input: $input, first: 10) { edges { node { id status meta } } } }',
+    { input: { projectId: ids.projectId, serviceId: ids.serviceId, environmentId: ids.environmentId } },
+  )
+  const edges = data?.deployments?.edges
+  if (!Array.isArray(edges)) return null
+  const sha = edges.find((e) => e?.node?.status === 'SUCCESS')?.node?.meta?.commitHash
+  return typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha) ? sha : null
+}
+
 export async function deploymentStatus(fetchImpl, conn, id) {
   const data = await gql(fetchImpl, conn, 'query($id: String!) { deployment(id: $id) { id status } }', { id })
   const status = data?.deployment?.status
@@ -110,6 +129,7 @@ export async function runBatchedDeploy(opts) {
     waitIdleSeconds = 2700,
     waitBuildSeconds = 2700,
     deploySha = '',
+    skipIfLive = false,
   } = opts
   const conn = { api: opts.api || DEFAULT_API, token: opts.token }
   const ids = { projectId: opts.projectId, environmentId: opts.environmentId, serviceId: opts.serviceId }
@@ -139,6 +159,24 @@ export async function runBatchedDeploy(opts) {
   // 3. Deploy the NEWEST main, read now — not the commit that started this run.
   const sha = String(deploySha || readSha()).trim()
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new DeployError(`Could not read the main commit (got '${sha}')`)
+
+  // 3b. A run is queued by one push but deploys the newest main, so the run before it has often
+  //     deployed this very commit already. Measured 2026-11-25: 976895ad17 was built by the 04:52 run
+  //     and again by the 05:00 run, a second full build of identical code. Skipped only when the
+  //     service is known to be serving this commit: an unreadable answer deploys, as before.
+  if (skipIfLive && !deploySha) {
+    let live = null
+    try {
+      live = await liveCommit(fetchImpl, conn, ids)
+    } catch (e) {
+      log(`Could not read the live commit (${e?.message ?? e}) — deploying`)
+    }
+    if (live === sha) {
+      log(`${sha.slice(0, 9)} is already live — no build started`)
+      return { outcome: 'already-live', sha, deploymentId: null, minutes: 0 }
+    }
+  }
+
   const deploymentId = await triggerDeploy(fetchImpl, conn, ids, sha)
   log(`Deploying ${sha.slice(0, 9)} → Railway deployment ${deploymentId}`)
 
@@ -187,11 +225,14 @@ async function main() {
       waitIdleSeconds: num(env.WAIT_IDLE_SECONDS, 2700),
       waitBuildSeconds: num(env.WAIT_BUILD_SECONDS, 2700),
       deploySha: env.DEPLOY_SHA,
+      skipIfLive: env.SKIP_IF_LIVE === '1',
     })
     summary(
       r.outcome === 'live'
         ? `✅ Live: \`${r.sha.slice(0, 9)}\` (Railway deployment \`${r.deploymentId}\`) after ${r.minutes} min of build`
-        : `⚠ Deployment \`${r.deploymentId}\` ended ${r.outcome.toUpperCase()} (superseded or skipped)`,
+        : r.outcome === 'already-live'
+          ? `✅ Already live: \`${r.sha.slice(0, 9)}\` — an earlier run deployed it, no build started`
+          : `⚠ Deployment \`${r.deploymentId}\` ended ${r.outcome.toUpperCase()} (superseded or skipped)`,
     )
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

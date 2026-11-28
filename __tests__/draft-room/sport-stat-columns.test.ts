@@ -40,13 +40,16 @@ describe('getDraftStatColumnsForSport', () => {
     expect(getDraftStatColumnsForSport('NCAAF', { position: 'PK' }).some((c) => c.key === 'fgm')).toBe(true)
   })
 
-  it('NBA exposes observed rates and shooting while college keeps its existing columns', () => {
+  it('NBA and college basketball both expose observed per-game rates and shooting', () => {
     const nba = getDraftStatColumnsForSport('NBA')
     const ncaab = getDraftStatColumnsForSport('NCAAB')
     expect(nba.map((c) => c.key)).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'fg_pct', 'ft_pct', 'gp', 'nba_proj'])
-    expect(ncaab.map((c) => c.key)).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'nba_proj'])
+    // College has its own stored box scores now (ncaabDraftSeason.ts); its last column is this league's
+    // points per game, under a per-game key and label rather than the season-total `projectedPoints`.
+    expect(ncaab.map((c) => c.key)).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'fg_pct', 'ft_pct', 'gp', 'ncaab_proj'])
     expect(nba.find(c => c.key === 'ast')?.label).toBe('APG')
-    expect(ncaab.find(c => c.key === 'ast')?.label).toBe('AST')
+    expect(ncaab.find(c => c.key === 'ast')?.label).toBe('APG')
+    expect(ncaab.find(c => c.key === 'ncaab_proj')).toMatchObject({ label: 'Proj/G', aliases: ['projectedPointsPerGame'] })
   })
 
   it('MLB hitter vs pitcher by position', () => {

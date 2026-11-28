@@ -105,6 +105,40 @@ describe('campus points in the matchup score', () => {
     expect(score.allFinal).toBe(false)
   })
 
+  it('includes football campus points in roster scores used by playoffs', async () => {
+    db.league.findFirst.mockResolvedValue(league())
+    const withCampus = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(campusPointsForMatchup).toHaveBeenCalledWith(db, { season: 2026, nflWeek: 3, homeRosterId: 'H', awayRosterId: 'H' })
+    campusPointsForMatchup.mockResolvedValue(null)
+    const proOnly = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(withCampus.points).toBe(Math.round((proOnly.points + 21.5) * 100) / 100)
+  })
+
+  it('a non-C2C league’s roster score never asks for campus points', async () => {
+    db.league.findFirst.mockResolvedValue(league({ leagueVariant: 'devy_dynasty' }))
+    await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(campusPointsForMatchup).not.toHaveBeenCalled()
+  })
+
+  it('a league on separate standings scores its pro lineup alone (the college side plays its own games)', async () => {
+    const { getC2CConfig } = await import('@/lib/merged-devy-c2c/C2CLeagueConfig')
+    vi.mocked(getC2CConfig).mockResolvedValueOnce({ standingsModel: 'separate' } as never)
+    db.league.findFirst.mockResolvedValue(league())
+    await updateMatchupScores('m1')
+    expect(campusPointsForMatchup).not.toHaveBeenCalled()
+    const data = db.redraftMatchup.update.mock.calls[0]![0].data
+    expect(data.homeScore).toBe(data.awayScore)
+    expect(data.lineupSnapshots.redraftScoring.campus).toBeUndefined()
+  })
+
+  it('a playoff roster score on separate standings leaves the college lineup to its own season', async () => {
+    const { getC2CConfig } = await import('@/lib/merged-devy-c2c/C2CLeagueConfig')
+    vi.mocked(getC2CConfig).mockResolvedValueOnce({ standingsModel: 'separate' } as never)
+    db.league.findFirst.mockResolvedValue(league())
+    await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(campusPointsForMatchup).not.toHaveBeenCalled()
+  })
+
   it('any other league is never asked', async () => {
     for (const over of [{ leagueVariant: 'devy_dynasty' }, { platform: 'sleeper' }, { sport: 'NHL' }, { sport: 'NBA', platform: 'sleeper' }]) {
       db.league.findFirst.mockResolvedValue(league(over))

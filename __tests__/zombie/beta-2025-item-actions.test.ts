@@ -91,9 +91,29 @@ describe('mandatory revival', () => {
   it('spends exactly two and restores Survivor status', async () => {
     h.team.status = 'Zombie'; h.team.weekBecameZombie = 3
     const update = vi.fn(async () => ({ count: 1 })); const audit = vi.fn(async () => ({}))
-    const tx = { ...h.tx, zombieLeagueTeam: { ...h.tx.zombieLeagueTeam, updateMany: update }, zombieAuditLog: { create: audit } }
+    const animation = vi.fn(async () => ({}))
+    const tx = { ...h.tx, zombieLeagueTeam: { ...h.tx.zombieLeagueTeam, updateMany: update }, zombieAuditLog: { create: audit },
+      roster: { ...h.tx.roster, findUnique: vi.fn(async () => ({ platformUserId: 'u' })) }, zombieEventAnimation: { create: animation } }
     expect(await reviveBetaTeamInTransaction(tx as any, 'T', 4)).toBe(true)
     expect(h.team.items.filter((i: any) => i.isUsed)).toHaveLength(2); expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'Survivor' }) })); expect(audit).toHaveBeenCalledOnce()
+    // The zombie-to-human video, written on the same transaction as the revival.
+    expect(animation).toHaveBeenCalledOnce()
+    expect(animation).toHaveBeenCalledWith({ data: expect.objectContaining({ animationType: 'player_revived', primaryUserId: 'u', week: 4,
+      metadata: expect.objectContaining({ clipUrl: '/zombie/videos/zombie-to-human/infection-win.mp4', clipType: 'video', policy: 'beta_2025' }) }) })
+  })
+  it('revives an unclaimed roster without a video, since no manager can be named', async () => {
+    h.team.status = 'Zombie'; h.team.weekBecameZombie = 3
+    const animation = vi.fn(async () => ({}))
+    const tx = { ...h.tx, zombieLeagueTeam: { ...h.tx.zombieLeagueTeam, updateMany: vi.fn(async () => ({ count: 1 })) }, zombieAuditLog: { create: vi.fn(async () => ({})) },
+      roster: { ...h.tx.roster, findUnique: vi.fn(async () => ({ platformUserId: null })) }, zombieEventAnimation: { create: animation } }
+    expect(await reviveBetaTeamInTransaction(tx as any, 'T', 4)).toBe(true)
+    expect(animation).not.toHaveBeenCalled()
+  })
+  it('queues no video when there is no revival', async () => {
+    const animation = vi.fn(async () => ({}))
+    h.team.status = 'Zombie'; h.team.items = [serum('s')]
+    expect(await reviveBetaTeamInTransaction({ ...h.tx, zombieEventAnimation: { create: animation } } as any, 'T', 4)).toBe(false)
+    expect(animation).not.toHaveBeenCalled()
   })
 })
 

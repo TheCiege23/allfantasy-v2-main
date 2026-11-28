@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const m = vi.hoisted(() => ({
   leagueWaiverSettings: { findUnique: vi.fn() },
+  league: { findUnique: vi.fn() },
   waiverRun: { findFirst: vi.fn() },
   waiverClaim: { count: vi.fn() },
   roster: { findMany: vi.fn() },
@@ -27,6 +28,8 @@ const NOW = new Date('2026-09-15T12:00:00Z')
 
 beforeEach(() => {
   for (const d of Object.values(m)) for (const fn of Object.values(d)) (fn as ReturnType<typeof vi.fn>).mockReset()
+  // The league's sport scopes the claim-name read (Sleeper reuses ids across sports).
+  m.league.findUnique.mockResolvedValue({ sport: 'NFL' })
   m.leagueWaiverSettings.findUnique.mockResolvedValue({
     waiverType: 'faab',
     faabBudget: 1000,
@@ -151,10 +154,10 @@ describe('getCommissionerWaiverOversight', () => {
  * Young). The mock below honours the query's `where`, as Postgres does.
  */
 describe('last run player names — Sleeper ids', () => {
-  type Row = { id: string; sleeperId: string | null; externalId: string | null; source: string; name: string; position: string }
+  type Row = { id: string; sport: string; sleeperId: string | null; externalId: string | null; source: string; name: string; position: string }
   const ROWS: Row[] = [
-    { id: 'u-by', sleeperId: '9228', externalId: 'sleeper:9228', source: 'sleeper', name: 'Bryce Young', position: 'QB' },
-    { id: 'u-mt', sleeperId: null, externalId: '9228', source: 'rolling_insights', name: 'Michael Tarquin', position: 'OT' },
+    { id: 'u-by', sport: 'NFL', sleeperId: '9228', externalId: 'sleeper:9228', source: 'sleeper', name: 'Bryce Young', position: 'QB' },
+    { id: 'u-mt', sport: 'NFL', sleeperId: null, externalId: '9228', source: 'rolling_insights', name: 'Michael Tarquin', position: 'OT' },
   ]
   type Clause = { id?: { in: string[] }; sleeperId?: { in: string[] }; externalId?: { in: string[] } }
   const hit = (r: Row, c: Clause) =>
@@ -167,8 +170,8 @@ describe('last run player names — Sleeper ids', () => {
       id: 'run9', runAt: new Date('2026-09-29T07:00:00Z'), runType: 'scheduled', status: 'completed',
       results: [{ id: 'r9', rosterId: 'ro1', addPlayerId: '9228', resultType: 'awarded', metadata: null, claim: { faabBid: 5, resultMessage: 'Awarded' } }],
     })
-    m.sportsPlayer.findMany.mockImplementation(async ({ where }: { where: { OR: Clause[] } }) =>
-      ROWS.filter((r) => where.OR.some((c) => hit(r, c))),
+    m.sportsPlayer.findMany.mockImplementation(async ({ where }: { where: { sport?: string; OR: Clause[] } }) =>
+      ROWS.filter((r) => (!where.sport || r.sport === where.sport) && where.OR.some((c) => hit(r, c))),
     )
     const out = await getCommissionerWaiverOversight({ leagueId: 'L', platform: 'manual', role: 'commissioner', now: NOW })
     if (!out.available || !out.lastRun) throw new Error('expected a run')

@@ -9,9 +9,11 @@ interface PortfolioPoint {
   deltaValue: number;
   cumulativeValue: number;
   tradeSummary: string;
+  /** THE one completed-trade grade, from your side (A–F). */
   grade: string;
+  result?: 'win' | 'loss' | 'even';
   volatility: string;
-  confidence: number;
+  confidence: number | null;
 }
 
 interface PortfolioData {
@@ -21,6 +23,8 @@ interface PortfolioData {
   worstTrade: PortfolioPoint | null;
   averageDelta: number;
   volatilityProfile: string;
+  /** Trades the grade withheld: not points, counted in no total. */
+  notGraded?: Array<{ tradeId: string; date: string; tradeSummary: string; reason: string }>;
 }
 
 interface PortfolioChartProps {
@@ -122,7 +126,9 @@ export default function PortfolioChart({ leagueId, userId, isSuperFlex = false, 
   if (!data || data.points.length === 0) {
     return (
       <div className="bg-gray-800 rounded-xl p-6 text-center">
-        <p className="text-gray-400">No trade history to display</p>
+        <p className="text-gray-400">
+          {data?.notGraded?.length ? `Not graded: ${data.notGraded[0].reason}` : 'No trade history to display'}
+        </p>
       </div>
     );
   }
@@ -145,7 +151,7 @@ export default function PortfolioChart({ leagueId, userId, isSuperFlex = false, 
             Total: {data.totalDelta >= 0 ? '+' : ''}{data.totalDelta.toFixed(0)}
           </span>
           <span className="text-gray-400">
-            {data.points.length} trades
+            {data.points.length} trades{data.notGraded?.length ? ` · ${data.notGraded.length} not graded` : ''}
           </span>
           <span className={`px-2 py-0.5 rounded text-xs ${
             data.volatilityProfile === 'Conservative' ? 'bg-green-600/30 text-green-400' :

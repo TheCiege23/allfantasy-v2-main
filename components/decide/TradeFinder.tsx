@@ -6,13 +6,16 @@
  *
  * Honesty contract: every proposal shows its full rationale (checkable facts:
  * which slot it fills, the ADP gap, the partner's counted trade activity), the
- * method line renders verbatim, and the panel is explicit that market ADP is a
- * conversation starter — not an AF valuation verdict. Honest empty states for
+ * method line renders verbatim. ADP only picks which pairs are considered; the
+ * values, "% apart" and the last rationale line are THE league trade grade
+ * (2026-11-26), and a withheld grade says why. Honest empty states for
  * unlinked accounts and no-match rosters.
  */
 
 import { useEffect, useState } from 'react'
 import type { TradeFinderPayload } from '@/lib/trade-intel/tradeFinderService'
+import type { FinderTasteLock } from '@/lib/trade-finder/finderTaste'
+import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
 import { sleeperAvatarThumb, sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import './broadcast-deck.css'
@@ -20,7 +23,7 @@ import './broadcast-deck.css'
 type ApiResponse =
   | { supported: false; platform: string }
   | { supported: true; linked: false; finder: null }
-  | { supported: true; linked: true; finder: TradeFinderPayload | null; error?: string }
+  | { supported: true; linked: true; finder: TradeFinderPayload | null; error?: string; lock?: FinderTasteLock | null }
 
 function PlayerChip({
   playerId,
@@ -68,7 +71,7 @@ export function TradeFinder({
   leagueId: string
   onOpenTab: (tabId: string) => void
 }) {
-  const { t } = useOptionalLanguage()
+  const { t, language } = useOptionalLanguage()
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -183,6 +186,12 @@ export function TradeFinder({
               </div>
             )
           })}
+          {/* The free taste (2026-11-27): the server sent the top idea only; the rest are AF Pro. */}
+          {data && 'lock' in data && data.lock && data.lock.lockedCount > 0 ? (
+            <div data-testid="trade-finder-taste-lock">
+              <CoreDepthLock access={data.lock.access} lang={language} />
+            </div>
+          ) : null}
           <div className="bdx-empty" style={{ marginTop: 4 }}>
             <div className="m">
               <b>{t('decide.finder.method')}</b> {finder.method}

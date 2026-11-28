@@ -2,9 +2,10 @@ import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { sleeperReadableRosters, sleeperReadablePlayerDataOf, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
-import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
-import { hasIdpScoring } from '@/lib/core-app/scoringNotes'
+import { FOREIGN_IDS_UNREADABLE, availabilityUnverifiedSentence } from '@/lib/core-app/foreignIdSpaceCopy'
+import { declaredAvailability } from '@/lib/core-app/declaredAvailability'
 import { canFillSlot, startingSlots } from '@/lib/core-app/slotEligibility'
+import { loadAfNflWeek } from '@/lib/af-projections/nflLeagueWeek'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
@@ -86,6 +87,11 @@ export type WaiverBoardState =
   | 'no_roster'
   /** A foreign-id league (Fleaflicker, MFL, …): its roster is on file but cannot be read as ours. */
   | 'ids_unreadable'
+  /**
+   * A pasted Yahoo league below the coverage bar (declaredAvailability.ts): too many rostered players
+   * could not be matched, so nobody can be called available. `unmatchedRostered` says how many.
+   */
+  | 'availability_unverified'
   | 'no_scoring_settings'
   | 'no_slots'
   | 'no_projections'
@@ -123,6 +129,12 @@ export interface WaiverBoard {
    * for the whole board; absent for every other league, and for a candidate with nothing agreed on file.
    */
   dynastyMarkers?: Record<string, DynastyRosterMarker>
+  /**
+   * A pasted Yahoo league only: rostered players no Sleeper-id read can see. On an `ok` board the list
+   * stands (each one's own wire row hidden by name) and the screen says how many; on
+   * `availability_unverified` it is why there is no list. Absent for every other league.
+   */
+  unmatchedRostered?: number
 }
 
 const EMPTY = (state: WaiverBoardState, notes: string[] = []): WaiverBoard => ({
@@ -222,6 +234,19 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
 
   const mine = await findMyRoster(args.prisma, league.id, args.userId)
   if (!mine.found) return EMPTY(mine.reason === 'no_team_claimed' ? 'no_team_claimed' : 'no_roster')
+
+  const rawRosters = await args.prisma.roster
+    .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
+    .catch(() => [] as Array<{ playerData: unknown }>)
+  /*
+   * 🛑 A PASTED YAHOO LEAGUE: "NOT ON ANY ROSTER" IS NOT "AVAILABLE" UNTIL ITS COVERAGE SAYS SO. Its
+   * unmatched players are dropped by the read below, so each would be offered as a free agent. Below
+   * the bar there is no board; above it, each one's own wire row is hidden and the count travels.
+   */
+  const declared = declaredAvailability(league.platform, [...rawRosters.map((r) => r.playerData), mine.playerData])
+  if (declared && !declared.verified) {
+    return { ...EMPTY('availability_unverified', [availabilityUnverifiedSentence(declared.unmatched)]), unmatchedRostered: declared.unmatched }
+  }
   /*
    * A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids: read as one it prices
    * (and names as "displaced") a stranger, and strikes a real free agent off the board. An ESPN
@@ -239,18 +264,12 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   }
 
   /* Everyone rostered anywhere in the league is off the board. */
-  const allRosters = await sleeperReadableRosters(
-    await args.prisma.roster
-      .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
-      .catch(() => [] as Array<{ playerData: unknown }>),
-    league.platform,
-    league.sport,
-  )
+  const allRosters = await sleeperReadableRosters(rawRosters, league.platform, league.sport)
   const rostered = new Set<string>()
   for (const r of allRosters) for (const id of rosterPlayerIds(r.playerData)) rostered.add(id)
   for (const id of myIds) rostered.add(id)
 
-  const { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } = await import('@/lib/core-app/playerProjections')
+  const { latestProjectionWeek } = await import('@/lib/core-app/playerProjections')
 
   /*
    * The candidate pool is players who ACTUALLY PLAYED in the most recent scored week, plus
@@ -290,7 +309,13 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
           .catch(() => [] as Array<{ playerId: string }>)
       : []
 
-  const activeIds = new Set<string>()
+  const nextWeek = args.claimWeek ?? null
+  const nextPool = nextWeek ? await loadAfNflWeek(nextWeek) : null
+  const onNext = Boolean(nextPool?.size)
+  const at = onNext ? nextWeek : await latestProjectionWeek()
+  if (!at) return EMPTY('no_projections', ['No NFL scoring week is on file.'])
+  const afPool = onNext ? nextPool! : await loadAfNflWeek(at)
+  const activeIds = new Set([...afPool.keys()].filter((id) => !rostered.has(id)))
   for (const r of activeRows) if (!rostered.has(r.playerId)) activeIds.add(r.playerId)
   if (activeIds.size === 0) return EMPTY('no_projections', ['No recent game data to build a free-agent pool from.'])
 
@@ -333,12 +358,21 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   }
 
   const poolIds = new Set<string>()
+  let hiddenUnmatched = 0
   for (const id of activeIds) {
+    // A pasted Yahoo league's unmatched rostered player is somebody's, not a free agent.
+    if (declared) {
+      const meta = metaOf.get(id)
+      if (declared.hides({ name: meta?.name, position: meta?.position ?? positionOf.get(id), team: meta?.team })) {
+        hiddenUnmatched += 1
+        continue
+      }
+    }
     const pos = positionOf.get(id)
     // `canFillSlot` normalises, so a cache row spelling the position out in full still matches.
     if (pos && slots.some((slot) => canFillSlot(slot, pos))) poolIds.add(id)
   }
-  const ineligible = activeIds.size - poolIds.size
+  const ineligible = activeIds.size - poolIds.size - hiddenUnmatched
   if (poolIds.size === 0) {
     return EMPTY('no_projections', ['No available player can fill a starting slot in this league.'])
   }
@@ -348,26 +382,8 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * predicate, not the loose one. Handing it to a non-IDP league would project defensive lines
    * nobody can score and pad the pool with players who cannot help.
    */
-  const idpEnrichment = hasIdpScoring(scoring) ? { scoringSettings: scoring } : null
-
-  /*
-   * 🛑 NEXT WEEK'S BOARD WHEN THE CLAIM IS FOR NEXT WEEK — except in a league that scores
-   * defenders: nothing establishes that Sleeper's future board carries IDP lines, and the current
-   * path enriches defenders from its own source, so an IDP league stays on the week being played.
-   * A failed or empty read falls back to the current week too; the response says which it used.
-   */
-  const nextWeek = args.claimWeek && !idpEnrichment ? args.claimWeek : null
-  const nextProj = nextWeek ? await readNextWeekProjections(args.prisma, nextWeek, [...myIds, ...poolIds]).catch(() => null) : null
-  const onNext = nextProj != null && nextProj.size > 0
-  const [mineProj, poolProj] = onNext
-    ? [
-        new Map([...nextProj!].filter(([id]) => myIds.includes(id))),
-        new Map([...nextProj!].filter(([id]) => poolIds.has(id))),
-      ]
-    : await Promise.all([
-        lookupProjections(myIds, null, idpEnrichment),
-        lookupProjections([...poolIds], null, idpEnrichment),
-      ])
+  const mineProj = new Map(myIds.flatMap((id) => afPool.has(id) ? [[id, afPool.get(id)!] as const] : []))
+  const poolProj = new Map([...poolIds].flatMap((id) => afPool.has(id) ? [[id, afPool.get(id)!] as const] : []))
 
   /*
    * ONE scoring path for both sides of the comparison. Scoring a candidate under the league and
@@ -406,7 +422,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * three cannot disagree about who plays. Only for the week being played — a current injury says
    * nothing about next week's board. Fails open to the caller's list: a failed read changes nothing.
    */
-  const at = onNext ? null : await Promise.resolve().then(() => latestProjectionWeek()).catch(() => null)
+
   /*
    * The same read covers the free agents. A free agent who is out, on IR or on bye this week cannot
    * play for you this week, so he is not offered — and, being a known absence, he is not counted as
@@ -414,7 +430,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * week-4 line; the board's job is to say he cannot help, not that it failed to price him.)
    */
   const outFreeAgents = new Set<string>()
-  if (at) {
+  if (!onNext) {
     try {
       const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
       const bySport = await loadUnavailableBySport({ sleeperIds: [...myIds, ...poolIds], sports: ['NFL'], season: Number(at.season), week: at.week })
@@ -444,7 +460,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    */
   let locks: LineupLocks = NO_LOCKS
   let lockedNow: ((team: string | null) => boolean) | null = null
-  if (at) {
+  if (!onNext) {
     try {
       const { resolveSportsWeek } = await import('@/lib/core-app/sportsWeek')
       const { weekKickoffs } = await import('@/lib/core-app/playerGame')
@@ -479,42 +495,6 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     }
   }
 
-  /*
-   * ⚠ THE VENDOR FEED IS ONE WEEK DEEP, SO MOST OF THE WIRE HAD NO PROJECTION AT ALL.
-   * `FantasyProjection` carries ~1,000 rows for a single week and preset — on a standard league
-   * that left 141 of 449 startable free agents projectable and the other 308 unrankable. Recent
-   * form fills those gaps from what each player has actually scored under THIS league's rules.
-   *
-   * It NEVER overrides a real projection. A vendor number is forward-looking; this one is not,
-   * and quietly preferring it would trade a forecast for a memory. Every filled gap is marked
-   * `basis: 'form'` so the surface can say which it is showing.
-   */
-  /*
-   * ⚠ NOT ON NEXT WEEK'S BOARD. A free agent missing from next week's board is very often on BYE,
-   * and recent form would price him as if he plays. There, no line means not shown.
-   */
-  const missing = onNext ? [] : [...poolIds].filter((id) => !scoredPool.some((p) => p.sleeperId === id))
-  if (missing.length > 0 && statSeason != null) {
-    const form = await projectFromRecentForm({
-      prisma: args.prisma,
-      season: statSeason,
-      playerIds: missing,
-      scoring,
-    })
-    for (const [id, f] of form) {
-      const fromFeed = poolProj.get(id)
-      const cached = metaOf.get(id)
-      scoredPool.push({
-        sleeperId: id,
-        name: fromFeed?.name ?? cached?.name ?? id,
-        position: fromFeed?.position ?? cached?.position ?? null,
-        team: fromFeed?.team ?? cached?.team ?? null,
-        points: f.points,
-        basis: 'form',
-        formGames: f.games,
-      })
-    }
-  }
   if (roster.length === 0) {
     return EMPTY('no_projections', ['None of your rostered players could be projected under this league’s scoring.'])
   }
@@ -559,31 +539,6 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * who is recommended. A failed read leaves the AF figures off and the board exactly as it was.
    */
   /* The AF engine projects the week being played only — nothing to set beside next week's board. */
-  const afIds = onNext ? [] : shown.flatMap((c) => [c.sleeperId, c.displaces?.sleeperId ?? null]).filter((id): id is string => id != null)
-  if (afIds.length > 0) {
-    const engine = await lookupAfEngineProjections(afIds, null).catch(
-      (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
-    )
-    /* The provider's generic PPR total, for the carry into this league's scoring. A 'form'
-       candidate has none, so his AF figure stands as the engine's PPR number. */
-    const genericOf = (id: string): number | null =>
-      (poolProj.get(id) ?? mineProj.get(id))?.projectedPoints ?? null
-    for (const c of shown) {
-      if (c.sleeperId) {
-        const v = afEngineForLeague(
-          engine.get(c.sleeperId),
-          c.basis === 'projection' ? genericOf(c.sleeperId) : null,
-          c.basis === 'projection' ? c.projectedPoints : null,
-        )
-        if (v != null) c.afProjectedPoints = v
-      }
-      const d = c.displaces
-      if (d?.sleeperId) {
-        const v = afEngineForLeague(engine.get(d.sleeperId), genericOf(d.sleeperId), d.projectedPoints)
-        if (v != null) d.afProjectedPoints = v
-      }
-    }
-  }
 
   const notes: string[] = [
     `Ranked by how much each adds to your best starting lineup, not by raw projection — ` +
@@ -591,7 +546,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   ]
   if (onNext) {
     notes.push(
-      `A claim made now is for week ${nextWeek!.week}, so these are Sleeper's week ${nextWeek!.week} projections, ` +
+      `A claim made now is for week ${nextWeek!.week}, so these are AllFantasy’s week ${nextWeek!.week} projections, ` +
         `rescored under this league's scoring — published ahead, they move as injuries and depth charts settle. ` +
         `A player with no week ${nextWeek!.week} line (most often a bye) is not shown.`,
     )
@@ -699,62 +654,15 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
 
   return {
     state: 'ok',
-    season: onNext ? nextWeek!.season : statSeason != null ? String(statSeason) : null,
-    week: onNext ? nextWeek!.week : statWeek,
+    season: at.season,
+    week: at.week,
     currentLineupPoints: base.total,
     candidates: shown,
     notes,
     ...(needs ? { needs } : {}),
     ...(dynastyMarkers && Object.keys(dynastyMarkers).length > 0 ? { dynastyMarkers } : {}),
+    ...(declared ? { unmatchedRostered: declared.unmatched } : {}),
   }
-}
-
-/**
- * Next week's Sleeper lines for these players, shaped like `lookupProjections` output so the one
- * scoring path prices them. Name, position and team come from `sportsPlayer` (Sleeper's own row wins a
- * shared id). Postgres only — `future_week_projections` is written by the projections cron.
- */
-async function readNextWeekProjections(
-  prisma: PrismaClient,
-  week: { season: string; week: number },
-  playerIds: readonly string[],
-): Promise<Map<string, { projectedPoints: number; name: string | null; position: string | null; team: string | null; componentStats: Record<string, unknown> | null }> | null> {
-  const { futureWeekProjectionsReady, futureWeekStoreReader } = await import('@/lib/projections/futureWeekProjectionStore')
-  const { FUTURE_WEEK_SOURCE } = await import('@/lib/projections/futureWeekIngest')
-  if (!(await futureWeekProjectionsReady())) return null
-  const ids = [...new Set(playerIds)].filter(Boolean)
-  if (ids.length === 0) return null
-  const [lines, rows] = await Promise.all([
-    futureWeekStoreReader.readLines({
-      sport: 'NFL',
-      season: week.season,
-      source: FUTURE_WEEK_SOURCE,
-      afterWeek: week.week - 1,
-      throughWeek: week.week,
-      playerIds: ids,
-    }),
-    prisma.sportsPlayer.findMany({
-      // The NFL projection lines above, so NFL players — Sleeper reuses ids across its sports.
-      where: { sport: 'NFL', sleeperId: { in: ids } },
-      select: { sleeperId: true, source: true, name: true, position: true, team: true },
-    }),
-  ])
-  const meta = new Map<string, { name: string; position: string | null; team: string | null; sleeper: boolean }>()
-  for (const r of rows) {
-    if (!r.sleeperId) continue
-    const sleeper = r.source === 'sleeper'
-    const cur = meta.get(r.sleeperId)
-    if (cur && (cur.sleeper || !sleeper)) continue
-    meta.set(r.sleeperId, { name: r.name, position: r.position ?? null, team: r.team ?? null, sleeper })
-  }
-  const out = new Map<string, { projectedPoints: number; name: string | null; position: string | null; team: string | null; componentStats: Record<string, unknown> | null }>()
-  for (const l of lines) {
-    if (l.week !== week.week) continue
-    const m = meta.get(l.playerId)
-    const stats = l.stats && typeof l.stats === 'object' && !Array.isArray(l.stats) ? (l.stats as Record<string, unknown>) : null
-    out.set(l.playerId, { projectedPoints: l.projectedPoints, name: m?.name ?? null, position: m?.position ?? null, team: m?.team ?? null, componentStats: stats })
-  }
-  return out
 }
 
 /** How many weeks of byes to look ahead, counting the projection week. */

@@ -26,6 +26,8 @@ function sent(call: unknown[]): Prisma.Sql {
 function routeQueries(bench: unknown[], adds: unknown[]) {
   h.queryRaw.mockImplementation(async (...call: unknown[]) => {
     const q = sent(call).sql
+    // NBA / NHL / MLB bench calls (sportBenchGrading.ts, 2026-11-23): none recorded here.
+    if (q.includes('a.given_at >=')) return []
     if (q.includes('"SportsGame"')) {
       // Weeks 1–10 are over; week 11 kicks off after NOW.
       return Array.from({ length: 11 }, (_, i) => ({ week: i + 1, first: kick(i + 1), last: new Date(kick(i + 1).getTime() + 86_400_000) }))
@@ -56,9 +58,13 @@ describe('recomputeLedgerForLeagues', () => {
     expect(ledger).toMatchObject({ season: 2026, throughWeek: 10, bench: { right: 1, wrong: 1, pending: 1 }, pickups: { graded: 1, startable: 1 } })
     expect(ledger!.users).toEqual({})
 
-    const advice = h.queryRaw.mock.calls.map(sent).filter((s) => s.sql.includes('chimmy_advice'))
+    const all = h.queryRaw.mock.calls.map(sent).filter((s) => s.sql.includes('chimmy_advice'))
+    const sportReads = all.filter((s) => s.sql.includes('a.given_at >='))
+    const advice = all.filter((s) => !s.sql.includes('a.given_at >='))
     expect(advice).toHaveLength(2)
-    for (const s of advice) {
+    // One per other sport, each scoped the same way.
+    expect(sportReads).toHaveLength(3)
+    for (const s of [...advice, ...sportReads]) {
       expect(s.sql).toMatch(/league_id = ANY\(\?::text\[\]\)/)
       expect(s.values).toContainEqual(['L1', 'L2'])
     }
@@ -67,9 +73,13 @@ describe('recomputeLedgerForLeagues', () => {
   it('the platform-wide rebuild is unscoped, exactly as before', async () => {
     routeQueries([], [])
     await recomputeLedgerRecord({ now: NOW })
-    const advice = h.queryRaw.mock.calls.map(sent).filter((s) => s.sql.includes('chimmy_advice'))
-    expect(advice).toHaveLength(2)
-    for (const s of advice) expect(s.sql).not.toContain('ANY(')
+    const all = h.queryRaw.mock.calls.map(sent).filter((s) => s.sql.includes('chimmy_advice'))
+    const advice = all.filter((s) => !s.sql.includes('a.given_at >='))
+    // Bench calls, the panel's pickups, and the waiver engine's scored #1 claims (its own calibration, 2026-11-20).
+    expect(advice).toHaveLength(3)
+    // Plus one read per other sport's bench calls (2026-11-23).
+    expect(all.length - advice.length).toBe(3)
+    for (const s of all) expect(s.sql).not.toContain('ANY(')
   })
 
   it('no leagues reads nothing', async () => {
@@ -143,5 +153,22 @@ describe('loadPortalView — the record', () => {
     const read = vi.fn()
     await loadPortalView({ id: 'u', label: 'u' }, deps({ readRecommendationRecord: read, readWorkspace: vi.fn(async () => ({ name: 'A', bindings: [] })) }))
     expect(read).not.toHaveBeenCalled()
+  })
+})
+
+describe('the partner record carries the trade letters graded in its leagues (2026-11-22)', () => {
+  it('only letters with enough deals, per sport and measure; a record of trades alone is still a record', () => {
+    const rec = buildPartnerRecord(ledger({
+      bench: { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 },
+      pickups: { graded: 0, startable: 0, vsDrop: 0, beatDrop: 0, lostDrop: 0, pending: 0, noStats: 0 },
+      tradeOutcomes: {
+        'NFL:value': { sport: 'NFL', kind: 'value', byLetter: { A: { n: 24, net: 12.5, ahead: 17, behind: 7 }, B: { n: 3, net: 1, ahead: 2, behind: 1 } }, pending: 0, unscored: 0, gradable: 27, skips: {}, letters: {} },
+        'NBA:points': { sport: 'NBA', kind: 'points', byLetter: { D: { n: 30, net: 2.1, ahead: 18, behind: 12 } }, pending: 0, unscored: 0, gradable: 30, skips: {}, letters: {} },
+      },
+    }))
+    expect(rec).not.toBeNull()
+    const letters = rec!.trades.flatMap((b) => b.letters.map((t) => `${b.sport}:${b.kind}:${t.letter}:${t.n}`)).sort()
+    // B has 3 deals — under the sample floor, so it is not shown.
+    expect(letters).toEqual(['NBA:points:D:30', 'NFL:value:A:24'])
   })
 })

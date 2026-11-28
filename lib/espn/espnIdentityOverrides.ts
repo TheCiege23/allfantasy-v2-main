@@ -182,8 +182,8 @@ export async function applyEspnIdentityOverrides(
       const updated = await prisma.playerIdentityMap.updateMany({
         where:
           action.kind === 'set-espn'
-            ? { id: action.rowId, espnId: null, sleeperId: action.override.sleeperId }
-            : { id: action.rowId, espnId: null, sleeperId: null },
+            ? { id: action.rowId, sport: sportKey, espnId: null, sleeperId: action.override.sleeperId }
+            : { id: action.rowId, sport: sportKey, espnId: null, sleeperId: null },
         data:
           action.kind === 'set-espn'
             ? { espnId: action.override.espnId }

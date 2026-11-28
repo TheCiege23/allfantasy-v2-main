@@ -108,6 +108,12 @@ export type ReadyTradeScenario = {
      * 2026-10-10): the same deal's league-value letter, which the other manager and trade history see.
      */
     marketGrade?: string | null
+    /**
+     * Why values moved, as MEASURED from completed trades on AllFantasy (`marketEvidenceOf`): one line per asset and
+     * fact, verbatim from the grade — e.g. "Puka Nacua: AllFantasy trade market +6%: what managers actually paid…".
+     * Empty when nothing in the grade came from the trade market. Absent on scenarios sent before 2026-11-22.
+     */
+    marketEvidence?: string[]
   }
   /**
    * The saved evaluation receipt (`evaluateTrade`), so a reply can point at the one record every

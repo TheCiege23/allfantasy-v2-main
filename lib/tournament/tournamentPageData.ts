@@ -39,6 +39,8 @@ export type SerializedTournamentLeague = {
   status: string
   teamSlots: number
   currentTeamCount: number
+  /** Where the league's own draft stands, from its lifecycle. Absent on the grouped-leagues hub. */
+  draftStatus?: 'scheduled' | 'drafting' | 'complete'
   draftScheduledAt: string | null
   colorHex: string | null
   logoUrl: string | null
@@ -110,6 +112,9 @@ export type LegacyFeederLeagueRow = {
   inviteCode: string
   joinUrl: string
   conferenceName: string
+  /** 0-based round the league belongs to, and whether that is the round the tournament is in. */
+  roundIndex?: number
+  inCurrentRound?: boolean
 }
 
 export type SerializedMiniCommissionerAssignment = {
@@ -297,6 +302,21 @@ function buildAdvancersByLeagueId(
   return counts
 }
 
+/** The latest round that has started (active or completed); the first round when none has. */
+export function currentLegacyRoundIndex(rounds: ReadonlyArray<{ roundIndex: number; status: string | null }>): number {
+  const started = rounds.filter((r) => r.status === 'active' || r.status === 'completed').map((r) => r.roundIndex)
+  if (started.length > 0) return Math.max(...started)
+  return rounds.length > 0 ? Math.min(...rounds.map((r) => r.roundIndex)) : 0
+}
+
+/** A league's draft, read from its lifecycle: not started, running, or done. */
+export function legacyLeagueDraftStatus(lifecycleState: string | null | undefined): 'scheduled' | 'drafting' | 'complete' {
+  const s = String(lifecycleState ?? '').toLowerCase()
+  if (s === 'drafting') return 'drafting'
+  if (s === 'setup' || s === 'pre_draft' || s === '') return 'scheduled'
+  return 'complete'
+}
+
 function deriveRepresentativeLeagueSettings(
   leagueRows: Array<{ settings: unknown }> | Array<{ settings: unknown } | undefined>,
   settings: TournamentSettings,
@@ -311,7 +331,11 @@ function deriveRepresentativeLeagueSettings(
     .map((row) => asRecord(row?.settings))
     .find((settings) => Object.keys(settings).length > 0) ?? {}
 
-  const openingRosterSize = asFiniteInt(representative.rosterSize, 15)
+  // The size the leagues actually draft: the stored roster size, else the draft's own round count.
+  const draftRounds = leagueRows
+    .map((row) => Number((row as { leagueSettings?: { rounds?: number | null } | null } | undefined)?.leagueSettings?.rounds))
+    .find((n) => Number.isInteger(n) && n > 0)
+  const openingRosterSize = asFiniteInt(representative.rosterSize, draftRounds ?? 15)
   const qualificationBenchSize = Math.max(0, asFiniteInt(representative.benchSize, settings.benchSpotsQualification ?? 7))
   const eliminationBenchSize = Math.max(0, settings.benchSpotsElimination ?? 2)
   const starterSlots = Math.max(1, openingRosterSize - qualificationBenchSize)
@@ -473,7 +497,9 @@ async function loadLegacyTournamentLayoutPayload(
               settings: true,
               logoUrl: true,
               avatarUrl: true,
-              _count: { select: { teams: true } },
+              lifecycleState: true,
+              leagueSettings: { select: { rounds: true } },
+              _count: { select: { teams: true, rosters: true } },
             },
           })
           .catch(() => [])
@@ -486,6 +512,12 @@ async function loadLegacyTournamentLayoutPayload(
   const dbFirstRound = t.rounds[0]
   const primaryRoundId = dbFirstRound?.id ?? `${t.id}:legacy-round-placeholder`
   const primaryRoundIndex = dbFirstRound?.roundIndex ?? 0
+  /*
+   * The round the tournament is IN: the latest one that has started. `primaryRoundIndex` above is
+   * always the first round, and reading it as "current" left the home page on "Qualification"
+   * after the cut had moved everyone on (walked 2026-11-22).
+   */
+  const currentRoundIndex = currentLegacyRoundIndex(t.rounds)
 
   const participantCount = await prisma.legacyTournamentParticipant.count({
     where: { tournamentId: t.id },
@@ -523,7 +555,7 @@ async function loadLegacyTournamentLayoutPayload(
     leaguesPerConference: Math.max(1, Math.ceil(t.leagues.length / Math.max(1, t.conferences.length))),
     teamsPerLeague: typeof settings.initialLeagueSize === 'number' ? settings.initialLeagueSize : 12,
     namingMode: settings.leagueNamingMode,
-    currentRoundNumber: primaryRoundIndex + 1,
+    currentRoundNumber: currentRoundIndex + 1,
     totalRounds: Math.max(t.rounds.length, 1),
     advancersPerLeague: advancersPerLeagueDisplay,
     wildcardCount: Math.max(0, asFiniteInt(rawSettings.wildcardCount, 0)),
@@ -603,6 +635,8 @@ async function loadLegacyTournamentLayoutPayload(
       inviteCode,
       joinUrl,
       conferenceName: tl.conference?.name ?? 'Conference',
+      roundIndex: tl.roundIndex,
+      inCurrentRound: tl.roundIndex === currentRoundIndex,
     }
   })
 
@@ -722,8 +756,10 @@ async function loadLegacyTournamentLayoutPayload(
         conferenceId: tl.conferenceId,
         leagueId: tl.leagueId,
         status: tl.phase,
+        draftStatus: legacyLeagueDraftStatus(lg?.lifecycleState),
         teamSlots: lg?.leagueSize ?? 12,
-        currentTeamCount: lg?._count?.teams ?? 0,
+        // A league built by the cut has rosters before it has team rows, so the larger count is the true one.
+        currentTeamCount: Math.max(lg?._count?.teams ?? 0, lg?._count?.rosters ?? 0),
         draftScheduledAt: draftPlan.fields?.scheduledAt ?? null,
         colorHex: null,
         logoUrl: lg?.logoUrl ?? lg?.avatarUrl ?? null,

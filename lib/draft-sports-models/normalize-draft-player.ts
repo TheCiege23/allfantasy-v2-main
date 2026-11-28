@@ -34,6 +34,10 @@ export type RawDraftPlayerLike = {
   school?: string | null
   age?: number | null
   classYearLabel?: string | null
+  /** A college player's transfer-portal move, one line (lib/devy/portalMoves.ts). */
+  transferNote?: string | null
+  /** A college football player's place at his school by usage (lib/college/usageDepth.ts). */
+  depthNote?: string | null
   draftGrade?: string | null
   projectedLandingSpot?: string | null
   draftEligibleYear?: number | null
@@ -44,6 +48,8 @@ export type RawDraftPlayerLike = {
   imageUrl?: string | null
   fantasyPointsPerGame?: number | null
   statSeason?: string | null
+  /** The stat line is the season before the one being drafted: the player has no game in it yet. */
+  statSeasonIsPrevious?: boolean
   nbaDraftStats?: { pointsPerGame: number | null; reboundsPerGame: number | null; minutesPerGame: number | null } | null
   /** MLB / NHL season line, spread into `display.stats` for the pool's stat columns. */
   seasonStatLine?: Partial<Record<string, number>> | null
@@ -168,6 +174,7 @@ export function normalizeDraftPlayer(
 
   const stats: PlayerStatSnapshotModel = {
     seasonLabel: raw.statSeason ?? null,
+    ...(raw.statSeason && raw.statSeasonIsPrevious === true ? { seasonIsPrevious: true } : {}),
     rollingInsightsSupplemental: raw.rollingInsightsSupplemental ?? undefined,
     primaryStatLabel: adp != null ? 'ADP' : fppg != null ? 'PPG' : ltv != null ? 'Val' : null,
     primaryStatValue: adp ?? fppg ?? ltv ?? null,
@@ -195,9 +202,12 @@ export function normalizeDraftPlayer(
     byeWeek: bye ?? null,
     fantasyPointsPerGame: sportNorm === 'NFL' && raw.statSeason && raw.nflDraftProjectionSplits?.projectedPointsPerGame != null
       ? raw.nflDraftProjectionSplits.projectedPointsPerGame : fppg,
-    ...(sportNorm === 'NBA' && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
+    ...((sportNorm === 'NBA' || sportNorm === 'NCAAB') && raw.nbaDraftStats ? raw.nbaDraftStats : {}),
     ...((sportNorm === 'MLB' || sportNorm === 'NHL') && raw.seasonStatLine ? raw.seasonStatLine : {}),
-    ...((sportNorm === 'MLB' || sportNorm === 'NHL') &&
+    // Every sport whose pool attaches an AF projection. Left out, a sport's projection never reaches the
+    // board's sort (adp-ordering `projectedRate`) and an ADP-less board lists by name: college football and
+    // soccer did until 2026-11-27.
+    ...((sportNorm === 'MLB' || sportNorm === 'NHL' || sportNorm === 'NCAAB' || sportNorm === 'NCAAF' || sportNorm === 'SOCCER') &&
     typeof raw.afProjectionPerGame === 'number' &&
     Number.isFinite(raw.afProjectionPerGame) &&
     raw.afProjectionPerGame > 0
@@ -229,6 +239,8 @@ export function normalizeDraftPlayer(
     isDevy: isDevy || undefined,
     school: school != null ? String(school).trim() : undefined,
     classYearLabel: raw.classYearLabel != null ? String(raw.classYearLabel).trim() : undefined,
+    transferNote: raw.transferNote != null && String(raw.transferNote).trim() ? String(raw.transferNote).trim() : undefined,
+    depthNote: raw.depthNote != null && String(raw.depthNote).trim() ? String(raw.depthNote).trim() : undefined,
     draftGrade: raw.draftGrade != null ? String(raw.draftGrade).trim() : undefined,
     projectedLandingSpot: raw.projectedLandingSpot != null ? String(raw.projectedLandingSpot).trim() : undefined,
     draftEligibleYear: draftEligibleYear ?? undefined,

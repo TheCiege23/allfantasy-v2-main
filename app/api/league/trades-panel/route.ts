@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { resolveNativeRosterPlayers } from '@/lib/player-identity/resolveNativeRosterPlayers'
+import type { ResolvedProviderPlayer } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import type { LeagueTradeBlockPanelItem, LeagueTradeHistoryItem, LeagueTradeAsset } from '@/components/league/types'
 import { rosterIdMapKeys } from '@/lib/core-app/rosterIdMatch'
@@ -141,10 +144,39 @@ async function storedLogoFor(sport: string | null | undefined): Promise<StoredLo
   return getStoredTeamLogoResolver(s).catch(() => null)
 }
 
+/**
+ * Players named from their ids, for items that carry no name of their own. A Trade Center proposal (and
+ * Chimmy's offers) store only the player id, so without this the card showed "114" for Nikola Jokic.
+ * Read only in leagues AllFantasy runs, through the collision-safe native resolver: a native NBA, NCAAB
+ * or NHL id is a Rolling Insights number, which names someone else if read as a Sleeper id.
+ */
+type KnownPlayers = ReadonlyMap<string, ResolvedProviderPlayer>
+
+async function knownPlayersFor(
+  leagueId: string,
+  sport: string,
+  items: ReadonlyArray<{ itemType: string | null; itemReference: string | null; metadata: unknown }>,
+): Promise<KnownPlayers> {
+  const ids = [...new Set(items
+    .filter((i) => {
+      const type = String(i.itemType ?? 'player').toLowerCase()
+      if (type.includes('pick') || type.includes('faab') || !i.itemReference) return false
+      const meta = i.metadata && typeof i.metadata === 'object' && !Array.isArray(i.metadata) ? (i.metadata as Record<string, unknown>) : {}
+      return !(typeof meta.playerName === 'string' && meta.playerName.trim())
+    })
+    .map((i) => i.itemReference as string))]
+  if (ids.length === 0) return new Map()
+  // Never lets a failed read break the panel: no platform means no lookup, and the stored labels stand.
+  const league = await Promise.resolve().then(() => prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })).catch(() => null)
+  if (!league || !isNativePlatform(league.platform)) return new Map()
+  return resolveNativeRosterPlayers(ids, sport).catch(() => new Map<string, ResolvedProviderPlayer>())
+}
+
 function assetLabel(
   item: { itemType: string; itemReference: string | null; metadata: unknown; fromRosterId?: string | null },
   sport = 'NFL',
   storedLogo: StoredLogo = null,
+  known: KnownPlayers | null = null,
 ): {
   label: string; sublabel: string | null; playerId: string | null; team: string | null; headshotUrl: string | null; teamLogoUrl: string | null
   pick?: LeagueTradeAsset['pick']
@@ -152,19 +184,23 @@ function assetLabel(
   const meta = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
     ? (item.metadata as Record<string, unknown>)
     : {}
-  const name = typeof meta.playerName === 'string' && meta.playerName.trim() ? meta.playerName : null
-  const position = typeof meta.position === 'string' && meta.position.trim() ? meta.position : null
-  const team = typeof meta.team === 'string' && meta.team.trim() ? meta.team.trim().toUpperCase() : null
   const itemType = String(item.itemType ?? 'player').toLowerCase()
   const playerId = itemType.includes('player') ? item.itemReference : null
-  const explicitHeadshot = typeof meta.headshotUrl === 'string' && meta.headshotUrl.trim() ? meta.headshotUrl.trim() : null
+  const resolved = playerId ? known?.get(playerId) ?? null : null
+  const name = typeof meta.playerName === 'string' && meta.playerName.trim() ? meta.playerName : resolved?.name ?? null
+  const position = typeof meta.position === 'string' && meta.position.trim() ? meta.position : resolved?.position ?? null
+  const rawTeam = typeof meta.team === 'string' && meta.team.trim() ? meta.team : resolved?.team ?? null
+  const team = rawTeam ? rawTeam.trim().toUpperCase() : null
+  const explicitHeadshot = typeof meta.headshotUrl === 'string' && meta.headshotUrl.trim() ? meta.headshotUrl.trim() : resolved?.imageUrl ?? null
   const pick = pickChipFromTradeItem(item)
   return {
     label: name ?? item.itemReference ?? 'Asset',
     sublabel: [position, team].filter(Boolean).join(' · ') || null,
     playerId,
     team,
-    headshotUrl: explicitHeadshot ?? sleeperPlayerHeadshot(playerId),
+    // The Sleeper CDN path is NFL-only: outside NFL the id is not a Sleeper NFL id, and building the
+    // URL anyway shows a stranger's face (lib/player-media-urls.ts `buildHeadshotUrl`). Initials instead.
+    headshotUrl: explicitHeadshot ?? (String(sport).trim().toUpperCase() === 'NFL' ? sleeperPlayerHeadshot(playerId) : null),
     teamLogoUrl: storedLogo?.(team) ?? teamLogoUrl(sport, team),
     // A pick's year, round and original team, from its own id; absent on every other asset.
     ...(pick ? { pick } : {}),
@@ -301,10 +337,11 @@ async function buildNativeActiveTrades(
    * One row per id: `SportsPlayer` holds several for many players (see viewerNeedFactors).
    */
   const nameForId = await loadNativePlayerNames(active.flatMap((t) => t.items), leagueId)
+  const known = await knownPlayersFor(leagueId, sport, active.flatMap((t) => t.items))
   const idolPlayers = await idolRidesAlongPlayers(leagueId, userId, active.flatMap((t) => t.items))
   /* An asset as the panel draws it, marked when a player-bound Survivor idol rides along with it. */
   const nativeAsset = (item: (typeof active)[number]['items'][number]) => {
-    const label = assetLabel(item, sport, storedLogo)
+    const label = assetLabel(item, sport, storedLogo, known)
     return item.itemReference && String(item.itemType ?? '').toLowerCase().includes('player') && idolPlayers.has(item.itemReference)
       ? { ...label, idol: true }
       : label
@@ -519,6 +556,7 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
     listAfLeagueTrades(leagueId, { take: 200 }),
   ])
   const terminal = trades.filter((trade) => TERMINAL_STATUSES.has(trade.status))
+  const historyKnown = await knownPlayersFor(league.id, String(league.sport), terminal.flatMap((t) => t.items))
   if (terminal.length === 0) return []
   const [decisionReceipts, storedLogo] = await Promise.all([
     loadDecisionReceipts(terminal.map((trade) => trade.id)),
@@ -658,10 +696,10 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
           isViewer: myRosterIds.has(rosterId),
           assets: trade.items
             .filter((item) => item.fromRosterId === rosterId)
-            .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: rosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
+            .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo, historyKnown), accent: rosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
           received: trade.items
             .filter((item) => item.toRosterId === rosterId)
-            .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: item.fromRosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
+            .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo, historyKnown), accent: item.fromRosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
           grade: frozen?.grade ?? null,
           reason: frozen?.reason ?? null,
         }
@@ -681,10 +719,10 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
         executedAt: (trade.processedAt ?? trade.rejectedAt ?? trade.cancelledAt ?? trade.updatedAt ?? trade.createdAt).toISOString(),
         sent: trade.items
           .filter((item) => item.fromRosterId === trade.proposerRosterId)
-          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: 'blue' as const })),
+          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo, historyKnown), accent: 'blue' as const })),
         received: trade.items
           .filter((item) => item.fromRosterId === trade.receiverRosterId)
-          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: 'teal' as const })),
+          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo, historyKnown), accent: 'teal' as const })),
         participantSides,
         status: trade.status,
         proposalGrade: frozenProposer?.grade ?? offer?.grade ?? null,
@@ -737,6 +775,7 @@ async function buildNativeExecutedTrades(
   if (trades.length === 0) return []
   // This list used to label every asset as NFL whatever the league played.
   const storedLogo = await storedLogoFor(sport)
+  const known = await knownPlayersFor(leagueId, sport, trades.flatMap((t) => t.items))
 
   const rosterIds = [...new Set(trades.flatMap((t) => [
     t.proposerRosterId,
@@ -776,10 +815,10 @@ async function buildNativeExecutedTrades(
       // What each side SENT: `sent` is the proposer's outgoing assets, `received` the receiver's.
       sent: t.items
         .filter((i) => i.fromRosterId === t.proposerRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo), accent: 'blue' as const })),
+        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo, known), accent: 'blue' as const })),
       received: t.items
         .filter((i) => i.fromRosterId === t.receiverRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo), accent: 'teal' as const })),
+        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo, known), accent: 'teal' as const })),
       participantSides: participantIds.map((rosterId) => ({
         rosterId,
         name: nameOf(rosterId),
@@ -787,10 +826,10 @@ async function buildNativeExecutedTrades(
         isViewer: false,
         assets: t.items
           .filter((item) => item.fromRosterId === rosterId)
-          .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: rosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
+          .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo, known), accent: rosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
         received: t.items
           .filter((item) => item.toRosterId === rosterId)
-          .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: item.fromRosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
+          .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo, known), accent: item.fromRosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
         grade: null,
         reason: null,
       })),
@@ -1065,7 +1104,7 @@ export async function GET(req: NextRequest) {
        * empty here while /core Trades listed every deal. Read from the database only; a failure costs this
        * list, never the panel.
        */
-      resolveWriteAuthority(league.platform) === 'NATIVE'
+      resolveWriteAuthority(league) === 'NATIVE'
         ? Promise.resolve([] as LeagueTradeHistoryItem[])
         : prisma.leagueTeam
             .findFirst({ where: { leagueId, claimedByUserId: userId }, select: { platformUserId: true } })
@@ -1160,8 +1199,63 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    /*
+     * ── ESPN ─────────────────────────────────────────────────────────────
+     *
+     * Read from the ledger the scheduled ESPN offer sweep writes
+     * (`lib/provider-trades/syncEspnTradeOffers.ts`) — never from ESPN on this
+     * request. Only the viewer's own team's offers are stored (GAPS T-03).
+     * Graded on THE grader from the viewer's side, with their own conditional
+     * drop counted; a partner's drop is shown, and costs the viewer nothing.
+     */
+    if (platform === 'espn' && league.platformLeagueId && String(league.sport ?? 'NFL').toUpperCase() === 'NFL') {
+      const { loadEspnOfferViewsForViewer, gradeEspnOfferViews } = await import('@/lib/provider-trades/espnOfferView')
+      const read = await loadEspnOfferViewsForViewer({ leagueId, userId }).catch(() => ({
+        views: [],
+        scanned: false,
+        reason: 'ESPN offers could not be read just now' as string | null,
+        viewerTeamId: null,
+      }))
+      const trades = read.views.map((v) => v.trade)
+      const grades = await gradeEspnOfferViews(read.views, await grader()).catch(() => new Map<string, TradeGradeView>())
+      const dropLines = new Map(read.views.map((v) => [v.trade.transactionId, v.dropLine]))
+      const expiries = new Map(read.views.map((v) => [v.trade.transactionId, v.expiresAt]))
+      const espnUrl = `https://fantasy.espn.com/football/league?leagueId=${encodeURIComponent(league.platformLeagueId)}`
+      return NextResponse.json({
+        draft,
+        leagueType: leagueTypeInfo,
+        tradeBlock: [] as LeagueTradeBlockPanelItem[],
+        tradeBlockNote: tradeBlockSupport('espn').note,
+        activeTrades: [
+          ...activeTrades,
+          ...mapProviderTrades(trades, new Map(), grades).map((row) => {
+            const id = row.id.slice('espn:'.length)
+            return { ...row, dropNote: dropLines.get(id) ?? null, expiresAt: expiries.get(id) ?? null }
+          }),
+        ],
+        historyTrades,
+        activeCount: activeTrades.length + trades.length,
+        source: 'espn' as const,
+        leagueName: league.name ?? 'League',
+        providerPendingCount: trades.length,
+        providerLeagueUrl: espnUrl,
+        pending: {
+          scanned: read.scanned,
+          reason: read.reason,
+          platform: 'espn' as const,
+          leagueUrl: espnUrl,
+          weeksUnanswered: 0,
+        },
+        pendingOffers: builderOffers(trades, new Map(), grades).map((o) => ({
+          ...o,
+          dropNote: dropLines.get(o.transactionId) ?? null,
+          expiresAt: expiries.get(o.transactionId) ?? null,
+        })),
+      })
+    }
+
     const executedTrades =
-      resolveWriteAuthority(league.platform) === 'NATIVE' ? await buildNativeExecutedTrades(leagueId, userId, league.sport ?? undefined) : []
+      resolveWriteAuthority(league) === 'NATIVE' ? await buildNativeExecutedTrades(leagueId, userId, league.sport ?? undefined) : []
 
     return NextResponse.json({
       draft,
@@ -1171,7 +1265,7 @@ export async function GET(req: NextRequest) {
        * An imported league's empty block is a platform we cannot read, not a league with nothing on
        * it, so the tab says which. A native league keeps its plain empty state.
        */
-      tradeBlockNote: resolveWriteAuthority(league.platform) === 'NATIVE' ? null : tradeBlockSupport(platform).note,
+      tradeBlockNote: resolveWriteAuthority(league) === 'NATIVE' ? null : tradeBlockSupport(platform).note,
       activeTrades,
       historyTrades,
       executedTrades,
@@ -1185,7 +1279,7 @@ export async function GET(req: NextRequest) {
        */
       pending: {
         scanned: false,
-        reason: `we do not read pending offers on ${platform} yet — Sleeper and Yahoo are the two we can`,
+        reason: `we do not read pending offers on ${platform} yet — Sleeper, Yahoo and ESPN are the ones we can`,
         platform,
         leagueUrl: null as string | null,
         weeksUnanswered: 0,

@@ -14,12 +14,14 @@ import { SignInPushSheet } from '@/components/notifications/SignInPushSheet';
 import { AppMusicDock } from '@/components/app-music/AppMusicDock';
 import { IosAppLinkHandler } from '@/components/platform/IosAppLinkHandler';
 import { MetaPixelPageViewTracker } from '@/components/meta/MetaPixelPageViewTracker';
+import { PartnerActivityBeacon } from '@/components/partner-codes/PartnerActivityBeacon';
 import { ErrorBoundaryClient } from '@/components/error-handling/ErrorBoundaryClient';
 import { PlayerComparisonUIProvider } from '@/components/player-comparison-ui';
 import { buildSeoMeta } from '@/lib/seo';
 import { resolveServerDataMode, THEME_SYSTEM_RESOLVED_COOKIE_KEY } from '@/lib/theme';
 import { getLanguageTextDirection, resolveLanguage } from '@/lib/i18n/constants';
 import { IOS_APP_HTML_FLAG_SCRIPT, IOS_APP_UA_TEST_JS } from '@/lib/platform/iosApp';
+import { APP_STORE_APP_ID } from '@/lib/platform/iosAppStore';
 import { AD_OPT_OUT_TEST_JS } from '@/lib/privacy/adMeasurementOptOut';
 import './globals.css';
 
@@ -79,6 +81,9 @@ export const metadata: Metadata = {
     apple: '/icons/icon-192.png',
   },
   manifest: metadataManifestPath,
+  // ⚠ NO `itunes` HERE — the Smart App Banner tag is rendered in the layout below. Next 15 streams this
+  // metadata object into <body> for ordinary browsers, and Safari reads apple-itunes-app only from <head>,
+  // so `itunes: { appId }` here served the right tag in the wrong place and no banner ever showed.
   robots: {
     index: true,
     follow: true,
@@ -262,6 +267,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Caveat:wght@500;600;700&family=Cinzel:wght@600;700&family=JetBrains+Mono:wght@400;500;700;800&family=Bebas+Neue&family=Creepster&family=Pirata+One&display=swap"
         precedence="default"
       />
+      {/*
+        Safari on iPhone shows its own "Get the app" banner ("Open" once installed), but ONLY when this tag
+        is in <head>. As metadata (`itunes: { appId }`) Next 15 streamed it into <body> and Safari ignored it.
+        Rendered here, React hoists it into <head> like the stylesheet above (checked in the served HTML with
+        an iPhone Safari user agent). WKWebView never renders the banner, so the app is unaffected.
+        lib/platform/iosAppStore.ts holds the id.
+      */}
+      <meta name="apple-itunes-app" content={`app-id=${APP_STORE_APP_ID}`} />
       <body
         className="antialiased min-h-screen mode-readable"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
@@ -553,6 +566,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;var n=d.currentSc
             */}
             <Suspense fallback={null}>
               {isVisualQaMode ? null : <MetaPixelPageViewTracker pixelId={metaPixelId} />}
+              {/* Commissioner Partner Codes active-user meter: once a day, signed-in members only. */}
+              {initialSession?.user && process.env.PARTNER_CODES_ENABLED === '1' ? <PartnerActivityBeacon /> : null}
               <SafeGlobalChrome fbAppId={fbAppId} />
               {/*
                 iOS app only, renders nothing: re-stores this phone's push token and opens a tapped

@@ -151,7 +151,15 @@ export function rosterResponse(sport: HarnessSport) {
           slots[p.id] = cfg.slots[j]
           if (status === 'past') points[p.id] = Math.round(p.projected * (0.6 + ((i + j) % 5) / 6) * 10) / 10
         })
-        return { day: iso(d), status, slots, points, starterPoints: Object.values(points).reduce((s, v) => s + v, 0) }
+        const startedIds = Object.keys(points)
+        const starterPoints = Math.round(Object.values(points).reduce((s, v) => s + v, 0) * 10) / 10
+        // The bench is on the roster every day; one bench player scores on the first day, so the
+        // week-by-player table has points left on the bench to show (they never count).
+        t.bench.forEach((p, j) => {
+          slots[p.id] = 'bench'
+          if (status === 'past' && i === 0 && j === 2) points[p.id] = Math.round(p.projected * 0.9 * 10) / 10
+        })
+        return { day: iso(d), status, slots, points, starterPoints, startedIds }
       })
     : []
   return {
@@ -169,7 +177,16 @@ export function rosterResponse(sport: HarnessSport) {
     lineupLock: { lockedPlayerIds: t.starters.filter(p => p.status !== 'upcoming').map(p => p.id), perPlayerReasons: {} },
     irRules: { irAllowOut: true, irAllowCovid: false, irAllowSuspended: false, irAllowNA: false, irAllowDNR: false, irAllowDoubtful: false },
     dailyLineups: cfg.daily
-      ? { week: cfg.week, today: days[2].day, days, weekPoints: days.reduce((s, d) => s + d.starterPoints, 0), startedPoints: {} }
+      ? {
+          week: cfg.week,
+          today: days[2].day,
+          days,
+          weekPoints: Math.round(days.reduce((s, d) => s + d.starterPoints, 0) * 10) / 10,
+          startedPoints: days.reduce<Record<string, number>>((acc, d) => {
+            for (const id of d.startedIds) acc[id] = Math.round(((acc[id] ?? 0) + d.points[id]) * 10) / 10
+            return acc
+          }, {}),
+        }
       : null,
   }
 }
@@ -313,10 +330,11 @@ export function waiverStateResponse() {
 export function tradesResponse(sport: HarnessSport) {
   const mine = teamPlayers(sport, 0)
   const theirs = teamPlayers(sport, 3)
-  const asset = (p: Player) => ({ id: p.id, label: p.name, sublabel: `${p.position} · ${p.team}` })
+  // The route's real asset shape (app/api/league/trades-panel assetLabel): the player's id, club and crest ride along.
+  const asset = (p: Player) => ({ id: p.id, label: p.name, sublabel: `${p.position} · ${p.team}`, playerId: p.id, team: p.team, headshotUrl: null, teamLogoUrl: teamLogoUrl(sport, p.team) })
   const now = Date.now()
   return {
-    tradeBlock: [teamPlayers(sport, 5).bench[0], teamPlayers(sport, 6).starters[3], teamPlayers(sport, 8).bench[2]].map((p, i) => ({ id: `tb${i}`, ownerName: MANAGERS[5 + i], name: p.name, position: p.position, team: p.team })),
+    tradeBlock: [teamPlayers(sport, 5).bench[0], teamPlayers(sport, 6).starters[3], teamPlayers(sport, 8).bench[2]].map((p, i) => ({ id: `tb${i}`, playerId: p.id, ownerName: MANAGERS[5 + i], name: p.name, position: p.position, team: p.team })),
     activeTrades: [
       { id: 'tr1', direction: 'incoming', partnerName: MANAGERS[3], timestamp: new Date(now - 5 * 3_600_000).toISOString(), sent: [asset(mine.starters[1])], received: [asset(theirs.starters[3]), asset(theirs.bench[0])], status: 'pending', viewerIsReceiver: true, leagueGrade: { graded: true, letter: 'B+', partnerLetter: 'C+', percentDiff: 11, label: 'You win', recommendation: 'You get the better weekly starter and keep your depth. Accept unless you need the bench piece.' } },
       { id: 'tr2', direction: 'complete', partnerName: MANAGERS[6], proposerName: MANAGERS[6], receiverName: MANAGERS[9], timestamp: new Date(now - 26 * 3_600_000).toISOString(), sent: [asset(teamPlayers(sport, 6).starters[0])], received: [asset(teamPlayers(sport, 9).starters[2])], status: 'awaiting_commissioner', viewerIsCommissioner: true },
@@ -326,4 +344,181 @@ export function tradesResponse(sport: HarnessSport) {
       { id: 'h1', direction: 'complete', partnerName: MANAGERS[2], proposerName: MANAGERS[1], receiverName: MANAGERS[2], timestamp: new Date(now - 6 * 86_400_000).toISOString(), sent: [asset(teamPlayers(sport, 1).starters[4])], received: [asset(teamPlayers(sport, 2).starters[5])], status: 'accepted' },
     ],
   }
+}
+
+/**
+ * `/api/leagues/[id]/trades/rosters` — what the trade builder reads: every team's tradeable players,
+ * two future picks each, FAAB where the sport's waivers use it, and one Chimmy suggestion. The viewer
+ * holds roster `r-0`, the same team `tradesResponse` treats as "mine".
+ */
+export function tradeRostersResponse(sport: HarnessSport) {
+  const cfg = SPORTS[sport]
+  const season = 2027
+  const rosters = MANAGERS.map((ownerName, i) => {
+    const t = teamPlayers(sport, i)
+    return {
+      rosterId: `r-${i}`,
+      platformUserId: i === 0 ? 'harness-viewer' : `harness-${i}`,
+      teamExternalId: `r-${i}`,
+      ownerName,
+      ownerHandles: [],
+      avatarUrl: null,
+      wins: 8 - (i % 6),
+      losses: i % 6,
+      ties: 0,
+      playoffProbability: null,
+      faabRemaining: cfg.waiverType === 'faab' ? 100 - i * 7 : null,
+      canReceiveProposal: true,
+      players: [...t.starters, ...t.bench].map((p) => ({
+        id: p.id, name: p.name, position: p.position, team: p.team, imageUrl: null, byeWeek: null,
+        injuryStatus: p.injury, value: Math.round(p.projected * 100), weeklyProjection: p.projected,
+      })),
+      picks: [1, 2].map((round) => ({ pickId: `pk-${i}-${round}`, season, round, label: `${season} Round ${round}`, itemType: 'future_pick' as const, value: round === 1 ? 900 : 400 })),
+    }
+  })
+  const mine = rosters[0]!.players
+  const theirs = rosters[3]!.players
+  return {
+    rosters,
+    viewerRosterId: 'r-0',
+    viewerTeamRosterId: 'r-0',
+    suggestions: [3, 5, 7].map((r, k) => ({
+      rosterId: `r-${r}`,
+      fitScore: 78 - k * 9,
+      packages: [{
+        id: `sg-${r}`,
+        send: [{ kind: 'player', id: mine[5 + k]!.id, name: mine[5 + k]!.name, position: mine[5 + k]!.position, value: 1, amount: null, itemType: 'player' }],
+        receive: [{ kind: 'player', id: rosters[r]!.players[3]!.id, name: rosters[r]!.players[3]!.name, position: rosters[r]!.players[3]!.position, value: 1, amount: null, itemType: 'player' }],
+        sendValue: 1, receiveValue: 1, fairness: 92, acceptanceLikelihood: null,
+        reason: `${theirs[3]!.name.split(' ')[0]}'s team is thin where you are deep.`,
+        grade: { graded: true, letter: k === 0 ? 'B+' : 'B', partnerLetter: 'B', label: 'Fair for both', giveValue: 1200, getValue: 1300 },
+      }],
+    })),
+    multiTeamSuggestions: [],
+    tradeContext: { valueBook: 'league', managerStrategy: 'balanced', strategyConfirmed: true, missing: [] },
+  }
+}
+
+/** `/api/leagues/[id]/guillotine/summary` — a guillotine league in week 4: nine alive, three chopped. */
+export function guillotineSummaryResponse() {
+  const alive = MANAGERS.slice(0, 9)
+  const week = [142.6, 131.2, 127.9, 118.4, 109.7, 101.3, 96.8, 92.1, 84.5]
+  const season = [498.2, 471.0, 455.6, 462.3, 430.9, 441.7, 402.5, 415.0, 389.4]
+  const line = week[week.length - 1]
+  return {
+    weekOrPeriod: 4,
+    myRosterId: 'r-6',
+    dangerTiers: alive.map((displayName, i) => ({ rosterId: `r-${i}`, displayName, tier: i === 8 ? 'chop_zone' : week[i] - line <= 15 ? 'danger' : 'safe', pointsFromChopZone: Math.round((week[i] - line) * 10) / 10 })),
+    survivalStandings: alive.map((displayName, i) => ({ rosterId: `r-${i}`, displayName, rank: i + 1, seasonPointsCumul: season[i] })),
+    chopWatch: { live: true, week: 4, chopCount: 1, chopLine: line },
+    home: {
+      season: 2026, scores: Object.fromEntries(alive.map((_, i) => [`r-${i}`, week[i]])), teamCount: 12, aliveCount: 9, chopLabel: 'Wed 9:00 AM',
+      chopped: [{ rosterId: 'r-9', name: MANAGERS[9], week: 3, points: 78.2 }, { rosterId: 'r-10', name: MANAGERS[10], week: 2, points: 81.9 }, { rosterId: 'r-11', name: MANAGERS[11], week: 1, points: 66.4 }],
+    },
+    config: { eliminationStartWeek: 1, eliminationEndWeek: 11 },
+  }
+}
+
+/** `/api/leagues/[id]/week-cards`: the League page's matchups — six games, the viewer's (r-0) first. */
+export function weekCardsResponse(sport: HarnessSport) {
+  const cfg = SPORTS[sport]
+  const played = cfg.week - 1
+  const base = cfg.pts * cfg.slots.length
+  const team = (i: number) => {
+    const wins = Math.max(0, played - Math.round((i * played) / 11))
+    return {
+      rosterId: `r-${i}`, name: MANAGERS[i], avatarUrl: null, record: `${wins}-${played - wins}`,
+      points: i % 4 === 1 ? null : Math.round(base * (0.35 + (i % 5) * 0.06) * 10) / 10,
+      projected: Math.round(base * (1.15 - i * 0.025) * 10) / 10, isYou: i === 0,
+    }
+  }
+  const cards = [0, 2, 4, 6, 8, 10].map((i, n) => {
+    const home = team(i)
+    const away = team(i + 1)
+    const p = home.projected / (home.projected + away.projected)
+    return { id: `g-${n}`, label: null, status: n === 5 ? 'upcoming' : 'live', mine: n === 0, games: n === 1 ? 3 : 1, homeWinProbability: Math.round(p * 100) / 100,
+      home: n === 5 ? { ...home, points: null } : home, away: n === 5 ? { ...away, points: null } : away }
+  })
+  return { season: 2026, week: cfg.week, cards }
+}
+
+/** `/api/app/leagues/[id]/chat/moves`: the League page's activity — a trade, a waiver claim and a free-agent pickup. */
+export function activityResponse(sport: HarnessSport) {
+  const cfg = SPORTS[sport]
+  const pl = (k: number, pos: string, to: string | null = null) => ({ id: `${sport}-act-${k}`, name: name(500 + k * 7), position: pos, team: cfg.teams[k % cfg.teams.length], imageUrl: null, to })
+  const ago = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+  const pos = cfg.slots.filter(s => !['FLEX', 'UTIL', 'G', 'F'].includes(s))
+  return {
+    moves: [
+      { id: 'm1', kind: 'trade', occurredAt: ago(3), teamName: MANAGERS[1], managerName: null, avatarUrl: null, involvedTeams: [MANAGERS[1], MANAGERS[4]],
+        adds: [pl(1, pos[0], MANAGERS[1]), pl(2, pos[1 % pos.length], MANAGERS[4])], drops: [], bid: null, picks: [] },
+      { id: 'm2', kind: 'waiver', occurredAt: ago(20), teamName: MANAGERS[0], managerName: null, avatarUrl: null, involvedTeams: [MANAGERS[0]],
+        adds: [pl(3, pos[2 % pos.length])], drops: [pl(4, pos[2 % pos.length])], bid: 14, picks: [] },
+      { id: 'm3', kind: 'roster_move', occurredAt: ago(30), teamName: MANAGERS[6], managerName: null, avatarUrl: null, involvedTeams: [MANAGERS[6]],
+        adds: [pl(5, pos[3 % pos.length])], drops: [pl(6, pos[0])], bid: null, picks: [] },
+    ],
+    leagues: [],
+  }
+}
+
+/** `/api/leagues/[id]/manager-contacts`: every other team's manager is messageable (r-0 is the viewer). */
+export function managerContactsResponse() {
+  const contacts: Record<string, { username: string; displayName: string; avatarUrl: null }> = {}
+  MANAGERS.forEach((teamName, i) => {
+    if (i === 0) return
+    contacts[`r-${i}`] = { username: `manager${i}`, displayName: teamName.replace(/^The /, ''), avatarUrl: null }
+  })
+  return { contacts }
+}
+
+/** `/api/leagues/[id]/week-planner`: the sport's eight teams over the league week, in the planner's shape. */
+export function weekPlannerResponse(sport: HarnessSport, offset: number) {
+  const cfg = SPORTS[sport]
+  const teams = cfg.teams
+  const start = new Date()
+  start.setUTCHours(0, 0, 0, 0)
+  start.setUTCDate(start.getUTCDate() - 2 + offset * 7)
+  const today = new Date().toISOString().slice(0, 10)
+  // Busy and light nights: four games, one game, four, one, four, two, four.
+  const perNight = [4, 1, 4, 1, 4, 2, 4]
+  const days = perNight.map((n, i) => {
+    const d = new Date(start.getTime() + i * 86_400_000).toISOString().slice(0, 10)
+    return { day: d, games: n, status: d < today ? 'past' : d === today ? 'today' : 'future', light: n <= 1 }
+  })
+  const byTeam = new Map(teams.map((t) => [t, [] as Array<{ day: string; opponent: string; home: boolean; started: boolean }>]))
+  days.forEach((d, i) => {
+    for (let k = 0; k < d.games; k++) {
+      const home = teams[(i * 3 + k * 2) % teams.length]
+      const away = teams[(i * 3 + k * 2 + 1) % teams.length]
+      byTeam.get(home)!.push({ day: d.day, opponent: away, home: true, started: d.status === 'past' })
+      byTeam.get(away)!.push({ day: d.day, opponent: home, home: false, started: d.status === 'past' })
+    }
+  })
+  const lightDays = new Set(days.filter((d) => d.light).map((d) => d.day))
+  const rows = [...byTeam.entries()].map(([team, games]) => {
+    const open = games.filter((g) => !g.started)
+    return { team, label: team, games, count: games.length, remaining: open.length, lightRemaining: open.filter((g) => lightDays.has(g.day)).length }
+  })
+  rows.sort((a, b) => b.remaining - a.remaining || b.lightRemaining - a.lightRemaining || a.label.localeCompare(b.label))
+  const teamCodes: Record<string, string> = {}
+  for (const t of teams) teamCodes[t] = t
+  return { planner: { sport, week: cfg.week + offset, days, teams: rows }, teamCodes }
+}
+
+/** `/api/nhl/goalie-starts`: the viewer's two goalies, one projected to start and one the backup. */
+export function goalieStartsResponse() {
+  const goalies = [...teamPlayers('NHL', 0).starters, ...teamPlayers('NHL', 0).bench].filter((p) => p.position === 'G')
+  const fa = waiverPlayersResponse('NHL').players.filter((p) => p.position === 'G')
+  const today = new Date().toISOString().slice(0, 10)
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+  const proj = (day: string, starter: { id: string; name: string }, backup: { id: string; name: string } | null, confidence: 'likely' | 'lean', basis: string, team: string) => ({
+    day, team, opponent: 'DAL', home: true, status: 'projected', confidence,
+    goalie: { playerId: starter.id, name: starter.name }, alternate: backup ? { playerId: backup.id, name: backup.name } : null,
+    basis, starts: confidence === 'likely' ? 8 : 5, games: 10,
+  })
+  const out = []
+  if (goalies[0]) out.push(proj(today, goalies[0], goalies[1] ?? null, 'likely', `${goalies[0].name} has started 8 of the last 10 games.`, goalies[0].team))
+  if (goalies[2]) out.push(proj(tomorrow, goalies[2], null, 'lean', `Second night of a back-to-back: the No. 1 started last night, so ${goalies[2].name} is the likelier starter.`, goalies[2].team))
+  if (fa[0]) out.push(proj(tomorrow, fa[0], null, 'lean', `${fa[0].name} has started 5 of the last 10 games.`, fa[0].team))
+  return { generatedAt: new Date().toISOString(), projections: out }
 }

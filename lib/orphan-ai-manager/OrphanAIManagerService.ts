@@ -15,15 +15,21 @@ import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolve
 import { computeCPUPick } from '@/lib/automated-drafter/CPUDrafterService'
 import { computeAIDrafterPick, isAIDrafterProviderAvailable } from '@/lib/automated-drafter/AIDrafterService'
 import { getRosterSlotLabelsForLeagueDraft } from '@/lib/draft-room'
-import { buildDraftTradeAiReview, type DraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
+import {
+  draftPickTradeGraderSource,
+  reviewDraftPickSwap,
+  type DraftPickSwapSession,
+  type DraftPickTradeReview,
+} from '@/lib/live-draft-engine/draftPickTradeCanonicalReview'
 import type { LeagueSport } from '@prisma/client'
 import { getAssignmentForRoster, parseCommissionerAiManagers } from '@/lib/commissioner-ai-draft-manager'
 import { mapAiStyleToCpuMode } from '@/lib/commissioner-ai-draft-manager/mapAiStyle'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
 import { guardCandidates, loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
 
-export type AiManagerAuditAction = 'draft_pick' | 'trade_accept' | 'trade_reject' | 'trade_counter' | 'trade_send'
+export type AiManagerAuditAction = 'draft_pick' | 'trade_accept' | 'trade_reject' | 'trade_counter' | 'trade_send' | 'trade_hold'
 
 export interface LogActionInput {
   leagueId: string
@@ -71,21 +77,25 @@ export interface ExecuteDraftPickForOrphanResult {
   usedFallback?: boolean
 }
 
-export type OrphanAiTradeDecision = 'accept' | 'reject' | 'counter'
+/** `hold`: the swap is not graded, so the AI manager takes no action on it. */
+export type OrphanAiTradeDecision = 'accept' | 'reject' | 'counter' | 'hold'
 
-export interface DeterministicOrphanTradeDecisionInput {
-  giveRound: number
-  giveSlot: number
-  receiveRound: number
-  receiveSlot: number
-  teamCount: number
+export interface OrphanTradeDecisionInput {
+  leagueId: string
+  /** The acting commissioner, when there is one — membership/commissioner access is already proven. */
+  userId?: string | null
+  session: DraftPickSwapSession
+  /** The ORPHAN roster's side: what it gives and what it gets. */
+  give: { round: number; slot: number }
+  get: { round: number; slot: number }
+  partnerName?: string | null
 }
 
-export interface DeterministicOrphanTradeDecisionResult {
+export interface OrphanTradeDecisionResult {
   decision: OrphanAiTradeDecision
-  action: 'trade_accept' | 'trade_reject' | 'trade_counter'
+  action: 'trade_accept' | 'trade_reject' | 'trade_counter' | 'trade_hold'
   reason: string
-  review: DraftTradeAiReview
+  review: DraftPickTradeReview
 }
 
 type StrategyProfile = {
@@ -164,31 +174,29 @@ function buildDeterministicQueuePreview(
     .map((entry) => entry.player)
 }
 
-export function evaluateDeterministicTradeDecision(
-  input: DeterministicOrphanTradeDecisionInput
-): DeterministicOrphanTradeDecisionResult {
-  const review = buildDraftTradeAiReview({
-    giveRound: input.giveRound,
-    giveSlot: input.giveSlot,
-    receiveRound: input.receiveRound,
-    receiveSlot: input.receiveSlot,
-    teamCount: input.teamCount,
-  })
-
-  const decision = review.verdict as OrphanAiTradeDecision
-  const action = decision === 'accept'
-    ? 'trade_accept'
-    : decision === 'counter'
-      ? 'trade_counter'
-      : 'trade_reject'
-  const reason = review.summary || review.reasons[0] || 'Deterministic trade review completed.'
-
-  return {
-    decision,
-    action,
-    reason,
-    review,
-  }
+/**
+ * 🛑 THE ORPHAN MANAGER'S TRADE ANSWER IS THE LEAGUE GRADE (2026-11-26) — `draftPickTradeCanonicalReview`,
+ * for the orphan's own side. An even (C) grade is accepted: a fair swap. A withheld grade is `hold`: no
+ * action on a judgement nobody made.
+ */
+export async function evaluateOrphanTradeDecision(input: OrphanTradeDecisionInput): Promise<OrphanTradeDecisionResult> {
+  const { review } = await reviewDraftPickSwap(
+    draftPickTradeGraderSource({ leagueId: input.leagueId, userId: input.userId ?? null }),
+    input.session,
+    { give: input.give, get: input.get },
+    input.partnerName ?? null,
+  )
+  const decision: OrphanAiTradeDecision =
+    review.verdict === 'accept' || review.verdict === 'even'
+      ? 'accept'
+      : review.verdict === 'counter'
+        ? 'counter'
+        : review.verdict === 'reject'
+          ? 'reject'
+          : 'hold'
+  const action =
+    decision === 'accept' ? 'trade_accept' : decision === 'counter' ? 'trade_counter' : decision === 'reject' ? 'trade_reject' : 'trade_hold'
+  return { decision, action, reason: review.summary || review.reasons[0] || 'Trade reviewed.', review }
 }
 
 /**
@@ -229,16 +237,37 @@ export async function executeDraftPickForOrphan(
 
   const draftedNames = new Set(snapshot.picks.map((p) => p.playerName))
   const sport = (league.sport as LeagueSport) ?? 'NFL'
-  const pool = await getPlayerPoolForLeague(leagueId, sport, { limit: 500 })
   const sessionPool = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { playerPool: true },
+    select: { playerPool: true, draftModeLabel: true },
   })
+  if (sessionPool?.draftModeLabel === ANNUAL_C2C_DRAFT) {
+    const { submitBestAvailableAutopickForExpiredTimer } = await import('@/lib/live-draft-engine/autopickBestAvailableSubmit')
+    const overall = snapshot.currentPick.overall
+    const result = await submitBestAvailableAutopickForExpiredTimer(leagueId, currentRosterId, input.expectedOverall ?? overall)
+    if (!result.ok) return { success: false, error: 'No eligible pick could be made on the combined draft board.' }
+    return {
+      success: true,
+      pick: { playerName: result.pick.playerName, position: result.pick.position, overall, round: snapshot.currentPick.round, slot: snapshot.currentPick.slot },
+      reason: result.pick.reason,
+    }
+  }
+  const pool = await getPlayerPoolForLeague(leagueId, sport, { limit: 500 })
   // Pick validation refuses an ineligible `auto` pick in a rookies-only / veterans-only draft.
   const eligiblePool = await filterCandidatesForPlayerPool(leagueId, sessionPool?.playerPool, pool, (p) => ({
     playerName: p.full_name,
   }))
+  // The pool row's id, kept beside the drafter's name-only candidates: the pick is submitted with it.
+  // (It was submitted with none, so an AI manager's pick could finish the draft with a made-up id.)
+  const poolIdOf = new Map<string, string>()
+  const poolKey = (name: string, position: string | null | undefined) => `${name.trim().toLowerCase()}|${String(position ?? '').trim().toUpperCase()}`
+  for (const p of eligiblePool) {
+    const id = String(p.external_source_id ?? p.player_id ?? '').trim()
+    const key = poolKey(p.full_name, p.position)
+    // Two pool rows under one name and position cannot be told apart here: neither id is used.
+    if (id) poolIdOf.set(key, poolIdOf.has(key) && poolIdOf.get(key) !== id ? '' : id)
+  }
   const available = eligiblePool
     .filter((p) => !draftedNames.has(p.full_name))
     .slice(0, 250)
@@ -317,6 +346,7 @@ export async function executeDraftPickForOrphan(
     playerName: pickResult.player.name,
     position: pickResult.player.position,
     team: pickResult.player.team ?? null,
+    playerId: poolIdOf.get(poolKey(pickResult.player.name, pickResult.player.position)) || null,
     rosterId: currentRosterId,
     source: 'auto',
     ...(input.expectedOverall != null ? { expectedOverall: input.expectedOverall } : {}),

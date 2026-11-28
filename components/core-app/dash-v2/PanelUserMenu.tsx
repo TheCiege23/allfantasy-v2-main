@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useSettingsProfile } from '@/hooks/useSettingsProfile'
 import { useOptionalThemeMode } from '@/components/theme/ThemeProvider'
 import { THEME_IDS, type ThemeId } from '@/lib/theme/constants'
+import { usePartnerNudge } from '@/components/partner-codes/usePartnerNudge'
 
 /**
  * The identity control at the foot of the league panel, and the settings popup
@@ -57,6 +58,8 @@ function initialsOf(name: string): string {
 export function PanelUserMenu({ levelLabel = null }: { levelLabel?: string | null }) {
   const { profile, loading } = useSettingsProfile()
   const theme = useOptionalThemeMode()
+  // Shown only to commissioners (or code owners) while the program is on; the server decides.
+  const partner = usePartnerNudge()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
@@ -154,6 +157,12 @@ export function PanelUserMenu({ levelLabel = null }: { levelLabel?: string | nul
             <Link href="/settings" className="af-d2-usermenu-item" role="menuitem" onClick={() => setOpen(false)}>
               Subscription &amp; billing
             </Link>
+            {partner?.show ? (
+              <Link href="/partner-code" className="af-d2-usermenu-item" role="menuitem" onClick={() => setOpen(false)}>
+                Partner Code
+                <span className="af-d2-usermenu-hint af-num">{partner.menuHint}</span>
+              </Link>
+            ) : null}
             <Link href="/settings" className="af-d2-usermenu-item" role="menuitem" onClick={() => setOpen(false)}>
               Notifications
             </Link>

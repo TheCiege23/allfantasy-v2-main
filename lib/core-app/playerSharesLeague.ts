@@ -5,7 +5,7 @@ import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/proj
 import { teamForRoster } from '@/lib/trade-block/importedTradeBlock'
 import { loadLeagueValueMap, type LeagueValue } from './playerDepth'
 import { componentStats } from './playerSeason'
-import { applyBridge, bridgeColumnFor, loadBridgedLeagues } from './bridgedRosterIds'
+import { applyBridge, bridgeColumnFor, isDeclaredBridge, loadBridgedLeagues } from './bridgedRosterIds'
 import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
 import type { ShareRow } from './playerShares'
 
@@ -81,13 +81,16 @@ export async function loadLeagueShareView(
    * (bridgedRosterIds.ts), an unbridged id dropped. A player with no bridge id of his own could be
    * on a roster we cannot see, so for him a miss stays `unknown` — never "free agent".
    */
-  const bridgeColumn = idSpace === 'other' ? bridgeColumnFor(league.platform) : null
+  const bridgeColumn = idSpace === 'other' ? bridgeColumnFor(league.platform, league.sport) : null
   const bridge = bridgeColumn ? (await loadBridgedLeagues([league])).get(league.id) ?? null : null
   const bridgeReadable = bridge?.readable === true
   const bridgedPlayers = new Set<string>()
-  if (bridgeReadable && bridgeColumn && sleeperIds.length > 0) {
+  if (bridgeReadable && isDeclaredBridge(bridgeColumn)) {
+    // A pasted Yahoo league: every player has a declared spelling, so none is invisible by id alone.
+    for (const id of sleeperIds) bridgedPlayers.add(id)
+  } else if (bridgeReadable && bridgeColumn && sleeperIds.length > 0) {
     const idRows = await prisma.playerIdentityMap
-      .findMany({ where: { sleeperId: { in: sleeperIds }, [bridgeColumn]: { not: null } }, select: { sleeperId: true } })
+      .findMany({ where: { sport: 'NFL', sleeperId: { in: sleeperIds }, [bridgeColumn]: { not: null } }, select: { sleeperId: true } })
       .catch(() => [] as Array<{ sleeperId: string | null }>)
     for (const r of idRows) if (r.sleeperId) bridgedPlayers.add(r.sleeperId)
   }

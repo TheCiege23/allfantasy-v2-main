@@ -53,6 +53,7 @@ import { ThemeModeSelect } from '@/components/theme/ThemeModeSelect'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
+import { PlayerCsvDownload } from '@/components/league-export/PlayerCsvDownload'
 import {
   initialsFromName,
   leagueAvatarSrc,
@@ -244,6 +245,7 @@ function ImportedLeagueSummary({
           </a>
         ) : null}
       </div>
+      <PlayerCsvDownload leagueId={league.id} />
     </div>
   )
 }

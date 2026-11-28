@@ -1127,7 +1127,7 @@ export default function ChimmyChatShell({
           onChange={handleAssistantModeChange}
         />
         <label className="flex flex-col gap-1 min-w-[120px] flex-1 sm:flex-none">
-          <span className="text-[11px] uppercase tracking-wide text-white/45">Sport</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/50">Sport</span>
           <select
             data-testid="chimmy-scope-sport"
             className="rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
@@ -1150,7 +1150,7 @@ export default function ChimmyChatShell({
           </select>
         </label>
         <label className="flex flex-col gap-1 min-w-[160px] flex-[2] sm:flex-none sm:min-w-[220px]">
-          <span className="text-[11px] uppercase tracking-wide text-white/45">League</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/50">League</span>
           <select
             data-testid="chimmy-scope-league"
             className="max-w-full rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
@@ -1336,13 +1336,18 @@ export default function ChimmyChatShell({
           </button>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-white/40 flex-wrap gap-2">
+        {/* text-white/60, not /40: at 11px, /40 measured 3.81:1 on this panel, under the 4.5:1 AA floor
+            for small text. Hover goes one step brighter so it still reads as a change.
+            On a touch screen (pointer: coarse) each control is 44px tall rather than its 18px line box.
+            The row sits below the input row in normal flow, so the taller boxes push the composer down
+            by the difference instead of overlapping the input; a mouse keeps the compact 18px row. */}
+        <div className="flex items-center justify-between text-[11px] text-white/60 flex-wrap gap-2">
           <div className="flex items-center gap-3">
             {startSitDecisionHref ? (
               <Link
                 href={startSitDecisionHref}
                 data-testid="chimmy-start-sit-tool-link"
-                className="text-cyan-300/90 hover:text-cyan-100 underline underline-offset-2"
+                className="inline-flex items-center text-cyan-300/90 hover:text-cyan-100 underline underline-offset-2 [@media(pointer:coarse)]:min-h-[44px]"
               >
                 Start A vs B tool
               </Link>
@@ -1351,7 +1356,7 @@ export default function ChimmyChatShell({
               type="button"
               onClick={handleCopyResponse}
               data-testid="chimmy-copy-response-button"
-              className="hover:text-white/60"
+              className="inline-flex items-center hover:text-white/85 [@media(pointer:coarse)]:min-h-[44px]"
               aria-label="Copy response"
             >
               Copy response
@@ -1362,7 +1367,7 @@ export default function ChimmyChatShell({
                 onClick={handleRetry}
                 disabled={retryLoading}
                 data-testid="chimmy-retry-button"
-                className="inline-flex items-center gap-1 hover:text-white/60 disabled:opacity-50"
+                className="inline-flex items-center gap-1 hover:text-white/85 disabled:opacity-50 [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px]"
                 aria-label="Retry"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${retryLoading ? 'animate-spin' : ''}`} />
@@ -1375,7 +1380,7 @@ export default function ChimmyChatShell({
               type="button"
               onClick={onSaveConversation}
               data-testid="chimmy-save-conversation-button"
-              className="hover:text-white/60"
+              className="inline-flex items-center hover:text-white/85 [@media(pointer:coarse)]:min-h-[44px]"
             >
               Save conversation
             </button>

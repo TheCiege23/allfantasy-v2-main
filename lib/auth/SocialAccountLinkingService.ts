@@ -363,6 +363,30 @@ export async function linkSocialAccountToAppUser(
             console.warn("[social-link] referral attribution failed (non-blocking):", referralErr);
           }
         })();
+        /*
+         * Commissioner Partner Codes for OAuth sign-ups (2026-11-24). The code rides the httpOnly
+         * `af_partner_code` cookie, set either by the commissioner's /with/CODE link or by a code typed
+         * on /signup before pressing Apple or Google (/api/partner-codes/remember). Until now only the
+         * email/phone register route read it, so every social sign-up — including Sign in with Apple in
+         * the iPhone app — reached the commissioner as nobody. Create branch only, like the referral
+         * above, so a returning login is never re-attributed; awaited so the active-user meter sees it
+         * before the first request lands. Best-effort: a failure never blocks sign-in.
+         */
+        try {
+          const { isPartnerCodesEnabled, PARTNER_CODE_COOKIE } = await import("@/lib/partner-codes/flags");
+          if (isPartnerCodesEnabled()) {
+            const { cookies, headers } = await import("next/headers");
+            const partnerCode = (await cookies()).get(PARTNER_CODE_COOKIE)?.value?.trim();
+            if (partnerCode) {
+              const { clientIpFromHeaders } = await import("@/lib/http/clientIp");
+              const ip = clientIpFromHeaders(await headers());
+              const { attachReferral } = await import("@/lib/partner-codes/service");
+              await attachReferral({ userId: user.id, rawCode: partnerCode, email: user.email, ip });
+            }
+          }
+        } catch (partnerErr) {
+          console.warn("[social-link] partner code not attached (non-blocking):", partnerErr instanceof Error ? partnerErr.message : partnerErr);
+        }
       } catch (error) {
         if (!isUniqueConstraintError(error)) {
           throw error;

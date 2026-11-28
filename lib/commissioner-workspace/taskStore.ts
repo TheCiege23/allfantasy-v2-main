@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { detectLeagueTasks } from './taskSources'
+import { detectLeagueTasks, type WorkspaceTaskCandidate } from './taskSources'
 
 /**
  * The persisted half of Commissioner Workspace: reconcile detected conditions against stored rows,
@@ -158,6 +158,7 @@ export async function reconcileLeagueTasks(leagueId: string, now = new Date()): 
         },
       })
       outcome.opened += 1
+      if (candidate.notifyOnOpen) await notifyCommissionersOfTask(leagueId, candidate).catch(() => undefined)
       continue
     }
 
@@ -275,3 +276,40 @@ export async function hasEverBeenScanned(leagueId: string): Promise<boolean> {
 
 /** The automation job type that drives `reconcileLeagueTasks`. Defined here so both sides agree. */
 export const WORKSPACE_REFRESH_JOB_TYPE = 'workspace.refreshTasks'
+
+/** The league owner plus every commissioner / co-commissioner seat. */
+async function commissionerUserIds(leagueId: string): Promise<string[]> {
+  const [league, teams] = await Promise.all([
+    prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }),
+    prisma.leagueTeam.findMany({
+      where: { leagueId, OR: [{ isCommissioner: true }, { isCoCommissioner: true }] },
+      select: { claimedByUserId: true },
+    }),
+  ])
+  const ids = new Set<string>()
+  if (league?.userId) ids.add(league.userId)
+  for (const t of teams) if (t.claimedByUserId) ids.add(t.claimedByUserId)
+  return [...ids]
+}
+
+/** Sent once, when a task that asks for a decision is first opened. Deduped per task. */
+async function notifyCommissionersOfTask(leagueId: string, candidate: WorkspaceTaskCandidate): Promise<void> {
+  const n = candidate.notifyOnOpen
+  if (!n) return
+  const userIds = await commissionerUserIds(leagueId)
+  if (userIds.length === 0) return
+  const { dispatchNotification } = await import('@/lib/notifications/NotificationDispatcher')
+  await dispatchNotification({
+    userIds,
+    category: 'commissioner_alerts',
+    type: 'commissioner_workspace_task',
+    title: n.title,
+    body: n.body,
+    actionHref: n.actionHref,
+    actionLabel: n.actionLabel,
+    leagueId,
+    severity: candidate.priority === 'critical' ? 'high' : 'medium',
+    dedupePrefix: `cw-task:${leagueId}:${candidate.sourceKey}`,
+    meta: { sourceKey: candidate.sourceKey },
+  })
+}

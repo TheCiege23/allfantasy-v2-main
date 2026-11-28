@@ -1,7 +1,8 @@
 /**
  * POST: Deterministic AI manager trade actions for orphan rosters.
  * Supports:
- * - intent=respond: evaluate accept/reject/counter (optional applyDecision for proposalId)
+ * - intent=respond: the league grade's accept/reject/counter for the ORPHAN's side, or hold when the
+ *   swap is not graded (optional applyDecision for proposalId)
  * - intent=send: create deterministic outbound proposal draft (optional createProposal)
  */
 
@@ -12,7 +13,7 @@ import { authOptions } from '@/lib/auth'
 import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import {
-  evaluateDeterministicTradeDecision,
+  evaluateOrphanTradeDecision,
   logAction,
 } from '@/lib/orphan-ai-manager/OrphanAIManagerService'
 import { getDraftSessionByLeague, buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
@@ -198,6 +199,9 @@ export async function POST(
   let receiveRound = toInt(body.receiveRound)
   let receiveSlot = toInt(body.receiveSlot)
   let proposalStatus: string | null = null
+  // The orphan's side of the swap. A proposal the orphan RECEIVED is read from the receiver's side.
+  let orphanIsReceiver = false
+  let partnerRosterId: string | null = null
 
   if (proposalId) {
     const proposal = await (prisma as any).draftPickTradeProposal.findFirst({
@@ -218,6 +222,8 @@ export async function POST(
       return NextResponse.json({ error: 'Proposal does not involve this orphan roster' }, { status: 400 })
     }
     proposalStatus = proposal.status
+    orphanIsReceiver = proposal.receiverRosterId === rosterId
+    partnerRosterId = orphanIsReceiver ? proposal.proposerRosterId : proposal.receiverRosterId
     giveRound = proposal.giveRound
     giveSlot = proposal.giveSlot
     receiveRound = proposal.receiveRound
@@ -240,12 +246,19 @@ export async function POST(
     )
   }
 
-  const result = evaluateDeterministicTradeDecision({
-    giveRound,
-    giveSlot,
-    receiveRound,
-    receiveSlot,
-    teamCount: Number((draftSession as any).teamCount ?? 12),
+  const proposerPick = { round: giveRound, slot: giveSlot }
+  const receiverPick = { round: receiveRound, slot: receiveSlot }
+  const partnerName =
+    (((draftSession as any).slotOrder ?? []) as Array<{ rosterId: string; displayName: string }>).find((s) => s.rosterId === partnerRosterId)
+      ?.displayName ?? null
+  // Commissioner access was asserted above, which is what the league grader requires of its caller.
+  const result = await evaluateOrphanTradeDecision({
+    leagueId,
+    userId,
+    session: draftSession as any,
+    give: orphanIsReceiver ? receiverPick : proposerPick,
+    get: orphanIsReceiver ? proposerPick : receiverPick,
+    partnerName,
   })
 
   const applyDecision = Boolean(body.applyDecision ?? body.apply_decision ?? false)

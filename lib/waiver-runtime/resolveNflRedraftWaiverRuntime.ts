@@ -14,9 +14,7 @@ import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import {
   applyNflRedraftFreeAgentAdd,
   buildNflRedraftWaiverRuntimeState,
-  buildWaiverRuntimeEvent,
   processNflRedraftWaiverClaims,
-  validateNflRedraftWaiverClaim,
   type NflRedraftFreeAgentAddInput,
   type NflRedraftWaiverClaimInput,
   type NflRedraftWaiverPlayerInput,
@@ -32,25 +30,6 @@ export type NflRedraftWaiverRuntimeResolved =
       season: { id: string; leagueId: string; sport: string; season: number; currentWeek: number; status: string }
     }
   | { ok: false; reason: 'season_not_found' | 'league_not_found' | 'not_nfl_redraft' }
-
-export type SubmitNflRedraftWaiverClaimInput = {
-  seasonId?: string | null
-  leagueId?: string | null
-  rosterId: string
-  addPlayerId: string
-  addPlayerName?: string | null
-  addPlayerPosition?: string | null
-  addPlayerTeam?: string | null
-  dropPlayerId?: string | null
-  dropPlayerName?: string | null
-  bidAmount?: number | null
-  conditionalGroupId?: string | null
-  conditionalRank?: number | null
-  actorUserId?: string | null
-}
-export type EditNflRedraftWaiverClaimInput = SubmitNflRedraftWaiverClaimInput & {
-  claimId: string
-}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -258,6 +237,14 @@ function toRuntimeTransaction(row: {
   }
 }
 
+/**
+ * Where a READ path gets the league ruleset (2026-11-21 re-score: this read went around League OS). A GET route passes
+ * League OS's `loadRules` (`createLeagueOsLoaders`), which holds the ruleset for 60 s; every other caller — proposal
+ * validation, roster limits, move sync, matchup completion, anything that PERSISTS on the result — passes nothing and
+ * keeps reading it live, as League OS's own header requires.
+ */
+export type WaiverRuntimeRulesDeps = { loadRules?: (leagueId: string) => ReturnType<typeof resolveCanonicalLeagueRules> }
+
 export async function resolveNflRedraftWaiverRuntime(input: {
   seasonId?: string | null
   leagueId?: string | null
@@ -265,12 +252,12 @@ export async function resolveNflRedraftWaiverRuntime(input: {
   now?: Date
   includeFreeAgents?: boolean
   extraFreeAgents?: NflRedraftWaiverPlayerInput[]
-}): Promise<NflRedraftWaiverRuntimeResolved> {
+}, deps: WaiverRuntimeRulesDeps = {}): Promise<NflRedraftWaiverRuntimeResolved> {
   const season = await resolveSeason(input)
   if (!season) return { ok: false, reason: 'season_not_found' }
   if (String(season.sport).toUpperCase() !== 'NFL') return { ok: false, reason: 'not_nfl_redraft' }
 
-  const rules = await resolveCanonicalLeagueRules(season.leagueId)
+  const rules = await (deps.loadRules ?? resolveCanonicalLeagueRules)(season.leagueId)
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 
@@ -451,241 +438,6 @@ async function recordClaimTransaction(input: {
       metadata: toPrismaJsonInput(input.metadata),
     },
   })
-}
-
-async function createClaimEvents(input: {
-  leagueId: string
-  seasonId: string
-  week: number
-  type: 'waiver.claim.submitted' | 'waiver.claim.edited' | 'waiver.claim.cancelled'
-  claimId: string
-  rosterId: string
-  actorUserId?: string | null
-  payload?: Record<string, unknown>
-}) {
-  await recordLeagueEvents([
-    buildWaiverRuntimeEvent({
-      leagueId: input.leagueId,
-      type: input.type,
-      actorUserId: input.actorUserId ?? null,
-      payload: {
-        seasonId: input.seasonId,
-        week: input.week,
-        claimId: input.claimId,
-        rosterId: input.rosterId,
-        ...(input.payload ?? {}),
-      },
-    }),
-  ])
-}
-
-export async function submitNflRedraftWaiverClaim(input: SubmitNflRedraftWaiverClaimInput) {
-  const season = await resolveSeason(input)
-  if (!season) throw new Error('season_not_found')
-  if (String(season.sport).toUpperCase() !== 'NFL') throw new Error('not_nfl_redraft')
-  const meta = await resolvePlayerMeta({
-    playerId: input.addPlayerId,
-    playerName: input.addPlayerName,
-    position: input.addPlayerPosition,
-    team: input.addPlayerTeam,
-    sport: season.sport,
-  })
-  const resolved = await resolveNflRedraftWaiverRuntime({
-    seasonId: season.id,
-    week: season.currentWeek || 1,
-    includeFreeAgents: false,
-    extraFreeAgents: [meta],
-  })
-  if (!resolved.ok) throw new Error(resolved.reason)
-  const roster = resolved.state.teams.find((team) => team.rosterId === input.rosterId)
-  if (!roster) throw new Error('roster_not_found')
-
-  const conditionalGroupId = input.conditionalGroupId?.trim() || `group:${input.rosterId}:${Date.now()}`
-  const conditionalRank = Math.max(1, Math.floor(Number(input.conditionalRank ?? 1)))
-  const candidate: NflRedraftWaiverClaimInput = {
-    claimId: 'candidate',
-    rosterId: input.rosterId,
-    addPlayerId: input.addPlayerId,
-    addPlayerName: meta.playerName,
-    addPlayerPosition: meta.position,
-    addPlayerTeam: meta.team,
-    dropPlayerId: input.dropPlayerId ?? null,
-    dropPlayerName: input.dropPlayerName ?? null,
-    bidAmount: input.bidAmount ?? 0,
-    priority: conditionalRank,
-    conditionalGroupId,
-    conditionalRank,
-    status: 'pending',
-    actorUserId: input.actorUserId ?? null,
-  }
-  const validation = validateNflRedraftWaiverClaim({ state: resolved.state, claim: candidate })
-  if (!validation.ok) throw new Error(validation.message)
-
-  const claim = await prisma.redraftWaiverClaim.create({
-    data: {
-      seasonId: season.id,
-      leagueId: season.leagueId,
-      rosterId: input.rosterId,
-      addPlayerId: input.addPlayerId,
-      addPlayerName: meta.playerName,
-      dropPlayerId: input.dropPlayerId ?? null,
-      dropPlayerName: input.dropPlayerName ?? null,
-      bidAmount: input.bidAmount ?? 0,
-      priority: conditionalRank,
-    },
-  })
-  await recordClaimTransaction({
-    leagueId: season.leagueId,
-    seasonId: season.id,
-    rosterId: input.rosterId,
-    type: 'waiver_claim_submitted',
-    metadata: {
-      claimId: claim.id,
-      addPlayerId: claim.addPlayerId,
-      addPlayerName: meta.playerName,
-      addPlayerPosition: meta.position,
-      addPlayerTeam: meta.team,
-      dropPlayerId: claim.dropPlayerId,
-      dropPlayerName: claim.dropPlayerName,
-      bidAmount: claim.bidAmount,
-      conditionalGroupId,
-      conditionalRank,
-      actorUserId: input.actorUserId ?? null,
-      warning: meta.warning,
-    },
-  })
-  await createClaimEvents({
-    leagueId: season.leagueId,
-    seasonId: season.id,
-    week: season.currentWeek || 1,
-    type: 'waiver.claim.submitted',
-    claimId: claim.id,
-    rosterId: claim.rosterId,
-    actorUserId: input.actorUserId,
-    payload: { addPlayerId: claim.addPlayerId, dropPlayerId: claim.dropPlayerId, bidAmount: claim.bidAmount },
-  })
-  return { claim, warning: meta.warning }
-}
-
-export async function editNflRedraftWaiverClaim(input: EditNflRedraftWaiverClaimInput) {
-  const existing = await prisma.redraftWaiverClaim.findFirst({ where: { id: input.claimId, rosterId: input.rosterId, status: 'pending' } })
-  if (!existing) throw new Error('claim_not_found')
-  const meta = await resolvePlayerMeta({
-    playerId: input.addPlayerId || existing.addPlayerId,
-    playerName: input.addPlayerName ?? existing.addPlayerName,
-    position: input.addPlayerPosition,
-    team: input.addPlayerTeam,
-    sport: 'NFL',
-  })
-  const resolved = await resolveNflRedraftWaiverRuntime({
-    seasonId: existing.seasonId,
-    week: null,
-    includeFreeAgents: false,
-    extraFreeAgents: [meta],
-  })
-  if (!resolved.ok) throw new Error(resolved.reason)
-
-  const conditionalGroupId = input.conditionalGroupId?.trim() || `claim:${input.claimId}`
-  const conditionalRank = Math.max(1, Math.floor(Number(input.conditionalRank ?? existing.priority ?? 1)))
-  const candidate: NflRedraftWaiverClaimInput = {
-    claimId: input.claimId,
-    rosterId: input.rosterId,
-    addPlayerId: input.addPlayerId || existing.addPlayerId,
-    addPlayerName: meta.playerName,
-    addPlayerPosition: meta.position,
-    addPlayerTeam: meta.team,
-    dropPlayerId: input.dropPlayerId === undefined ? existing.dropPlayerId : input.dropPlayerId,
-    dropPlayerName: input.dropPlayerName === undefined ? existing.dropPlayerName : input.dropPlayerName,
-    bidAmount: input.bidAmount === undefined ? existing.bidAmount : input.bidAmount,
-    priority: conditionalRank,
-    conditionalGroupId,
-    conditionalRank,
-    status: 'pending',
-    actorUserId: input.actorUserId ?? null,
-  }
-  const validation = validateNflRedraftWaiverClaim({ state: resolved.state, claim: candidate, existingClaimId: input.claimId })
-  if (!validation.ok) throw new Error(validation.message)
-
-  const claim = await prisma.redraftWaiverClaim.update({
-    where: { id: input.claimId },
-    data: {
-      addPlayerId: candidate.addPlayerId,
-      addPlayerName: candidate.addPlayerName,
-      dropPlayerId: candidate.dropPlayerId,
-      dropPlayerName: candidate.dropPlayerName,
-      bidAmount: candidate.bidAmount,
-      priority: conditionalRank,
-    },
-  })
-  await recordClaimTransaction({
-    leagueId: existing.leagueId,
-    seasonId: existing.seasonId,
-    rosterId: existing.rosterId,
-    type: 'waiver_claim_edited',
-    metadata: {
-      claimId: claim.id,
-      addPlayerId: claim.addPlayerId,
-      addPlayerName: meta.playerName,
-      addPlayerPosition: meta.position,
-      addPlayerTeam: meta.team,
-      dropPlayerId: claim.dropPlayerId,
-      dropPlayerName: claim.dropPlayerName,
-      bidAmount: claim.bidAmount,
-      conditionalGroupId,
-      conditionalRank,
-      actorUserId: input.actorUserId ?? null,
-      warning: meta.warning,
-    },
-  })
-  await createClaimEvents({
-    leagueId: existing.leagueId,
-    seasonId: existing.seasonId,
-    week: resolved.state.week,
-    type: 'waiver.claim.edited',
-    claimId: claim.id,
-    rosterId: claim.rosterId,
-    actorUserId: input.actorUserId,
-    payload: { addPlayerId: claim.addPlayerId, dropPlayerId: claim.dropPlayerId, bidAmount: claim.bidAmount },
-  })
-  return { claim, warning: meta.warning }
-}
-
-export async function cancelNflRedraftWaiverClaim(input: {
-  claimId: string
-  rosterId: string
-  actorUserId?: string | null
-}) {
-  const existing = await prisma.redraftWaiverClaim.findFirst({ where: { id: input.claimId, rosterId: input.rosterId, status: 'pending' } })
-  if (!existing) throw new Error('claim_not_found')
-  const claim = await prisma.redraftWaiverClaim.update({
-    where: { id: input.claimId },
-    data: { status: 'cancelled' },
-  })
-  await recordClaimTransaction({
-    leagueId: existing.leagueId,
-    seasonId: existing.seasonId,
-    rosterId: existing.rosterId,
-    type: 'waiver_claim_cancelled',
-    metadata: {
-      claimId: existing.id,
-      addPlayerId: existing.addPlayerId,
-      addPlayerName: existing.addPlayerName,
-      dropPlayerId: existing.dropPlayerId,
-      dropPlayerName: existing.dropPlayerName,
-      bidAmount: existing.bidAmount,
-      actorUserId: input.actorUserId ?? null,
-    },
-  })
-  await createClaimEvents({
-    leagueId: existing.leagueId,
-    seasonId: existing.seasonId,
-    week: 1,
-    type: 'waiver.claim.cancelled',
-    claimId: claim.id,
-    rosterId: claim.rosterId,
-    actorUserId: input.actorUserId,
-  })
-  return { claim }
 }
 
 function playerMetaForResult(state: NflRedraftWaiverRuntimeState, playerId: string): NflRedraftWaiverPlayerInput {

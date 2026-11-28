@@ -87,15 +87,19 @@ a.af-tlg-switch-row:focus-visible {
   align-items: center;
   justify-content: center;
   min-height: 44px;
-  margin: 8px 0 0;
-  padding: 0 12px;
-  border: 1px dashed var(--line);
-  border-radius: 10px;
+  margin: 4px 0 0;
+  /*
+   * A link, not a button (2026-11-23, "crowded"): a full-width dashed box under every completed trade
+   * read as a second action on each card. Same 44px tap height, no frame.
+   */
+  padding: 0;
+  border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--accent);
   font: inherit;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .af-core .af-tr .af-tr-why-toggle.af-tlg-why-toggle:focus-visible {
@@ -122,7 +126,7 @@ a.af-tlg-switch-row:focus-visible {
 }
 @media (max-width: 640px) {
   .af-core .af-tr .af-tr-why-toggle.af-tlg-why-toggle {
-    display: flex;
-    width: 100%;
+    display: inline-flex;
+    width: auto;
   }
 }

@@ -13,6 +13,7 @@ import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type Suppor
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 import { previewTokenSpend, type TokenSpendClientPreview } from '@/lib/tokens/client-confirm'
 import { InContextMonetizationCard } from '@/components/monetization/InContextMonetizationCard'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import { TokenSpendPreflightModal } from '@/components/monetization/TokenSpendPreflightModal'
 
 type AlertSeverity = 'low' | 'medium' | 'high' | 'critical'
@@ -57,14 +58,19 @@ interface ActionLogView {
   createdAt: string
 }
 
+/** THE grade for a completed trade (`lib/ai-commissioner/TradeFairnessAnalyzer.ts`). */
 interface TradeFairnessView {
   tradeId: string
   transactionId: string | null
-  createdAt: string
+  createdAt: string | null
   sport: SupportedSport
-  fairnessScore: number
-  imbalancePct: number
-  controversyLevel: 'low' | 'medium' | 'high'
+  graded: boolean
+  letter: string | null
+  partnerLetter: string | null
+  fairnessScore: number | null
+  imbalancePct: number | null
+  controversyLevel: 'low' | 'medium' | 'high' | 'unknown'
+  withheldReason: string | null
   summary: string
   relatedManagerIds: string[]
 }
@@ -438,7 +444,8 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
           body: JSON.stringify({ alertId }),
         })
         const data = (await res.json().catch(() => ({}))) as { error?: string; narrative?: string }
-        if (!res.ok) throw new Error(data.error || 'Failed to explain alert')
+        // AF Commissioner since 2026-11-27 (`commissioner_automation`): the server's plan sentence, not "Premium feature".
+        if (!res.ok) throw new Error(readPlanRefusal(res.status, data)?.message || data.error || 'Failed to explain alert')
         const narrative = String(data.narrative ?? '').trim()
         if (narrative) {
           setExplanations((prev) => ({ ...prev, [alertId]: narrative }))
@@ -463,7 +470,8 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
           body: JSON.stringify({ tradeId }),
         })
         const data = (await res.json().catch(() => ({}))) as { error?: string; narrative?: string }
-        if (!res.ok) throw new Error(data.error || 'Failed to explain trade fairness')
+        // AF Commissioner since 2026-11-27 (`commissioner_automation`): the server's plan sentence, not "Premium feature".
+        if (!res.ok) throw new Error(readPlanRefusal(res.status, data)?.message || data.error || 'Failed to explain trade fairness')
         const narrative = String(data.narrative ?? '').trim()
         if (narrative) {
           setExplanations((prev) => ({ ...prev, [key]: narrative }))
@@ -617,7 +625,6 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
         tokenRuleCodes={[
           'commissioner_ai_cycle_run',
           'commissioner_ai_chat_question',
-          'ai_storyline_creation',
           'commissioner_ai_collusion_detection_scan',
           'commissioner_ai_tanking_detection_scan',
         ]}
@@ -913,7 +920,8 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
                   return (
                     <div key={trade.tradeId} className="rounded-md border border-white/10 bg-black/25 p-2">
                       <p className="text-[11px] text-white/80">
-                        {trade.summary} (fairness {trade.fairnessScore}/100)
+                        {trade.summary}
+                        {trade.graded ? ` (fairness ${trade.fairnessScore}/100)` : ''}
                       </p>
                       <Button
                         size="sm"

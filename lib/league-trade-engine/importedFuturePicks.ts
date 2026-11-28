@@ -27,6 +27,7 @@ import {
   upcomingDraftSeasons,
   type InventoryPick,
 } from './futurePickInventory'
+import { effectiveDraftStatus, rookieDraftStateFromPlatform } from '@/lib/dynasty-core/rookieDraftDone'
 
 const PROVIDERS_WITH_SYNCED_PICKS = new Set(['sleeper', 'mfl', 'fantrax'])
 /** Providers whose stored rows are the whole inventory (own picks included), so nothing is rebuilt. */
@@ -76,6 +77,16 @@ type InventoryArgs = {
   }>
 }
 
+/** `League.settings`, or null when it cannot be read: the answer is optional, never a reason to fail. */
+async function readLeagueSettings(leagueId: string): Promise<unknown> {
+  try {
+    const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    return row?.settings ?? null
+  } catch {
+    return null
+  }
+}
+
 /**
  * The league's whole pick inventory in provider-team-id space — the part both loaders below share.
  * `'none'` when this league's picks are not read here; `'failed'` when the table could not be read.
@@ -87,7 +98,21 @@ async function importedInventory(
   if (PROVIDERS_WITH_WHOLE_INVENTORY.has(String(args.platform ?? '').trim().toLowerCase())) {
     return wholeStoredInventory({ leagueId: args.leagueId, leagueSeason: args.leagueSeason })
   }
-  const seasons = upcomingDraftSeasons({ leagueSeason: args.leagueSeason, status: args.status })
+  /*
+   * MFL reports `in_season` all year, so it cannot say whether this season's rookie draft is still ahead.
+   * The commissioner's answer from the import confirm screen fills that in (lib/dynasty-core/rookieDraftDone.ts).
+   * Sleeper reports its draft state itself, so it skips the extra read.
+   */
+  const status =
+    rookieDraftStateFromPlatform(args.platform, args.status) != null
+      ? args.status
+      : effectiveDraftStatus({
+          platform: args.platform,
+          providerStatus: args.status,
+          settings: await readLeagueSettings(args.leagueId),
+          leagueSeason: args.leagueSeason,
+        })
+  const seasons = upcomingDraftSeasons({ leagueSeason: args.leagueSeason, status })
   const teamIds = [...new Set(args.teams.map((t) => t.externalId).filter((x) => x.length > 0))]
   const [stored, history] = await Promise.all([
     prisma.futureDraftPick

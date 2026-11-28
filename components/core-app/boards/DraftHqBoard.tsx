@@ -103,7 +103,8 @@ function statusOf(r: DraftHqAllRow, m: Copy): { label: string; sev: 'bad' | 'war
 /** The one line under a card. Computed from the row, never generated — it cannot say what the board does not show. */
 function lineOf(r: DraftHqAllRow, m: Copy): string | null {
   if (r.rawStatus === 'paused') return m.linePaused
-  if (r.yoursOnClock) return m.lineYourPick
+  /* No line on your own pick (2026-11-24): the card's tag says YOUR PICK, with the clock beside it. */
+  if (r.yoursOnClock) return null
   if (r.phase === 'live' && r.yourSlot == null) return m.lineSlotUnknown
   if (r.phase === 'live') return r.onClockName ? m.lineOnClock(r.onClockName) : m.lineRunning
   return null
@@ -159,8 +160,15 @@ function LiveDetail({ row, picks, m }: { row: DraftHqAllRow; picks: LiveDraftPic
 
   return (
     <div className="af-bd-card-body">
-      <div className="af-bd-side">
-        <span className="af-bd-side-label">{m.lastPicks}</span>
+      {/*
+        Last picks, closed until tapped (2026-11-24, the simplify pass): four rows per running draft, on a
+        page that can hold several, and the board one tap away shows every pick anyway.
+      */}
+      <details className="af-bd-side af-bd-sidefold" data-testid="draft-last-picks">
+        <summary className="af-bd-side-label">
+          {m.lastPicks}
+          {board.length > 0 ? <span className="af-bd-sidefold-n"> · {board.length}</span> : null}
+        </summary>
         {board.length > 0 ? (
           board.map((p) => (
             <span className="af-bd-asset" key={p.overall}>
@@ -171,6 +179,7 @@ function LiveDetail({ row, picks, m }: { row: DraftHqAllRow; picks: LiveDraftPic
                 imageUrl={p.imageUrl}
                 name={p.playerName ?? m.unnamedPick}
                 teamLogoUrl={teamLogoUrl(p.sport ?? 'NFL', p.team)}
+                team={p.team}
                 size="sm"
               />
               <span className="af-bd-asset-name">
@@ -202,7 +211,7 @@ function LiveDetail({ row, picks, m }: { row: DraftHqAllRow; picks: LiveDraftPic
             <span className="af-bd-asset-name">{m.noPicks}</span>
           </span>
         )}
-      </div>
+      </details>
 
       {queue.length > 0 ? (
         <div className="af-bd-side">
@@ -242,8 +251,12 @@ function Card({ row, picks, m }: { row: DraftHqAllRow; picks?: LiveDraftPicks; m
   const label = platformLabel(row.platform)
   const format = [row.modeLabel, row.draftType].filter(Boolean).join(' · ') || null
   const yourPick = isYourPickNow(row)
-  /* "On the clock" only while a pick is genuinely being made; off that, it is not drawn at all. */
-  const onClock = row.yoursOnClock ? m.you : row.phase === 'live' ? row.onClockName : null
+  /*
+   * "On the clock" only while someone else's pick is being made (2026-11-24): on your own pick the card's tag
+   * already says YOUR PICK with the clock beside it, so "On the clock · You" said it twice. Off a live pick it
+   * is not drawn at all.
+   */
+  const onClock = row.yoursOnClock ? null : row.phase === 'live' ? row.onClockName : null
   const slot = slotOf(row, m)
   const round = row.currentRound != null ? (row.rounds != null ? m.of(row.currentRound, row.rounds) : String(row.currentRound)) : null
   const line = lineOf(row, m)
@@ -315,9 +328,15 @@ function Row({ row, m }: { row: DraftHqAllRow; m: Copy }) {
           </span>
         ) : null}
       </span>
-      <span className="af-bd-tag" data-sev={status.sev}>
-        {status.label}
-      </span>
+      {/*
+        The plain "Not started" / "Complete" tag is not drawn (2026-11-24): the section heading above these
+        rows already says it. A raw provider status we could not place still shows, since nothing else does.
+      */}
+      {row.phase === 'upcoming' || row.phase === 'done' ? null : (
+        <span className="af-bd-tag" data-sev={status.sev}>
+          {status.label}
+        </span>
+      )}
       <Link className="af-bd-btn af-dh-row-btn" href={boardHref(row)}>
         {buttonLabel(row, m)}
       </Link>
@@ -350,7 +369,9 @@ function DraftHqBoard({ data, allHref, totalLeagues, picks, language = null }: D
 
   return (
     <div className="af-bd af-bd--drafts">
-      <BoardHead eyebrow={m.eyebrow} title={headlineText(headline, m)} blurb={m.intro} />
+      {/* No intro under the headline once there are drafts (2026-11-24, the simplify pass): the headline and the
+          sections under it ("Your pick now", "Drafting now"…) say it. The empty board keeps it, where it explains. */}
+      <BoardHead eyebrow={m.eyebrow} title={headlineText(headline, m)} />
 
       {withDraft === 0 ? <p className="af-bd-note">{m.noDraftYet(data.withoutDraft)}</p> : null}
 

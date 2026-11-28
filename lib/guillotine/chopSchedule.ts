@@ -4,6 +4,8 @@
  *   schedule    "teams chopped per week by schedule (e.g., 1/wk then 2/wk after week 10)" — steps
  *   overrides   "double-chop weeks, 'no-chop' holiday weeks" — a week set to 0, 2, 3…
  *   immunity    "weekly top scorer is chop-proof next week"
+ *   faab        "released-player rules: FAAB reset amount" — what every surviving team's FAAB becomes after
+ *               a chop: unchanged, topped up by an amount, or reset to an amount (see ./faabAfterChop)
  *
  * Until now the engine took one `teamsPerChop` for the whole season. `League.guillotineAcceleratedWeeks`
  * and `guillotineEliminationsPerPeriod` were written at creation and read by nothing, so a commissioner
@@ -22,6 +24,11 @@ export const MAX_CHOPS_PER_WEEK = 4
 const MAX_WEEK = 30
 
 type ImmunityRule = 'off' | 'top_scorer'
+export const MAX_FAAB_AMOUNT = 10_000
+
+/** After each chop: survivors keep their FAAB, get `amount` added, or are reset to `amount`. */
+export type FaabAfterChop = { mode: 'unchanged' | 'add' | 'set'; amount: number }
+export const DEFAULT_FAAB_AFTER_CHOP: FaabAfterChop = { mode: 'unchanged', amount: 0 }
 
 export type GuillotineAdvanced = {
   /** From `fromWeek` on, `chops` teams per week (until the next step). Sorted by week. */
@@ -29,15 +36,31 @@ export type GuillotineAdvanced = {
   /** Exact weeks: 0 = no chop (holiday), 2+ = double/triple chop. Wins over steps. */
   overrides: Record<number, number>
   immunity: ImmunityRule
+  faab: FaabAfterChop
+  /**
+   * Once `teamsLeft` or fewer teams remain, `chops` teams per week (owner's list, 2026-11-25: "trigger a rule
+   * when N teams remain, not only in week N"). Absent = none. Sorted by `teamsLeft`, highest first. Wins over a
+   * week step; an exact-week override still wins over it.
+   */
+  remaining?: Array<{ teamsLeft: number; chops: number }>
+  /**
+   * FAAB added to the surviving team with the week's top score, after each chop (./faabBonus.ts). Absent or 0 =
+   * off. A tie at the top splits it.
+   */
+  topScorerBonus?: number
 }
 
-export const DEFAULT_ADVANCED: GuillotineAdvanced = { steps: [], overrides: {}, immunity: 'off' }
+export const DEFAULT_ADVANCED: GuillotineAdvanced = { steps: [], overrides: {}, immunity: 'off', faab: DEFAULT_FAAB_AFTER_CHOP }
 
 const isWeek = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= MAX_WEEK
 const isChops = (n: unknown, allowZero: boolean): n is number =>
   typeof n === 'number' && Number.isInteger(n) && n >= (allowZero ? 0 : 1) && n <= MAX_CHOPS_PER_WEEK
 
-export type NormalizeError = 'bad_step' | 'duplicate_step' | 'bad_override' | 'bad_immunity'
+export type NormalizeError = 'bad_step' | 'duplicate_step' | 'bad_override' | 'bad_immunity' | 'bad_faab' | 'bad_remaining' | 'bad_bonus'
+
+/** Teams-left a rule can name: 2 (the last two) up to a full 32-team league. */
+export const MAX_TEAMS_LEFT = 32
+const isTeamsLeft = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 2 && n <= MAX_TEAMS_LEFT
 
 /** Validate a commissioner's input. Strict: an invalid row is an error, never silently dropped. */
 export function normalizeAdvanced(raw: unknown): { ok: true; value: GuillotineAdvanced } | { ok: false; error: NormalizeError } {
@@ -60,7 +83,34 @@ export function normalizeAdvanced(raw: unknown): { ok: true; value: GuillotineAd
   }
   const immunity = r.immunity ?? 'off'
   if (immunity !== 'off' && immunity !== 'top_scorer') return { ok: false, error: 'bad_immunity' }
-  return { ok: true, value: { steps, overrides, immunity } }
+  // Saved before this rule existed: no `faab` means unchanged.
+  const f = r.faab == null ? DEFAULT_FAAB_AFTER_CHOP : (r.faab as Record<string, unknown>)
+  if (typeof f !== 'object' || (f.mode !== 'unchanged' && f.mode !== 'add' && f.mode !== 'set')) return { ok: false, error: 'bad_faab' }
+  const amount = f.mode === 'unchanged' ? 0 : f.amount
+  if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < (f.mode === 'add' ? 1 : 0) || amount > MAX_FAAB_AMOUNT) return { ok: false, error: 'bad_faab' }
+  const remainingIn = Array.isArray(r.remaining) ? r.remaining : []
+  const remaining: NonNullable<GuillotineAdvanced['remaining']> = []
+  for (const s of remainingIn) {
+    const x = (s ?? {}) as Record<string, unknown>
+    if (!isTeamsLeft(x.teamsLeft) || !isChops(x.chops, true)) return { ok: false, error: 'bad_remaining' }
+    if (remaining.some((p) => p.teamsLeft === x.teamsLeft)) return { ok: false, error: 'bad_remaining' }
+    remaining.push({ teamsLeft: x.teamsLeft, chops: x.chops })
+  }
+  remaining.sort((a, b) => b.teamsLeft - a.teamsLeft)
+  const bonus = r.topScorerBonus ?? 0
+  if (typeof bonus !== 'number' || !Number.isInteger(bonus) || bonus < 0 || bonus > MAX_FAAB_AMOUNT) return { ok: false, error: 'bad_bonus' }
+  return {
+    ok: true,
+    value: {
+      steps,
+      overrides,
+      immunity,
+      faab: { mode: f.mode, amount },
+      // Only when set, so a schedule saved before these rules reads back exactly as it was stored.
+      ...(remaining.length ? { remaining } : {}),
+      ...(bonus > 0 ? { topScorerBonus: bonus } : {}),
+    },
+  }
 }
 
 /** What is stored. Anything unreadable reads as the default rather than breaking a chop. */
@@ -71,12 +121,37 @@ export function readAdvanced(settings: unknown): GuillotineAdvanced {
 }
 
 export function isDefault(a: GuillotineAdvanced): boolean {
-  return a.steps.length === 0 && Object.keys(a.overrides).length === 0 && a.immunity === 'off'
+  return (
+    a.steps.length === 0 &&
+    Object.keys(a.overrides).length === 0 &&
+    a.immunity === 'off' &&
+    a.faab.mode === 'unchanged' &&
+    !(a.remaining?.length) &&
+    !(a.topScorerBonus && a.topScorerBonus > 0)
+  )
 }
 
-/** Teams this week calls for: an exact-week override, else the latest step at or before the week, else the base. */
-export function scheduledChops(a: GuillotineAdvanced, week: number, base: number): number {
+/** A survivor's FAAB after a chop under the rule. A team with no balance yet counts as $0. */
+export function faabAfterChop(rule: FaabAfterChop, current: number | null): number {
+  if (rule.mode === 'set') return rule.amount
+  const base = current ?? 0
+  return rule.mode === 'add' ? base + rule.amount : base
+}
+
+/**
+ * Teams this week calls for: an exact-week override; else, when `aliveBefore` (teams alive going into this
+ * week's chop) is known, the teams-remaining rule for the fewest teams that applies; else the latest week step
+ * at or before the week; else the base.
+ *
+ * A caller that does not know the field size gets the week-only answer, which is what every caller got before.
+ */
+export function scheduledChops(a: GuillotineAdvanced, week: number, base: number, aliveBefore?: number): number {
   if (Object.prototype.hasOwnProperty.call(a.overrides, week)) return a.overrides[week]
+  if (aliveBefore != null && a.remaining?.length) {
+    let hit: number | null = null
+    for (const r of a.remaining) if (aliveBefore <= r.teamsLeft) hit = r.chops
+    if (hit != null) return hit
+  }
   let n = base
   for (const s of a.steps) if (s.fromWeek <= week) n = s.chops
   return n
@@ -112,6 +187,12 @@ export function describeSchedule(a: GuillotineAdvanced, base: number, startWeek:
   for (const [w, n] of Object.entries(a.overrides).sort((x, y) => Number(x[0]) - Number(y[0]))) {
     lines.push(n === 0 ? `Week ${w}: no chop.` : `Week ${w}: ${t(n)} chopped.`)
   }
+  for (const r of [...(a.remaining ?? [])].sort((x, y) => y.teamsLeft - x.teamsLeft)) {
+    lines.push(r.chops === 0 ? `Once ${r.teamsLeft} teams are left: no more chops.` : `Once ${r.teamsLeft} teams are left: ${t(r.chops)} a week.`)
+  }
   if (a.immunity === 'top_scorer') lines.push('Each week’s top scorer cannot be chopped the next week.')
+  if (a.faab.mode === 'add') lines.push(`After each chop, every surviving team gets $${a.faab.amount} more FAAB.`)
+  if (a.faab.mode === 'set') lines.push(`After each chop, every surviving team’s FAAB resets to $${a.faab.amount}.`)
+  if (a.topScorerBonus && a.topScorerBonus > 0) lines.push(`After each chop, the week’s top scorer gets $${a.topScorerBonus} more FAAB.`)
   return lines
 }

@@ -38,7 +38,15 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'app/api/redraft/trades/trade-block/route.ts', entry: /gradeDeal\(/, what: 'the trade block' },
   { file: 'lib/core-app/trades.ts', entry: /gradeDeal\(/, what: 'the /core Trades pending list' },
   /* 2026-09-28: the live draft's pick-trade builder, rookie drafts (see lib/live-draft-engine/draftPickTradeGrade.ts). */
-  { file: 'app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts', entry: /gradeDeal\(/, what: 'the live draft pick-trade builder' },
+  /* 2026-11-26: every draft-room pick-trade verdict goes through ONE module, and that module to the one grader. */
+  { file: 'lib/live-draft-engine/draftPickTradeCanonicalReview.ts', entry: /gradeDeal\(/, what: 'the draft-room pick-swap verdict' },
+  { file: 'app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts', entry: /reviewDraftPickSwap\(/, what: 'the live draft pick-trade builder' },
+  { file: 'app/api/leagues/[leagueId]/draft/trade-builder/suggestions/route.ts', entry: /leagueGradeForDraftPickSwap\(/, what: 'the live draft pick-trade suggestions' },
+  { file: 'app/api/leagues/[leagueId]/draft/trade-proposals/route.ts', entry: /reviewDraftPickSwap\(/, what: 'the draft pick offer DM and notification' },
+  { file: 'app/api/leagues/[leagueId]/draft/trade-proposals/[proposalId]/review/route.ts', entry: /reviewDraftPickSwap\(/, what: 'the receiver’s private draft-offer review' },
+  { file: 'app/api/league/trade-grades/route.ts', entry: /leagueGradeForDraftPickSwap\(/, what: 'the league trade feed’s draft-pick proposals' },
+  { file: 'lib/commissioner-ai-draft-manager/aiTradeAutoResponse.ts', entry: /reviewDraftPickSwap\(/, what: 'the commissioner AI manager’s answer to a pick offer' },
+  { file: 'lib/orphan-ai-manager/OrphanAIManagerService.ts', entry: /reviewDraftPickSwap\(/, what: 'the orphan AI manager’s answer to a pick offer' },
   /* 2026-09-28: "Propose a Trade" — the deal as composed, before it is sent (packages: the rosters route above). */
   { file: 'app/api/leagues/[leagueId]/trades/grade-preview/route.ts', entry: /gradeDeal\(/, what: 'the trade proposal composer' },
   { file: 'lib/chimmy/tradeScenarioGrounding.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'Chimmy, on a trade between rostered players (the evaluate_trade tool and the push path) — through the one engine, with a receipt' },
@@ -75,6 +83,13 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'app/api/trades/evaluate/route.ts', entry: /evaluateStoredTrade\(/, what: 'POST /api/trades/evaluate' },
   /* 2026-09-27: /trade-finder's candidates (see lib/trade-finder/candidateGrades.ts). */
   { file: 'app/api/trade-finder/route.ts', entry: /gradeDeal\(/, what: 'the /trade-finder page’s suggested trades' },
+  /* 2026-11-26: the other three trade finders — generation stays theirs, every verdict is the grade's. */
+  { file: 'app/api/trade-finder/matchmaking/route.ts', entry: /gradeDeal\(/, what: 'Partner Match (Find Best Partners) offers' },
+  { file: 'app/api/league/trade-finder/route.ts', entry: /gradeDeal\(/, what: 'the league trade finder (Trade Center panel, Decide tab)' },
+  { file: 'app/api/redraft/trades/package-finder/route.ts', entry: /gradeDeal\(/, what: 'the redraft package finder (Find a Trade)' },
+  /* 2026-11-26: Chimmy's "find me a trade" ideas and its league brief's latest-trade letter. */
+  { file: 'lib/chimmy/tradeFinderGrounding.ts', entry: /gradeDeal\(/, what: 'Chimmy trade ideas (find_trade)' },
+  { file: 'lib/intelligence/chimmy/leagueIntelligenceGrounding.ts', entry: /oneGradeForCompletedTrade\(/, what: 'Chimmy league brief, latest completed trade' },
   /* 2026-09-29: the /core Player Finder's "trade for him" card — it printed a second engine's verdict until then. */
   { file: 'lib/core-app/playerTradeVisual.ts', entry: /gradeDeal\(/, what: 'the /core Player Finder “trade for him” card' },
 ]
@@ -90,6 +105,7 @@ const PRIVATE_LETTERS: ReadonlyArray<{ name: string; shape: RegExp }> = [
   { name: 'a value edge on the mean of both sides', shape: /letterForValueEdge\(/ },
   { name: 'the flat-200 FantasyCalc balance', shape: /calculateTradeBalance\(/ },
   { name: "the canonical memo's fairness letter", shape: /canonicalFairnessGrade\(/ },
+  { name: 'the overall-distance draft-pick verdict (retired 2026-11-26)', shape: /buildDraftTradeAiReview\(/ },
 ]
 
 describe.each(SURFACES)('$what', ({ file, entry }) => {
@@ -214,9 +230,15 @@ describe('the /trade-evaluator page shows only the receipt beside its letter', (
     ['composite fairness', /fairnessScore:\s*null,/],
     ['composite confidence', /confidencePct:\s*null,/],
     ['acceptance drivers', /drivers:\s*\[\],/],
-    ['the IDP fairness range', /idpCeilingCaveat:\s*null,/],
   ])('blanks %s', (_what, shape) => {
     expect(map).toMatch(shape)
+  })
+
+  // The IDP ceiling caveat was blanked here while it was on the old composite scale. Since 2026-11-26
+  // it is in the grade's own letters, and is mapped only beside the real grade it was computed for.
+  it('maps the IDP ceiling caveat only beside the matching real grade', () => {
+    expect(map).toMatch(/caveat\.gradeLetter === panel\.senderGrade/)
+    expect(map).toMatch(/!panel\.gradeWithheld/)
   })
 
   it('never derives a verdict from acceptance odds, and keeps no historical letter scale', () => {
@@ -418,7 +440,9 @@ describe('Chimmy — explains the one grade, never makes one (design step 7)', (
 
   it('the tool loop’s answer is held to the letters the engine gave', () => {
     const route = code('app/api/chat/chimmy/route.ts')
-    expect(route).toMatch(/tradeGrades: \[\] as ChimmyTradeGrade\[\]/)
+    // One list, started empty, shared with the grounding packet's graded inbox (2026-11-20).
+    expect(route).toMatch(/const packetTradeGrades: ChimmyTradeGrade\[\] = \[\]/)
+    expect(route).toMatch(/tradeGrades: packetTradeGrades,/)
     expect(route).toMatch(/enforceTradeLetters\(\{\s*answer: loop\.text,\s*grades: toolContext\.tradeGrades,/)
   })
 })
@@ -426,7 +450,10 @@ describe('Chimmy — explains the one grade, never makes one (design step 7)', (
 describe('College redraft — points over replacement, never the private scale (design step 8)', () => {
   it('the league grader asks the college grader first, before any chart pricing', () => {
     const src = code('lib/decision-os/trade/leagueTradeGrader.ts')
-    expect(src).toMatch(/sport === 'NCAAF'\s*\?\s*createNcaafLeagueGrader\(/)
+    // Phase 5: the concept registry names the college grader for every NCAAF concept but Zombie
+    // (`conceptGradingRegistry.ts`; parity with the old `sport === 'NCAAF'` gate is in concept-grading-registry.test.ts).
+    expect(src).toMatch(/rule\.grader === 'ncaaf_college'\s*\?\s*createNcaafLeagueGrader\(/)
+    expect(code('lib/decision-os/trade/conceptGradingRegistry.ts')).toMatch(/redraft: \{ NFL: CHART, NCAAF: COLLEGE_REDRAFT/)
     const college = src.indexOf('await college.grade(give, get)')
     const chart = src.indexOf('resolveAssets(give, opts)')
     expect(college).toBeGreaterThan(-1)
@@ -455,7 +482,8 @@ describe('College redraft — points over replacement, never the private scale (
 describe('League asset rules — picks refused where unpriced, held devy prospects priced (design step 9)', () => {
   it('the league grader refuses picks before pricing and prices devy before grading', () => {
     const src = code('lib/decision-os/trade/leagueTradeGrader.ts')
-    const refuse = src.indexOf('assets.pickRefusal([...give, ...get])')
+    // Every pick but a startup/redraft live-draft board pick (priced from that draft's board, 2026-11-26).
+    const refuse = src.indexOf('assets.pickRefusal([...give, ...get].filter((a) => !isBoardPick(a)))')
     const price = src.indexOf('resolveAssets(give, opts)')
     expect(refuse).toBeGreaterThan(-1)
     expect(price).toBeGreaterThan(refuse)

@@ -112,6 +112,23 @@ describe('the sheet', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('never paints the welcome guide and the alerts sheet together, even for one frame', async () => {
+    // CI caught both on screen at once (2026-11-22, two unrelated PRs). The sheet used to announce itself in a
+    // passive effect, which runs AFTER the DOM is committed, so there was a window with both prompts painted. A
+    // MutationObserver fires in that window (before passive effects), which is what a user would see.
+    const both: boolean[] = []
+    const seen = new MutationObserver(() => {
+      if (document.querySelector('[data-testid="signin-push-sheet"]')) both.push(Boolean(document.querySelector('.af-welcome')))
+    })
+    seen.observe(document.body, { childList: true, subtree: true })
+    render(<><HomePromptSlot enabled><CoreWelcomeTour leagueCount={1} /></HomePromptSlot><SignInPushSheet /></>)
+    await screen.findByTestId('signin-push-sheet')
+    await new Promise((r) => setTimeout(r, 0))
+    seen.disconnect()
+    expect(both.length).toBeGreaterThan(0)
+    expect(both).not.toContain(true)
+  })
+
   it('shows after sign-in, and counts the ask', async () => {
     render(<SignInPushSheet />)
     await waitFor(() => expect(screen.getByText(TITLE)).toBeTruthy())
@@ -167,5 +184,42 @@ describe('the sheet', () => {
     fireEvent.click(await screen.findByText('Turn on alerts'))
     expect(h.enable).toHaveBeenCalledTimes(1)
     expect(h.subscribe).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * Measured (2026-11-24): the sheet asks every new account but sent no event, so `push_ask_shown`
+ * counted only Player Finder and read as "1 of 22 new users was asked". Same events and key as PushAsk.
+ */
+describe('the sheet is counted, by placement', () => {
+  const tracked = () =>
+    (vi.mocked(fetch).mock.calls as unknown as Array<[string, { body?: string }?]>)
+      .filter((c) => c[0] === '/api/analytics/track')
+      .map((c) => JSON.parse(String(c[1]?.body)) as { event: string; toolKey: string; meta: Record<string, string> })
+
+  it('shown, then "Not now": push_ask_shown + push_ask_dismissed with placement signin_sheet', async () => {
+    render(<SignInPushSheet />)
+    fireEvent.click(await screen.findByText('Not now'))
+    await waitFor(() => expect(tracked().map((e) => e.event)).toEqual(['push_ask_shown', 'push_ask_dismissed']))
+    for (const e of tracked()) {
+      expect(e.toolKey).toBe('push_ask')
+      expect(e.meta).toEqual({ placement: 'signin_sheet', mode: 'web' })
+    }
+  })
+
+  it('shown, then turned on: push_ask_enabled once, and closing "Done" is not a dismissal', async () => {
+    h.subscribe.mockResolvedValue(true)
+    render(<SignInPushSheet />)
+    fireEvent.click(await screen.findByText('Turn on alerts'))
+    await waitFor(() => expect(screen.getByText("You're set")).toBeTruthy())
+    fireEvent.click(screen.getByText('Done'))
+    await waitFor(() => expect(tracked().map((e) => e.event)).toEqual(['push_ask_shown', 'push_ask_enabled']))
+  })
+
+  it('never shown: nothing counted', async () => {
+    h.web.permission = 'granted'
+    render(<SignInPushSheet />)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(tracked()).toEqual([])
   })
 })

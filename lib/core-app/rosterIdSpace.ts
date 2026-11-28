@@ -1,5 +1,6 @@
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { prisma } from '@/lib/prisma'
+import { declaredSleeperId } from './declaredSleeperId'
 
 /**
  * Which player-id vocabulary a league's rosters speak, and the translation that
@@ -78,7 +79,17 @@ export function isKnownNonNflSport(sport: RosterIdSport): boolean {
 
 export function rosterIdSpaceOf(platform: string | null | undefined, sport?: RosterIdSport): RosterIdSpace {
   const p = (platform ?? '').trim().toLowerCase()
-  if (p === 'espn') return 'espn'
+  /*
+   * 🛑 'espn' MEANS "TRANSLATE THROUGH THE NFL CROSSWALK", SO IT IS AN NFL ANSWER (2026-11-27). Every
+   * ESPN → Sleeper translator here (`loadEspnToSleeperMap`, `crosswalkToSleeperIds`, the readers that
+   * call them) maps onto `PlayerIdentityMap.sleeperId` — NFL Sleeper's numbering. Sleeper numbers
+   * each sport separately (NFL 1466 is Travis Kelce, NBA 1466 is JaVale McGee), so an ESPN basketball
+   * or baseball roster put through that map comes out as NFL players. A known non-NFL ESPN league is
+   * therefore foreign here: unreadable as Sleeper ids, never a wrong player. Its sport-correct read
+   * is `sportRosterTranslate.ts` (`espnId` scoped to the league's own sport, to the catalog).
+   * An unknown sport keeps 'espn', for the reason `isKnownNonNflSport` gives for native leagues.
+   */
+  if (p === 'espn') return isKnownNonNflSport(sport) ? 'other' : 'espn'
   if (p === 'sleeper') return 'sleeper'
   // Native leagues speak Sleeper ids — in NFL. `isNativePlatform` owns the native spellings
   // (allfantasy, af, manual, native); a local copy of that list once omitted `af` and `native` and
@@ -88,6 +99,21 @@ export function rosterIdSpaceOf(platform: string | null | undefined, sport?: Ros
   if (p === '') return 'sleeper'
   if (isNativePlatform(p)) return isKnownNonNflSport(sport) ? 'other' : 'sleeper'
   return 'other'
+}
+
+/**
+ * The league's sport when the league is ESPN's, and `undefined` otherwise: the sport exactly as far as
+ * the ESPN rule in `rosterIdSpaceOf` needs it, and no further.
+ *
+ * ⚠ FOR A READER THAT MUST NOT ALSO STRIP A NATIVE LEAGUE OF ANOTHER SPORT. Passing the full sport
+ * makes a native NBA/NHL league foreign as well (its ids are Rolling Insights'), which is right for a
+ * Sleeper-id reader and wrong for one that reads that league's catalog ids BY SPORT — Chimmy's
+ * canonical world, the other-sport waiver pool and lineup builder, the AI team context. Those callers
+ * pass this instead, so an ESPN basketball league stops going through the NFL crosswalk while a
+ * native one reads exactly as before.
+ */
+export function espnSportOf(platform: string | null | undefined, sport: RosterIdSport): RosterIdSport {
+  return (platform ?? '').trim().toLowerCase() === 'espn' ? sport : undefined
 }
 
 /**
@@ -113,12 +139,32 @@ const STRIPPED_ARRAY_KEYS: readonly string[] = [...ROSTER_KEYS, 'ir', 'devy', 'b
 export function stripForeignIds(playerData: unknown): Record<string, unknown> {
   const pd = (playerData ?? {}) as Record<string, unknown>
   const out: Record<string, unknown> = { ...pd }
-  for (const key of STRIPPED_ARRAY_KEYS) if (Array.isArray(pd[key])) out[key] = []
+  /*
+   * ⚠ EXCEPT AN ID THAT DECLARES ITSELF A SLEEPER ID (`sleeper:<id>`, see `declaredSleeperId.ts`).
+   * Only a pasted Yahoo league writes one, and it is kept UNWRAPPED — the bare Sleeper id — because
+   * the namespace is in the id, not inferred from the platform. Every other foreign id is still
+   * removed; a roster with no declared ids comes out exactly as before.
+   */
+  const keepDeclared = (arr: unknown[]) =>
+    arr.flatMap((x) => {
+      const sid = declaredSleeperId(x)
+      return sid ? [sid] : []
+    })
+  for (const key of STRIPPED_ARRAY_KEYS) if (Array.isArray(pd[key])) out[key] = keepDeclared(pd[key] as unknown[])
   for (const sectionsKey of ['lineup_sections', 'lineupSections']) {
     const sections = pd[sectionsKey]
     if (!sections || typeof sections !== 'object' || Array.isArray(sections)) continue
     out[sectionsKey] = Object.fromEntries(
-      Object.entries(sections as Record<string, unknown>).map(([k, v]) => [k, Array.isArray(v) ? [] : v]),
+      Object.entries(sections as Record<string, unknown>).map(([k, v]) => [
+        k,
+        Array.isArray(v)
+          ? v.flatMap((e) => {
+              const sid = declaredSleeperId(sectionEntryId(e))
+              if (!sid) return []
+              return [e && typeof e === 'object' ? { ...(e as Record<string, unknown>), id: sid } : sid]
+            })
+          : v,
+      ]),
     )
   }
   return out
@@ -237,14 +283,24 @@ export function translatePlayerData(playerData: unknown, map: ReadonlyMap<string
   return out
 }
 
-/** `espnId → sleeperId` for the ids given, from rows that carry both. One indexed read. */
-export async function loadEspnToSleeperMap(espnIds: readonly string[]): Promise<Map<string, string>> {
+/**
+ * `espnId → sleeperId` for the ids given, from rows that carry both. One indexed read.
+ *
+ * NFL only, and says so in the query: ESPN translation exists for NFL leagues (ESPN 12483 Stafford IS
+ * Sleeper's 12483), `sleeperId` is the NFL Sleeper column, and ESPN numbers its sports separately too —
+ * an NBA row sharing the ESPN number must never translate an NFL roster. The other direction is
+ * `sport`: pass the league's, and a known non-NFL league's ids translate to nothing — its ids are
+ * never NFL players (see `rosterIdSpaceOf`).
+ */
+export async function loadEspnToSleeperMap(espnIds: readonly string[], sport?: RosterIdSport): Promise<Map<string, string>> {
   const out = new Map<string, string>()
+  // A caller that knows its league is not NFL gets no translation at all, rather than NFL players.
+  if (isKnownNonNflSport(sport)) return out
   const ids = [...new Set(espnIds.filter(Boolean))]
   if (ids.length === 0) return out
   const rows = await prisma.playerIdentityMap
     .findMany({
-      where: { espnId: { in: ids }, sleeperId: { not: null } },
+      where: { sport: 'NFL', espnId: { in: ids }, sleeperId: { not: null } },
       select: { espnId: true, sleeperId: true },
     })
     .catch(() => [] as Array<{ espnId: string | null; sleeperId: string | null }>)
@@ -272,11 +328,13 @@ export async function translateRostersToSleeperIds<T extends { playerData: unkno
   const idSpace = rosterIdSpaceOf(platform, sport)
   if (idSpace === 'other') {
     // Counted, never read: a foreign id surviving to a Sleeper-id lookup IS the collision.
+    // Only ids that declare themselves Sleeper ids survive (`stripForeignIds`).
+    const ids = collectRosterIds(rosters.map((r) => r.playerData))
     return {
       rosters: rosters.map((r) => ({ ...r, playerData: stripForeignIds(r.playerData) })),
       idSpace,
-      total: collectRosterIds(rosters.map((r) => r.playerData)).length,
-      translated: 0,
+      total: ids.length,
+      translated: ids.filter((id) => declaredSleeperId(id) !== null).length,
     }
   }
   if (idSpace !== 'espn' || rosters.length === 0) return { rosters: [...rosters], idSpace, total: 0, translated: 0 }

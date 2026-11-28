@@ -26,15 +26,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('Settings → Home page', () => {
-  it('shows every section ON by default, with what it also silences', () => {
+  it('shows every section ON by default, and says hiding one never changes notifications', () => {
     render(<HomeSectionsSettingsSection profile={profile()} onRefetch={vi.fn()} />)
     expect(switchOf('league-trades').checked).toBe(true)
     expect(row('league-trades').dataset.shown).toBe('true')
-    expect(row('league-trades').textContent).toMatch(/Turning this off also stops/)
-    // The two rows whose "off" also silences an alert you must act on warn about it.
-    expect(screen.getByTestId('home-section-warn-drafts').textContent).toMatch(/on-the-clock alerts/)
-    expect(screen.getByTestId('home-section-warn-league-trades').textContent).toMatch(/trade offers sent to you/)
-    expect(screen.queryByTestId('home-section-warn-rivals')).toBeNull()
+    // Layout only since 2026-11-22: no row promises to stop an alert, and the intro says where alerts live.
+    expect(document.body.textContent).not.toMatch(/also stops|Notifications stopped|on-the-clock alerts/)
+    expect(screen.getByTestId('settings-home-sections').textContent).toContain("Your notifications don't change")
     // 22 since the guide cards (2026-11-12): leagues you run, your season, when things happen, your formats.
     expect(screen.getByTestId('home-sections-count').textContent).toBe('22 of 22 sections showing')
   })
@@ -48,7 +46,10 @@ describe('Settings → Home page', () => {
     fireEvent.click(switchOf('league-trades'))
     // Before the request resolves, the row already reads OFF.
     expect(row('league-trades').dataset.shown).toBe('false')
-    expect(row('league-trades').textContent).toMatch(/Hidden/)
+    expect(switchOf('league-trades').checked).toBe(false)
+    expect(row('league-trades').textContent).toMatch(/\bOff\b/)
+    // No HIDDEN tag beside the title (2026-11-25): the switch and its Off say it.
+    expect(row('league-trades').textContent).not.toMatch(/Hidden/)
 
     await waitFor(() => expect(onRefetch).toHaveBeenCalled())
     const [url, init] = fetchMock.mock.calls[0]
@@ -98,14 +99,10 @@ describe('default layout keeps alerts', () => {
     fetchMock.mockResolvedValue({ ok: true })
     render(<HomeSectionsSettingsSection profile={{ notificationPreferences: {} } as never} onRefetch={vi.fn()} />)
     expect(switchOf('drafts').checked).toBe(false)
-    expect(row('drafts').textContent).not.toContain('{list}')
-    expect(row('drafts').textContent).toContain('Draft alerts')
     // The 2026-11-12 trim hides the trade evaluator by default; the streak stays on (owner's call).
     expect(switchOf('streak').checked).toBe(true)
     expect(switchOf('trade-evaluator').checked).toBe(false)
     expect(switchOf('decisions').checked).toBe(true)
-    expect(screen.queryByTestId('home-section-warn-drafts')).toBeNull()
-    expect(row('drafts').textContent).toContain('notification settings are unchanged')
     // "League that needs you" joined the hidden defaults in the "simplify /core" pass (2026-11-12).
     expect(switchOf('league-focus').checked).toBe(false)
     // A visible-by-default, visual-only card (rivals, then league-focus, were this test's card until

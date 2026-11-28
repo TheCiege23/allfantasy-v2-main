@@ -6,6 +6,8 @@
  * twice in a week.
  */
 import React from 'react'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -13,6 +15,7 @@ import type { UserLeague } from '@/app/dashboard/types'
 vi.mock('@/hooks/useLeagueRealtimeRefresh', () => ({ useLeagueRealtimeRefresh: () => undefined }))
 
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
+import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 
 // The week has NOT loaded on the league object: exactly the state the page mounts the tab in.
 const league = { id: 'lg1', name: 'Big League', sport: 'NBA', season: 2026, teamCount: 36, platform: 'manual', format: 'dynasty', settings: {} } as unknown as UserLeague
@@ -60,6 +63,20 @@ const boardGame = (id: string, home: string, hp: number | null, away: string | n
 })
 
 describe('NativeMatchupScreen on the league’s own season', () => {
+  it('jumps straight to any week from the week list', async () => {
+    const calls = stubFetch({
+      '/matchup-center': (u) => payload(Number(new URL(u, 'http://x').searchParams.get('week') ?? 7), {}),
+      '/scoring/matchups': () => ({ season: 2026, week: 7, matchups: [], games: [] }),
+    })
+    render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
+    await screen.findByRole('heading', { name: 'Week 7' })
+    const select = screen.getByTestId('matchup-week-select') as HTMLSelectElement
+    expect(select.value).toBe('7')
+    fireEvent.change(select, { target: { value: '2' } })
+    expect(await screen.findByRole('heading', { name: 'Week 2' })).toBeTruthy()
+    expect(calls.some((u) => u.includes('/matchup-center') && u.includes('week=2'))).toBe(true)
+  })
+
   it('🛑 asks for no week on open, and shows the week the league is on', async () => {
     const calls = stubFetch({
       '/matchup-center': () => payload(7, {}),
@@ -67,7 +84,9 @@ describe('NativeMatchupScreen on the league’s own season', () => {
     })
     render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
     expect(await screen.findByRole('heading', { name: 'Week 7' })).toBeTruthy()
-    expect(calls.length).toBe(2)
+    // The two week reads (the screen also asks who manages each team, which has no week in it).
+    const weekReads = calls.filter((u) => u.includes('/matchup-center') || u.includes('/scoring/matchups'))
+    expect(weekReads.length).toBe(2)
     expect(calls.every((u) => !u.includes('week='))).toBe(true)
 
     // One line per game; a game not started draws a dash, not 0.0.
@@ -202,5 +221,43 @@ describe('NativeMatchupScreen on the league’s own season', () => {
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(await screen.findByRole('heading', { name: 'Week 9' })).toBeTruthy()
     expect(screen.getByTestId('native-scoreboard').textContent).toContain('101.5')
+  })
+})
+
+/*
+ * 🛑 During a live game this screen polls its own scores every 30s, and the league page re-rendered the
+ * whole page on the server on the same beat (measured 2026-11-23, MNF). While the screen polls it claims
+ * the route, and LeagueShell's timer stands down; it releases the claim the moment it stops.
+ */
+describe('NativeMatchupScreen owns the refresh while it polls', () => {
+  it('claims the route while its own score polling runs, and releases it on unmount', async () => {
+    stubFetch({
+      '/matchup-center': () => payload(7, {}, { matchupStatus: 'live', refreshIntervalMs: 30_000 }),
+      '/scoring/matchups': () => ({ season: 2026, week: 7, matchups: [], games: [] }),
+    })
+    expect(routeRefreshClaimed()).toBe(false)
+    const view = render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
+    await screen.findByRole('heading', { name: 'Week 7' })
+    await waitFor(() => expect(routeRefreshClaimed()).toBe(true))
+    view.unmount()
+    expect(routeRefreshClaimed()).toBe(false)
+  })
+
+  it('[control] a screen that is not polling (a final week, interval 0) does not claim it', async () => {
+    stubFetch({
+      '/matchup-center': () => payload(7, {}),
+      '/scoring/matchups': () => ({ season: 2026, week: 7, matchups: [], games: [] }),
+    })
+    const view = render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
+    await screen.findByRole('heading', { name: 'Week 7' })
+    expect(routeRefreshClaimed()).toBe(false)
+    view.unmount()
+  })
+
+  it('the league page timer checks the claim before re-rendering', () => {
+    const shell = readFileSync(join(process.cwd(), 'app/league/[leagueId]/LeagueShell.tsx'), 'utf8')
+    const timer = shell.slice(shell.indexOf('const interval = setInterval(() => {'), shell.indexOf('}, 30000)'))
+    expect(timer).toMatch(/^\s*if \(routeRefreshClaimed\(\)\) return$/m)
+    expect(timer.indexOf('routeRefreshClaimed()')).toBeLessThan(timer.indexOf('refresh()', timer.indexOf('routeRefreshClaimed()') + 25))
   })
 })

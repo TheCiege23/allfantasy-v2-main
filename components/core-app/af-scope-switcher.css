@@ -112,6 +112,26 @@
   text-transform: uppercase;
 }
 .af-scope-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Sport and platform as two dropdowns on one row (2026-11-28): the chip walls they replace took four rows. */
+.af-scope-selects { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.af-scope-select { position: relative; display: flex; align-items: center; min-width: 0; }
+.af-scope-select select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 32px 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--chip) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a0a8c0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center;
+  color: var(--text);
+  font: 700 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  text-overflow: ellipsis;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.af-scope-select[data-active='true'] select { border-color: var(--accent-line, var(--accent)); color: var(--accent); }
+.af-scope-select .af-scope-chip-dot { position: absolute; left: 10px; pointer-events: none; }
+.af-scope-select .af-scope-chip-dot + select { padding-left: 28px; }
 .af-scope-chip {
   display: inline-flex;
   align-items: center;
@@ -455,6 +475,8 @@ button.af-scope-chip { cursor: pointer; }
   .af-core .af-scope-filters .af-scope-group,
   .af-core .af-scope-filters .af-scope-chips { display: contents; }
   .af-core .af-scope-apply { flex: 1 1 100%; min-height: 40px; }
+  .af-core .af-scope-filters .af-scope-selects { flex: 1 1 100%; grid-template-columns: 1fr 1fr; }
+  .af-core .af-scope-select select { font-size: 16px; min-height: 40px; } /* 16px: iOS zooms the page into a smaller select. */
   .af-core .af-scope-group-title {
     position: absolute;
     width: 1px;
@@ -487,3 +509,30 @@ button.af-scope-chip { cursor: pointer; }
   .af-core .af-scope-panel { inset: auto 8px calc(76px + env(safe-area-inset-bottom, 0px)); padding: 14px; width: auto; max-height: 76dvh; }
   .af-core .af-scope-search input { font-size: 16px; }
 }
+
+/*
+ * Add a league, under the league list (2026-11-23). Two equal buttons side by side, 44px tall — the
+ * phone's only league list now carries what the wide screen's rail foot always had.
+ */
+.af-core .af-scope-add {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+.af-core .af-scope-add a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--accent-line, var(--line));
+  border-radius: 10px;
+  color: var(--accent);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  text-align: center;
+}
+.af-core .af-scope-add a:hover { background: var(--accent-soft, transparent); }

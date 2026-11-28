@@ -1,3 +1,5 @@
+import { valueBookFor } from '@/lib/core-app/valueBook'
+import { loadAfNflMarketQuote } from './afLeaguePlayerPrice'
 import 'server-only'
 
 import type { SportsPlayerRecord } from '@prisma/client'
@@ -11,6 +13,11 @@ import { getFantasyCalcChartDbFirst, readFantasyCalcValuesFromDb } from '@/lib/f
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { collapseSamePersonRows } from '@/lib/data/samePersonRows'
+import {
+  providerIdentityColumn,
+  resolveProviderRosterPlayers,
+  type ResolvedProviderPlayer,
+} from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { prisma } from '@/lib/prisma'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
@@ -400,12 +407,36 @@ function repricedAsset(p: PricedAsset, marketValue: number, source: PricedAsset[
  * follow when no evidenced value exists. Nothing is priced as zero: `unpriced` is the signal.
  */
 export async function priceLeagueTradePick(
-  pick: { year: number; round: number; tier?: 'early' | 'mid' | 'late' | null; originalRosterId?: string | null; overall?: number },
+  pick: {
+    year: number
+    round: number
+    tier?: 'early' | 'mid' | 'late' | null
+    originalRosterId?: string | null
+    overall?: number
+    roundPick?: number
+  },
   args: { nflCtx: ValuationContext; fcPlayers: FantasyCalcPlayer[]; pickSlots?: PickSlotProjection | null },
 ): Promise<{ priced: PricedAsset; dataSource: string; projection?: string }> {
   const curve = await pricePick({ year: pick.year, round: pick.round, tier: pick.tier ?? null }, args.nflCtx)
   const teams = args.nflCtx.numTeams ?? REFERENCE_TEAMS
   const large = args.nflCtx.largeLeagueRookiePicks
+  /*
+   * AN EXACT SLOT IN A DRAFT BEING RUN NOW (2026-11-26). The live draft room trades 1.04 for 1.09 —
+   * picks whose slot is known, not "a 2026 early 1st". The market prices exactly those once the order
+   * is known ("2026 Pick 1.04"), on this league's own board, so such a pick is that row. Only a caller
+   * that knows the slot sets `roundPick`; without the row the pick falls through to the tier/round
+   * rule below — the market's own coarser price, never an invented curve. A large league already
+   * prices from `overall` on the 12-team board (`largeLeaguePickValue`), so it is left to that path.
+   */
+  if (!large && pick.roundPick != null && Number.isInteger(pick.roundPick) && pick.roundPick >= 1 && pick.roundPick <= teams) {
+    const exact = chartSlotValue(args.fcPlayers, pick.year, pick.round, pick.roundPick)
+    if (exact != null && exact > 0) {
+      return {
+        priced: { ...repricedAsset(curve, exact, 'fantasycalc'), name: `${pick.year} Pick ${pick.round}.${String(pick.roundPick).padStart(2, '0')}` },
+        dataSource: 'fantasycalc_pick_slot',
+      }
+    }
+  }
   const projected = large || pick.tier ? null : projectedLivePick(args.fcPlayers, pick, args.pickSlots ?? null)
   if (projected) {
     return {
@@ -664,6 +695,50 @@ async function onePersonNamed(
   return kept.length === 1 ? kept[0]! : null
 }
 
+/**
+ * A non-Sleeper league's roster id (Fantrax, ESPN, Fleaflicker, MFL) as the identity it names, or null.
+ * Sleeper is not handled here: its ids are the records' own keys. Never throws — an identity read that
+ * fails leaves the name search to settle the player, as it did for a typed name.
+ */
+export async function identifyProviderRosterId(
+  id: string,
+  platform: string,
+  sport: string,
+  resolve: typeof resolveProviderRosterPlayers = resolveProviderRosterPlayers,
+): Promise<ResolvedProviderPlayer | null> {
+  if (!providerIdentityColumn(platform)) return null
+  const hits = await resolve(platform, [id], sport).catch(() => null)
+  return hits?.get(id) ?? null
+}
+
+/** One athlete's name in two sources: case, accents, punctuation and spacing aside. */
+function sameAthleteName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string | null | undefined) =>
+    String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  const x = norm(a)
+  return x.length > 0 && x === norm(b)
+}
+
+/**
+ * A provider identity standing in for a missing `sports_players` row: enough for the unpriced line
+ * (name, position, team), keyed by the league's own id so the sport grader still reads it.
+ */
+function identityAsRecord(identity: ResolvedProviderPlayer, leagueId: string, sport: SupportedSport): SportsPlayerRecord {
+  return {
+    id: leagueId,
+    sport: identity.sport || sport,
+    name: identity.name,
+    position: identity.position ?? '—',
+    team: identity.team ?? '—',
+    headshotUrl: identity.imageUrl ?? null,
+    headshotUrlLg: null,
+    headshotUrlSm: null,
+    logoUrl: null,
+    injuryStatus: null,
+    dataSource: 'provider_identity',
+  } as unknown as SportsPlayerRecord
+}
+
 export async function resolveAssets(
   items: TradeAssetInput[],
   args: {
@@ -685,6 +760,18 @@ export async function resolveAssets(
     /** Where each team's next-draft picks are projected to land — see `loadPickSlotProjection`. */
     pickSlots?: PickSlotProjection | null
     combinedPickQuote?: (pick: Extract<TradeAssetInput, { kind: 'pick' }>) => Promise<number | null>
+    /**
+     * The price of a pick in a startup/redraft draft being run now (`liveBoardOverall`), read from that
+     * draft's remaining board by the grader (`draftBoardPickPricing.ts`). A board pick with no quote is unpriced.
+     */
+    draftBoardQuote?: (pick: Extract<TradeAssetInput, { kind: 'pick' }>) => { value: number; source?: string | null } | null
+    /**
+     * The league's platform (`fantrax`, `espn`, …). A roster player's `playerId` from such a league is
+     * that platform's own id, read through its `PlayerIdentityMap` column — see `identifyProviderRosterId`.
+     */
+    platform?: string | null
+    /** Injectable for tests; defaults to the real `PlayerIdentityMap` read. */
+    resolveProviderIds?: typeof resolveProviderRosterPlayers
   },
 ): Promise<{
   /** One line per pick priced by its original owner's projected finish ("2027 1st projected early (62%)"). */
@@ -726,6 +813,34 @@ export async function resolveAssets(
           pricedSource: 'pick',
           playerId: null,
           dataSource: 'no_pick_market',
+        }),
+      )
+      continue
+    }
+    if (raw.kind === 'pick' && raw.liveBoardOverall != null) {
+      /*
+       * A pick in a startup/redraft draft being run now: worth the players this draft expects at that slot,
+       * priced on this chart by the grader (`draftBoardPickPricing.ts`). Never the rookie-pick market, which
+       * has no row for it, and never a curve: no quote, no price.
+       */
+      const name = `${raw.year} Pick ${raw.round}${raw.roundPick != null ? `.${String(raw.roundPick).padStart(2, '0')}` : ''} (#${raw.liveBoardOverall})`
+      const quote = args.draftBoardQuote?.(raw) ?? null
+      const p: PricedAsset = quote && Number.isFinite(quote.value) && quote.value >= 0
+        ? {
+            ...repricedAsset(await pricePick({ year: raw.year, round: raw.round, tier: raw.tier ?? null }, args.nflCtx), quote.value,
+              quote.source === 'allfantasy' ? 'allfantasy' : 'fantasycalc'),
+            name,
+          }
+        : unpricedAsset({ name, type: 'pick', reason: noPickMarketUnpricedReason(raw.year, raw.round) })
+      priced.push(p)
+      lines.push(
+        lineFromPriced(p, {
+          sport: args.effectiveSport,
+          position: 'PICK',
+          team: `${raw.year}`,
+          pricedSource: 'pick',
+          playerId: null,
+          dataSource: quote ? 'draft_board' : 'no_pick_market',
         }),
       )
       continue
@@ -824,15 +939,34 @@ export async function resolveAssets(
       if (!row && knownSleeperId) {
         displayName = matched?.player.name ?? args.nflCtx.leagueValueBySleeperId?.get(knownSleeperId)?.name ?? displayName
       }
-      let pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
-      if (
-        pa.unpriced && knownSleeperId && args.fcPlayers.length > 0 &&
-        isFloorEligible(pa, position, args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId))
-      ) {
-        floorCandidates.push(knownSleeperId)
-        if (args.onAnotherChart?.has(knownSleeperId)) {
-          pa = belowChartFloorAsset(displayName, pa.position ?? position ?? undefined)
-          belowFloor.push(displayName)
+      let pa: PricedAsset
+      const afBook = args.nflCtx.afLeagueMarketBook
+      if (afBook) {
+        const id = knownSleeperId
+        const market = await loadAfNflMarketQuote({ book: afBook, sleeperId: id, name: displayName, position,
+          allowNameLookup: !raw.playerId && !raw.providerIdentity }).catch(() => null)
+        const specialty = (id || (!raw.playerId && !raw.providerIdentity)) ? leagueValueForPlayer({
+          name: displayName, identity: { sleeperId: id, position },
+          bySleeperId: args.nflCtx.leagueValueBySleeperId, byNameLower: args.nflCtx.leagueValueByNameLower,
+        }) : null
+        const price = market?.marketValue ?? specialty?.value
+        pa = price == null ? unpricedAsset({ name: displayName, type: 'player', position,
+          reason: { code: 'priced_on_analysis', label: 'AF has no verified league trade price for this player.' } })
+          : { name: displayName, type: 'player', position: position ?? market?.position ?? specialty?.position ?? undefined, value: price,
+              source: market ? 'allfantasy' : specialty?.basis ?? 'allfantasy',
+              ...(market ? { valueAsOf: market.generatedAt.toISOString() } : {}),
+              assetValue: { marketValue: price, impactValue: price, vorpValue: price, volatility: 0 } }
+      } else {
+        pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
+        if (
+          pa.unpriced && knownSleeperId && args.fcPlayers.length > 0 &&
+          isFloorEligible(pa, position, args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId))
+        ) {
+          floorCandidates.push(knownSleeperId)
+          if (args.onAnotherChart?.has(knownSleeperId)) {
+            pa = belowChartFloorAsset(displayName, pa.position ?? position ?? undefined)
+            belowFloor.push(displayName)
+          }
         }
       }
       const defenderProjection = pa.source === 'idp-vorp' ? leagueValueForPlayer({
@@ -845,13 +979,13 @@ export async function resolveAssets(
           ?? args.nflCtx.leagueUnpricedReasonByNameLower?.get(displayName.trim().toLowerCase())
         : null
       if (unpricedReason) args.dataGaps.push(`${displayName}: ${unpricedReason.label}.`)
-      else if (!matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat' && pa.source !== 'dst-flat') {
+      else if (!afBook && !matched && row && pa.source !== 'idp-vorp' && pa.source !== 'kicker-flat' && pa.source !== 'dst-flat') {
         args.dataGaps.push(`No market-feed match for "${displayName}"; ${pa.unpriced ? 'no value available' : 'using fallback pricing'}.`)
       }
       priced.push(pa)
       const headshot = row?.headshotUrl ?? row?.headshotUrlLg ?? row?.headshotUrlSm ?? null
       const src: TradeConsolePlayerLine['pricedSource'] =
-        pa.source === 'fantasycalc' || pa.source === 'excel'
+        pa.source === 'allfantasy' ? 'allfantasy' : pa.source === 'fantasycalc' || pa.source === 'excel'
           ? 'fantasycalc'
           : pa.source === 'idp-vorp' || pa.source === 'kicker-flat' || pa.source === 'dst-flat'
             ? 'idp_league'
@@ -869,7 +1003,7 @@ export async function resolveAssets(
           logoUrl: row?.logoUrl ?? null,
           injuryStatus: row?.injuryStatus ?? null,
           pricedSource: src,
-          dataSource: row?.dataSource ?? 'fantasycalc+rolling',
+          dataSource: afBook ? 'allfantasy' : row?.dataSource ?? 'fantasycalc+rolling',
           position: pa.position ?? row?.position ?? '—',
           ...(defenderProjection ? {
             effectiveProjection: defenderProjection.points,
@@ -882,11 +1016,57 @@ export async function resolveAssets(
       continue
     }
 
-    if (!row && !raw.playerId && !raw.providerIdentity && displayName.length >= 2) {
+    /*
+     * 🛑 A NON-SLEEPER ROSTER ID USED TO END HERE AS "COULD NOT RESOLVE" (2026-11-19). The Trade Center
+     * sends a roster player's `playerId` as the league's own id — a Fantrax id in a Fantrax league — and
+     * `getPlayer` keys records by Sleeper-shaped ids, so it missed. The name search below was then
+     * skipped because a `playerId` was present, and an NHL Fantrax trade (Hughes for Montour + Hintz)
+     * was refused before the NHL points grader, which reads Fantrax ids itself, ever ran. The id is
+     * now read through the platform's `PlayerIdentityMap` column (the rule the roster list already
+     * uses to show the names), in this order:
+     *   1. the identity's Rolling Insights (then Sleeper) id → the record keyed by it. Measured on
+     *      production the same day, outside the NFL NO Fantrax-linked identity carries a Sleeper id,
+     *      but the Rolling Insights id reaches a record for NHL 186/196, NBA 298/307, NCAAB 2819/2909.
+     *      The record must carry the identity's NAME: `sports_players` keys Sleeper- and RI-seeded
+     *      rows the same way (`NHL:<number>`), so a bare number is not proof of the person;
+     *   2. the name, narrowed by the identity's position — "Jack Hughes" is two NHL centres (NJD and
+     *      LA), which only step 1 tells apart, and is why it comes first;
+     *   3. the identity itself. It proves the player exists, and every sport grader reads the league's
+     *      own ids, so an unrecordable player is an unpriced line, never "could not resolve".
+     */
+    let identityPosition: string | null = null
+    let identity: ResolvedProviderPlayer | null = null
+    if (!row && !providerSleeperId && !raw.providerIdentity && raw.playerId?.trim() && args.platform) {
+      identity = await identifyProviderRosterId(raw.playerId.trim(), args.platform, args.effectiveSport, args.resolveProviderIds)
+      if (identity) {
+        identityPosition = identity.position
+        displayName = identity.name || displayName
+        for (const key of [identity.rollingInsightsId, identity.sleeperId]) {
+          if (!key || row) continue
+          const keyed = (await getPlayer(key, { sport: args.effectiveSport })) as SportsPlayerRecord | null
+          if (keyed && sameAthleteName(keyed.name, identity.name) && valuePositionsAgree(identity.position, keyed.position)) row = keyed
+        }
+      }
+    }
+    /*
+     * ⚠ A SELECTED ID THAT MISSES IS NEVER REPLACED BY A NAME HIT (`__tests__/values/player-value-identity.test.ts`):
+     * a typed or search-picked id that resolves to nothing must not turn into whichever namesake the name
+     * search returns. The one exception is an id the platform's identity map has already identified —
+     * then the name searched is the IDENTITY's, proven by that id, not a guess.
+     */
+    if (!row && !raw.providerIdentity && (!raw.playerId?.trim() || identity) && displayName.length >= 2) {
       const found = await searchPlayers(displayName, args.effectiveSport)
-      const exact = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
+      const named = found.filter(p => p.name.trim().toLowerCase() === displayName.toLowerCase())
+      /*
+       * The identity's position separates namesakes (two Sebastian Ahos: a C and a D). It only ever
+       * narrows: sources label hockey forwards differently (C / LW / RW / F), so a filter that empties
+       * the list is a labelling disagreement, not evidence, and the unfiltered rows stand.
+       */
+      const byPosition = identityPosition ? named.filter(p => valuePositionsAgree(identityPosition, p.position)) : named
+      const exact = byPosition.length > 0 ? byPosition : named
       row = (exact.length === 1 ? exact[0] : await onePersonNamed(exact, args.effectiveSport)) as SportsPlayerRecord | null
     }
+    if (!row && identity && raw.playerId?.trim()) row = identityAsRecord(identity, raw.playerId.trim(), args.effectiveSport)
     if (!row) {
       unresolved.push(displayName || raw.playerId || 'unknown')
       continue
@@ -1118,6 +1298,7 @@ export async function resolveLeagueTradeChart(args: {
   const faabState = args.marketless ? null : await loadLeagueFaabState(leagueRow)
 
   const nflCtx: ValuationContext = {
+    ...(leagueRow && leagueSport === 'NFL' && !args.marketless ? { afLeagueMarketBook: valueBookFor(leagueRow.settings, leagueRow.leagueType) } : {}),
     asOfDate: asOf,
     isSuperFlex,
     fantasyCalcPlayers: fcPlayers,

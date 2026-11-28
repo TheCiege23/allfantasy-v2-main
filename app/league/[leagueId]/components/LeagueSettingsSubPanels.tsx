@@ -25,7 +25,7 @@ import { toast } from 'sonner'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
 import { LEAGUE_SETTINGS_AI_PANEL_FEATURE } from '@/lib/monetization/entitlements'
-import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
+import { copyInviteText, LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
 import { leagueJoinUrl } from '@/lib/league/league-invite-link'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -38,6 +38,7 @@ import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { DeleteLeagueFromAfPanel } from './DeleteLeagueFromAfPanel'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { seatInviteUrl } from '@/lib/league-join/joinLanding'
 import { checkTeamName, MAX_TEAM_NAME_LENGTH } from '@/lib/league/myTeamEdit'
 import { importedPlatformLabel } from '@/lib/dashboard/platform-label'
 import { useRouter } from 'next/navigation'
@@ -50,6 +51,7 @@ import { NhlScoringSettingsPanel } from '@/components/league-settings/NhlScoring
 import ScoringSettingsPanel from '@/components/app/settings/ScoringSettingsPanel'
 import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { NcaafScoringSettingsPanel } from '@/components/league-settings/NcaafScoringSettingsPanel'
+import { CollegePlayerPoolPanel } from '@/components/league-settings/CollegePlayerPoolPanel'
 import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerScoringSettingsPanel'
 import { DraftSettingsCommissionerPanel } from '@/components/league-settings/DraftSettingsCommissionerPanel'
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
@@ -771,6 +773,13 @@ export function SettingsSubPanelBody({
       return (
         <>
           <RosterSettingsReadonlyPanel ctx={ctx} />
+          {/* College leagues, and the college side of a devy / C2C NFL or NBA league (the card stays
+              hidden when the API says the league has no college side). */}
+          {['NCAAF', 'NCAAB', 'NFL', 'NBA'].includes(String(ctx.league.sport)) && (
+            <div className="mt-6">
+              <CollegePlayerPoolPanel leagueId={ctx.league.id} />
+            </div>
+          )}
           {(ctx.league.sport === 'NFL' || ctx.league.sport === 'NBA' || ctx.league.sport === 'NCAAB' || ctx.league.sport === 'MLB' || ctx.league.sport === 'NCAAF' || ctx.league.sport === 'NHL' || ctx.league.sport === 'SOCCER') && (
             <div className="mt-6">
               <RosterSettingsEditorLazy leagueId={ctx.league.id} />
@@ -836,6 +845,18 @@ export function SettingsSubPanelBody({
       return (
         <InvitePanel
           inviteUrl={inviteUrl}
+          /*
+           * A league switched to AllFantasy in place (settings.nativeConversion) keeps its provider managers' teams
+           * open until they join: one link per team lets the commissioner send each manager theirs (owner, Q7).
+           * On a native league `LeagueTeam.externalId` is the `Roster.id` the join route seats them on.
+           */
+          openSeats={
+            settings.nativeConversion && isNativePlatform(ctx.league.platform)
+              ? ctx.league.teams
+                  .filter((team) => !team.claimedByUserId)
+                  .map((team) => ({ rosterId: team.externalId, teamName: team.teamName, ownerName: team.ownerName }))
+              : []
+          }
           leagueName={ctx.displayLeague.name}
           // Count only slots a real manager has claimed — `teams.length` includes
           // auto-materialized placeholder slots and reported the league as "full"
@@ -1154,7 +1175,52 @@ function NotificationsPanel({ leagueId }: { leagueId: string }) {
   )
 }
 
-function InvitePanel({ inviteUrl, filled, total, leagueName }: { inviteUrl: string; filled: number; total: number; leagueName?: string | null }) {
+export type OpenSeat = { rosterId: string; teamName: string; ownerName: string | null }
+
+/** One copyable link per open team: the league's invite link plus `team=<Roster.id>` (lib/league-join/joinLanding.ts). */
+export function OpenSeatLinks({ inviteUrl, seats }: { inviteUrl: string; seats: OpenSeat[] }) {
+  const { t } = useLanguage()
+  const [copied, setCopied] = useState<string | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  if (!seats.length) return null
+  // The invite share's own copy (it awaits the clipboard and says "Copied" only when it was); a refusal shows the link.
+  const copy = async (rosterId: string) => {
+    const outcome = await copyInviteText(seatInviteUrl(inviteUrl, rosterId))
+    setCopied(outcome === 'copied' ? rosterId : null)
+    setFailed(outcome === 'copied' ? null : rosterId)
+  }
+  return (
+    <section className="space-y-2" data-testid="settings-invite-open-seats">
+      <p className="text-sm font-bold text-white">{t('lsPanel.invite.openTeams')}</p>
+      <p className="text-[12px] leading-5 text-white/60">{t('lsPanel.invite.openTeamsHint')}</p>
+      <ul className="space-y-2">
+        {seats.map((seat) => (
+          <li key={seat.rosterId} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-bold text-white">{seat.teamName}</span>
+              {seat.ownerName ? <span className="block truncate text-[12px] text-white/50">{seat.ownerName}</span> : null}
+            </span>
+            <button
+              type="button"
+              onClick={() => void copy(seat.rosterId)}
+              className="min-h-[44px] shrink-0 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-xs font-extrabold text-white/80"
+              data-testid={`settings-invite-seat-copy-${seat.rosterId}`}
+            >
+              {copied === seat.rosterId ? t('lsPanel.invite.copied') : t('lsPanel.invite.copy')}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {failed ? (
+        <p className="text-[12px] leading-5 text-white/60" data-testid="settings-invite-seat-copy-failed">
+          {t('lsPanel.invite.copyFailed')} <span className="break-all text-white/80">{seatInviteUrl(inviteUrl, failed)}</span>
+        </p>
+      ) : null}
+    </section>
+  )
+}
+
+function InvitePanel({ inviteUrl, filled, total, leagueName, openSeats = [] }: { inviteUrl: string; filled: number; total: number; leagueName?: string | null; openSeats?: OpenSeat[] }) {
   const { t } = useLanguage()
   const membersValue = t('lsPanel.invite.filled').replace('{{filled}}', String(filled)).replace('{{total}}', String(total))
   if (!inviteUrl) {
@@ -1172,6 +1238,7 @@ function InvitePanel({ inviteUrl, filled, total, leagueName }: { inviteUrl: stri
       <Row label={t('lsPanel.members')} value={membersValue} />
       {/* One invite component for every surface: QR, share sheet, text, WhatsApp, copy that can fail. */}
       <LeagueInviteShare url={inviteUrl} leagueName={leagueName} testIdPrefix="settings-invite" />
+      <OpenSeatLinks inviteUrl={inviteUrl} seats={openSeats} />
       {inviteUrl.includes('sleeper.com') ? (
         <p className="text-[11px] text-white/35">{t('lsPanel.invite.sleeperNote')}</p>
       ) : null}

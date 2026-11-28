@@ -309,6 +309,7 @@ function statusOf(t: LeagueTradeHistoryItem): LogRow['status'] {
   const s = t.status ?? 'pending'
   if (s === 'pending_on_sleeper') return { label: 'Pending · on Sleeper', tone: 'warn' }
   if (s === 'pending_on_yahoo') return { label: 'Pending · on Yahoo', tone: 'warn' }
+  if (s === 'pending_on_espn') return { label: 'Pending · on ESPN', tone: 'warn' }
   if (s === 'awaiting_commissioner') return { label: 'Commissioner review', tone: 'violet' }
   if (s === 'awaiting_votes') return { label: 'League vote', tone: 'violet' }
   if (s === 'accepted' || s === 'scheduled') return { label: 'Accepted · settling', tone: 'good' }
@@ -852,7 +853,7 @@ export function PendingTradeCard(props: {
 }) {
   const { trade: t, offer, verdict } = props
   const onSleeper = t.status?.startsWith('pending_on_') === true
-  const providerName = t.status === 'pending_on_yahoo' ? 'Yahoo' : 'Sleeper'
+  const providerName = t.status === 'pending_on_yahoo' ? 'Yahoo' : t.status === 'pending_on_espn' ? 'ESPN' : 'Sleeper'
   const review = t.status === 'awaiting_commissioner'
   const dynastyEra = useContext(DynastyEraContext)
   const commissionerView = t.direction === 'complete'
@@ -975,6 +976,9 @@ export function PendingTradeCard(props: {
           )
         })}
       </div>
+      {t.dropNote ? (
+        <p className="text-[12px] font-semibold text-[var(--text2)]" data-testid="pending-trade-drop">{t.dropNote}</p>
+      ) : null}
 
       {/* ── The AllFantasy read ──────────────────────────────────────── */}
       <div className="rounded-xl border border-[#22d3ee]/25 bg-[#22d3ee]/[0.06] px-3 py-2.5">
@@ -1113,7 +1117,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const dynastyEra = usesDynastyBackground(league)
   // Non-null only for imported (SHADOW) leagues, where a trade built here never reaches the
   // partner on their own platform. Drives every "Propose"→"Build a shadow trade" relabel.
-  const tradeShadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
+  const tradeShadowNotice = useMemo(() => shadowDisclosure({ platform: league.platform, settings: league.settings ?? null }), [league.platform, league.settings])
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
   const [tradeBlockNote, setTradeBlockNote] = useState<string | null>(null)
   const [tradeBlockReadable, setTradeBlockReadable] = useState(true)
@@ -1315,7 +1319,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         (t) =>
           (t.viewerIsReceiver && t.status === 'pending') ||
           (t.viewerIsCommissioner && t.status === 'awaiting_commissioner') ||
-          (t.status === 'pending_on_sleeper' && t.direction === 'incoming'),
+          ((t.status === 'pending_on_sleeper' || t.status === 'pending_on_espn') && t.direction === 'incoming'),
       ),
     [activeTrades],
   )
@@ -2058,6 +2062,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         leagueId={league.id}
         teams={teams}
         platform={league.platform}
+        leagueSettings={league.settings}
         sport={league.sport}
         initialPartnerRosterId={proposeFor?.rosterId ?? null}
         initialGetPlayerId={proposeFor?.playerId ?? null}

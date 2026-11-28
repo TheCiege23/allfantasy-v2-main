@@ -105,5 +105,22 @@ describe('Waivers screen', () => {
   it('draws nothing when the page loaded nothing and there is no lock to show', () => {
     render(<Waivers data={DATA} />)
     expect(screen.queryByTestId('waiver-competitive-edge')).toBeNull()
+    // …and no empty fold row for it either.
+    expect(screen.queryByTestId('waiver-fold-edge')).toBeNull()
+  })
+
+  /* 2026-11-23 (owner): Chimmy's picks and Competitive Edge are closed rows, each named for what is inside. */
+  it('folds Competitive Edge and Chimmy into closed rows that say what they hold', () => {
+    render(<Waivers data={DATA} edge={{ available: true, data: EDGE }} edgeAccess={access(true)} />)
+    const edge = screen.getByTestId('waiver-fold-edge') as HTMLDetailsElement
+    const chimmy = screen.getByTestId('waiver-fold-chimmy') as HTMLDetailsElement
+    expect([edge.tagName, edge.open, edge.querySelector('summary')?.textContent]).toEqual(['DETAILS', false, 'Who can outbid you'])
+    expect([chimmy.tagName, chimmy.open, chimmy.querySelector('summary')?.textContent]).toEqual(['DETAILS', false, "Chimmy's waiver picks"])
+    expect(edge.contains(screen.getByTestId('waiver-competitive-edge'))).toBe(true)
+  })
+
+  it('a locked Competitive Edge still gets its row, with the upgrade card inside', () => {
+    render(<Waivers data={DATA} edgeAccess={access(false)} />)
+    expect(screen.getByTestId('waiver-fold-edge')).toBeTruthy()
   })
 })

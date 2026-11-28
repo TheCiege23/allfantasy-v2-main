@@ -1,0 +1,136 @@
+/* /core/decisions — My decisions (2026-11-26). Reads the .af-core tokens; both themes come from af-core.css. Mobile first. */
+
+.af-dl { max-width: 820px; display: grid; gap: 16px; min-width: 0; }
+
+.af-dl-head { display: grid; gap: 6px; }
+.af-dl-title { margin: 0; font-size: 24px; letter-spacing: -0.035em; }
+.af-dl-sub { margin: 0; max-width: 60ch; font-size: 13px; line-height: 1.55; color: var(--muted); }
+
+.af-dl-h2 { margin: 0; font-size: 14px; font-weight: 800; letter-spacing: -0.01em; }
+
+.af-dl-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.af-dl-filter { display: grid; gap: 4px; min-width: 0; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.af-dl-filter select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--chip);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.af-dl-summary {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-dl-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.af-dl-stat { margin: 0; display: grid; gap: 2px; min-width: 0; }
+.af-dl-stat b { font-size: 20px; letter-spacing: -0.03em; }
+.af-dl-stat span { font-size: 12px; line-height: 1.35; color: var(--muted); }
+.af-dl-record { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.af-dl-record-label { font-size: 12px; font-weight: 700; color: var(--text2); margin-right: 2px; }
+.af-dl-record-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  font-size: 12px;
+}
+.af-dl-rates { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; color: var(--text2); }
+.af-dl-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--faint, var(--muted)); }
+
+.af-dl-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.af-dl-row {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface);
+  min-width: 0;
+}
+.af-dl-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--muted); }
+.af-dl-type {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 11px;
+}
+.af-dl-league { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.af-dl-headline { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.af-dl-detail { margin: 0; font-size: 13px; color: var(--text2); overflow-wrap: anywhere; }
+
+.af-dl-grades { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.af-dl-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--text);
+}
+.af-dl-pill[data-kind='trade'] { border-color: var(--accent-line, var(--line2)); background: var(--accent-soft); color: var(--accent); }
+.af-dl-pill[data-kind='outcome'] { border-color: var(--good, var(--line2)); background: var(--good-soft, var(--chip)); color: var(--good, var(--text)); }
+.af-dl-pill[data-muted] { border-color: var(--line2); background: transparent; color: var(--muted); font-weight: 700; }
+.af-dl-why { flex-basis: 100%; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+.af-dl-followed { margin: 0; font-size: 12px; color: var(--muted); }
+.af-dl-followed[data-followed='true'] { color: var(--good, var(--text2)); }
+
+.af-dl-empty {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 18px 16px;
+  border: 1px dashed var(--line2);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-dl-empty p { margin: 0; }
+.af-dl-empty-title { font-weight: 800; color: var(--text); }
+.af-dl-retry {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.af-dl-loading { display: grid; gap: 10px; }
+.af-dl-skel { display: block; height: 88px; border-radius: 12px; background: var(--chip); border: 1px solid var(--line); animation: af-dl-pulse 1.4s ease-in-out infinite; }
+.af-dl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@keyframes af-dl-pulse { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .af-dl-skel { animation: none; } }
+
+/* Wider screens: the filters sit side by side at their natural width. Its own block, not nested. */
+@media (min-width: 720px) {
+  .af-dl-filters { grid-template-columns: repeat(2, minmax(0, 260px)); }
+  .af-dl-row { padding: 14px 18px; }
+}

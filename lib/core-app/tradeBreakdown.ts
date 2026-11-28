@@ -125,6 +125,8 @@ export function buildTradeBreakdown(args: TradeBreakdownArgs): string[] {
   // through that path.
   if (received.length === 0 || gave.length === 0) return []
 
+  /* "You" mid-sentence is lowercase (2026-11-23) — see the same note in tradeGradeBreakdown.ts. */
+  const mid = (label: string) => (label === 'You' ? 'you' : label)
   const share = Math.round(Math.max(0, Math.min(100, sharePct)))
   const out: string[] = []
 
@@ -136,13 +138,13 @@ export function buildTradeBreakdown(args: TradeBreakdownArgs): string[] {
       out.push(`${recv} got the better end of it, with ${share}% of the value.`)
       break
     case 'C':
-      out.push(`A near-even deal — ${share}% to ${recv}, ${100 - share}% to ${partner}.`)
+      out.push(`A near-even deal — ${share}% to ${mid(recv)}, ${100 - share}% to ${mid(partner)}.`)
       break
     case 'D':
-      out.push(`${partner} got the better end — ${recv} took ${share}%.`)
+      out.push(`${partner} got the better end — ${mid(recv)} took ${share}%.`)
       break
     case 'F':
-      out.push(`${partner} came out well ahead — ${recv} took only ${share}%.`)
+      out.push(`${partner} came out well ahead — ${mid(recv)} took only ${share}%.`)
       break
   }
 
@@ -164,8 +166,8 @@ export function buildTradeBreakdown(args: TradeBreakdownArgs): string[] {
 
     out.push(
       split
-        ? `Quality and quantity pulled apart: the best single asset was ${best.asset.name}, and ${holder} got ${pronoun} — the other side won on the rest of the deal.`
-        : `The most valuable asset was ${best.asset.name}, and ${holder} got ${pronoun}.`,
+        ? `Quality and quantity pulled apart: the best single asset was ${best.asset.name}, and ${mid(holder)} got ${pronoun} — the other side won on the rest of the deal.`
+        : `The most valuable asset was ${best.asset.name}, and ${mid(holder)} got ${pronoun}.`,
     )
   }
 

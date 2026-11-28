@@ -1,6 +1,8 @@
+import { legacyRedraftWaiverClaimsRetiredResponse } from '@/lib/redraft/legacyWaiverClaimsRetired'
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
-import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -8,11 +10,8 @@ import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/leagu
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 import {
   addNflRedraftFreeAgent,
-  cancelNflRedraftWaiverClaim,
-  editNflRedraftWaiverClaim,
   processNflRedraftWaiverWindow,
   resolveNflRedraftWaiverRuntime,
-  submitNflRedraftWaiverClaim,
   type NflRedraftWaiverRuntimeState,
 } from '@/lib/waiver-runtime'
 import { checkImmediateAddGate } from '@/lib/waiver-wire/immediateAddGate'
@@ -143,12 +142,15 @@ export async function GET(req: NextRequest) {
   const wantsLeagueScope = scope === 'league'
   if (wantsLeagueScope && !commissioner.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+  // League OS holds the ruleset 60 s, so one page load's resolvers share it (GET only — see `WaiverRuntimeRulesDeps`).
+  const { loadRules, drainOutcomes } = createLeagueOsLoaders()
   const resolved = await resolveNflRedraftWaiverRuntime({
     seasonId,
     leagueId,
     week: parsedWeek.value,
     includeFreeAgents,
-  })
+  }, { loadRules })
+  emitFeedOutcomes('league', drainOutcomes())
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400
     return NextResponse.json({ error: resolved.reason }, { status })
@@ -176,6 +178,10 @@ export async function POST(request: Request) {
   if (!leagueId) return NextResponse.json({ error: 'seasonId or leagueId required' }, { status: 400 })
   const member = await assertLeagueMember(leagueId, userId)
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+  if (league?.leagueVariant === 'survivor_guillotine' && action !== 'cancel_claim') {
+    return NextResponse.json({ error: 'Use your Survivor Guilly league waiver board for claims and processing.' }, { status: 409 })
+  }
 
   try {
     if (action === 'process_waivers' || action === 'apply_commissioner_override') {
@@ -193,75 +199,10 @@ export async function POST(request: Request) {
     const access = await rosterAccess({ rosterId: body.rosterId, seasonId: body.seasonId, leagueId, userId })
     if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
 
-    if (action === 'submit_claim') {
-      const addPlayerId = body.addPlayerId?.trim()
-      const conditionalClaims = Array.isArray(body.conditionalClaims) ? body.conditionalClaims : []
-      if (!addPlayerId && conditionalClaims.length === 0) {
-        return NextResponse.json({ error: 'addPlayerId or conditionalClaims required' }, { status: 400 })
-      }
-      const groupId = body.conditionalGroupId?.trim() || (conditionalClaims.length > 0 ? `group:${access.roster.id}:${randomUUID()}` : undefined)
-      const claims = []
-      const submitOne = async (
-        claimBody: NonNullable<WaiverRuntimeBody['conditionalClaims']>[number] | WaiverRuntimeBody,
-        rank: number,
-      ) => {
-        const id = claimBody.addPlayerId?.trim()
-        if (!id) throw new Error('addPlayerId required')
-        return submitNflRedraftWaiverClaim({
-          seasonId: body.seasonId,
-          leagueId,
-          rosterId: access.roster.id,
-          addPlayerId: id,
-          addPlayerName: claimBody.addPlayerName,
-          addPlayerPosition: claimBody.addPlayerPosition,
-          addPlayerTeam: claimBody.addPlayerTeam,
-          dropPlayerId: claimBody.dropPlayerId,
-          dropPlayerName: claimBody.dropPlayerName,
-          bidAmount: claimBody.bidAmount,
-          conditionalGroupId: groupId,
-          conditionalRank: claimBody === body ? body.conditionalRank ?? rank : rank,
-          actorUserId: userId,
-        })
-      }
-      if (conditionalClaims.length > 0) {
-        for (let i = 0; i < conditionalClaims.length; i += 1) {
-          claims.push(await submitOne(conditionalClaims[i], i + 1))
-        }
-      } else {
-        claims.push(await submitOne(body, body.conditionalRank ?? 1))
-      }
-      return NextResponse.json({ ok: true, claims })
-    }
-
-    if (action === 'edit_claim') {
-      if (!body.claimId?.trim()) return NextResponse.json({ error: 'claimId required' }, { status: 400 })
-      const claim = await editNflRedraftWaiverClaim({
-        claimId: body.claimId.trim(),
-        seasonId: body.seasonId,
-        leagueId,
-        rosterId: access.roster.id,
-        addPlayerId: body.addPlayerId ?? '',
-        addPlayerName: body.addPlayerName,
-        addPlayerPosition: body.addPlayerPosition,
-        addPlayerTeam: body.addPlayerTeam,
-        dropPlayerId: body.dropPlayerId,
-        dropPlayerName: body.dropPlayerName,
-        bidAmount: body.bidAmount,
-        conditionalGroupId: body.conditionalGroupId,
-        conditionalRank: body.conditionalRank,
-        actorUserId: userId,
-      })
-      return NextResponse.json({ ok: true, ...claim })
-    }
-
-    if (action === 'cancel_claim') {
-      if (!body.claimId?.trim()) return NextResponse.json({ error: 'claimId required' }, { status: 400 })
-      const claim = await cancelNflRedraftWaiverClaim({
-        claimId: body.claimId.trim(),
-        rosterId: access.roster.id,
-        actorUserId: userId,
-      })
-      return NextResponse.json({ ok: true, ...claim })
+    // Retired 2026-11-26: the old claim table takes no claims and a production count found it empty, so
+    // submitting, editing and cancelling a claim here all refuse and point at the main waiver system.
+    if (action === 'submit_claim' || action === 'edit_claim' || action === 'cancel_claim') {
+      return legacyRedraftWaiverClaimsRetiredResponse(leagueId)
     }
 
     if (action === 'add_free_agent') {

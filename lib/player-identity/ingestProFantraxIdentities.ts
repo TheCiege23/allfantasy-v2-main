@@ -45,7 +45,7 @@ export async function ingestProFantraxIdentities(sport: ProFantraxSport, dryRun 
     universeStored = rows.length
   }
   const rows = await prisma.playerIdentityMap.findMany({ where: { sport }, select: { id: true, canonicalName: true, currentTeam: true, position: true, fantraxId: true, rollingInsightsId: true } })
-  const { links, ...coverage } = planProFantraxIdentityLinks(sport, Object.values(map.data), rows)
+  const { links, ...coverage } = planProFantraxIdentityLinks(sport, Object.values(map.data), rows, { fullDirectory: true })
   const updated = dryRun || !links.length ? 0 : await prisma.$executeRaw`
     WITH links AS (SELECT * FROM jsonb_to_recordset(${JSON.stringify(links)}::jsonb) AS l(id text, "fantraxId" text, "rollingInsightsId" text))
     UPDATE "PlayerIdentityMap" p SET "fantraxId"=l."fantraxId", "updatedAt"=NOW(), "lastSyncedAt"=NOW()

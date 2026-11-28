@@ -159,7 +159,9 @@ describe('header: Sign in and Sign up are a pair', () => {
       // The sign-in link must not be hidden inside the collapsed menu.
       expect(signIn?.closest('details'), bar).toBeNull()
     }
-    expect(doc.querySelector('[data-testid="landing-hero-sign-in"]')?.getAttribute('href')).toBe('/login')
+    // The hero has no second Sign in: the bar's button is the one way in, so it is not shown twice.
+    expect(doc.querySelector('[data-testid="landing-hero-sign-in"]')).toBeNull()
+    expect(doc.querySelectorAll('.af-lp-hero a[href="/login"]')).toHaveLength(0)
   })
 
   it('signed in: no Sign in anywhere, and the primary button goes to the dashboard', () => {

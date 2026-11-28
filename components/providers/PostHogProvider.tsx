@@ -4,6 +4,7 @@ import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 import { useEffect } from 'react'
 import { useSession } from 'next-auth/react'
+import { appPlatformProperties } from '@/lib/platform/appPlatform'
 
 /**
  * Reads the authenticated session and calls posthog.identify() so that page
@@ -78,6 +79,11 @@ export function PHProvider({ children }: { children: React.ReactNode }) {
       // (maskAllInputs), and the Privacy Policy discloses recordings under 2.2.
       enable_recording_console_log: false,
       debug: process.env.NODE_ENV === 'development',
+      // Label every event as iOS app / Android app / web, so app usage can be split
+      // from browser usage (both apps are this website in a native shell).
+      loaded: (ph) => {
+        ph.register(appPlatformProperties())
+      },
     })
   }, [])
 

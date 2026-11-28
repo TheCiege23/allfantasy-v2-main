@@ -266,7 +266,8 @@ async function loadImported(prisma: Db, league: LoadedLeague): Promise<StoryData
   const unnamed = [...new Set(playerWeeks.map((w) => w.playerId))].filter((id) => !playerNames.has(id))
   if (unnamed.length > 0) {
     const players = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: unnamed } },
+      // The league's sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+      where: { sport: String(league.sport ?? 'NFL').toUpperCase(), sleeperId: { in: unnamed } },
       select: { sleeperId: true, name: true },
     })
     for (const p of players) if (p.sleeperId && p.name?.trim() && !playerNames.has(p.sleeperId)) playerNames.set(p.sleeperId, p.name.trim())

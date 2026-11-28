@@ -98,6 +98,13 @@ describe('recordAdvice', () => {
     expect($executeRaw).not.toHaveBeenCalled()
   })
 
+  it('a basketball, hockey or baseball week runs past 25 (its own calendar); an NFL week does not', async () => {
+    $executeRaw.mockResolvedValue(1)
+    for (const sport of ['NBA', 'nhl', 'MLB']) expect(await recordAdvice({ ...ADVICE, sport, week: 27 })).toBe('recorded')
+    expect(await recordAdvice({ ...ADVICE, sport: 'NBA', week: 31 })).toBe('invalid')
+    expect(await recordAdvice({ ...ADVICE, sport: 'NFL', week: 26 })).toBe('invalid')
+  })
+
   it('🛑 a missing table is unavailable; any other error propagates', async () => {
     $executeRaw.mockRejectedValue(MISSING_TABLE)
     expect(await recordAdvice(ADVICE)).toBe('unavailable')
@@ -145,7 +152,7 @@ describe('listAdviceForUser', () => {
     ])
     const call = $queryRaw.mock.calls[0]
     expect(sqlOf(call)).toMatch(/ORDER BY "given_at" DESC/)
-    expect(valuesOf(call)).toEqual(['u1', ['af-ice'], since, ['my_team_bench', 'waiver_panel'], MAX_ADVICE_READ])
+    expect(valuesOf(call)).toEqual(['u1', ['af-ice'], since, ['my_team_bench', 'waiver_panel', 'waiver_engine'], MAX_ADVICE_READ])
   })
 
   it('rows of an unknown type or surface are dropped, not guessed', async () => {
@@ -194,9 +201,10 @@ describe('advice ledger: projections and My Team calls', () => {
     expect(await recordAdvice(MY_TEAM)).toBe('recorded')
     const sql = sqlOf($executeRaw.mock.calls[0])
     expect(sql).toContain('"rec_projected", "alt_projected"')
-    expect(sql).toMatch(/WHERE "chimmy_advice"\."surface" = \?/)
-    expect(sql).not.toContain('"surface"        = EXCLUDED."surface"')
+    // It relabels a row only when the row is its own or the weekly engine run's unshown one — never Chimmy's.
+    expect(sql).toMatch(/WHERE "chimmy_advice"\."surface" = \? OR "chimmy_advice"\."surface" = \?\s*$/)
     const v = valuesOf($executeRaw.mock.calls[0])
+    expect(v.slice(-2)).toEqual(['my_team_bench', 'waiver_engine'])
     expect(v).toContain('my_team_bench')
     expect(v).toContain(14.24)
     expect(v).toContain(9.1)
@@ -239,7 +247,7 @@ describe('advice ledger: projections and My Team calls', () => {
     await listAdviceUsers({ since: new Date(0), limit: 5 })
     for (const call of $queryRaw.mock.calls) {
       expect(sqlOf(call)).toContain('NOT ("surface" = ANY(?::text[]))')
-      expect(valuesOf(call)).toContainEqual(['my_team_bench', 'waiver_panel'])
+      expect(valuesOf(call)).toContainEqual(['my_team_bench', 'waiver_panel', 'waiver_engine'])
     }
   })
 
@@ -247,8 +255,24 @@ describe('advice ledger: projections and My Team calls', () => {
     $executeRaw.mockResolvedValue(1)
     await recordAdvice({ ...ADVICE, adviceType: 'add', surface: 'waiver_panel', alt: { key: '4034', name: 'Drop Guy' }, slot: null })
     const call = $executeRaw.mock.calls[0]
-    expect(sqlOf(call)).toMatch(/WHERE "chimmy_advice"\."surface" = \?/)
-    expect(valuesOf(call).at(-1)).toBe('waiver_panel')
+    expect(sqlOf(call)).toMatch(/WHERE "chimmy_advice"\."surface" = \? OR "chimmy_advice"\."surface" = \?/)
+    expect(valuesOf(call).slice(-2)).toEqual(['waiver_panel', 'waiver_engine'])
+  })
+
+  it('🛑 a pick somebody was SHOWN takes over the weekly engine run’s unshown row; the engine only ever updates its own', async () => {
+    $executeRaw.mockResolvedValue(1)
+    await recordAdvice({ ...ADVICE, adviceType: 'add', surface: 'waiver_panel', alt: null, slot: null })
+    const shown = $executeRaw.mock.calls[0]
+    // The takeover relabels the row as the surface that showed it.
+    expect(sqlOf(shown)).toMatch(/"surface"\s+= EXCLUDED\."surface"/)
+    expect(valuesOf(shown).slice(-2)).toEqual(['waiver_panel', 'waiver_engine'])
+
+    $executeRaw.mockClear()
+    await recordAdvice({ ...ADVICE, adviceType: 'add', surface: 'waiver_engine', alt: null, slot: null, confidencePct: 84 })
+    const engine = $executeRaw.mock.calls[0]
+    // Both sides of its OR are its own surface: it can never take a shown row.
+    expect(valuesOf(engine).slice(-2)).toEqual(['waiver_engine', 'waiver_engine'])
+    expect(valuesOf(engine)).toContain(84)
   })
 
   it('withdraws only My Team calls this render no longer makes, and only for players not yet kicked off', async () => {

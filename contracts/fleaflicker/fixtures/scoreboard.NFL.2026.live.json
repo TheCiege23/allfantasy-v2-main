@@ -1,0 +1,871 @@
+{
+  "schedulePeriod": {
+    "ordinal": 11,
+    "low": {
+      "ordinal": 11,
+      "startEpochMilli": "1794913200000",
+      "isNow": true
+    },
+    "containsNow": true,
+    "value": 11
+  },
+  "eligibleSchedulePeriods": [
+    {
+      "ordinal": 1,
+      "low": {
+        "ordinal": 1,
+        "startEpochMilli": "1788861600000"
+      },
+      "value": 1
+    },
+    {
+      "ordinal": 2,
+      "low": {
+        "ordinal": 2,
+        "startEpochMilli": "1789466400000"
+      },
+      "value": 2
+    },
+    {
+      "ordinal": 3,
+      "low": {
+        "ordinal": 3,
+        "startEpochMilli": "1790071200000"
+      },
+      "value": 3
+    },
+    {
+      "ordinal": 4,
+      "low": {
+        "ordinal": 4,
+        "startEpochMilli": "1790676000000"
+      },
+      "value": 4
+    },
+    {
+      "ordinal": 5,
+      "low": {
+        "ordinal": 5,
+        "startEpochMilli": "1791280800000"
+      },
+      "value": 5
+    },
+    {
+      "ordinal": 6,
+      "low": {
+        "ordinal": 6,
+        "startEpochMilli": "1791885600000"
+      },
+      "value": 6
+    },
+    {
+      "ordinal": 7,
+      "low": {
+        "ordinal": 7,
+        "startEpochMilli": "1792490400000"
+      },
+      "value": 7
+    },
+    {
+      "ordinal": 8,
+      "low": {
+        "ordinal": 8,
+        "startEpochMilli": "1793095200000"
+      },
+      "value": 8
+    },
+    {
+      "ordinal": 9,
+      "low": {
+        "ordinal": 9,
+        "startEpochMilli": "1793703600000"
+      },
+      "value": 9
+    },
+    {
+      "ordinal": 10,
+      "low": {
+        "ordinal": 10,
+        "startEpochMilli": "1794308400000"
+      },
+      "value": 10
+    },
+    {
+      "ordinal": 11,
+      "low": {
+        "ordinal": 11,
+        "startEpochMilli": "1794913200000",
+        "isNow": true
+      },
+      "containsNow": true,
+      "value": 11
+    },
+    {
+      "ordinal": 12,
+      "low": {
+        "ordinal": 12,
+        "startEpochMilli": "1795518000000"
+      },
+      "value": 12
+    },
+    {
+      "ordinal": 13,
+      "low": {
+        "ordinal": 13,
+        "startEpochMilli": "1796122800000"
+      },
+      "value": 13
+    },
+    {
+      "ordinal": 14,
+      "low": {
+        "ordinal": 14,
+        "startEpochMilli": "1796727600000"
+      },
+      "value": 14
+    },
+    {
+      "ordinal": 15,
+      "low": {
+        "ordinal": 15,
+        "startEpochMilli": "1797332400000"
+      },
+      "value": 15
+    },
+    {
+      "ordinal": 16,
+      "low": {
+        "ordinal": 16,
+        "startEpochMilli": "1797937200000"
+      },
+      "value": 16
+    },
+    {
+      "ordinal": 17,
+      "low": {
+        "ordinal": 17,
+        "startEpochMilli": "1798542000000"
+      },
+      "value": 17
+    }
+  ],
+  "games": [
+    {
+      "id": "58332594",
+      "away": {
+        "id": 1769016,
+        "name": "Team 2",
+        "logoUrl": "https://example.invalid/team-2.png",
+        "recordOverall": {
+          "wins": 6,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.6,
+            "formatted": ".600"
+          },
+          "rank": 3,
+          "formatted": "6-4"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 3,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1463.18,
+          "formatted": "1,463.18"
+        },
+        "pointsAgainst": {
+          "value": 1363.36,
+          "formatted": "1,363.36"
+        },
+        "streak": {
+          "value": 3,
+          "formatted": "W3"
+        },
+        "waiverPosition": 9,
+        "newItemCounts": {
+          "activityUnread": 223
+        },
+        "initials": "T2"
+      },
+      "home": {
+        "id": 1769014,
+        "name": "Team 1",
+        "logoUrl": "https://example.invalid/team-1.png",
+        "recordOverall": {
+          "wins": 2,
+          "losses": 8,
+          "winPercentage": {
+            "value": 0.2,
+            "formatted": ".200"
+          },
+          "rank": 10,
+          "formatted": "2-8"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 10,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1126.66,
+          "formatted": "1,126.66"
+        },
+        "pointsAgainst": {
+          "value": 1462.26,
+          "formatted": "1,462.26"
+        },
+        "streak": {
+          "value": 1,
+          "formatted": "W1"
+        },
+        "waiverPosition": 3,
+        "newItemCounts": {
+          "activityUnread": 255
+        },
+        "initials": "T1"
+      },
+      "awayScore": {
+        "yetToPlay": 10,
+        "score": {
+          "formatted": "0"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "TE",
+          "RB",
+          "RB",
+          "FLEX",
+          "FLEX",
+          "QB",
+          "K",
+          "WR",
+          "WR"
+        ]
+      },
+      "homeScore": {
+        "yetToPlay": 9,
+        "alreadyPlayed": 1,
+        "score": {
+          "value": 2.3,
+          "formatted": "2.3"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "WR",
+          "WR",
+          "RB",
+          "RB",
+          "FLEX",
+          "FLEX",
+          "K",
+          "QB"
+        ],
+        "alreadyPlayedPositions": [
+          "TE"
+        ]
+      },
+      "isInProgress": true
+    },
+    {
+      "id": "58332593",
+      "away": {
+        "id": 1769017,
+        "name": "Team 4",
+        "logoUrl": "https://example.invalid/team-4.png",
+        "recordOverall": {
+          "wins": 7,
+          "losses": 3,
+          "winPercentage": {
+            "value": 0.7,
+            "formatted": ".700"
+          },
+          "rank": 2,
+          "formatted": "7-3"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 2,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1364.44,
+          "formatted": "1,364.44"
+        },
+        "pointsAgainst": {
+          "value": 1339.7,
+          "formatted": "1,339.7"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverPosition": 10,
+        "newItemCounts": {
+          "activityUnread": 210
+        },
+        "initials": "T4"
+      },
+      "home": {
+        "id": 1768978,
+        "name": "Team 3",
+        "logoUrl": "https://example.invalid/team-3.png",
+        "recordOverall": {
+          "wins": 5,
+          "losses": 5,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 8,
+          "formatted": "5-5"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 8,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1195.84,
+          "formatted": "1,195.84"
+        },
+        "pointsAgainst": {
+          "value": 1268.26,
+          "formatted": "1,268.26"
+        },
+        "streak": {
+          "value": -2,
+          "formatted": "L2"
+        },
+        "waiverPosition": 5,
+        "newItemCounts": {
+          "activityUnread": 255
+        },
+        "initials": "T3"
+      },
+      "awayScore": {
+        "yetToPlay": 9,
+        "alreadyPlayed": 1,
+        "score": {
+          "value": 6,
+          "formatted": "6"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "WR",
+          "WR",
+          "RB",
+          "RB",
+          "FLEX",
+          "FLEX",
+          "QB",
+          "TE"
+        ],
+        "alreadyPlayedPositions": [
+          "K"
+        ]
+      },
+      "homeScore": {
+        "yetToPlay": 9,
+        "score": {
+          "formatted": "0"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "FLEX",
+          "RB",
+          "RB",
+          "WR",
+          "WR",
+          "TE",
+          "K",
+          "QB"
+        ]
+      },
+      "isInProgress": true
+    },
+    {
+      "id": "58332598",
+      "away": {
+        "id": 1769018,
+        "name": "Team 6",
+        "recordOverall": {
+          "wins": 6,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.6,
+            "formatted": ".600"
+          },
+          "rank": 5,
+          "formatted": "6-4"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 5,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1350.36,
+          "formatted": "1,350.36"
+        },
+        "pointsAgainst": {
+          "value": 1280.62,
+          "formatted": "1,280.62"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverPosition": 8,
+        "newItemCounts": {
+          "activityUnread": 255
+        },
+        "initials": "T6"
+      },
+      "home": {
+        "id": 1769026,
+        "name": "Team 5",
+        "logoUrl": "https://example.invalid/team-5.png",
+        "recordOverall": {
+          "wins": 10,
+          "winPercentage": {
+            "value": 1,
+            "formatted": "1.000"
+          },
+          "rank": 1,
+          "formatted": "10-0"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 1,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1710.08,
+          "formatted": "1,710.08"
+        },
+        "pointsAgainst": {
+          "value": 1283.7,
+          "formatted": "1,283.7"
+        },
+        "streak": {
+          "value": 10,
+          "formatted": "W10"
+        },
+        "waiverPosition": 12,
+        "newItemCounts": {
+          "activityUnread": 49
+        },
+        "initials": "T5"
+      },
+      "awayScore": {
+        "yetToPlay": 6,
+        "alreadyPlayed": 2,
+        "score": {
+          "value": 38.56,
+          "formatted": "38.56"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "FLEX",
+          "RB",
+          "RB",
+          "K",
+          "WR"
+        ],
+        "alreadyPlayedPositions": [
+          "WR",
+          "QB"
+        ]
+      },
+      "homeScore": {
+        "yetToPlay": 8,
+        "alreadyPlayed": 2,
+        "score": {
+          "value": 25.9,
+          "formatted": "25.9"
+        },
+        "yetToPlayPositions": [
+          "WR",
+          "WR",
+          "K",
+          "RB",
+          "TE",
+          "QB",
+          "FLEX",
+          "FLEX"
+        ],
+        "alreadyPlayedPositions": [
+          "D/ST",
+          "RB"
+        ]
+      },
+      "isInProgress": true
+    },
+    {
+      "id": "58332597",
+      "away": {
+        "id": 1769019,
+        "name": "Team 8",
+        "recordOverall": {
+          "wins": 5,
+          "losses": 5,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 7,
+          "formatted": "5-5"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 7,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1345.58,
+          "formatted": "1,345.58"
+        },
+        "pointsAgainst": {
+          "value": 1350.98,
+          "formatted": "1,350.98"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverPosition": 6,
+        "newItemCounts": {
+          "activityUnread": 147,
+          "messagesUnread": 2
+        },
+        "initials": "T8"
+      },
+      "home": {
+        "id": 1769023,
+        "name": "Team 7",
+        "logoUrl": "https://example.invalid/team-7.png",
+        "recordOverall": {
+          "wins": 6,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.6,
+            "formatted": ".600"
+          },
+          "rank": 4,
+          "formatted": "6-4"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 4,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1481.6,
+          "formatted": "1,481.6"
+        },
+        "pointsAgainst": {
+          "value": 1315.24,
+          "formatted": "1,315.24"
+        },
+        "streak": {
+          "value": 2,
+          "formatted": "W2"
+        },
+        "waiverPosition": 11,
+        "newItemCounts": {
+          "activityUnread": 9
+        },
+        "initials": "T7"
+      },
+      "awayScore": {
+        "yetToPlay": 5,
+        "alreadyPlayed": 2,
+        "score": {
+          "value": 6.4,
+          "formatted": "6.4"
+        },
+        "yetToPlayPositions": [
+          "QB",
+          "WR",
+          "WR",
+          "FLEX",
+          "TE"
+        ],
+        "alreadyPlayedPositions": [
+          "K",
+          "FLEX"
+        ]
+      },
+      "homeScore": {
+        "yetToPlay": 10,
+        "score": {
+          "formatted": "0"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "FLEX",
+          "FLEX",
+          "WR",
+          "WR",
+          "TE",
+          "QB",
+          "RB",
+          "RB",
+          "K"
+        ]
+      },
+      "isInProgress": true
+    },
+    {
+      "id": "58332596",
+      "away": {
+        "id": 1769020,
+        "name": "Team 10",
+        "logoUrl": "https://example.invalid/team-10.png",
+        "recordOverall": {
+          "wins": 4,
+          "losses": 6,
+          "winPercentage": {
+            "value": 0.4,
+            "formatted": ".400"
+          },
+          "rank": 9,
+          "formatted": "4-6"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 9,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1243.64,
+          "formatted": "1,243.64"
+        },
+        "pointsAgainst": {
+          "value": 1433.94,
+          "formatted": "1,433.94"
+        },
+        "streak": {
+          "value": -4,
+          "formatted": "L4"
+        },
+        "waiverPosition": 4,
+        "newItemCounts": {
+          "activityUnread": 52
+        },
+        "initials": "T10"
+      },
+      "home": {
+        "id": 1769021,
+        "name": "Team 9",
+        "recordOverall": {
+          "wins": 2,
+          "losses": 8,
+          "winPercentage": {
+            "value": 0.2,
+            "formatted": ".200"
+          },
+          "rank": 11,
+          "formatted": "2-8"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 11,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1064.24,
+          "formatted": "1,064.24"
+        },
+        "pointsAgainst": {
+          "value": 1396.86,
+          "formatted": "1,396.86"
+        },
+        "streak": {
+          "value": 1,
+          "formatted": "W1"
+        },
+        "waiverPosition": 2,
+        "newItemCounts": {
+          "activityUnread": 255
+        },
+        "initials": "T9"
+      },
+      "awayScore": {
+        "yetToPlay": 10,
+        "score": {
+          "formatted": "0"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "QB",
+          "FLEX",
+          "FLEX",
+          "RB",
+          "RB",
+          "WR",
+          "WR",
+          "TE",
+          "K"
+        ]
+      },
+      "homeScore": {
+        "yetToPlay": 9,
+        "score": {
+          "formatted": "0"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "K",
+          "WR",
+          "WR",
+          "TE",
+          "RB",
+          "RB",
+          "QB",
+          "FLEX"
+        ]
+      },
+      "isInProgress": true
+    },
+    {
+      "id": "58332595",
+      "away": {
+        "id": 1769022,
+        "name": "Team 12",
+        "logoUrl": "https://example.invalid/team-12.png",
+        "recordOverall": {
+          "wins": 5,
+          "losses": 5,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 6,
+          "formatted": "5-5"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 6,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1425.64,
+          "formatted": "1,425.64"
+        },
+        "pointsAgainst": {
+          "value": 1199.7,
+          "formatted": "1,199.7"
+        },
+        "streak": {
+          "value": 1,
+          "formatted": "W1"
+        },
+        "waiverPosition": 7,
+        "newItemCounts": {
+          "activityUnread": 54
+        },
+        "initials": "T12"
+      },
+      "home": {
+        "id": 1769015,
+        "name": "Team 11",
+        "recordOverall": {
+          "wins": 2,
+          "losses": 8,
+          "winPercentage": {
+            "value": 0.2,
+            "formatted": ".200"
+          },
+          "rank": 12,
+          "formatted": "2-8"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 12,
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "value": 1326.88,
+          "formatted": "1,326.88"
+        },
+        "pointsAgainst": {
+          "value": 1403.52,
+          "formatted": "1,403.52"
+        },
+        "streak": {
+          "value": -4,
+          "formatted": "L4"
+        },
+        "waiverPosition": 1,
+        "newItemCounts": {
+          "activityUnread": 255
+        },
+        "initials": "T11"
+      },
+      "awayScore": {
+        "yetToPlay": 10,
+        "score": {
+          "formatted": "0"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "QB",
+          "K",
+          "TE",
+          "FLEX",
+          "FLEX",
+          "WR",
+          "WR",
+          "RB",
+          "RB"
+        ]
+      },
+      "homeScore": {
+        "yetToPlay": 10,
+        "score": {
+          "formatted": "0"
+        },
+        "yetToPlayPositions": [
+          "D/ST",
+          "WR",
+          "WR",
+          "QB",
+          "TE",
+          "FLEX",
+          "FLEX",
+          "RB",
+          "RB",
+          "K"
+        ]
+      },
+      "isInProgress": true
+    }
+  ]
+}

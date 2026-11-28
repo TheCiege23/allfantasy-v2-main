@@ -70,8 +70,9 @@ export function ReferralProgressWidget({ progress: providedProgress }: ReferralP
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div>
+      {/* Side by side on a phone too (2026-11-25, the simplify pass): the tier and its rate are one line. */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="min-w-0">
           <p className="text-lg font-bold" style={{ color: "var(--text)" }}>
             {progress.tier.label}
           </p>
@@ -80,7 +81,7 @@ export function ReferralProgressWidget({ progress: providedProgress }: ReferralP
             {progress.claimableRewards === 1 ? "" : "s"} ready
           </p>
         </div>
-        <div className="text-left sm:text-right">
+        <div className="text-right">
           <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
             {progress.onboardingCompletionRate}%
           </p>

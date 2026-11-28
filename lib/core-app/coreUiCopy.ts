@@ -21,6 +21,9 @@ const spanish: Record<string, string> = {
   Matchup: 'Enfrentamiento',
   Match: 'Partido',
   Team: 'Equipo',
+  // The /core league tabs (lib/core-app/leagueDestinations.ts LEAGUE_TABS, 2026-11-19).
+  Trade: 'Intercambios',
+  'Sections of this tab': 'Secciones de esta pestaña',
   Trades: 'Intercambios',
   Waivers: 'Agentes libres',
   // The league tab strip's 'Moves' had no entry, so Spanish readers saw it in English.
@@ -40,6 +43,7 @@ const spanish: Record<string, string> = {
   'Season Outlook': 'Proyección de temporada',
   Outlook: 'Proyección',
   'Your career': 'Tu trayectoria',
+  'My decisions': 'Mis decisiones',
   Rankings: 'Clasificaciones',
   Leaderboards: 'Tablas de líderes',
   Portfolio: 'Portafolio',
@@ -251,6 +255,7 @@ const spanish: Record<string, string> = {
   Bench: 'Suplentes',
   'Injured reserve': 'Reserva de lesionados',
   'Taxi squad': 'Equipo de desarrollo',
+  'Not eligible to start.': 'No puede ser titular.',
   'Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.': 'No puede ser titular. Los años restantes se calculan según el límite de desarrollo de tu liga.',
   'Projections are not shown because': 'No se muestran proyecciones porque',
   'Games started': 'Partidos iniciados',
@@ -388,6 +393,7 @@ const spanish: Record<string, string> = {
   'on bye': 'en descanso',
   'Lineup decision': 'Decisión de alineación',
   'Review starters': 'Revisar titulares',
+  'Clips and highlights': 'Clips y jugadas destacadas',
   'Review your starting lineup': 'Revisa tu alineación titular',
   'No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.': 'No identificamos ninguna posición vacía, descartada o en descanso entre los jugadores que pudimos leer. Los jugadores sin resolver y las noticias que falten pueden ocultar problemas; confirma la alineación en tu plataforma.',
   'This starting slot was empty when checked. Confirm the current lineup, eligibility, locks, and AutoSubs on your platform.': 'Esta posición titular estaba vacía al revisarla. Confirma la alineación actual, la elegibilidad, los cierres y los cambios automáticos en tu plataforma.',
@@ -483,6 +489,9 @@ const spanish: Record<string, string> = {
   "Win": 'Victoria',
   "Loss": 'Derrota',
   "Tie": 'Empate',
+  "Ahead": 'Por delante',
+  "AllFantasy estimate": 'Estimación de AllFantasy',
+  "Behind": 'Por detrás',
   "Opponent not identified": 'Rival no identificado',
   'Your week, every matchup': 'Tu semana, todos los enfrentamientos',
   'No matchups are on file for this week.': 'No hay enfrentamientos registrados para esta semana.',
@@ -667,6 +676,7 @@ const spanish: Record<string, string> = {
   'this league’s tiebreak rule was not published': 'No se publicó la regla de desempate de esta liga.',
   'no claim limit was published — this platform does not expose one': 'No se publicó un límite de reclamos; esta plataforma no lo proporciona.',
   'we cannot tell which roster in this league is yours': 'No podemos identificar cuál es tu plantilla en esta liga.',
+  'we can’t verify who’s available in this league': 'No podemos confirmar quién está disponible en esta liga.',
   'This league does not use FAAB bidding.': 'Esta liga no usa ofertas FAAB.',
   'your platform does not publish remaining FAAB for this league, so we cannot show a budget — this is not the same as having none': 'Tu plataforma no publica el FAAB restante de esta liga, así que no podemos mostrar un presupuesto. Eso no significa que sea cero.',
   'this league does not publish a waiver priority, or runs blind bidding instead': 'Esta liga no publica la prioridad de reclamo o usa ofertas a ciegas.',
@@ -1477,6 +1487,14 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   [/^Only trades in the uploaded Fantrax export are counted; trades made since the last upload are not\.$/, () => 'Solo se cuentan los intercambios del archivo de Fantrax subido; los hechos desde la última subida no.'],
   [/^(.+) waiver claims aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los reclamos de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
   [/^(.+) draft picks aren't matched to the manager who made them yet\.$/, (m) => `Las selecciones del draft de ${m[1]} todavía no están asignadas al mánager que las hizo.`],
+  // ESPN / MFL / Yahoo drafts credited to each season's owner (2026-11-23, lib/competitive-edge/providerManagerHistory.ts).
+  [/^No (.+) draft picks have been imported for this league yet\.$/, (m) => `Todavía no se importaron selecciones del draft de ${m[1]} para esta liga.`],
+  [/^(.+) draft picks are on file, but who owned each team in those seasons wasn't recorded\.$/, (m) => `Hay selecciones del draft de ${m[1]} registradas, pero no quedó registrado quién manejaba cada equipo en esas temporadas.`],
+  // Yahoo trades from its historical backfill (2026-11-23, lib/competitive-edge/providerManagerHistory.ts).
+  [/^Yahoo's season-by-season history hasn't been imported for this league yet, so its trades can't be counted per manager\.$/, () => 'El historial por temporada de Yahoo todavía no se importó para esta liga, así que sus intercambios no se pueden contar por mánager.'],
+  [/^Draft picks moved in Yahoo trades aren't stored in the imported transactions, so these counts are players only\.$/, () => 'Las selecciones del draft intercambiadas en Yahoo no se guardan en las transacciones importadas, así que estos conteos son solo de jugadores.'],
+  [/^Some Yahoo trades from (.+) were imported without the players each team got, so they aren't counted until the league's transactions are imported again\.$/, (m) => `Algunos intercambios de Yahoo de ${m[1]} se importaron sin los jugadores que recibió cada equipo, así que no se cuentan hasta que se vuelvan a importar las transacciones de la liga.`],
+  [/^In (.+), some teams' managers weren't recorded, so their side of a trade isn't credited to anyone\.$/, (m) => `En ${m[1]}, no quedaron registrados los mánagers de algunos equipos, así que su lado del intercambio no se le atribuye a nadie.`],
   [/^(.+) doesn't give each team a person id, so there is no per-manager history to read\.$/, (m) => `${m[1]} no da un identificador de persona para cada equipo, así que no hay historial por mánager que leer.`],
   [/^(Trade|Waiver|Draft) history could not be read right now\.$/, (m) => `No se pudo leer ahora el historial de ${m[1] === 'Trade' ? 'intercambios' : m[1] === 'Waiver' ? 'reclamos' : 'drafts'}.`],
   [
@@ -1589,6 +1607,26 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
       const listed = spanishLockList(m[1]!)
       return listed ? `Los partidos que ya empezaron quedan fijos: ${listed}.` : m[0]!
     },
+  ],
+  // A pasted Yahoo league (foreignIdSpaceCopy.ts `availabilityUnverifiedSentence` / `unmatchedRosteredNote`).
+  [
+    /^We can't verify who's available in this league: 1 player on its rosters couldn't be matched to ours\.$/,
+    () => 'No podemos confirmar quién está disponible en esta liga: no pudimos emparejar 1 jugador de sus plantillas con los nuestros.',
+  ],
+  [
+    /^We can't verify who's available in this league: (\d+) players on its rosters couldn't be matched to ours\.$/,
+    (m) => `No podemos confirmar quién está disponible en esta liga: no pudimos emparejar ${m[1]} jugadores de sus plantillas con los nuestros.`,
+  ],
+  // foreignIdSpaceCopy.ts `leagueUnverifiedClause`, as a refusal's detail ("Roster changes cannot be priced here: …").
+  [/^1 player on its rosters couldn't be matched to ours$/, () => 'no pudimos emparejar 1 jugador de sus plantillas con los nuestros'],
+  [/^(\d+) players on its rosters couldn't be matched to ours$/, (m) => `no pudimos emparejar ${m[1]} jugadores de sus plantillas con los nuestros`],
+  [
+    /^1 player on rosters in this league couldn't be matched to ours\.$/,
+    () => 'No pudimos emparejar 1 jugador de las plantillas de esta liga con los nuestros.',
+  ],
+  [
+    /^(\d+) players on rosters in this league couldn't be matched to ours\.$/,
+    (m) => `No pudimos emparejar ${m[1]} jugadores de las plantillas de esta liga con los nuestros.`,
   ],
   [
     /^1 free agent is ruled out, on injured reserve or on a bye this week and not shown\.$/,

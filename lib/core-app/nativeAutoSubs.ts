@@ -14,13 +14,14 @@ import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlay
 import { getPlayerGameLockStateForAutoCoach } from '@/lib/autocoach/playerGameLock'
 import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineupService'
 import { readTeamPreference } from './teamPreferenceStore'
+import { aiSwapAllowedForTeam } from '@/lib/lineup-automation/aiSwapPolicy'
 import { freshAutoSubsEvidence,nativeAutoSubsKey,type NativeAutoSubsAssignment } from './nativeAutoSubsPolicy'
 const settingsObject=(s:unknown)=>s&&typeof s==='object'&&!Array.isArray(s)?s as Record<string,unknown>:{}
 
 /** Reads saved provider evidence only. Uncertain status or missing game times holds execution. */
 export async function runNativeAutoSubsForLeague(leagueId:string,deadline=Date.now()+10_000) {
   const league=await prisma.league.findUnique({where:{id:leagueId}})
-  if(!league || resolveWriteAuthority(league.platform)!=='NATIVE' || settingsObject(league.settings).nativeAutoSubsEnabled!==true || league.bestBallMode || automaticLineup(league.leagueType,league.settings) || !['active','in_season'].includes(String(league.status ?? league.lifecycleState).toLowerCase())) return []
+  if(!league || resolveWriteAuthority(league)!=='NATIVE' || settingsObject(league.settings).nativeAutoSubsEnabled!==true || league.bestBallMode || automaticLineup(league.leagueType,league.settings) || !['active','in_season'].includes(String(league.status ?? league.lifecycleState).toLowerCase())) return []
   const week=leagueWeekFromSettings(league.settings),season=league.season
   if(!season || week==null || !Number.isInteger(week)) return []
   const rosters=await prisma.roster.findMany({where:{leagueId},orderBy:{id:'asc'},take:64})
@@ -31,6 +32,9 @@ export async function runNativeAutoSubsForLeague(leagueId:string,deadline=Date.n
     const owner=roster.platformUserId,key=nativeAutoSubsKey(leagueId,roster.id,season,week)
     const assignment=await readTeamPreference<NativeAutoSubsAssignment>(owner,key)
     if(!assignment?.enabled) continue
+    // AI swap is a paid, opt-in feature the commissioner can switch off league-wide (lib/lineup-automation/aiSwapPolicy.ts).
+    const swap=await aiSwapAllowedForTeam({roster,league})
+    if(!swap.allowed){results.push({rosterId:roster.id,applied:false,reason:swap.reason});continue}
     const sections=getNormalizedLineupSections(roster.playerData),starters=sections.starters.map(p=>String(p.id))
     if(JSON.stringify(starters)!==JSON.stringify(assignment.starters)) {results.push({rosterId:roster.id,applied:false,reason:'lineup_changed'});continue}
     const ids=[...starters,...Object.values(assignment.backups)],players=await findSportsPlayersForLeague(String(league.sport),league.platform,ids)
@@ -65,7 +69,7 @@ export async function runNativeAutoSubsForLeague(leagueId:string,deadline=Date.n
             await tx.$queryRaw`SELECT id FROM "SportsGame" WHERE sport=${String(league.sport)} AND "startTime" BETWEEN ${new Date(n-12*3600_000)} AND ${new Date(n+7*86400_000)} AND ("homeTeam" ILIKE ${out.team??''} OR "awayTeam" ILIKE ${out.team??''} OR "homeTeam" ILIKE ${into.team??''} OR "awayTeam" ILIKE ${into.team??''}) FOR SHARE`
             const currentLocks=await Promise.all([getPlayerGameLockStateForAutoCoach({...args,teamAbbr:out.team,db:tx,nowUtc:new Date()}),getPlayerGameLockStateForAutoCoach({...args,teamAbbr:into.team,db:tx,nowUtc:new Date()})])
             if(currentLocks.some(l=>!l.scheduleKnown || l.lockedBecauseGameStarted || !l.nextKickoffUtc || l.nextKickoffUtc.getTime()<=Date.now())) throw new Error('AUTOSUB_GAME_LOCK_CHANGED')
-            if(!currentLeague || resolveWriteAuthority(currentLeague.platform)!=='NATIVE' || currentLeague.updatedAt.getTime()!==league.updatedAt.getTime() || leagueWeekFromSettings(currentLeague.settings)!==week || currentLeague.season!==season || currentLeague.bestBallMode || currentLeague.lockAllMoves || !['active','in_season'].includes(String(currentLeague.status??currentLeague.lifecycleState).toLowerCase()) || settingsObject(currentLeague.settings).nativeAutoSubsEnabled!==true || !current?.enabled || current.version!==assignment.version || outLock.nextKickoffUtc!.getTime()<=n || inLock.nextKickoffUtc!.getTime()<=n || !freshAutoSubsEvidence(out,n) || !freshAutoSubsEvidence(into,n)) throw new Error('AUTOSUB_AUTHORIZATION_CHANGED')
+            if(!currentLeague || resolveWriteAuthority(currentLeague)!=='NATIVE' || currentLeague.updatedAt.getTime()!==league.updatedAt.getTime() || leagueWeekFromSettings(currentLeague.settings)!==week || currentLeague.season!==season || currentLeague.bestBallMode || currentLeague.lockAllMoves || !['active','in_season'].includes(String(currentLeague.status??currentLeague.lifecycleState).toLowerCase()) || settingsObject(currentLeague.settings).nativeAutoSubsEnabled!==true || currentLeague.autoCoachEnabled===false || !current?.enabled || current.version!==assignment.version || outLock.nextKickoffUtc!.getTime()<=n || inLock.nextKickoffUtc!.getTime()<=n || !freshAutoSubsEvidence(out,n) || !freshAutoSubsEvidence(into,n)) throw new Error('AUTOSUB_AUTHORIZATION_CHANGED')
             // Advance the authorization snapshot atomically so other assigned slots can run next sweep.
             const remaining={...current.backups};delete remaining[slot]
             const updated=JSON.stringify({...current,enabled:Object.keys(remaining).length>0,backups:remaining,starters:Array.isArray(next.starters)?next.starters.map(String):[],version:current.version+1,updatedAt:new Date().toISOString()})

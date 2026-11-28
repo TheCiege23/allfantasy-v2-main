@@ -131,7 +131,7 @@ export function myTeamFixture(sport: HarnessSport): MyTeamData {
         unpricedReason: null,
       },
     },
-    rosterGrade: { available: false, reason: 'We need prices for most of this league’s rosters to rank yours against them, and we don’t have them yet.' },
+    rosterGrade: { available: false, reason: 'Ranked once most rosters in this league have prices.' },
     upcomingByes: football ? [{ week: cfg.week + 2, names: [name(3), name(8), name(31)] }] : [],
     liveScore: { available: false, reason: 'harness' },
     teamActivity: null,
@@ -149,6 +149,7 @@ export function weekBoardFixture(sport: HarnessSport): LeagueWeekBoard {
   const side = (i: number, k: number) => ({ rosterId: ids[i], name: MANAGERS[i], avatarUrl: null, projected: Math.round(scale * (0.92 + k * 0.03) * 10) / 10 })
   return {
     format: 'head-to-head',
+    sport,
     leagueId: 'e2e-redraft-core',
     leagueName: 'Sunday Night Redraft',
     platform: 'allfantasy',

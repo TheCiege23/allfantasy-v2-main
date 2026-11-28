@@ -95,9 +95,15 @@ function getTeamLogoUrl(team: string | null): string | null {
   return resolveTeamLogoUrl(normalized, 'nfl')
 }
 
+/*
+ * 🛑 THIS SERVICE IS NFL, AND EVERY SLEEPER-ID READ IN IT SAYS SO. `sleeperId` is the identity map's NFL
+ * Sleeper column (NBA ids live in `sleeperNbaId`), and the name lookups here are `sport: 'NFL'`. Sleeper
+ * reuses ids across sports — NFL 1466 Travis Kelce, NBA 1466 JaVale McGee — so an unscoped read is a
+ * read of whichever sport's row happens to hold the number.
+ */
 export async function lookupBySleeperId(sleeperId: string): Promise<UnifiedPlayer | null> {
   const identity = await prisma.playerIdentityMap.findUnique({
-    where: { sleeperId },
+    where: { sleeperId, sport: 'NFL' },
   })
 
   if (!identity) return null
@@ -182,7 +188,7 @@ export async function lookupByName(
 
 export async function lookupBySleeperIds(sleeperIds: string[]): Promise<Map<string, UnifiedPlayer>> {
   const identities = await prisma.playerIdentityMap.findMany({
-    where: { sleeperId: { in: sleeperIds } },
+    where: { sport: 'NFL', sleeperId: { in: sleeperIds } },
   })
 
   const result = new Map<string, UnifiedPlayer>()
@@ -425,7 +431,7 @@ export async function syncIdentityMap(): Promise<{ created: number; updated: num
     const dob = fc.player.maybeBirthday || null
 
     let existing = sleeperId
-      ? await prisma.playerIdentityMap.findUnique({ where: { sleeperId } })
+      ? await prisma.playerIdentityMap.findUnique({ where: { sleeperId, sport: 'NFL' } })
       : null
 
     if (!existing) {
@@ -510,7 +516,7 @@ export async function syncIdentityMap(): Promise<{ created: number; updated: num
     const team = normalizeTeamAbbrev(ri.team)
 
     let identity = ri.sleeperId
-      ? await prisma.playerIdentityMap.findUnique({ where: { sleeperId: ri.sleeperId } })
+      ? await prisma.playerIdentityMap.findUnique({ where: { sleeperId: ri.sleeperId, sport: 'NFL' } })
       : null
 
     if (!identity) {

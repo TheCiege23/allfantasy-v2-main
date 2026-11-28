@@ -18,6 +18,8 @@ import Link from 'next/link'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { clubAbbr } from '@/components/core-app/boards/PlayerFace'
+import { initialsFor } from '@/lib/draft-room/classify-avatar-source'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -25,6 +27,8 @@ import { matchupConfidenceText, matchupReasonText } from '@/lib/core-app/matchup
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { InfoTip } from '@/components/core-app/InfoTip'
 import { MatchupMarketPanel } from '@/components/core-app/MatchupMarketPanel'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { defineMessages } from '@/lib/i18n/messages'
 import { matchupHeadline, pct } from '@/lib/core-app/matchupGuide'
 import { matchupGuideMessages } from '@/lib/core-app/messages/matchupGuide'
 import { platformLabel } from '@/lib/core-app/platformLinks'
@@ -42,6 +46,12 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { matchupScreenMessages } from '@/lib/core-app/messages/matchupScreen'
 import { playerGameMark } from '@/lib/core-app/redraftCoreScoreBug'
 import { lineupHoles, slotFamily, swingGame, toWin, type WeekState } from '@/lib/core-app/matchupInsights'
+
+/* The one "More detail" fold's note line (2026-11-20). */
+const matchupMoreDetailMessages = defineMessages({
+  en: { note: 'Your history with them · betting lines' },
+  es: { note: 'Tu historial contra ellos · líneas de apuestas' },
+})
 
 /**
  * Screen 5 — Matchup.
@@ -444,7 +454,7 @@ function PlayerHalf({
           <img className="af-mu-face" src={imageUrl} alt="" width={34} height={34} loading="lazy" onError={() => setFailedImageUrl(imageUrl)} />
         ) : (
           <span className="af-mu-face af-mu-face--none" aria-hidden>
-            {(cell.name ?? '?').charAt(0).toUpperCase()}
+            {initialsFor(cell.name)}
           </span>
         )}
         {/*
@@ -455,6 +465,8 @@ function PlayerHalf({
         {crest && crest !== failedLogoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img className="af-mu-club" src={crest} alt="" width={15} height={15} loading="lazy" onError={() => setFailedLogoUrl(crest)} />
+        ) : clubAbbr(cell.team) ? (
+          <span className="af-mu-club af-crest-abbr" aria-hidden>{clubAbbr(cell.team)}</span>
         ) : null}
       </span>
       <div className="af-mu-half-text">
@@ -502,6 +514,16 @@ function PlayerHalf({
           </div>
         ) : null}
         {cell.statLine ? <div className="af-mu-half-statline">{cell.statLine}</div> : null}
+        {/*
+          What that line is worth under this league's rules, worked out by AllFantasy. Only where the
+          platform's own player scores are not on file, and named as an estimate: the platform's
+          official number can differ.
+        */}
+        {!live && cell.ownPoints != null ? (
+          <div className="af-mu-half-statline" data-testid="matchup-own-points">
+            {copy('AllFantasy estimate')}: <span className="af-num">{cell.ownPoints.toFixed(1)}</span> {copy('pts')}
+          </div>
+        ) : null}
         {/*
           His game's state as a chip — live boards only. A starter ruled out or on bye is `final` in
           the game-state read, but he never played; the BYE / OUT flag beside his number says so, and a
@@ -650,29 +672,6 @@ export function slotEdges(
   return a > b ? { you: 'ahead', opponent: 'behind' } : { you: 'behind', opponent: 'ahead' }
 }
 
-/** Sum of a column, and how many of its cells it was built from. */
-function columnTotal(slots: MatchupSlot[], key: 'you' | 'opponent', live: boolean) {
-  let total = 0
-  let from = 0
-  let of = 0
-  for (const s of slots) {
-    const cell = s[key]
-    if (!cell || cell.empty) continue
-    /*
-     * A live starter still to kick off is not a gap in our data — nobody has points for him yet.
-     * Counting him in `of` made a Friday board say "built from 2 of your 28 starters, so both
-     * totals read low" about a week that simply had not been played.
-     */
-    if (live && cell.gameState === 'upcoming' && (cell.actual == null || cell.actual === 0)) continue
-    of += 1
-    const v = live ? cell.actual : cell.projected
-    if (v == null) continue
-    total += v
-    from += 1
-  }
-  return { total: Math.round(total * 10) / 10, from, of }
-}
-
 function LineupBoard({ data }: { data: MatchupData }) {
   const { language } = useOptionalLanguage()
   const m = useMessages(matchupScreenMessages)
@@ -683,8 +682,6 @@ function LineupBoard({ data }: { data: MatchupData }) {
 
   const live = data.playerScoring.available
   const slots = data.lineups.data
-  const yours = columnTotal(slots, 'you', live)
-  const theirs = columnTotal(slots, 'opponent', live)
   const yoursAf = afEngineColumnTotal(slots, 'you')
   const theirsAf = afEngineColumnTotal(slots, 'opponent')
   // Before kickoff each cell carries two projections: Sleeper's (SLPR) and AllFantasy's (AF).
@@ -777,14 +774,14 @@ function LineupBoard({ data }: { data: MatchupData }) {
           )
         })}
 
-        <div className="af-mu-board-foot" role="row">
-          {/* "—" when not one cell on that side had a number: a 0.0 total is a claim. */}
-          <span className="af-mu-foot-total af-num">{yours.from === 0 ? '—' : yours.total.toFixed(1)}</span>
-          <span className="af-mu-foot-label af-label">{copy(data.league.bestBall ? 'listed total' : live ? 'total' : 'projected')}</span>
-          <span className="af-mu-foot-total af-mu-foot-total--right af-num">
-            {theirs.from === 0 ? '—' : theirs.total.toFixed(1)}
-          </span>
-        </div>
+        {/*
+          🛑 NO TOTAL ROW UNDER THE SLOTS (2026-11-23). It summed the player cells on file and sat under a
+          scoreboard that prints the league's own score in large type, so at best it said that number twice
+          — and whenever a cell was missing it said a DIFFERENT one: measured on the matchup harness, the
+          scoreboard read 132.2–125.9 (projected to win) while this row read 53.6–61.9 (a loss), and live
+          46.2 against 33.4 for the same side. The scoreboard is the score. The "Built from N of M starters"
+          note went with it; it existed only to qualify this row.
+        */}
         {/* AllFantasy's own engine, totalled the same way, before kickoff only. */}
         {!live && (yoursAf != null || theirsAf != null) ? (
           <div className="af-mu-board-foot af-mu-board-foot--af" role="row">
@@ -803,11 +800,6 @@ function LineupBoard({ data }: { data: MatchupData }) {
         the gap between them, which is the only thing anyone reads off this
         board.
       */}
-      {yours.from < yours.of || theirs.from < theirs.of ? (
-        <p className="af-mu-note">
-          {m.coverage(yours.from, yours.of, theirs.from, theirs.of)}
-        </p>
-      ) : null}
     </>
   )
 }
@@ -866,7 +858,7 @@ function InsightCards({
       {win ? (
         <div className="af-mu-insight" data-kind="to-win">
           <h2 className="af-mu-insight-label">{m.toWinLabel}</h2>
-          <p className="af-mu-insight-title af-num">{win.needed > 0 ? m.toWinNeed(win.needed) : m.toWinAhead}</p>
+          <p className="af-mu-insight-title af-num">{win.needed > 0 ? m.toWinNeed(win.needed, win.theirProjected) : m.toWinAhead}</p>
           {m.toWinBody(win.needed, win.theirProjected, win.yourScore, win.yourLeft, win.yourLeftProjected, win.short) ? (
             <p className="af-mu-insight-body" data-testid="matchup-to-win-body">
               {m.toWinBody(win.needed, win.theirProjected, win.yourScore, win.yourLeft, win.yourLeftProjected, win.short)}
@@ -975,6 +967,9 @@ export function Matchup({ data }: MatchupProps) {
    * before). One line says what the page is for; up to three numbers sit under it.
    */
   const g = useMessages(matchupGuideMessages)
+  const md = useMessages(matchupMoreDetailMessages)
+  /* The head-to-head branch below (not empty, not an elimination league): the history's own condition. */
+  const inHeadToHead = !data.league.elimination && (data.teams.available || data.lineups.available)
   const pWin = data.winProbability.available ? data.winProbability.data.pWin : null
   const head = matchupHeadline({ weekState, scored, projected, pWin })
   const winPct = pct(pWin)
@@ -1352,7 +1347,13 @@ export function Matchup({ data }: MatchupProps) {
                     <span>
                       {g.result == null
                         ? copy('Not scored yet')
-                        : `${g.yourPoints.toFixed(2)} – ${g.opponentPoints.toFixed(2)} · ${copy(g.result === 'win' ? 'Win' : g.result === 'loss' ? 'Loss' : 'Tie')}`}
+                        : `${g.yourPoints.toFixed(2)} – ${g.opponentPoints.toFixed(2)} · ${copy(
+                            /* A result only once the week is final. Production 2026-11-21: "0.00 – 25.40 · Loss"
+                               on a Saturday, under a headline that read "Behind by 25.4 so far". */
+                            weekState === 'final'
+                              ? (g.result === 'win' ? 'Win' : g.result === 'loss' ? 'Loss' : 'Tie')
+                              : (g.result === 'win' ? 'Ahead' : g.result === 'loss' ? 'Behind' : 'Level'),
+                          )}`}
                     </span>
                   </Link>
                 </li>
@@ -1375,36 +1376,46 @@ export function Matchup({ data }: MatchupProps) {
         <LineupBoard data={data} />
       </section>
 
-      {/* ── What decides it ─────────────────────────────────────────── */}
-      {/*
-        "What decides it" listed players yet to play and the projected final — both already on the
-        scoreboard and in the headline chips (2026-11-13 guide). The one thing only it said, the series
-        with this manager, stays, under a name that says what it is.
-      */}
-      {data.headToHead && data.headToHead.meetings.length > 0 ? (
-        <section className="af-frame af-mu-section">
-          <header className="af-mu-section-head">
-            <h2 className="af-label">{g.historyTitle}</h2>
-          </header>
-          <ul className="af-mu-missing">
-            <li>
-              <span className="af-mu-missing-key">{copy('Head to head')}</span>
-              <span className="af-mu-missing-value af-num">
-                {data.headToHead.wins}–{data.headToHead.losses}
-                {data.headToHead.ties ? `–${data.headToHead.ties}` : ''}
-                <em className="af-mu-missing-caveat">
-                  {' '}
-                  — {m.meetingsOnFile(data.headToHead.meetings[0].you, data.headToHead.meetings[0].them, data.headToHead.meetings[0].week)}
-                </em>
-              </span>
-            </li>
-          </ul>
-        </section>
-      ) : null}
       </>
       )}
-      {/* Your starters' scoring environment, from the stored odds. Self-contained: nothing off-NFL or once final. */}
-      <MatchupMarketPanel data={data} />
+      {/*
+        ⚠ ONE "More detail" FOLD FOR THE PAGE (2026-11-20, owner: "the core site is confusing"). Your
+        history with this manager and the betting-lines panel moved in here unchanged; the scoreboard,
+        the three week cards and the slot-by-slot board stay open. The history keeps its old condition
+        (a head-to-head page only). The betting-lines panel is still its own fold inside this one — it
+        lives in MatchupMarketPanel.tsx — and it renders nothing until its odds arrive, so the fold
+        hides itself while its body is empty (`.af-mu-more`, af-matchup.css) rather than open on nothing.
+      */}
+      <MoreDetail className="af-mu-more" testId="matchup-more" note={md.note}>
+        {/* ── What decides it ─────────────────────────────────────────── */}
+        {/*
+          "What decides it" listed players yet to play and the projected final — both already on the
+          scoreboard and in the headline chips (2026-11-13 guide). The one thing only it said, the series
+          with this manager, stays, under a name that says what it is.
+        */}
+        {inHeadToHead && data.headToHead && data.headToHead.meetings.length > 0 ? (
+          <section className="af-frame af-mu-section">
+            <header className="af-mu-section-head">
+              <h2 className="af-label">{g.historyTitle}</h2>
+            </header>
+            <ul className="af-mu-missing">
+              <li>
+                <span className="af-mu-missing-key">{copy('Head to head')}</span>
+                <span className="af-mu-missing-value af-num">
+                  {data.headToHead.wins}–{data.headToHead.losses}
+                  {data.headToHead.ties ? `–${data.headToHead.ties}` : ''}
+                  <em className="af-mu-missing-caveat">
+                    {' '}
+                    — {m.meetingsOnFile(data.headToHead.meetings[0].you, data.headToHead.meetings[0].them, data.headToHead.meetings[0].week)}
+                  </em>
+                </span>
+              </li>
+            </ul>
+          </section>
+        ) : null}
+        {/* Your starters' scoring environment, from the stored odds. Self-contained: nothing off-NFL or once final. */}
+        <MatchupMarketPanel data={data} />
+      </MoreDetail>
     </div>
     </PlayerCardLeagueScope>
   )

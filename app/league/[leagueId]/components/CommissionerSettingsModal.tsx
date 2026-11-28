@@ -97,6 +97,7 @@ import { CommissionerControlPanel } from '@/components/league-settings/Commissio
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
 import { LeaguePreviousSeasonsPanel } from '@/components/league-settings/LeaguePreviousSeasonsPanel'
 import { CommissionerLeagueDeletePanel } from '@/components/league-settings/CommissionerLeagueDeletePanel'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import {
   commissionerKeeperSectionHeading,
   showKeeperSelectionInCommissionerSettings,
@@ -144,7 +145,11 @@ export function CommissionerSettingsModal({
   const [loadError, setLoadError] = useState(false)
   const [payload, setPayload] = useState<ApiGet | null>(null)
   const { t } = useLanguage()
-  const [survivorMode, setSurvivorMode] = useState(false)
+  const [survivorFlag, setSurvivorMode] = useState(false)
+  // Survivor settings drive AllFantasy's own island engine. A league played as Survivor on another
+  // platform carries the flag (two Sleeper imports in production do) but has no island here, so its
+  // commissioner was offered settings tabs that change nothing.
+  const survivorMode = survivorFlag && isNativePlatform(typeof payload?.league?.platform === 'string' ? payload.league.platform : null)
   const [tournamentShellId, setTournamentShellId] = useState<string | null>(null)
   const [zombieMode, setZombieMode] = useState(false)
   const [idpLeague, setIdpLeague] = useState(false)
@@ -524,7 +529,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'draft' ? (
             <DraftSettingsPanel
               draftRow={payload?.settings ?? null}
-              league={payload?.league ?? null}
+              league={payload?.league ? { ...payload.league, settings: payload.league.settings ?? null } : null}
               leagueId={leagueId}
               canEdit={canEditArea('league')}
               save={save}

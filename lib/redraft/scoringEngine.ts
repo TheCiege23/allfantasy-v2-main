@@ -9,6 +9,7 @@ import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/sco
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { campusSport } from '@/lib/c2c/campusLineup'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
+import { scoreStatsWithCategories } from '@/lib/scoring-runtime/categoryMath'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
@@ -45,6 +46,7 @@ import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, 
 import { capSlotKey, loadDailyGamesPlayed, loadPriorSeasonLedger, positionTokens } from './gamesLimitsScoring'
 import { loadGamesCountScoring, scoreCountedGames, type GamesCountScoring } from './gamesCountStore'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { runsOnAllFantasy } from '@/lib/league/switching/switchingLeague'
 import { heldFromSeasonStart, loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
 import { resolveBestBallScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { computeDailyBestBall, type DailyBestBallCandidate, type DailyBestBallCounted, type DailyBestBallDay } from '@/lib/bestball/dailyBestBall'
@@ -74,63 +76,9 @@ export function calculateFantasyPoints(
   return sum
 }
 
-function bonusBaseYardsKey(catKey: string): string | null {
-  if (catKey.includes('pass_') && catKey.includes('bonus')) return 'pass_yds'
-  if (catKey.includes('rush_') && catKey.includes('bonus')) return 'rush_yds'
-  if (catKey.includes('rec_') && catKey.includes('bonus')) return 'rec_yds'
-  return null
-}
-
-export function pointsForCategory(cat: ScoringCategory, rawStats: Record<string, number>): number {
-  const pts = cat.defaultPoints
-  if (cat.minForBonus != null) {
-    const base = bonusBaseYardsKey(cat.key)
-    if (!base) return 0
-    const yards = rawStats[base] ?? 0
-    return yards >= cat.minForBonus ? pts : 0
-  }
-  // Threshold-tier categories (team-defense points/yards allowed): award the
-  // tier's points when the single tier stat falls within [tierMin, tierMax].
-  // The stat must be present — a real 0 (shutout) is a valid tier value, so
-  // distinguish "absent" from "0" via a key check rather than `?? 0`.
-  if (cat.tierStatKey != null) {
-    if (!(cat.tierStatKey in rawStats)) return 0
-    const value = rawStats[cat.tierStatKey]
-    if (!Number.isFinite(value)) return 0
-    const min = cat.tierMin ?? Number.NEGATIVE_INFINITY
-    const max = cat.tierMax ?? Number.POSITIVE_INFINITY
-    return value >= min && value <= max ? pts : 0
-  }
-  // Explicit role counts supersede the legacy aggregate conversion count.
-  if (cat.sport === 'NCAAF' && cat.key === 'two_pt' && ['pass_2pt', 'rush_2pt', 'rec_2pt'].some(k => k in rawStats)) return 0
-  const raw = rawStats[cat.key] ?? 0
-  if (cat.unit === 'per_yard' || cat.unit === 'per_inning') {
-    return raw * pts
-  }
-  return raw * pts
-}
+export { pointsForCategory, scoreStatsWithCategories } from '@/lib/scoring-runtime/categoryMath'
 
 export { applyScoringPresetToRecPoints }
-
-/**
- * Pure scorer: sum fantasy points for one player's raw weekly stats against a
- * resolved scoring-category list, honoring per-category commissioner overrides
- * and yardage-threshold bonuses. This is the authoritative scoring math; both
- * the live engine (`calculateScoreFromSportConfig`) and the contract tests run
- * through it so what we test is exactly what scores.
- */
-export function scoreStatsWithCategories(
-  categories: ScoringCategory[],
-  rawStats: Record<string, number>,
-  overrides: Record<string, number> = {},
-): number {
-  let sum = 0
-  for (const cat of categories) {
-    const mult = overrides[cat.key] ?? cat.defaultPoints
-    sum += pointsForCategory({ ...cat, defaultPoints: mult }, rawStats)
-  }
-  return sum
-}
 
 /**
  * Slots that NEVER count toward a matchup score. Mirrors the non-starter set in
@@ -228,6 +176,11 @@ export async function calculateScoreFromSportConfig(
  * Moved out of `calculateScoreFromSportConfig` unchanged (2026-10-09): the weekly matchup engine and the
  * trade grade must score a stat line the same way, so they share this rather than a copy.
  */
+export function calculateScoreForLeague(league: Parameters<typeof resolveLeagueScoringRules>[0], rawStats: Record<string, number>, position?: string | null): number {
+  const scorer = buildLeagueStatScorer(league)
+  return scorer ? scorer(rawStats, position) : calculateFantasyPoints(rawStats, [] as unknown as SportConfig['statCategories'], undefined)
+}
+
 export function buildLeagueStatScorer(league: Parameters<typeof resolveLeagueScoringRules>[0]): LeagueStatScorer | null {
   const rules = resolveLeagueScoringRules(league)
   if (!rules) return null
@@ -336,6 +289,8 @@ type BestBallScoringContext = {
   sport: string
   slots: LineupSlotSpec[]
   platform?: string | null
+  /** `League.settings`: an imported league made official on AllFantasy scores as-of-week like a native one. */
+  settings?: unknown
   asOfWeek?: boolean
   /** Daily best ball (lib/bestball/scoringPeriod.ts). Absent for every weekly league. */
   daily?: boolean
@@ -383,6 +338,37 @@ export type MatchupScoreUpdateSummary = {
   awayScore: number
   isComplete: boolean
   missingPlayerIds: string[]
+}
+
+type WeekScoreRow = { playerId: string; sport: string; stats: unknown; isFinalized: boolean }
+
+/**
+ * A roster's stat rows for one week, all requested at once. Prisma batches `findUnique` calls made in the same
+ * tick into a single query, so this is one round trip per roster rather than one per player in sequence, and
+ * it asks exactly what it always asked (every test double that answers the single-row read still answers it).
+ */
+async function loadRosterWeekScoreRows(
+  players: ReadonlyArray<{ playerId: string; sport: string }>,
+  week: number,
+  season: number,
+): Promise<(p: { playerId: string; sport: string }) => Promise<WeekScoreRow | null>> {
+  const key = (p: { playerId: string; sport: string }) => `${p.sport}|${p.playerId}`
+  const pending = new Map<string, Promise<WeekScoreRow | null>>()
+  for (const p of players) {
+    if (pending.has(key(p))) continue
+    pending.set(key(p), prisma.playerWeeklyScore.findUnique({ where: { playerId_week_season_sport: { playerId: p.playerId, week, season, sport: p.sport } } }) as Promise<WeekScoreRow | null>)
+  }
+  await Promise.all(pending.values())
+  return (p) => pending.get(key(p)) ?? (prisma.playerWeeklyScore.findUnique({ where: { playerId_week_season_sport: { playerId: p.playerId, week, season, sport: p.sport } } }) as Promise<WeekScoreRow | null>)
+}
+
+/** `calculateScoreFromSportConfig`, with the league read once instead of once per player. Same points. */
+async function leagueStatScorerFor(leagueId: string): Promise<(rawStats: Record<string, number>, position?: string | null) => number> {
+  const league = await prisma.league.findFirst({ where: { id: leagueId }, select: { sport: true, settings: true } })
+  if (!league) return () => 0
+  const scorer = buildLeagueStatScorer(league)
+  if (!scorer) return (rawStats) => calculateFantasyPoints(rawStats, [] as unknown as SportConfig['statCategories'], undefined)
+  return (rawStats, position) => scorer(rawStats, position)
 }
 
 async function scoreRosterStarters(args: {
@@ -440,17 +426,17 @@ async function scoreRosterStarters(args: {
   const missingPlayerIds: string[] = []
   const playerPoints: NativePlayerPoints[] = []
 
+  /*
+   * Scale (2026-11-24): this read every starter's stat row on its own, and re-read the league to score each
+   * one — two queries a player, about 29,000 a pass for a 180-team league playing four games a week. The
+   * week's rows for the roster are now read in one query and the league once; the points are the same.
+   */
+  const withBench = args.includeBench || args.collectPlayerPoints
+  const rowFor = await loadRosterWeekScoreRows(withBench ? starters : activeStarters, args.week, args.seasonYear)
+  const scoreStats = await leagueStatScorerFor(args.leagueId)
+
   for (const p of activeStarters) {
-    const row = await prisma.playerWeeklyScore.findUnique({
-      where: {
-        playerId_week_season_sport: {
-          playerId: p.playerId,
-          week: args.week,
-          season: args.seasonYear,
-          sport: p.sport,
-        },
-      },
-    })
+    const row = await rowFor(p)
     if (!row) {
       missingPlayerIds.push(p.playerId)
       allFinal = false
@@ -469,7 +455,7 @@ async function scoreRosterStarters(args: {
         setting: gamesCount.setting,
         games,
         choice: gamesCount.choices.get(p.playerId),
-        scoreStats: (stats) => calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position),
+        scoreStats: async (stats) => scoreStats(stats, p.position),
       })
       for (const stats of counted.countedStats) statMaps.push(stats as TeamStatTotals)
       pts += counted.points
@@ -479,13 +465,7 @@ async function scoreRosterStarters(args: {
       continue
     }
     statMaps.push(row.stats as TeamStatTotals)
-    const playerPts = await calculateScoreFromSportConfig(
-      args.leagueId,
-      p.playerId,
-      args.week,
-      row.stats as Record<string, number>,
-      p.position,
-    )
+    const playerPts = scoreStats(row.stats as Record<string, number>, p.position)
     pts += playerPts
     playerPoints.push({ playerId: p.playerId, points: playerPts, isStarter: true })
     scoredStarterCount += 1
@@ -493,14 +473,12 @@ async function scoreRosterStarters(args: {
   }
 
   let benchPts = 0
-  for (const p of args.includeBench || args.collectPlayerPoints ? starters : []) {
+  for (const p of withBench ? starters : []) {
     const slot = weekSlotType(p, weekLineups)
     if (isScoringStarterSlot(slot) || NON_BENCH_RESERVE_SLOTS.has(String(slot ?? '').trim().toLowerCase())) continue
-    const row = await prisma.playerWeeklyScore.findUnique({
-      where: { playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport } },
-    })
+    const row = await rowFor(p)
     if (!row) continue
-    const playerPts = await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, row.stats as Record<string, number>, p.position)
+    const playerPts = scoreStats(row.stats as Record<string, number>, p.position)
     benchPts += playerPts
     playerPoints.push({ playerId: p.playerId, points: playerPts, isStarter: false })
   }
@@ -587,10 +565,12 @@ export async function scoreRosterStartersDaily(
   // Under injection the league's scorer is resolved once from the row read above — what
   // `calculateScoreFromSportConfig` resolves per line — so no read reaches the shared client.
   const injectedScorer = inject ? buildLeagueStatScorer(league) : null
-  const scoreLine = (playerId: string, stats: Record<string, number>, position: string | null) =>
+  // Without injection the scorer is still resolved once per roster, not once per player-day (scale, 2026-11-24).
+  let sharedScorer: ReturnType<typeof leagueStatScorerFor> | undefined
+  const scoreLine = async (_playerId: string, stats: Record<string, number>, position: string | null) =>
     inject
-      ? Promise.resolve(injectedScorer ? injectedScorer(stats, position) : 0)
-      : calculateScoreFromSportConfig(args.leagueId, playerId, args.week, stats, position)
+      ? injectedScorer ? injectedScorer(stats, position) : 0
+      : (await (sharedScorer ??= leagueStatScorerFor(args.leagueId)))(stats, position)
   // "Which games count" applies across the days he STARTED: only those days' games are eligible.
   const gamesCount = await loadGamesCountScoring({
     leagueId: args.leagueId,
@@ -681,7 +661,7 @@ export async function scoreRosterStartersDaily(
           setting: gamesCount.setting,
           games: (gamesCount.games.get(p.playerId) ?? []).filter((g) => started.has(g.day)),
           choice: gamesCount.choices.get(p.playerId),
-          scoreStats: (stats) => calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, stats, p.position),
+          scoreStats: (stats) => scoreLine(p.playerId, stats, p.position),
         })
         pts += counted.points
         gamesCountPts += counted.points
@@ -840,6 +820,7 @@ async function scoreRosterBestBall(args: {
         season: args.seasonYear,
         week: args.week,
         platform: args.bestBall.platform,
+        settings: args.bestBall.settings ?? null,
       })
     : await prisma.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, droppedAt: null } })
   // Best ball still excludes whoever was on IR / taxi / devy in THIS week's saved lineup.
@@ -856,6 +837,7 @@ async function scoreRosterBestBall(args: {
   let allFinal = true
   const missingPlayerIds: string[] = []
   const inputs: { playerId: string; positions: string[]; points: number; playerName: string | null }[] = []
+  let weekScorer: ReturnType<typeof leagueStatScorerFor> | undefined
   const positionsUsed: Record<string, string | null> = {}
   const weekPositions = await loadCandidateWeekPositions(candidates, args.seasonYear, args.week)
   for (const p of candidates) {
@@ -871,13 +853,7 @@ async function scoreRosterBestBall(args: {
     }
     const position = bestBallPositionOf(args.bestBall, p, weekPositions)
     positionsUsed[p.playerId] = position
-    const points = await calculateScoreFromSportConfig(
-      args.leagueId,
-      p.playerId,
-      args.week,
-      row.stats as Record<string, number>,
-      position,
-    )
+    const points = (await (weekScorer ??= leagueStatScorerFor(args.leagueId)))(row.stats as Record<string, number>, position)
     inputs.push({ playerId: p.playerId, positions: playerPositions(position), points, playerName: p.playerName ?? null })
     scored += 1
     if (!row.isFinalized) allFinal = false
@@ -955,6 +931,7 @@ async function scoreRosterBestBallDaily(args: {
     season: args.seasonYear,
     week: args.week,
     platform: args.bestBall.platform,
+    settings: args.bestBall.settings ?? null,
   })
   const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: [args.rosterId], season: args.seasonYear, week: args.week })
   const candidates = players.filter((p: (typeof players)[number]) => isBestBallCandidateSlot(weekSlotType(p, weekLineups)))
@@ -970,6 +947,7 @@ async function scoreRosterBestBallDaily(args: {
   let allFinal = true
   const missingPlayerIds: string[] = []
   const inputs: DailyBestBallCandidate[] = []
+  let dayScorer: ReturnType<typeof leagueStatScorerFor> | undefined
   const positionsUsed: Record<string, string | null> = {}
   const sportOf = new Map<string, string>()
   const weekPositions = await loadCandidateWeekPositions(candidates, args.seasonYear, args.week)
@@ -995,7 +973,7 @@ async function scoreRosterBestBallDaily(args: {
     for (const key of onRosterDays) {
       const line = byDay?.get(key)
       if (!line) continue
-      pointsByDay.set(key, await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, line.stats, position))
+      pointsByDay.set(key, (await (dayScorer ??= leagueStatScorerFor(args.leagueId)))(line.stats, position))
     }
     inputs.push({ playerId: p.playerId, positions: playerPositions(position), playerName: p.playerName ?? null, onRosterDays, pointsByDay })
     sportOf.set(p.playerId, p.sport)
@@ -1042,7 +1020,7 @@ async function loadBestBallContext(leagueId: string): Promise<BestBallScoringCon
   const sport = String(league.sport ?? 'NFL')
   // A weekly league gets exactly the context it always did; only a daily league carries the flag.
   const daily = resolveBestBallScoringPeriod({ sport, settings: league.settings }) === 'daily'
-  return { sport, slots: buildBestBallSlots(sport, league.settings), platform: league.platform ?? null, asOfWeek: true, ...(daily ? { daily: true } : {}) }
+  return { sport, slots: buildBestBallSlots(sport, league.settings), platform: league.platform ?? null, settings: league.settings ?? null, asOfWeek: true, ...(daily ? { daily: true } : {}) }
 }
 
 /**
@@ -1089,10 +1067,19 @@ export async function scoreRosterForWeek(args: {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
   const result = await scoreRosterStarters({ ...args, useDevyEngine, bestBall })
-  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { platform: true, sport: true, leagueVariant: true, settings: true } })
-  if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'basketball') return result
+  const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { platform: true, sport: true, leagueVariant: true, leagueType: true, settings: true } })
+  const sportOfCampus = league && isNativePlatform(league.platform) ? campusSport(league) : null
+  if (!league || !sportOfCampus) return result
   const settings = settingsForScoringWeek(league.settings as Record<string, any> | null, args.seasonYear, args.week)
   const mode = settings?.scoring_mode ?? settings?.scoringSettings?.scoringMode ?? 'points'
+  if (sportOfCampus === 'football') {
+    // NFL C2C: the campus starters count here exactly as in a regular-season matchup (updateMatchupScores), so a
+    // playoff round no longer drops the college lineup (2026-11-24 audit). Same gate: points, no best ball, no devy engine.
+    if (mode !== 'points' || bestBall || useDevyEngine) return result
+    const footballCampus = await loadCampusPoints(league, { leagueId: args.leagueId, season: args.seasonYear, week: args.week, homeRosterId: args.rosterId, awayRosterId: args.rosterId })
+    if (!footballCampus) return result
+    return { ...result, points: Math.round((result.points + footballCampus.home.points) * 100) / 100 }
+  }
   if (mode !== 'points' || bestBall || useDevyEngine) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
   const campus = await loadBasketballCampusPoints(league, { leagueId: args.leagueId, season: args.seasonYear, week: args.week, homeRosterId: args.rosterId, awayRosterId: args.rosterId })
   if (!campus) return result
@@ -1107,10 +1094,17 @@ export async function scoreRosterForWeek(args: {
  * module's stat scorer.
  */
 async function loadCampusPoints(
-  league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null } | null,
-  args: { season: number; week: number; homeRosterId: string; awayRosterId: string },
+  league: { platform?: string | null; sport?: string | null; leagueVariant?: string | null; leagueType?: string | null } | null,
+  args: { season: number; week: number; homeRosterId: string; awayRosterId: string; leagueId: string },
 ) {
   if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'football') return null
+  // "separate" standings: the college lineup plays its own matchups (lib/c2c/campusSeason), so the pro
+  // score is the pro lineup alone. Only a league that chose it; a league with no config stays combined.
+  {
+    const { getC2CConfig } = await import('@/lib/merged-devy-c2c/C2CLeagueConfig')
+    const config = await getC2CConfig(args.leagueId).catch(() => null)
+    if (config?.standingsModel === 'separate') return null
+  }
   const { campusPointsForMatchup } = await import('@/lib/c2c/campusScoring')
   return campusPointsForMatchup(prisma as never, { season: args.season, nflWeek: args.week, homeRosterId: args.homeRosterId, awayRosterId: args.awayRosterId })
 }
@@ -1180,7 +1174,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   if (scoringLeague && isNativePlatform(scoringLeague.platform) && isBasketballC2CLeague(scoringLeague) && (scoringMode !== 'points' || bestBall || useDevyEngine)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
 
   // Per-player points are kept only for a points league we host (see `persistNativePlayerPoints`).
-  const collectPlayerPoints = scoringMode === 'points' && isNativePlatform(scoringLeague?.platform)
+  const collectPlayerPoints = scoringMode === 'points' && runsOnAllFantasy(scoringLeague)
   // `playerPoints` is split off here so it never lands in `lineupSnapshots` below.
   const { playerPoints: homePlayerPoints, ...home } = await scoreRosterStarters({
     leagueId,
@@ -1218,7 +1212,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   }
   const campus =
     scoringMode === 'points' && !bestBall && !useDevyEngine
-      ? await loadCampusPoints(scoringLeague, { season: seasonYear, week, homeRosterId, awayRosterId })
+      ? await loadCampusPoints(scoringLeague, { leagueId, season: seasonYear, week, homeRosterId, awayRosterId })
       : null
   const basketballCampus = scoringMode === 'points' && !bestBall && !useDevyEngine
     ? await loadBasketballCampusPoints(scoringLeague, { leagueId, season: seasonYear, week, homeRosterId, awayRosterId })
@@ -1440,7 +1434,7 @@ async function updateByeRowScore(row: {
 }): Promise<void> {
   let m = row
   const [league, season] = await Promise.all([
-    prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true, platform: true, sport: true, leagueVariant: true } }),
+    prisma.league.findFirst({ where: { id: m.leagueId }, select: { settings: true, medianGame: true, platform: true, sport: true, leagueVariant: true, leagueType: true } }),
     prisma.redraftSeason.findFirst({ where: { id: m.seasonId }, select: { season: true, medianGame: true } }),
   ])
   if (!league || !season) return
@@ -1480,7 +1474,7 @@ async function updateByeRowScore(row: {
   if (adjustments.length) home.points = adjustedScore(home.points, adjustments, m.id, m.homeRosterId)
   // A C2C bye team's campus starters count toward its median / extra-game score too.
   const campus = !bestBall && !useDevyEngine
-    ? await loadCampusPoints(league, { season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
+    ? await loadCampusPoints(league, { leagueId: m.leagueId, season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })
     : null
   const basketballCampus = !bestBall && !useDevyEngine
     ? await loadBasketballCampusPoints(league, { leagueId: m.leagueId, season: season.season, week: m.week, homeRosterId: m.homeRosterId, awayRosterId: m.homeRosterId })

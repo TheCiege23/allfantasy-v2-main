@@ -8,12 +8,13 @@ import { isTeamEliminated } from '@/lib/core-app/teamElimination'
 import { rosteredIdsOf } from './ncaafRedraftContext'
 import { scoringRulesFrom } from './scoringContextFromWorld'
 import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
-import { getDailyRedraftRosterLayout, type DailyRedraftSport } from '@/lib/sportConfig/dailySportRedraftRoster'
+import { getDailyRedraftRosterLayout } from '@/lib/sportConfig/dailySportRedraftRoster'
 import { BENCH_SLOTS, startingSlots } from '@/lib/core-app/slotEligibility'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
-import { dailySportWeekForInstant, resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { dailySportWeekForInstant, resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { indexBoard, sampleGamesFromReasons, type BoardPlayer } from './sportPointsValue'
 import { lineupSlotsFor, loadSportPointsBase, seasonLabelFor } from './sportPointsContext'
+import { loadCachedLeagueBoardBase } from '../value-os/leagueBoard'
 import {
   guillotineTradeSport,
   minReplacementGamesFor,
@@ -101,9 +102,9 @@ export type GuillotineLeague = {
 }
 
 /** NFL or a supported daily sport, by the league's sport. */
-export async function loadGuillotineContext(league: GuillotineLeague, now: Date = new Date()): Promise<GuillotineContextResult> {
+export async function loadGuillotineContext(league: GuillotineLeague, now?: Date): Promise<GuillotineContextResult> {
   const sport = league.sport == null ? 'NFL' : guillotineTradeSport(league.sport)
-  if (sport === 'NBA' || sport === 'NHL' || sport === 'MLB') return loadDailyGuillotineContext(league, sport, now)
+  if (sport && sport !== 'NFL') return loadDailyGuillotineContext(league, sport, now)
   if (sport !== 'NFL') return { ok: false, reason: 'This sport does not have a Guilly trade model.' }
   return loadNflGuillotineContext(league)
 }
@@ -221,14 +222,26 @@ async function loadNflGuillotineContext(league: GuillotineLeague, mode: 'guillot
  * opener) and the guillotine profile's 24 regular-season weeks. Null when that season's opener is not
  * recorded: a guessed anchor would count the wrong weeks with confidence.
  */
-export function dailyGuillotineWeeksLeft(sport: DailyRedraftSport, season: number, now: Date): number | null {
+export function dailyGuillotineWeeksLeft(sport: DailyGuillotineSport, season: number, now: Date): number | null {
   const opener = resolveDailySportSeasonStart(sport, season)
   const total = getGuillotineSportConfig(sport)?.regularSeasonWeeks
   if (!opener || !total) return null
   const week = dailySportWeekForInstant(sport, season, now)
   if (week != null) return Math.max(0, total - week + 1)
   // Before the opener (its Eastern midnight falls a few hours after the UTC date it is stored under).
-  return now.getTime() < Date.parse(opener) + 86_400_000 ? total : null
+  if (now.getTime() < Date.parse(opener) + 86_400_000) return total
+  /*
+   * Soccer weeks are GAMEWEEKS, and an international break sits between two of them in no week at all
+   * (`dailySportWeekForInstant` is null there). The weeks left are then the recorded gameweeks still to start.
+   */
+  if (sport !== 'SOCCER') return null
+  let left = 0
+  for (let w = 1; w <= total; w++) {
+    const window = resolveDailySportWeekWindow(sport, season, w)
+    if (!window) return null
+    if (window.start.getTime() > now.getTime()) left += 1
+  }
+  return left
 }
 
 /** Kept for callers that use the original NBA calendar helper. */
@@ -236,11 +249,24 @@ export function nbaGuillotineWeeksLeft(season: number, now: Date): number | null
   return dailyGuillotineWeeksLeft('NBA', season, now)
 }
 
-/** A daily sport's real starting positions; unknown imported slots refuse the grade. */
-function dailySeats(sport: DailyRedraftSport, settings: unknown): GuillotineSeat[] | null {
+/** Every guillotine sport but football: NBA, NHL, MLB, and since 2026-11-26 college basketball and soccer. */
+type DailyGuillotineSport = Exclude<GuillotineTradeSport, 'NFL'>
+
+/**
+ * The positions a daily sport starts. NBA, NHL and MLB read their daily redraft roster layout. College basketball
+ * and soccer have no such layout, so the sport's default redraft lineup (`lineupSlotsFor` — the slots the points
+ * grader already prices replacement on) names them.
+ */
+function dailyStartingPositions(sport: DailyGuillotineSport): Set<string> {
   const layout = getDailyRedraftRosterLayout(sport)
-  if (!layout) return null
-  const positions = new Set(layout.starters.flatMap((s) => s.eligiblePositions))
+  if (layout) return new Set(layout.starters.flatMap((s) => s.eligiblePositions))
+  return new Set(lineupSlotsFor(sport, null).slots.flatMap((s) => s.eligible))
+}
+
+/** A daily sport's real starting positions; unknown imported slots refuse the grade. */
+function dailySeats(sport: DailyGuillotineSport, settings: unknown): GuillotineSeat[] | null {
+  const positions = dailyStartingPositions(sport)
+  if (positions.size === 0) return null
   const seat = (slot: string): GuillotineSeat | null => {
     const eligible = allowedPositionsForSlot(sport, slot).filter((p) => positions.has(p))
     return eligible.length ? { slot: slot.toUpperCase(), eligible } : null
@@ -264,14 +290,16 @@ function dailySeats(sport: DailyRedraftSport, settings: unknown): GuillotineSeat
  * own scoring, `AFProjectionSnapshot` keyed on `PlayerIdentityMap.id`, its readiness and dynasty refusals),
  * put on the WEEK — see `./guillotineValue.ts`. No provider call.
  */
-async function loadDailyGuillotineContext(league: GuillotineLeague, sport: DailyRedraftSport, now: Date): Promise<GuillotineContextResult> {
+async function loadDailyGuillotineContext(league: GuillotineLeague, sport: DailyGuillotineSport, clock?: Date): Promise<GuillotineContextResult> {
+  const now = clock ?? new Date()
   const seats = dailySeats(sport, league.settings)
   if (!seats) return { ok: false, reason: 'This league’s starting lineup could not be read, so a Guilly grade cannot be priced.' }
-  const base = await loadSportPointsBase({
-    sport,
-    league: { id: league.id, settings: league.settings, leagueType: 'guillotine', leagueSize: league.leagueSize },
-    now,
-  })
+  const boardLeague = { id: league.id, settings: league.settings, leagueType: 'guillotine', leagueSize: league.leagueSize }
+  // Through Value OS's league board (2026-11-21) when priced on today's clock; an explicit clock is a different
+  // board (its window counts from that date), so it is built for that call alone.
+  const base = clock
+    ? await loadSportPointsBase({ sport, league: boardLeague, now })
+    : await loadCachedLeagueBoardBase({ sport, league: boardLeague })
   if (!base.ok) return base
   // A guillotine chops the lowest POINTS total; a category score answers a different question.
   if (base.ctx.valueKind === 'categories') {

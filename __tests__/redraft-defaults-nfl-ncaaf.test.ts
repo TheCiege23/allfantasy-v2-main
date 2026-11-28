@@ -217,8 +217,9 @@ describe('NFL/NCAAF redraft creation defaults', () => {
   it('exposes the locked redraft draft-type set to create options', () => {
     const ids = getDraftTypeOptions('redraft', 'NFL').map((option) => option.id)
 
-    expect(ids).toEqual(expect.arrayContaining(['snake', 'linear', 'auction', 'mock_draft', 'offline', 'auto']))
+    expect(ids).toEqual(expect.arrayContaining(['snake', 'linear', 'auction', 'offline', 'auto']))
     expect(ids).not.toContain('slow_draft')
+    expect(ids).not.toContain('mock_draft')
   })
 
   it('pushes the same NCAAF redraft settings through preset engine and foundation defaults', () => {

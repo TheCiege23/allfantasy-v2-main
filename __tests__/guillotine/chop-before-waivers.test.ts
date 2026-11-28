@@ -54,7 +54,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
     }),
   },
   leagueTeam: { findMany: async () => [] },
-  waiverRun: { create: async () => { h.runsCreated += 1; return { id: 'run' } }, update: async () => ({}), findFirst: async () => null, findMany: async () => [] },
+  waiverRun: { create: async () => { h.runsCreated += 1; return { id: 'run' } }, update: async () => ({}), updateMany: async () => ({ count: 0 }), findFirst: async () => null, findMany: async () => [] },
   waiverTransaction: { create: vi.fn(async () => ({})) },
   waiverResult: { createMany: vi.fn(async () => ({})) },
   guillotineRosterState: { findFirst: async () => h.lastChop },
@@ -65,7 +65,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
 vi.mock('@/lib/waiver-wire/settings-service', () => ({
   getEffectiveLeagueWaiverSettings: async () => ({ normalizedWaiverType: h.waiverType, waiverType: h.waiverType, waiverEngineConfig: {}, allowZeroFaabBid: true, faabMinBid: 0 }),
 }))
-vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ getLeagueWaiverState: async () => null, upsertLeagueWaiverStateAfterRun: async () => {} }))
+vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ getLeagueWaiverState: async () => null, upsertLeagueWaiverStateAfterRun: async () => {}, refreshLeagueWaiverNextRunAt: async () => null }))
 vi.mock('@/lib/waiver-wire/run-hooks', () => ({ onWaiverRunComplete: async () => {} }))
 vi.mock('@/lib/specialty-league/registry', () => ({ getSpecialtySpecByVariant: () => null }))
 vi.mock('@/lib/survivor/SurvivorEffectEngine', () => ({ isWaiverFrozenForRoster: async () => false }))

@@ -1,5 +1,5 @@
 import 'server-only'
-import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { FOREIGN_IDS_UNREADABLE, availabilityUnverifiedSentence, unmatchedRosteredNote } from '@/lib/core-app/foreignIdSpaceCopy'
 
 type StructuredFantasyContext = Record<string, unknown> | null | undefined
 
@@ -265,6 +265,13 @@ function buildReplacementOptionsSection(structuredFantasyContext: StructuredFant
     lines.push(`- ${FOREIGN_IDS_UNREADABLE}, so no replacements were compared — say so; do not suggest alternatives.`)
     return lines.join('\n')
   }
+  // A pasted Yahoo league (declaredAvailability.ts): below the bar nobody can be called available.
+  const unmatched = typeof reps.unmatchedRostered === 'number' ? reps.unmatchedRostered : null
+  if (reps.limitation === 'availability_unverified') {
+    lines.push(`- ${availabilityUnverifiedSentence(unmatched ?? 0)} No replacements were compared — say so; do not suggest alternatives.`)
+    return lines.join('\n')
+  }
+  if (unmatched) lines.push(`- ${unmatchedRosteredNote(unmatched)} They are kept off the free-agent list below.`)
 
   const week = reps.projectionWeek
   const affected = reps.affectedProjection

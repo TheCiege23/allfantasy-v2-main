@@ -246,7 +246,8 @@ export async function syncTradeCardsForLeague(leagueId: string): Promise<TradeCa
     const players = playerIds.size
       ? await prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: [...playerIds] } },
+            // The league's sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+            where: { sport: String(league.sport).toUpperCase(), sleeperId: { in: [...playerIds] } },
             select: { sleeperId: true, name: true, position: true, team: true },
           })
           .catch(() => [])

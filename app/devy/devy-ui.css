@@ -1,0 +1,29 @@
+/*
+ * Devy screens (app/devy/[leagueId]/*), 2026-11-23. They sit inside `.af-core`, so --text, --surface, --line… switch
+ * with the mode. These add Devy's own colours (violet for college prospects, amber for the taxi squad) and give the
+ * older --devy-* variables from app/globals.css light values, so the screens follow the app's mode instead of staying
+ * a dark block on a light page.
+ */
+.devy-ui {
+  --devy-violet: #c4b5fd;
+  --devy-violet-soft: rgba(124, 58, 237, 0.16);
+  --devy-violet-line: rgba(139, 92, 246, 0.4);
+  --devy-amber: #fcd34d;
+  --devy-amber-soft: rgba(245, 158, 11, 0.12);
+  --devy-amber-line: rgba(245, 158, 11, 0.35);
+  --devy-panel: var(--surface);
+  --devy-border: var(--line);
+}
+html[data-mode='light'] .af-core.devy-ui,
+html[data-mode='light'] .af-core .devy-ui {
+  --devy-violet: #6d28d9;
+  --devy-violet-soft: rgba(124, 58, 237, 0.08);
+  --devy-violet-line: rgba(109, 40, 217, 0.28);
+  --devy-amber: #8a5a00;
+  --devy-amber-soft: rgba(245, 158, 11, 0.1);
+  --devy-amber-line: rgba(138, 90, 0, 0.3);
+  --devy-badge-devy: rgba(124, 58, 237, 0.07);
+  --devy-badge-taxi: rgba(245, 158, 11, 0.09);
+  --devy-taxi: #a16207;
+  --devy-active: #15803d;
+}

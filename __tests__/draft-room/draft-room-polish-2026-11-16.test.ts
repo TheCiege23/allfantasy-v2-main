@@ -57,11 +57,11 @@ describe('Board header follows the vertical scroll', () => {
 })
 
 describe('No unexplained minus number', () => {
-  it('board tiles say "early" / "late" instead of a bare signed number', () => {
-    const cell = read('components/app/draft-room/DraftBoardCell.tsx')
-    expect(cell).toMatch(/`\$\{pick\.adpDelta\} late`/)
-    expect(cell).toMatch(/`\$\{Math\.abs\(pick\.adpDelta\)\} early`/)
-    expect(cell).not.toMatch(/`−\$\{Math\.abs\(pick\.adpDelta\)\}`/)
+  it('board tiles carry no ADP gap at all: not a signed number, not "early" / "late"', () => {
+    // First a bare "−5", then "5 early" (2026-11-16), then removed from the tile (owner, 2026-11-25).
+    const code = read('components/app/draft-room/DraftBoardCell.tsx').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    expect(code).not.toMatch(/pick\.adpDelta/)
+    expect(code).not.toMatch(/draft-board-cell-adp-delta/)
   })
 })
 
@@ -88,7 +88,7 @@ describe('No "AI" in draft room copy', () => {
     expect(read('components/app/draft-room/DraftPlayerCard.tsx')).toMatch(/^\s*Chimmy pick\s*$/m)
   })
   it('no draft-room translation value contains the word AI', () => {
-    const en = read('lib/i18n/translations.ts')
+    const en = read('lib/i18n/translations-en.ts')
     const bad = en.split('\n').filter((l) => /^\s*"draftRoom\.[^"]+":\s*".*\bAI\b/.test(l))
     expect(bad).toEqual([])
   })

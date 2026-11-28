@@ -71,6 +71,10 @@ describe('buildSurvivalHistory', () => {
 describe('GuillotineSurvivalHistory', () => {
   it('shows each chop and every team’s row, and marks the viewer’s', () => {
     render(<GuillotineSurvivalHistory history={history()} myRosterId="c" closeCallMargin={10} />)
+    // The latest chop shows; earlier ones are one tap away (2026-11-24).
+    expect(screen.getByTestId('guillotine-history-week-3')).toBeTruthy()
+    expect(screen.queryByTestId('guillotine-history-week-1')).toBeNull()
+    fireEvent.click(screen.getByTestId('guillotine-history-all-weeks'))
     const w1 = screen.getByTestId('guillotine-history-week-1')
     expect(w1.textContent).toContain('chop line 60.0')
     expect(w1.textContent).toContain('Chopped: Bricklayers (60.0)')
@@ -78,13 +82,15 @@ describe('GuillotineSurvivalHistory', () => {
     // No-chop weeks are not listed as chops.
     expect(screen.queryByTestId('guillotine-history-week-2')).toBeNull()
     expect(screen.getByTestId('guillotine-history-team-c').textContent).toContain('You · Clutch')
-    expect(screen.getByTestId('guillotine-history-team-c').textContent).toContain('Alive · 2 chops survived')
+    expect(screen.getByTestId('guillotine-history-team-c').textContent).toContain('Alive')
+    // "Alive" once; the path squares already count the chops survived (2026-11-23).
+    expect(screen.getByTestId('guillotine-history-team-c').textContent).not.toContain('chops survived')
     expect(screen.getByTestId('guillotine-history-team-d').textContent).toContain('Chopped wk 3')
     // Each square of a path says what happened, for a screen reader too.
     expect(screen.getByTestId('guillotine-history-team-c').textContent).toContain('Week 1: 62.0 points, close call, +2.0')
   })
 
-  it('replays a week, and shows the latest four chops until asked for all', () => {
+  it('replays a week, and shows the latest chop until asked for all', () => {
     const many = buildSurvivalHistory({
       scores: [1, 2, 3, 4, 5, 6].flatMap((week) => [{ rosterId: `t${week}`, week, points: 50 }, { rosterId: 'z', week, points: 100 }]),
       chopped: [1, 2, 3, 4, 5, 6].map((week) => ({ rosterId: `t${week}`, week })),
@@ -93,7 +99,9 @@ describe('GuillotineSurvivalHistory', () => {
     })
     const onReplay = vi.fn()
     render(<GuillotineSurvivalHistory history={many} closeCallMargin={10} onReplay={onReplay} />)
-    expect(screen.queryByTestId('guillotine-history-week-2')).toBeNull()
+    expect(screen.getByTestId('guillotine-history-week-6')).toBeTruthy()
+    expect(screen.queryByTestId('guillotine-history-week-5')).toBeNull()
+    expect(screen.getByTestId('guillotine-history-all-weeks').textContent).toBe('Show all 6 weeks')
     fireEvent.click(screen.getByTestId('guillotine-history-all-weeks'))
     expect(screen.getByTestId('guillotine-history-week-1')).toBeTruthy()
     fireEvent.click(screen.getByTestId('guillotine-history-week-6').querySelector('button')!)

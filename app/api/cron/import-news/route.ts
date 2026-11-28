@@ -280,7 +280,20 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       if (summary.rowsWritten > 0 || summary.errors.length > 0) {
         await recordSyncJobRun({ jobName: CLUBHOUSE_SCHEDULE_JOB, trigger: 'cron' }, summary, Date.now() - clubhouseStarted)
       }
-      clubhouse = outcome
+      // League Lab build plans the idea form never started (closed tab, deploy) or that failed.
+      // One per run (a Claude call can take a couple of minutes). Skipped when the budget is already spent.
+      let ideaPlans: unknown = null
+      if (!budget.exhausted()) {
+        const { sweepIdeaPlans } = await import('@/lib/community/ideaPlanRunner')
+        ideaPlans = await sweepIdeaPlans(new Date(), 1).catch((e) => ({ error: e instanceof Error ? e.name : 'unknown' }))
+      }
+      // The weekly Clubhouse email: a date check outside Monday–Tuesday, a capped send inside it.
+      let digest: unknown = null
+      if (!budget.exhausted()) {
+        const { runClubhouseDigest } = await import('@/lib/community/digestRunner')
+        digest = await runClubhouseDigest().catch((e) => ({ error: e instanceof Error ? e.name : 'unknown' }))
+      }
+      clubhouse = { ...outcome, ideaPlans, digest }
     } catch (err) {
       clubhouse = { error: err instanceof Error ? err.message.slice(0, 200) : String(err) }
       console.error('[cron/import-news] clubhouse schedule failed:', clubhouse)

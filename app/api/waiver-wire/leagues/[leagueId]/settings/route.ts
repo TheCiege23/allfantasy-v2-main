@@ -56,7 +56,10 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
     faabRolloverDefault: effectiveFaabRolloverRule(null, faabRolloverFamilyForLeague(league as { leagueType?: string | null; leagueVariant?: string | null; settings?: unknown; isDynasty?: boolean | null })),
     // Loaded with the rest of the waiver shell so the page can disclose SHADOW status before a
     // manager files a claim, not only in the toast afterwards.
-    writeAuthority: buildWriteAuthorityEnvelope('waiver_claim', (league as { platform?: string })?.platform ?? null),
+    writeAuthority: buildWriteAuthorityEnvelope('waiver_claim', {
+      platform: (league as { platform?: string })?.platform ?? null,
+      settings: (league as { settings?: unknown })?.settings ?? null,
+    }),
   })
 }
 

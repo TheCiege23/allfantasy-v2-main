@@ -236,6 +236,44 @@ For each surface, once shadow parity holds over a real sample window (target: �
 2. Single UI contract: the four answers (What happened / Why it matters / Confidence / What to do) + provenance + freshness on every trade surface.
 3. Update `AF_REMEDIATION_PLAN.md` and `docs/os/SPORTS_DATA_DECISION_OS_DEPENDENCY_MAP.md`.
 
+### Phase 5 — concept registry (2026-11-26)
+
+**The contract: every league concept is graded by its own rule, and the rule is named in one table.**
+`createLeagueTradeGrader` (`lib/decision-os/trade/leagueTradeGrader.ts`) no longer picks its sub-grader
+with an if-chain. It asks `resolveConceptGrading` in `lib/decision-os/trade/conceptGradingRegistry.ts`,
+where every concept × sport (NFL, NCAAF, NBA, NCAAB, MLB, NHL, SOCCER) names a sub-grader — `zombie`,
+`ncaaf_college`, `guillotine`, `sport_points`, `market_chart` — plus its value basis and any NFL format
+post-processor (`keeper_option`, `salary_cap_surplus`, `c2c_campus`), or is `withheld` with the sentence
+the manager reads.
+
+- **A league type with no entry is withheld, never priced on the default chart.** Before this, a type
+  nobody had modelled reached the last branch and got a confident letter off the dynasty/redraft chart.
+  Stored values that dispatch today without being concepts are registered explicitly: any type containing
+  `dynasty` (the substring every sub-grader already uses) and the `imported` placeholder.
+- **A new concept needs a registry entry AND its own grading tests before it can grade.** Add the id to
+  `CONCEPT_GRADING_REGISTRY` with one rule per sport; `__tests__/decision-os/concept-grading-registry.test.ts`
+  fails CI with the file to edit when any concept the product carries (format-engine ids, wizard ids,
+  confirmable concepts) lacks one.
+- **The table maps today's behaviour, not the ideal.** It landed behaviour-preserving: the same test keeps
+  the old if-chain as an oracle, built from the real sub-grader factories, and proves every registered
+  concept × sport × variant still reaches the same sub-grader and post-processor. Entries whose basis looks
+  wrong carry a `review:` note; changing one is a deliberate grade change with its own tests.
+- **Three flagged rows were changed deliberately (owner-approved, 2026-11-26)**, and the parity test now
+  lists them in `INTENDED_CHANGES` — it expects the new rule for exactly those rows (13 NCAAF rows, pirate/efl
+  × 5 sports, guillotine × NCAAB/SOCCER incl. a guillotine variant on any non-Zombie base) and still pins
+  every other row to the old chain:
+  1. **NCAAF never prices on the NFL chart.** Concepts whose rosters reset (best ball, survivor, tournament,
+     big brother, guillotine, survivor guillotine) take the college rest-of-season basis; devy
+     and C2C the college dynasty basis (C2C: Campus picks only); pirate and EFL follow the league's book
+     (rule 2) on the college bases; keeper, salary cap and an unconfirmed `imported` college league are
+     withheld with a reason — their format adjustment has no college form.
+  2. **Pirate and EFL outside NFL grade on the league's book** (`leagueVariantFor`): five seasons +
+     picks on the dynasty book (EFL always; Pirate unless confirmed redraft), this season otherwise.
+  3. **Guillotine in NCAAB and soccer uses the guillotine grader's survival weighting**, on the daily-sport
+     model (points board on the week, NCAAB's recorded opener, soccer's recorded gameweeks).
+- The registry only chooses WHICH sub-grader grades. Each still reads the league's raw type for its own
+  costs and refusals (keeper costs, `multiSeasonFormatReason`, pick policy).
+
 ---
 
 ## Acceptance criteria

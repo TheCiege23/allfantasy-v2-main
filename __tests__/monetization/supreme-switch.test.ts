@@ -84,10 +84,11 @@ describe('switchToSupreme', () => {
     expect(db.updates).toEqual([])
   })
 
-  it('no Stripe Pro/Commissioner to switch (none, Legacy only, or expired): a normal checkout', async () => {
+  it('no Stripe Pro/Commissioner/Legacy to switch (none, or expired): a normal checkout', async () => {
     const stripe = fakeStripe()
     expect(await switchToSupreme({ userId: 'u1', supremeSku: 'af_supreme_monthly' as any, stripe: stripe as any, env: ENV })).toEqual({ kind: 'not_applicable' })
-    db.rows = [row('r-leg', 'af_war_room_monthly', 'sub_leg'), row('r-old', 'af_pro_monthly', 'sub_old', { status: 'canceled', currentPeriodEnd: new Date(Date.now() - 86_400_000) })]
+    // A Legacy row is SWITCHED since 2026-11-27 (Supreme includes Legacy) — only an expired one is left out.
+    db.rows = [row('r-old', 'af_pro_monthly', 'sub_old', { status: 'canceled', currentPeriodEnd: new Date(Date.now() - 86_400_000) })]
     expect(await switchToSupreme({ userId: 'u1', supremeSku: 'af_supreme_monthly' as any, stripe: stripe as any, env: ENV })).toEqual({ kind: 'not_applicable' })
     expect(stripe.subscriptions.update).not.toHaveBeenCalled()
   })
@@ -102,14 +103,14 @@ describe('switchToSupreme', () => {
 })
 
 describe('pickSwitchSources', () => {
-  it('only live Stripe Pro / Commissioner rows, most expensive first', () => {
+  it('only live Stripe Pro / Commissioner / Legacy rows, most expensive first', () => {
     expect(pickSwitchSources([
       { id: 'a', stripeSubscriptionId: 's1', sku: 'af_pro_yearly', live: true },
       { id: 'b', stripeSubscriptionId: 's2', sku: 'af_commissioner_monthly', live: true },
       { id: 'c', stripeSubscriptionId: 's3', sku: 'af_war_room_monthly', live: true },
       { id: 'd', stripeSubscriptionId: null, sku: 'af_pro_monthly', live: true },
       { id: 'e', stripeSubscriptionId: 's5', sku: 'af_pro_monthly', live: false },
-    ]).map((r) => r.id)).toEqual(['b', 'a'])
+    ]).map((r) => r.id)).toEqual(['b', 'a', 'c'])
   })
 
   it('the families switched are exactly what Supreme includes', () => {

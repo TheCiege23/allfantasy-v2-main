@@ -12,6 +12,11 @@ export type PricingAccount = {
   renewsAt: string | null
   /** Spendable tokens; null when the read did not return one. */
   tokenBalance: number | null
+  /**
+   * SKUs of the live subscriptions (e.g. `af_pro_monthly`), any store. The card for exactly that SKU
+   * reads "Current plan" instead of offering it again. Absent/empty when unread.
+   */
+  heldSkus?: string[]
   /** Tokens spent per week, net of refunds, oldest first (lib/tokens/weeklyTokenSpend.ts); null when unread. */
   weeklySpend?: { weekStart: string; spent: number }[] | null
 }
@@ -22,8 +27,8 @@ const FAMILY_BY_PLAN: Record<string, string> = {
   supreme: 'af_supreme',
 }
 
-/** AF Supreme bundles these two (lib/subscription/types.ts, SUPREME_INCLUDED_PLAN_IDS). */
-const SUPREME_INCLUDES = new Set(['af_pro', 'af_commissioner'])
+/** AF Supreme bundles these three (SUPREME_INCLUDED_PLAN_IDS; AF Legacy again since 2026-11-27). */
+const SUPREME_INCLUDES = new Set(['af_pro', 'af_commissioner', 'af_war_room'])
 
 /**
  * `yours` — the viewer holds this plan; `included` — they hold Supreme and this lane is inside it;

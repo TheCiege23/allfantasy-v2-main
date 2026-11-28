@@ -4,9 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 vi.mock('next-auth/react', () => ({ useSession: () => ({ data: { user: { id: 'u1' } } }) }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
-vi.mock('@/components/ui/AppModal', () => ({ AppModal: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null }))
-vi.mock('@/app/components/PlayerImage', () => ({ PlayerImage: () => null }))
-vi.mock('@/app/components/TeamLogo', () => ({ TeamLogo: () => null }))
+vi.mock('@/components/ui/AppModal', () => ({ AppModal: ({ open, title, children, footer }: { open: boolean; title?: string; children: React.ReactNode; footer?: React.ReactNode }) => open ? <div><h2>{title}</h2>{children}{footer}</div> : null }))
 
 import { ProposeTradeModal } from '@/app/league/[leagueId]/tabs/ProposeTradeModal'
 
@@ -38,13 +36,18 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 describe('native counteroffer builder', () => {
   it('loads the pending offer, permits edits, and posts a linked counteroffer', async () => {
     const { fetchMock, onClose, onSubmitted } = setup()
-    const alpha = await screen.findByRole('checkbox', { name: /Alpha/ }) as HTMLInputElement
-    expect(alpha.checked).toBe(true)
-    expect((screen.getByRole('checkbox', { name: /Beta/ }) as HTMLInputElement).checked).toBe(true)
-    expect((screen.getByTestId('propose-trade-partner-select') as HTMLSelectElement).disabled).toBe(true)
-    const submit = screen.getByRole('button', { name: 'Send counteroffer' }) as HTMLButtonElement
-    await waitFor(() => expect(submit.disabled).toBe(false))
+    // A counter opens straight on step 2 — its partner is fixed, so there is no partner step to show.
+        const alpha = await screen.findByRole('button', { name: /^Alpha/ }, { timeout: 30000 })
+    await waitFor(() => expect(alpha.getAttribute('aria-pressed')).toBe('true'))
+    expect(screen.getByRole('button', { name: /^Beta/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByTestId('propose-trade-step-partner')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
     fireEvent.click(alpha)
+    const next = screen.getByTestId('propose-trade-next') as HTMLButtonElement
+    await waitFor(() => expect(next.disabled).toBe(false))
+    fireEvent.click(next)
+    const submit = screen.getByRole('button', { name: 'Send counteroffer' }) as HTMLButtonElement
+    expect(submit.disabled).toBe(false)
     fireEvent.click(submit)
     await waitFor(() => expect(onSubmitted).toHaveBeenCalledOnce())
     expect(onClose).toHaveBeenCalledOnce()
@@ -59,7 +62,9 @@ describe('native counteroffer builder', () => {
   it('does not enable submission if an original asset is no longer available', async () => {
     const { fetchMock } = setup(true)
     await screen.findByText(/An original asset is unavailable/)
-    expect((screen.getByRole('button', { name: 'Send counteroffer' }) as HTMLButtonElement).disabled).toBe(true)
+    // Step 2 cannot move on, so the send button is never reached.
+    expect((screen.getByTestId('propose-trade-next') as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Send counteroffer' })).toBeNull()
     expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/counter'))).toBe(false)
   })
 })

@@ -1,3 +1,7 @@
+import { ANNUAL_C2C_DRAFT, annualC2CDraftSeason } from './annualC2CDraft'
+import { isC2CVariant } from '@/lib/c2c/campusLineup'
+import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
+import { getC2CPhaseConfig } from '@/lib/merged-devy-c2c/draft/C2CDraftOrchestration'
 import { nativeLeagueStatusPatch } from '@/lib/league/nativeLeagueStatus'
 import { readRookieAuctionSettings } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { planRookieAuction } from '@/lib/live-draft-engine/auction/rookieAuctionPickPolicy'
@@ -52,6 +56,8 @@ import { resolveLiveRookieDraftSlots } from '@/lib/rookie-order/liveRookieOrderS
 import { automaticRookieOrderMethod } from '@/lib/rookie-order/automaticRookieOrder'
 import { ensureRookieDraftLottery } from '@/lib/draft-lottery/rookieDraftLottery'
 
+class CombinedDraftPickError extends Error {}
+
 export type NextDraftKind = 'rookie' | 'standard'
 
 export type NextDraftOrderSource = 'lottery' | 'live_rookie_order' | 'standings' | 'default'
@@ -103,6 +109,8 @@ export type CreateNextDraftResult =
         | 'NEEDS_DATABASE_UPDATE'
         | 'ROOKIE_LOTTERY_UNAVAILABLE'
         | 'ROOKIE_AUCTION_PICKS_UNRESOLVED'
+        | 'COMBINED_DRAFT_UNAVAILABLE'
+        | 'COMBINED_DRAFT_PICKS_UNRESOLVED'
       message: string
     }
 
@@ -210,9 +218,11 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
     select: {
       id: true,
       sport: true,
+      season: true,
       platform: true,
       leagueType: true,
       isDynasty: true,
+      leagueVariant: true,
       keeperCount: true,
       leagueSize: true,
       lifecycleState: true,
@@ -230,6 +240,14 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
   }
   if (previous.status !== 'completed') {
     return { ok: false, code: 'DRAFT_STILL_OPEN', message: 'The current draft is not finished yet.' }
+  }
+
+  const native = isNativeFuturePickLeague(league)
+  const campusLeague = league.leagueType === 'c2c' || isC2CVariant(league.leagueVariant)
+  const campus = native && campusLeague ? await getC2CConfig(leagueId) : null
+  const combined = campus?.mergedRookieCollegeDraft ? getC2CPhaseConfig(campus, ANNUAL_C2C_DRAFT) : null
+  if (combined && ((combined.draftType !== 'snake' && combined.draftType !== 'linear') || !Number.isInteger(combined.rounds) || combined.rounds < 1 || combined.rounds > 50)) {
+    return { ok: false, code: 'COMBINED_DRAFT_UNAVAILABLE', message: 'The combined annual draft needs a numbered snake or linear order and 1–50 rounds.' }
   }
 
   const seasons = await prisma.redraftSeason.findMany({
@@ -259,6 +277,9 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
     }
   }
 
+  if (combined && annualC2CDraftSeason(previous) === incoming.season) {
+    return { ok: false, code: 'SEASON_IN_PROGRESS', message: 'This season’s combined draft has already been held.' }
+  }
   const kind: NextDraftKind = isDynastyFamilyLeague(league) ? 'rookie' : 'standard'
   const draftRosters = await prisma.roster.findMany({
     where: { leagueId },
@@ -285,6 +306,10 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       .catch(() => null)
     rounds = resolveRookieDraftRounds(dynasty?.rookieDraftRounds)
     draftType = dynasty?.rookieDraftType === 'auction' ? 'auction' : dynasty?.rookieDraftType === 'snake' ? 'snake' : 'linear'
+    if (combined) {
+      rounds = combined.rounds
+      draftType = combined.draftType
+    }
     thirdRoundReversal = false
 
     /*
@@ -359,6 +384,9 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
     }
   }
   if (!slotOrder) slotOrder = await buildSlotOrderForLeague(leagueId)
+  if (combined && !seatsEveryRoster(slotOrder, draftRosters)) {
+    return { ok: false, code: 'COMBINED_DRAFT_PICKS_UNRESOLVED', message: 'Seat every team before opening the combined annual draft.' }
+  }
   const teamCount = slotOrder.length || previous.teamCount
 
   // Locked keepers go on the board in the round they cost.
@@ -402,7 +430,27 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
   const fromState = league.lifecycleState
   try {
     const created = await prisma.$transaction(async (tx) => {
-      if (kind === 'rookie' && draftType === 'auction' && isNativeFuturePickLeague(league)) await lockNativeFuturePicks(tx, leagueId)
+      if (kind === 'rookie' && draftType === 'auction' && native) await lockNativeFuturePicks(tx, leagueId)
+      if (combined) {
+        await lockNativeFuturePicks(tx, leagueId)
+        // A concurrent opener must never create another board or consume the same pick rights.
+        const latestDraft = await tx.draftSession.findFirst({
+          where: { leagueId },
+          orderBy: CURRENT_DRAFT_SESSION_ORDER,
+          select: { id: true },
+        })
+        if (latestDraft?.id !== previous.id) return null
+        const picks = await tx.futureDraftPick.findMany({
+          where: { leagueId, pickSeason: incoming.season, status: { in: ['active', 'forfeited'] }, usedInDraftSessionId: null },
+          select: { status: true, round: true, originalRosterId: true, currentOwnerId: true },
+        })
+        const seated = new Set((slotOrder ?? []).map(entry => entry.rosterId))
+        if (picks.some(pick => (pick.status === 'forfeited' || pick.currentOwnerId !== pick.originalRosterId) &&
+          (pick.round < 1 || pick.round > rounds || !seated.has(pick.originalRosterId) ||
+            (pick.status !== 'forfeited' && !seated.has(pick.currentOwnerId))))) {
+          throw new CombinedDraftPickError('Resolve traded or forfeited Canton picks that cannot be placed on this board before creating the combined draft.')
+        }
+      }
       const session = await tx.draftSession.create({
         data: {
           leagueId,
@@ -417,11 +465,13 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
           cpuAutoPick: previous.cpuAutoPick,
           alphabeticalSort: previous.alphabeticalSort,
           playerPool: kind === 'rookie' ? 'rookies_only' : 'all',
-          draftModeLabel: kind,
+          draftModeLabel: combined ? ANNUAL_C2C_DRAFT : kind,
           slotOrder: slotOrder as unknown as Prisma.InputJsonValue,
           auctionBudgetPerTeam: draftType === 'auction' ? (kind === 'rookie' ? rookieAuction.budgetPerTeam : previous.auctionBudgetPerTeam) : null,
           devyConfig: kind === 'standard' && previous.devyConfig != null ? (previous.devyConfig as Prisma.InputJsonValue) : undefined,
-          c2cConfig: kind === 'standard' && previous.c2cConfig != null ? (previous.c2cConfig as Prisma.InputJsonValue) : undefined,
+          c2cConfig: combined
+            ? { annualSeason: incoming.season }
+            : kind === 'standard' && previous.c2cConfig != null ? (previous.c2cConfig as Prisma.InputJsonValue) : undefined,
           keeperConfig: keeperSelections.length > 0 ? ({ maxKeepers } as Prisma.InputJsonValue) : undefined,
           keeperSelections: keeperSelections.length > 0 ? (keeperSelections as unknown as Prisma.InputJsonValue) : undefined,
           onClockTradeTimerBehavior: previous.onClockTradeTimerBehavior,
@@ -431,7 +481,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
         select: { id: true },
       })
       // Auction conversion must not silently discard forfeited or unseated pick rights.
-      if (kind === 'rookie' && draftType === 'auction' && isNativeFuturePickLeague(league)) {
+      if (kind === 'rookie' && draftType === 'auction' && native) {
         const rows = await tx.futureDraftPick.findMany({
           where: { leagueId, pickSeason: incoming.season, status: { in: ['active', 'forfeited'] }, usedInDraftSessionId: null },
           select: { status: true, round: true, originalRosterId: true, currentOwnerId: true },
@@ -442,7 +492,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
         }
       }
       // Only a native league's rows are in Roster.id space; an import's are provider team ids.
-      const tradedPicks = isNativeFuturePickLeague(league)
+      const tradedPicks = native
         ? await consumeNativeFuturePicksForDraft(tx, {
             leagueId,
             season: incoming.season,
@@ -455,7 +505,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       if (kind === 'rookie' && draftType === 'auction') {
         // Settle protected/conditional picks in this transaction. Refuse uncertain outcomes; a
         // thrown error rolls the draft, term settlements, and consumed pick rows back together.
-        if (isNativeFuturePickLeague(league)) {
+        if (native) {
           const latestLeague = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
           const uncertain = Object.entries(readPickTermsRecords(latestLeague?.settings)).some(([id, record]) =>
             parseFuturePickRef(id)?.season === incoming.season && record.result?.outcome === 'conveyed_unjudged')
@@ -476,7 +526,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       }
       // An offseason league refuses every draft action; the new draft needs the league in
       // pre_draft for its settings to be edited, its order set and the draft started.
-      if (fromState !== 'pre_draft') {
+      if (fromState !== 'pre_draft' || (combined && league.season !== incoming.season)) {
         const meta =
           league.lifecycleMetadata && typeof league.lifecycleMetadata === 'object' && !Array.isArray(league.lifecycleMetadata)
             ? (league.lifecycleMetadata as Record<string, unknown>)
@@ -484,6 +534,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
         await tx.league.update({
           where: { id: leagueId },
           data: {
+            ...(combined ? { season: incoming.season } : {}),
             lifecycleState: 'pre_draft',
             ...nativeLeagueStatusPatch(league.platform, 'pre_draft'),
             lifecycleMetadata: {
@@ -498,6 +549,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       return { ...session, tradedPicksApplied: tradedPicks.length }
     })
 
+    if (!created) return { ok: false, code: 'DRAFT_STILL_OPEN', message: 'Another draft was just created for this league.' }
     await logAction({
       leagueId,
       userId: actorUserId,
@@ -508,6 +560,16 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       afterState: { lifecycleState: 'pre_draft', kind, season: incoming.season, rounds, orderSource },
     }).catch(() => null)
 
+    // AF Commissioner leagues with automatic keeper placement re-place the locked keepers on the new
+    // board under the league's own rules (same-round direction, traded picks, flags) —
+    // lib/keeper/keeperAutoBoard.ts. Otherwise the placement above stands.
+    let keepersPlaced = keeperSelections.length
+    if (kind === 'standard' && keeperSelections.length > 0) {
+      const { autoPlaceKeepersIfEnabled } = await import('@/lib/keeper/keeperAutoBoard')
+      const auto = await autoPlaceKeepersIfEnabled(leagueId)
+      if (auto?.ok) keepersPlaced = auto.summary.placed
+    }
+
     return {
       ok: true,
       sessionId: created.id,
@@ -516,11 +578,12 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       season: incoming.season,
       rounds,
       orderSource,
-      keepersPlaced: keeperSelections.length,
+      keepersPlaced,
       playersCarried,
       tradedPicksApplied: created.tradedPicksApplied,
     }
   } catch (error) {
+    if (error instanceof CombinedDraftPickError) return { ok: false, code: 'COMBINED_DRAFT_PICKS_UNRESOLVED', message: error.message }
     if (error instanceof RookieAuctionPickError) return { ok: false, code: 'ROOKIE_AUCTION_PICKS_UNRESOLVED', message: error.message }
     if (!isUniqueViolation(error)) throw error
     const open = await prisma.draftSession.findFirst({

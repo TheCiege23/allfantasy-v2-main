@@ -201,8 +201,9 @@ test.describe('@db Keeper War Room runtime', () => {
     await waitForAction(page, 'draft-plan', async () => { await page.getByTestId('keeper-war-room-tool-draft-plan').click() })
     await rendered(page.getByTestId('keeper-war-room-draft-plan-result'))
 
-    await waitForAction(page, 'trade-analyze', async () => { await page.getByTestId('keeper-war-room-tool-trade-analyze').click() })
-    await page.getByTestId('keeper-war-room-trade-incoming-input').fill(seed.opponentIncomingPlayerId)
+    // Opening the analyzer sends nothing; it grades once the incoming player is picked.
+    await page.getByTestId('keeper-war-room-tool-trade-analyze').click()
+    await page.getByTestId('keeper-war-room-trade-incoming-select').selectOption(seed.opponentIncomingPlayerId)
     await waitForAction(page, 'trade-analyze', async () => { await page.getByTestId('keeper-war-room-trade-analyze-submit').click() })
     await rendered(page.getByTestId('keeper-war-room-trade-analyze-result'))
 

@@ -9,6 +9,8 @@ import { getPlayerCard } from '@/lib/core-app/playerCard'
 import { applyPlayerCardDepth } from '@/lib/core-app/playerCardDepth'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import { getPlayerLeagueImpact } from '@/lib/core-app/playerLeagueImpact'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
+import { loadPlayerKeeperCardCost } from '@/lib/keeper/keeperCardCost'
 
 /**
  * The player card pop-up's payload — STATE 6 / STATE 7 of the 2026-09-07 design
@@ -80,7 +82,7 @@ export async function GET(req: Request) {
     if (!parsed.data.sleeperId) return NextResponse.json({ error: 'sleeperId is required' }, { status: 400 })
     const impact = await getPlayerLeagueImpact({ userId, rosterPlayerId: parsed.data.sleeperId }).catch(() => null)
     if (!impact) return NextResponse.json({ error: 'Impact unavailable' }, { status: 503 })
-    return NextResponse.json({ impact }, { headers: { 'Cache-Control': 'private, no-store' } })
+    return await afJson(userId, { impact }, { headers: { 'Cache-Control': 'private, no-store' } })
   }
 
   let leagueId: string | null = null
@@ -106,5 +108,17 @@ export async function GET(req: Request) {
 
   if (!card) return NextResponse.json({ error: 'Player not found' }, { status: 404 })
 
-  return NextResponse.json(applyPlayerCardDepth(card, depth), { headers: { 'Cache-Control': 'private, no-store' } })
+  // Keeper leagues (commissioner on AF Commissioner / Supreme): what keeping a ROSTERED player costs.
+  const rostered = card.league && card.league.slot !== 'NOT ROSTERED' && card.league.slot !== 'UNREADABLE'
+  if (leagueId && rostered) {
+    card.keeperCost = await loadPlayerKeeperCardCost({
+      leagueId,
+      sleeperId: card.player.sleeperId,
+      externalId: card.player.externalId ?? null,
+      name: card.player.name,
+      position: card.player.position,
+    })
+  }
+
+  return await afJson(userId, applyPlayerCardDepth(card, depth), { headers: { 'Cache-Control': 'private, no-store' } })
 }

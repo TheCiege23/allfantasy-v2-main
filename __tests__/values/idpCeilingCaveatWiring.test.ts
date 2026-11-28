@@ -36,11 +36,19 @@ describe('the route emits the caveat', () => {
     expect(ROUTE).toMatch(/idpCeilingCompositeBand\([\s\S]{0,200}received:[\s\S]{0,60}gives_faab/)
   })
 
-  /** 🛑 THE GATE. Without it every IDP trade nags, and a caveat that always fires is ignored. */
-  it('fires only when the band flips who wins', () => {
-    expect(ROUTE).toContain('flipsWinner')
-    expect(ROUTE).toMatch(/const flipsWinner = lo < 50 && hi > 50/)
-    expect(ROUTE).toMatch(/if \(flipsWinner\) \{/)
+  /**
+   * 🛑 THE GATE. Without it every IDP trade nags, and a caveat that always fires is ignored.
+   *
+   * It is the grade's letter now (2026-11-26), not the old composite fairness crossing 50: the route
+   * hands the band and the grade's own fairness to `idpCeilingGradeCaveat`, which reports only a band
+   * whose two ends grade differently (behaviour pinned in __tests__/trade-evaluator/
+   * idp-ceiling-grade-caveat.test.ts and the route cases in canonical-fairness.test.ts).
+   */
+  it('fires only when the band changes the letter, via the grade\'s helper', () => {
+    expect(ROUTE).toMatch(/const idpCeilingCaveat = idpCeilingGradeCaveat\(idpCeilingBand, canonicalFairness\)/)
+    expect(ROUTE).not.toContain('flipsWinner')
+    expect(ROUTE).not.toMatch(/lo < 50 && hi > 50/)
+    expect(ROUTE).not.toMatch(/computeValueFairness\(idpCeilingBand/)
   })
 
   it('returns it inside tradeInsights, where the page reads its siblings', () => {
@@ -57,14 +65,15 @@ describe('the page consumes and renders it', () => {
   })
 
   /*
-   * ⚠ BLANKED ON THE PAGE SINCE TRADE OS (2026-09-27). The caveat is a range of the route's COMPOSITE
-   * fairness, a scale the one grade does not use; live mode has blanked it since Phase 1, and
-   * historical mode — the last place it was mapped — now shows the same one grade. The route still
-   * emits it (above); the page must not put it beside a letter it could contradict.
+   * Blanked on the page from Trade OS (2026-09-27) while it was a range of the route's COMPOSITE
+   * fairness — a scale the one grade does not use. Mapped again from 2026-11-26, now that it is in
+   * the grade's letters: but ONLY beside a real grade whose letter is the one it was computed for,
+   * so it can qualify the letter and never contradict it.
    */
-  it('is blanked on the result the view reads', () => {
-    expect(PAGE).not.toContain('idpCeilingCaveat: payload.tradeInsights?.idpCeilingCaveat ?? null')
-    expect(PAGE).toMatch(/idpCeilingCaveat:\s*null,/)
+  it('is mapped only beside the real grade it was computed for', () => {
+    expect(PAGE).toContain('const caveat = payload.tradeInsights?.idpCeilingCaveat ?? null')
+    expect(PAGE).toMatch(/!panel\.gradeWithheld && caveat\.changesGrade && caveat\.gradeLetter === panel\.senderGrade/)
+    expect(PAGE).not.toMatch(/idpCeilingCaveat:\s*null,/)
   })
 
   /** 🛑 THE ASSERTION THAT CATCHES THE DEAD-COMPONENT CLASS OF BUG. */
@@ -78,9 +87,9 @@ describe('the page consumes and renders it', () => {
     expect(PAGE).toMatch(/\{result\.idpCeilingCaveat \? \([\s\S]*?\) : null\}/)
   })
 
-  it('shows the range, so the manager sees how far it moves', () => {
-    expect(PAGE).toContain('lowFairness')
-    expect(PAGE).toContain('highFairness')
+  it('shows the range in letters and N/100, so the manager sees how far it moves', () => {
+    expect(PAGE).toContain('{result.idpCeilingCaveat.lowLetter} ({result.idpCeilingCaveat.lowFairness}/100)')
+    expect(PAGE).toContain('{result.idpCeilingCaveat.highLetter} ({result.idpCeilingCaveat.highFairness}/100)')
   })
 
   /**

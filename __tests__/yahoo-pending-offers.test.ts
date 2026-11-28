@@ -146,6 +146,6 @@ describe('⚠ a Yahoo offer must not be labelled Sleeper', () => {
   })
 
   it('still names the platforms it cannot read', () => {
-    expect(ROUTE).toContain('Sleeper and Yahoo are the two we can')
+    expect(ROUTE).toContain('Sleeper, Yahoo and ESPN are the ones we can')
   })
 })

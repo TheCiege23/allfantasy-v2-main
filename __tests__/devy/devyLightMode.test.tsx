@@ -39,12 +39,14 @@ describe('Devy home in light mode', () => {
     const css = readFileSync('app/globals.css', 'utf8')
     expect(css).toMatch(/html\[data-mode="light"\] \.mode-readable \[class\*="text-white"\]:where\(:not\(\.af-draft-dark, \.af-draft-dark \*\)\)/)
   })
-  it('every panel under the hero sits inside .af-draft-dark', async () => {
-    render(<DevyHome leagueId="l" isCommissioner />)
+  // Superseded 2026-11-23: the Devy home follows light mode (Devy light tokens on the shell, /core tokens on the panels
+  // under the hero), so nothing under the hero hides behind the always-dark opt-out any more.
+  it('no panel under the hero sits inside .af-draft-dark', async () => {
+    const { container } = render(<DevyHome leagueId="l" isCommissioner />)
     const center = await screen.findByRole('heading', { name: 'Draft Center' })
-    const promo = await screen.findByText('Offseason promotion')
-    for (const el of [center, screen.getByText('Devy commissioner tools'), promo, screen.getByText(/NCAA Football devy pool/)]) {
-      expect(el.closest('.af-draft-dark'), el.textContent ?? '').toBeTruthy()
+    for (const el of [center, screen.getByText('Devy commissioner tools'), screen.getByText(/NCAA Football devy pool/)]) {
+      expect(el.closest('.af-draft-dark'), el.textContent ?? '').toBeNull()
     }
+    expect(container.querySelector('.af-draft-dark')).toBeNull()
   })
 })

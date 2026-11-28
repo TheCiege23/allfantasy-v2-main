@@ -6,7 +6,7 @@ import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
-import { loadEspnToSleeperMap, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
+import { espnSportOf, loadEspnToSleeperMap, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { bridgeColumnFor, loadBridgedLeagues } from '@/lib/core-app/bridgedRosterIds'
 import { resolveRosterPlayerIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 import type { AiRosterPlayerRef, AiTeamContextPayload } from '@/lib/ai-payload/types'
@@ -244,10 +244,11 @@ async function foreignRosterRefs(args: {
 
   let toSleeper = new Map<string, string>()
   try {
-    if (rosterIdSpaceOf(args.platform) === 'espn') {
-      toSleeper = await loadEspnToSleeperMap(ids)
-    } else if (bridgeColumnFor(args.platform) && args.sport === 'NFL') {
-      const bridged = await loadBridgedLeagues([{ id: args.leagueId, platform: args.platform }])
+    // `sport` matters: an ESPN baseball/basketball id put through the NFL crosswalk is an NFL player.
+    if (rosterIdSpaceOf(args.platform, args.sport) === 'espn') {
+      toSleeper = await loadEspnToSleeperMap(ids, args.sport)
+    } else if (bridgeColumnFor(args.platform, args.sport) && args.sport === 'NFL') {
+      const bridged = await loadBridgedLeagues([{ id: args.leagueId, platform: args.platform, sport: args.sport }])
       toSleeper = new Map(bridged.get(args.leagueId)?.map ?? [])
     }
   } catch {
@@ -398,7 +399,8 @@ export async function resolveAiTeamContext(args: {
    * 465 of 466 carry a registry id. The ids are never read raw as Sleeper ids (a raw Fleaflicker or
    * ESPN number names a stranger) — see `foreignRosterRefs`.
    */
-  const space = rosterIdSpaceOf(platform)
+  // ESPN's sport only: a native league of another sport keeps the by-sport read below (`espnSportOf`).
+  const space = rosterIdSpaceOf(platform, espnSportOf(platform, sport))
   let refsFor: (ids: string[]) => AiRosterPlayerRef[]
   if (space === 'sleeper') {
     const nameMap = await resolveNames(sport, [...starters, ...bench, ...reserve, ...taxi])

@@ -35,6 +35,20 @@ export type TradeAssetInput =
       round: number
       /** Overall selection number when a draft has assigned this pick a slot. */
       overall?: number
+      /**
+       * Where the pick falls WITHIN its round in a draft being run now (1 = the round's first
+       * selection) — the N in the market's "2026 Pick 1.04" rows. Set only by a caller that knows the
+       * exact slot (the live draft room); a pick carrying it is priced from that slot's row when the
+       * chart has one, and exactly as before otherwise (`priceLeagueTradePick`).
+       */
+      roundPick?: number
+      /**
+       * A pick in a STARTUP or REDRAFT draft being run now, by its overall number. The market has no row
+       * for such a pick, so it is priced from that draft's own remaining board (`draftBoardPickPricing.ts`)
+       * — only when the grade is handed that board; without it the pick is not priced. Set only by the
+       * live draft room (`draftPickBoardAsset`).
+       */
+      liveBoardOverall?: number
       draftSide?: C2CDraftSide
       tier?: 'early' | 'mid' | 'late'
       label?: string
@@ -149,7 +163,7 @@ export type TradeConsolePlayerLine = {
    * starting slots priced the player — no market prices defenders, so collapsing it
    * into 'unknown' would report a value we can fully explain as one we cannot.
    */
-  pricedSource: 'fantasycalc' | 'idp_league' | 'sports_db' | 'faab' | 'pick' | 'unknown'
+  pricedSource: 'allfantasy' | 'fantasycalc' | 'idp_league' | 'sports_db' | 'faab' | 'pick' | 'unknown'
   /**
    * True when the engine found NO value, and `marketValue` is only its placeholder 0.
    *

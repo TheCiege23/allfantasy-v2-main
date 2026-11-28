@@ -1,0 +1,287 @@
+/*
+ * Player game log. Reads the core app's tokens (--text, --line …) and falls back to the profile
+ * page's dark palette where those are not defined. Compact on purpose: hockey managers asked for
+ * narrower columns, not wider ones.
+ */
+.af-gl {
+  --gl-text: var(--text, rgba(255, 255, 255, 0.92));
+  --gl-text2: var(--text2, rgba(255, 255, 255, 0.7));
+  --gl-faint: var(--faint, rgba(255, 255, 255, 0.4));
+  --gl-line: var(--line, rgba(255, 255, 255, 0.08));
+  --gl-bg: var(--surface, #0b1020);
+  --gl-accent: var(--accent, #22d3ee);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-gl-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-gl-tabs {
+  display: inline-flex;
+  gap: 4px;
+}
+.af-gl-tab {
+  border: 1px solid var(--gl-line);
+  background: transparent;
+  color: var(--gl-text2);
+  border-radius: 999px;
+  padding: 4px 12px;
+  min-height: 32px;
+  font: 700 12px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.af-gl-tab[aria-selected='true'] {
+  color: var(--gl-text);
+  border-color: var(--gl-accent);
+}
+.af-gl-season {
+  background: var(--gl-bg);
+  color: var(--gl-text);
+  border: 1px solid var(--gl-line);
+  border-radius: 8px;
+  padding: 4px 8px;
+  min-height: 32px;
+  font: 600 12px/1 system-ui, sans-serif;
+}
+
+/*
+ * The table scrolls in BOTH directions inside its own box, so the header row can stay frozen while
+ * the games scroll under it ("the column headers aren't even frozen, so when you scroll down you
+ * can't tell what numbers mean what"). A sticky header only sticks to its nearest scrolling
+ * ancestor, and `overflow-x: auto` already makes this box that ancestor — so without a height cap
+ * the box never scrolls vertically and `top: 0` never engages.
+ */
+.af-gl-scroll {
+  overflow: auto;
+  max-height: min(70vh, 640px);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--gl-line);
+  border-radius: 10px;
+}
+.af-gl-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font: 600 12px/1.25 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--gl-text);
+  font-variant-numeric: tabular-nums;
+}
+.af-gl-table th,
+.af-gl-table td {
+  padding: 6px 7px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--gl-line);
+}
+.af-gl-table thead th {
+  font: 800 11px/1 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: var(--gl-faint);
+  text-transform: uppercase;
+}
+.af-gl-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--gl-bg);
+  box-shadow: inset 0 -1px 0 var(--gl-line);
+}
+/* The corner cell is frozen both ways, above the row headers and the header row. */
+.af-gl-table thead th.af-gl-pin {
+  z-index: 3;
+}
+
+/* Fantasy points: the first stat, set apart from the box line. */
+.af-gl-fpts {
+  font-weight: 800;
+  border-right: 1px solid var(--gl-line);
+}
+.af-gl-table thead th.af-gl-fpts {
+  color: var(--gl-text2);
+}
+.af-gl-fpts[data-mark='high'] {
+  color: var(--gl-accent);
+}
+.af-gl-fpts[data-mark='low'] {
+  color: var(--gl-faint);
+}
+.af-gl-mark {
+  font-size: 11px;
+  margin-right: 3px;
+}
+.af-gl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.af-gl-note {
+  margin: 0;
+  font: 600 11px/1.35 system-ui, sans-serif;
+  color: var(--gl-faint);
+}
+.af-gl-table abbr {
+  text-decoration: none;
+  cursor: help;
+}
+.af-gl-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+/* The pinned first column: date, opponent, final score. */
+.af-gl-pin {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--gl-bg);
+  text-align: left !important;
+  font: 700 12px/1.25 system-ui, sans-serif;
+  color: var(--gl-text2);
+  min-width: 108px;
+  border-right: 1px solid var(--gl-line);
+}
+.af-gl-date {
+  color: var(--gl-faint);
+  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.af-gl-opp {
+  color: var(--gl-text);
+}
+.af-gl-score {
+  display: block;
+  color: var(--gl-faint);
+  font-weight: 600;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.af-gl-score b {
+  color: var(--gl-text2);
+}
+.af-gl-sub {
+  color: var(--gl-faint);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.af-gl-summary td,
+.af-gl-summary th {
+  color: var(--gl-text2);
+  background: color-mix(in srgb, var(--gl-text) 3%, transparent);
+}
+.af-gl-summary tr:last-child > * {
+  border-bottom: 2px solid var(--gl-line) !important;
+}
+.af-gl-summary .af-gl-pin {
+  background: var(--gl-bg);
+}
+
+.af-gl-dnp th,
+.af-gl-dnp td {
+  color: var(--gl-faint);
+}
+.af-gl-dnp-cell {
+  text-align: left !important;
+  font-style: italic;
+}
+
+.af-gl-more {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: var(--gl-accent);
+  font: 700 12px/1 system-ui, sans-serif;
+  padding: 8px 0;
+  min-height: 32px;
+  cursor: pointer;
+}
+.af-gl-empty {
+  font: 600 12px/1.4 system-ui, sans-serif;
+  color: var(--gl-faint, rgba(255, 255, 255, 0.45));
+  padding: 8px 0;
+  margin: 0;
+}
+.af-gl-skel {
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.1);
+  animation: af-gl-pulse 1.2s ease-in-out infinite;
+}
+@keyframes af-gl-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-gl-skel {
+    animation: none;
+  }
+}
+
+/* Compact tables (Columns menu → "Compact tables"): tighter rows; text stays at the 11px floor. */
+.af-gl[data-density='compact'] .af-gl-table th,
+.af-gl[data-density='compact'] .af-gl-table td {
+  padding: 3px 5px;
+}
+.af-gl[data-density='compact'] .af-gl-table {
+  font-size: 11px;
+}
+.af-gl[data-density='compact'] .af-gl-score {
+  display: inline;
+  margin-left: 6px;
+}
+.af-gl[data-density='compact'] .af-gl-pin {
+  min-width: 0;
+}
+
+/* Rank by time window (PlayerWindowRanks). Four equal cells: they fit a phone without scrolling. */
+.af-gl-ranks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.af-gl-ranks-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.af-gl-rank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 4px;
+  border: 1px solid var(--gl-line, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  min-width: 0;
+}
+.af-gl-rank-label {
+  font: 800 11px/1.2 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gl-faint, rgba(255, 255, 255, 0.45));
+}
+.af-gl-rank-value {
+  font: 800 17px/1.2 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--gl-text, rgba(255, 255, 255, 0.92));
+  font-variant-numeric: tabular-nums;
+}
+.af-gl-rank-sub {
+  font: 600 11px/1.25 system-ui, sans-serif;
+  color: var(--gl-text2, rgba(255, 255, 255, 0.7));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}

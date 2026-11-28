@@ -71,32 +71,33 @@ export default function AlertSettingsClient() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-4">
-        <label className="flex items-center justify-between gap-3 cursor-pointer" data-testid="sports-alert-toggle-injury">
+      {/* 44px rows with a hairline between (2026-11-25, the simplify pass); the whole row is the label. */}
+      <div className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/5 px-4">
+        <label className="flex min-h-[48px] items-center justify-between gap-3 cursor-pointer" data-testid="sports-alert-toggle-injury">
           <span className="text-sm font-medium text-white">Player injury alerts</span>
           <input
             type="checkbox"
             checked={injuryAlerts}
             onChange={(e) => setInjuryAlerts(e.target.checked)}
-            className="h-4 w-4 rounded border-white/20 bg-black/30 text-cyan-500 focus:ring-cyan-500"
+            className="h-5 w-5 rounded border-white/20 bg-black/30 text-cyan-500 focus:ring-cyan-500"
           />
         </label>
-        <label className="flex items-center justify-between gap-3 cursor-pointer" data-testid="sports-alert-toggle-performance">
+        <label className="flex min-h-[48px] items-center justify-between gap-3 cursor-pointer" data-testid="sports-alert-toggle-performance">
           <span className="text-sm font-medium text-white">Game performance alerts</span>
           <input
             type="checkbox"
             checked={performanceAlerts}
             onChange={(e) => setPerformanceAlerts(e.target.checked)}
-            className="h-4 w-4 rounded border-white/20 bg-black/30 text-cyan-500 focus:ring-cyan-500"
+            className="h-5 w-5 rounded border-white/20 bg-black/30 text-cyan-500 focus:ring-cyan-500"
           />
         </label>
-        <label className="flex items-center justify-between gap-3 cursor-pointer" data-testid="sports-alert-toggle-lineup">
+        <label className="flex min-h-[48px] items-center justify-between gap-3 cursor-pointer" data-testid="sports-alert-toggle-lineup">
           <span className="text-sm font-medium text-white">Starting lineup alerts</span>
           <input
             type="checkbox"
             checked={lineupAlerts}
             onChange={(e) => setLineupAlerts(e.target.checked)}
-            className="h-4 w-4 rounded border-white/20 bg-black/30 text-cyan-500 focus:ring-cyan-500"
+            className="h-5 w-5 rounded border-white/20 bg-black/30 text-cyan-500 focus:ring-cyan-500"
           />
         </label>
       </div>
@@ -117,19 +118,23 @@ export default function AlertSettingsClient() {
         </p>
       )}
 
-      <p className="text-xs text-white/40">
-        Alerts appear in the notification bell and link to the relevant player or league page when you tap them.
-      </p>
-
-      <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <h2 className="text-sm font-semibold text-white">Chimmy alert controls</h2>
-        <p className="mt-1 text-xs text-white/60">
-          Fine-tune Chimmy frequency, channels, muted categories, and commissioner-only alert rules.
-        </p>
-        <div className="mt-4">
+      {/*
+        One closed row (2026-11-25, the simplify pass), as in Settings › Notifications: open, the panel was
+        ~650px under a second title ("Chimmy Alert Settings") and a line describing it. The fine print
+        about the bell joined the intro at the top of the page.
+      */}
+      <details className="group mt-6 rounded-2xl border border-white/10 bg-white/5" data-testid="alerts-chimmy-fold">
+        <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <span className="text-sm font-semibold text-white">Chimmy alert controls</span>
+          <span className="flex items-center gap-2 text-xs text-white/50">
+            Volume, channels, muted
+            <span aria-hidden="true" className="transition-transform group-open:rotate-180">▾</span>
+          </span>
+        </summary>
+        <div className="px-4 pb-4">
           <ChimmyAlertPreferencesPanel />
         </div>
-      </section>
+      </details>
     </div>
   )
 }

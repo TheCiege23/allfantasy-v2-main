@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LanguageCode } from '@/lib/i18n/constants'
+import { draftStateWord, type TournamentDraftState } from '@/lib/tournament/tournamentWords'
 
 function pickOrdinalLabel(n: number, lang: LanguageCode): string {
   if (lang === 'es') return `${n}.º`
@@ -13,7 +14,6 @@ export function DraftTransitionCard({
   leagueName,
   conferenceName,
   draftTypeLabel,
-  clockLabel,
   draftSlot,
   scheduledLabel,
   status,
@@ -23,17 +23,18 @@ export function DraftTransitionCard({
 }: {
   leagueName: string
   conferenceName: string | null
+  /** "Snake draft · 90s clock" — the clock is said here once. */
   draftTypeLabel: string
-  clockLabel: string
   draftSlot: number | null
-  scheduledLabel: string
-  status: 'SCHEDULED' | 'LIVE' | 'COMPLETE' | string
+  /** When the draft runs; null once it is done and no date is stored. */
+  scheduledLabel: string | null
+  status: TournamentDraftState
   countdownLabel: string | null
   leagueRoomHref: string | null
   readOnly?: boolean
 }) {
   const { t, tInterpolate, language } = useLanguage()
-  const live = status === 'LIVE' || status === 'drafting'
+  const live = status === 'live'
   return (
     <div
       className={`rounded-xl border p-4 ${
@@ -52,19 +53,19 @@ export function DraftTransitionCard({
             live ? 'bg-red-500/25 text-red-200' : 'bg-white/10 text-white/70'
           }`}
         >
-          {status}
+          {draftStateWord(status, t)}
         </span>
       </div>
       <p className="mt-2 text-[12px] text-[var(--tournament-text-mid)]">
-        {draftTypeLabel} · {clockLabel}
+        {draftTypeLabel}
       </p>
-      <p className="text-[12px] text-white/90">
-        {tInterpolate('tournament.draft.youPick', {
-          ordinal:
-            draftSlot != null ? pickOrdinalLabel(draftSlot, language) : t('tournament.draft.pickDash'),
-        })}
-      </p>
-      <p className="mt-1 text-[12px] text-[var(--tournament-text-dim)]">{scheduledLabel}</p>
+      {/* Only a known slot: "You draft —" sat on every league, including the ones you are not in. */}
+      {draftSlot != null ? (
+        <p className="text-[12px] text-white/90">
+          {tInterpolate('tournament.draft.youPick', { ordinal: pickOrdinalLabel(draftSlot, language) })}
+        </p>
+      ) : null}
+      {scheduledLabel ? <p className="mt-1 text-[12px] text-[var(--tournament-text-dim)]">{scheduledLabel}</p> : null}
       {countdownLabel ? (
         <p className="mt-2 font-mono text-[20px] font-bold tracking-tight text-[var(--tournament-gold)]">
           {countdownLabel}
@@ -124,10 +125,12 @@ export function RoundResetExplainer({
           <span>📋</span>
           <span>
             <strong className="text-white">{t('tournament.roundExplainer.rosterSize')}</strong> —{' '}
-            {tInterpolate('tournament.roundExplainer.rosterSizeDesc', {
-              after: String(rosterAfter),
-              before: String(rosterBefore),
-            })}
+            {rosterAfter === rosterBefore
+              ? tInterpolate('tournament.roundExplainer.rosterSizeSame', { after: String(rosterAfter) })
+              : tInterpolate('tournament.roundExplainer.rosterSizeDesc', {
+                  after: String(rosterAfter),
+                  before: String(rosterBefore),
+                })}
           </span>
         </li>
         <li className="flex gap-2">

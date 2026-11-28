@@ -167,9 +167,18 @@ export function deriveCanonicalTeamIdentity(seed: CanonicalTeamSeed): CanonicalT
   return {
     sportKey: normalizeSport(seed.sport),
     leagueKey: seed.leagueKey?.trim() || null,
-    normalizedName: String(seed.name ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, ' '),
+    normalizedName: legacyCanonicalTeamName(seed.name)
+      /*
+       * The dash family folds to a hyphen. Rolling Insights carries "University of Missouri-Kansas City"
+       * (RI 357) and "University of Missouri–Kansas City" (RI 347) as two rows, and this rule made them two
+       * canonical teams (merged 2026-11-20). Five stored teams used an en dash; their names were rewritten
+       * to this form the same day, and `legacyCanonicalTeamName` still finds any written the old way.
+       */
+      .replace(/[‐-―−]/g, '-'),
   }
+}
+
+/** The pre-2026-11-20 normalised name (no dash folding) — for finding rows stored under it. */
+export function legacyCanonicalTeamName(name: string | null | undefined): string {
+  return String(name ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }

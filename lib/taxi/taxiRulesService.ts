@@ -50,7 +50,7 @@ async function loadLeague(leagueId: string): Promise<LeagueRow | null> {
   })
 }
 
-const applies = (league: LeagueRow) => resolveWriteAuthority(league.platform) === 'NATIVE' && isDynastyFamilyLeague(league)
+const applies = (league: LeagueRow) => resolveWriteAuthority(league) === 'NATIVE' && isDynastyFamilyLeague(league)
 
 async function loadRules(leagueId: string): Promise<TaxiMoveRules | null> {
   const taxi = await getEffectiveTaxiSettings(leagueId)

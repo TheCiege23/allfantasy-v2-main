@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = {
   platform: 'fleaflicker',
+  sport: 'NFL',
   playerData: { players: ['6038'], starters: ['6038'] } as Record<string, unknown>,
   /** PlayerIdentityMap rows the Fleaflicker/MFL bridge reads; none = the league is not readable. */
   bridgeRows: [] as Array<{ fleaflickerId?: string; mflId?: string; sleeperId: string }>,
@@ -24,7 +25,7 @@ vi.mock('@/lib/prisma', () => ({
     league: {
       findUnique: vi.fn(async () => ({
         id: 'L1',
-        sport: 'NFL',
+        sport: state.sport,
         season: 2026,
         scoring: null,
         scoringPresetId: null,
@@ -60,7 +61,7 @@ vi.mock('@/lib/prisma', () => ({
           faabRemaining: null,
           waiverPriority: null,
           settings: null,
-          league: { platform: state.platform },
+          league: { platform: state.platform, sport: state.sport },
         },
       ]),
     },
@@ -94,6 +95,7 @@ beforeEach(() => {
   state.platform = 'fleaflicker'
   state.playerData = { players: ['6038'], starters: ['6038'] }
   state.bridgeRows = []
+  state.sport = 'NFL'
 })
 
 describe('canonical world — a Fleaflicker league the identity bridge can read', () => {
@@ -115,11 +117,70 @@ describe('canonical world — a Fleaflicker league the identity bridge can read'
     expect(rows.map((r) => r.name)).not.toContain('Wrong Player')
   })
 
+  /*
+   * 🛑 THE BRIDGE IS NFL (`PlayerIdentityMap` rows with `sport: 'NFL'`). A Fleaflicker / MFL league of
+   * another sport is never read through it, however much of it would "translate": its ids are that
+   * sport's, and an NFL bridge row sharing the number is an NFL stranger. It reads as unreadable
+   * (stripped), never as NFL players. Mirrors `espnSportOf` for ESPN.
+   */
+  it('🛑 a non-NFL Fleaflicker league is not bridged, even at 100% coverage — it is stripped', async () => {
+    state.playerData = { players: ['6038', '7000', '7001'], starters: ['6038'] }
+    // Every id bridges on both columns: 100% coverage on Fleaflicker and on MFL.
+    state.bridgeRows = ['6038', '7000', '7001'].map((id) => ({ fleaflickerId: id, mflId: id, sleeperId: id === '6038' ? '6038' : `s${id}` }))
+    for (const sport of ['NBA', 'MLB', 'NHL']) {
+      state.sport = sport
+      for (const platform of ['fleaflicker', 'mfl']) {
+        state.platform = platform
+        const world = await resolveCanonicalWorld('L1')
+        expect(world!.rosters.flatMap((r) => r.playerIds)).toEqual([])
+        expect(world!.rosters.flatMap((r) => r.starterIds)).toEqual([])
+      }
+    }
+  })
+
+  it('CONTROL: the same rosters in an NFL Fleaflicker league at 100% ARE bridged', async () => {
+    state.playerData = { players: ['6038', '7000', '7001'], starters: ['6038'] }
+    state.bridgeRows = [
+      { fleaflickerId: '6038', sleeperId: '6038' },
+      { fleaflickerId: '7000', sleeperId: 's7000' },
+      { fleaflickerId: '7001', sleeperId: 's7001' },
+    ]
+    const world = await resolveCanonicalWorld('L1')
+    expect(world!.rosters.flatMap((r) => r.playerIds)).toEqual(['6038', 's7000', 's7001'])
+  })
+
   it('below the bridge’s coverage rule the roster is stripped exactly as before', async () => {
     state.playerData = { players: ['6038', '7000', '7001'], starters: ['6038'] }
     state.bridgeRows = [{ fleaflickerId: '7000', sleeperId: 's7000' }] // 1 of 3
     const world = await resolveCanonicalWorld('L1')
     expect(world!.rosters.flatMap((r) => r.playerIds)).toEqual([])
+  })
+})
+
+/*
+ * A PASTED Yahoo league (2026-11-26): resolved players are stored `sleeper:<id>`, unmatched ones
+ * `yahoo-paste:…` (declaredSleeperId.ts). The declared ids are the bridge, read with no registry query.
+ * Unlike a thin Fleaflicker league it is bridged even below the coverage bar, because the strip would
+ * keep its declared ids and silently DROP the rest; bridged, every unmatched player stays countable.
+ */
+describe('canonical world — a pasted Yahoo league', () => {
+  it('declared ids become bare Sleeper ids; an unmatched player stays in his slot, prefixed', async () => {
+    state.platform = 'yahoo'
+    state.playerData = { players: ['sleeper:6038', 'yahoo-paste:some guy|wr|kc'], starters: ['yahoo-paste:some guy|wr|kc', 'sleeper:6038'] }
+    const world = await resolveCanonicalWorld('L1')
+    const roster = world!.rosters[0]!
+    expect(roster.playerIds).toEqual(['6038', 'unbridged:yahoo-paste:some guy|wr|kc'])
+    expect(roster.starterIds).toEqual(['unbridged:yahoo-paste:some guy|wr|kc', '6038'])
+    const rows = await loadPlayerMetadataRows('NFL', roster.playerIds)
+    expect(rows.map((r) => r.name)).toEqual(['Wrong Player'])
+  })
+
+  it('🛑 a bare Yahoo id is never read as a Sleeper id', async () => {
+    state.platform = 'yahoo'
+    state.playerData = { players: ['6038'], starters: ['6038'] }
+    const world = await resolveCanonicalWorld('L1')
+    expect(world!.rosters.flatMap((r) => r.playerIds)).toEqual(['unbridged:6038'])
+    expect((await namesFor('yahoo')).names).not.toContain('Wrong Player')
   })
 })
 

@@ -111,6 +111,38 @@ describe('mobile draft tray', () => {
     expect(handle().getAttribute('aria-expanded')).toBe('false')
   })
 
+  /**
+   * 44×44 touch minimum on the handle (it was a 28px-min row, 32px rendered). jsdom has no layout,
+   * so this pins the classes that make the box; the Playwright measurement at 390×844 on
+   * /e2e/draft-room-fixture read 390×44 after (390×32 before). The grabber pill stays 40×4.
+   */
+  it('the handle is a ≥44px-tall, full-width hit area around an unchanged 40×4 grabber', () => {
+    render(<Room />)
+    const cls = handle().className
+    expect(cls).toMatch(/\bmin-h-\[44px\]/)
+    expect(cls).not.toMatch(/\bmin-h-\[(?:[0-3]\d|4[0-3])px\]/)
+    expect(cls).toMatch(/\bw-full\b/)
+    expect(cls).toMatch(/\bshrink-0\b/)
+    const bar = handle().querySelector('span')!
+    expect(bar.className).toMatch(/\bh-1\b/)
+    expect(bar.className).toMatch(/\bw-10\b/)
+    expect(handle().getAttribute('role')).toBe('button')
+    expect(handle().getAttribute('tabindex')).toBe('0')
+  })
+
+  /**
+   * 🛑 THE RENDERED HEIGHT CAME FROM THE STYLESHEET, NOT THE COMPONENT. `draft-workspace.css` sets the
+   * handle's min-height inside the phone media query with higher specificity than the utility class,
+   * so changing `min-h-[…]` alone measured 32px in Chromium. Pin the stylesheet rule too.
+   */
+  it('the phone stylesheet does not cap the handle below 44px', async () => {
+    const { readFileSync } = await import('node:fs')
+    const css = readFileSync('components/app/draft-room/draft-workspace.css', 'utf8')
+    const rules = [...css.matchAll(/\[data-testid="draft-mobile-tray-handle"\]\{min-height:(\d+)px\}/g)].map((m) => Number(m[1]))
+    expect(rules.length).toBeGreaterThan(0)
+    for (const px of rules) expect(px).toBeGreaterThanOrEqual(44)
+  })
+
   it('focusing the chat composer expands the tray to full', () => {
     render(<Room initial="chat" />)
     fireEvent.focus(mobile().getByLabelText('message'))

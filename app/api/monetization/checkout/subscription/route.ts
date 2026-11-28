@@ -35,6 +35,9 @@ import {
   calculateDiscountedAmounts,
   findSponsorCoupon,
 } from "@/lib/promotions/sponsorCoupon"
+import { resolvePartnerCheckout } from "@/lib/partner-codes/checkout"
+import { clientIpFromHeaders } from "@/lib/http/clientIp"
+import { PARTNER_CODE_COOKIE } from "@/lib/partner-codes/flags"
 
 type CheckoutSubscriptionBody = {
   sku?: string
@@ -204,6 +207,23 @@ export async function POST(req: Request) {
      * `isFoundingMemberUser` reads nothing at all while the env var is unset.
      */
     const foundingMember = resolvedCouponCode ? false : await isFoundingMemberUser(session.user.id)
+    /*
+     * Commissioner Partner Codes (lib/partner-codes): a typed code that is not a sponsor code may be a
+     * commissioner's, and a buyer who arrived through /join/CODE carries it in a cookie. Either attaches
+     * them to that commissioner; their FIRST subscription gets the friend discount. Off unless
+     * PARTNER_CODES_ENABLED=1 (resolvePartnerCheckout returns `none`).
+     */
+    const partner = await resolvePartnerCheckout({
+      userId: session.user.id,
+      email: session.user.email ?? null,
+      typedCode: resolvedCouponCode ? null : rawCouponCode || null,
+      cookieCode: readCookie(req, PARTNER_CODE_COOKIE),
+      ip: clientIpFromHeaders(req.headers),
+      item,
+    })
+    if (partner.kind === "refused") {
+      return NextResponse.json({ error: partner.message, code: "partner_code_refused" }, { status: 400 })
+    }
     // Canonical checkout: charge is derived from the catalog price id
     // (STRIPE_PRICE_AF_*), guaranteeing charged == displayed catalog price.
     const checkout = await buildStripeCheckoutSessionForSku({
@@ -217,6 +237,8 @@ export async function POST(req: Request) {
       foundingMember,
       entrySource,
       trialDays,
+      partnerCouponId: partner.kind === "discount" ? partner.couponId : null,
+      partnerCodeId: partner.kind === "discount" ? partner.partnerCodeId : null,
     })
     if (!checkout || checkout.purchaseType !== "subscription") {
       return NextResponse.json(
@@ -286,4 +308,19 @@ export async function POST(req: Request) {
     console.error("POST /api/monetization/checkout/subscription error:", error)
     return NextResponse.json({ error: "Checkout failed" }, { status: 500 })
   }
+}
+
+/** One cookie from the request header (not `cookies()`: tests call this route outside a request scope). */
+function readCookie(req: Request, name: string): string | null {
+  for (const part of (req.headers.get("cookie") ?? "").split(";")) {
+    const eq = part.indexOf("=")
+    if (eq > 0 && part.slice(0, eq).trim() === name) {
+      try {
+        return decodeURIComponent(part.slice(eq + 1).trim()) || null
+      } catch {
+        return null
+      }
+    }
+  }
+  return null
 }

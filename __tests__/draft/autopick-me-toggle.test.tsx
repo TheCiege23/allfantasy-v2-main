@@ -198,6 +198,61 @@ describe('AutopickMeToggle — draft like me (AF Pro)', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ enabled: true, mode: 'draft_as_me' })
   })
+
+  it('says where it learned the style, or that it has too little to go on (2026-11-21)', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ style: { ready: false, summary: 'Draft like me needs 10 of your own picks from past drafts and has 2.' } }),
+    })
+    renderToggle({ ...enabledAutopick, mode: 'draft_as_me', isProEligible: true })
+    await waitFor(() => expect(screen.getByTestId('autopick-draft-like-me-summary').textContent).toMatch(/needs 10 of your own picks/))
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/leagues/league-1/draft/autopick/me/style')
+  })
+
+  it('asks nothing about style in the other modes', async () => {
+    renderToggle({ ...enabledAutopick, mode: 'standard', isProEligible: true })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('autopick-draft-like-me-summary')).toBeNull()
+  })
+})
+
+describe('AutopickMeToggle — follows the server', () => {
+  // A missed clock turns "Auto-pick me" on from the server (instantAutopick.ts). Seen live on
+  // 2026-11-25: the seat read AUTO while this switch stayed unchecked, so it could not be turned off.
+  it('checks the switch when the server turns auto-pick on', () => {
+    const props = { leagueId: 'league-1', onUpdate: vi.fn() }
+    const { rerender } = render(<AutopickMeToggle viewerAutopick={baseAutopick} {...props} />)
+    const checkbox = screen.getByTestId('autopick-me-enabled') as HTMLInputElement
+    expect(checkbox.checked).toBe(false)
+    rerender(<AutopickMeToggle viewerAutopick={{ ...baseAutopick, enabled: true, updatedAt: '2026-11-25T14:08:38.000Z' }} {...props} />)
+    expect(checkbox.checked).toBe(true)
+  })
+
+  it('lets the manager switch it back off after the server turned it on', async () => {
+    const props = { leagueId: 'league-1', onUpdate: vi.fn() }
+    const { rerender } = render(<AutopickMeToggle viewerAutopick={baseAutopick} {...props} />)
+    rerender(<AutopickMeToggle viewerAutopick={{ ...baseAutopick, enabled: true, updatedAt: '2026-11-25T14:08:38.000Z' }} {...props} />)
+    mockFetchOk({ ...baseAutopick, enabled: false, updatedAt: '2026-11-25T14:09:00.000Z' })
+    fireEvent.click(screen.getByTestId('autopick-me-enabled'))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ enabled: false, mode: 'standard' })
+    await waitFor(() => expect((screen.getByTestId('autopick-me-enabled') as HTMLInputElement).checked).toBe(false))
+  })
+
+  it('ignores a snapshot older than the last click, so a poll in flight cannot undo it', async () => {
+    const props = { leagueId: 'league-1', onUpdate: vi.fn() }
+    const stale = { ...baseAutopick, enabled: false, updatedAt: '2026-11-25T14:00:00.000Z' }
+    const { rerender } = render(<AutopickMeToggle viewerAutopick={stale} {...props} />)
+    mockFetchOk({ ...baseAutopick, enabled: true, updatedAt: '2026-11-25T14:05:00.000Z' })
+    const checkbox = screen.getByTestId('autopick-me-enabled') as HTMLInputElement
+    fireEvent.click(checkbox)
+    await waitFor(() => expect(props.onUpdate).toHaveBeenCalledTimes(1))
+    // The parent applies the save, then an older poll lands, then the next poll catches up.
+    rerender(<AutopickMeToggle viewerAutopick={{ ...baseAutopick, enabled: true, updatedAt: '2026-11-25T14:05:00.000Z' }} {...props} />)
+    rerender(<AutopickMeToggle viewerAutopick={stale} {...props} />)
+    expect(checkbox.checked).toBe(true)
+  })
 })
 
 describe('AutopickMeToggle — success response', () => {

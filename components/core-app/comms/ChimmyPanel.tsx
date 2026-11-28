@@ -1175,7 +1175,6 @@ export function ChimmyPanel({
 
   return (
     <div className="af-cm-panel" data-chimmy="true" ref={panelRef}>
-      {source !== 'messages_ai' ? <Link className="af-cm-expand" href={'/chimmy/chat' + (scopeId ? '?leagueId=' + encodeURIComponent(scopeId) : '')}>Open full-page analysis ↗</Link> : null}
       {/* Scope selector. The current scope is always visible, by contract. */}
       <div className="af-cm-scope">
         <span className="af-cm-scope-label">Scope</span>
@@ -1183,8 +1182,23 @@ export function ChimmyPanel({
           A searchable picker, not chips. The chips showed the first six leagues
           and silently dropped the rest — on a 60-league account, most leagues
           could not be scoped to from here at all.
+
+          "Open full-page analysis" was a row of its own above this (2026-11-05: Chimmy had five bands
+          before you could type); it is an icon beside the league now, same link, same words as its name.
         */}
-        <LeagueScopePicker leagues={leagues} value={scopeId} onChange={(id) => moveToScope(id)} allowGlobal />
+        <div className="af-cm-scope-row">
+          <LeagueScopePicker leagues={leagues} value={scopeId} onChange={(id) => moveToScope(id)} allowGlobal />
+          {source !== 'messages_ai' ? (
+            <Link
+              className="af-cm-expand af-cm-expand-icon"
+              href={'/chimmy/chat' + (scopeId ? '?leagueId=' + encodeURIComponent(scopeId) : '')}
+              aria-label="Open full-page analysis"
+              title="Open full-page analysis"
+            >
+              <ArrowUpRight size={18} aria-hidden />
+            </Link>
+          ) : null}
+        </div>
         {/*
           * ⚠ "ONLY" WAS A PROMISE THE SYSTEM DELIBERATELY DOES NOT KEEP. Scoped
           * to KBFL and asked "who can I pick up in the zombie league?", Chimmy
@@ -1314,7 +1328,6 @@ export function ChimmyPanel({
                   <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
                   {readChimmyGif(t.gif) ? <ChimmyGif gif={readChimmyGif(t.gif)!} /> : null}
                   {readProUpsell(t.proUpsell).length > 0 ? <ChimmyProUpsell tools={readProUpsell(t.proUpsell)} /> : null}
-                  <ChimmyCopyActions text={t.text} />
                 </>
               ) : (
                 <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <ChimmyScreenshot src={t.imagePreview} name={t.imageName} /> : null}</div>
@@ -1445,17 +1458,27 @@ export function ChimmyPanel({
                 Thumbs up / down — delivered answers only. Tagged with the tools the answer used
                 and the screen it was asked from, so a rating joins to the question it is about.
               */}
-              {t.role === 'chimmy' && t.answerId ? (
-                <ChimmyAnswerRating
-                  answerId={t.answerId}
-                  rating={t.rating ?? null}
-                  leagueId={(t.grounding?.grounded === true ? t.grounding.leagueId : null) ?? scopeId ?? null}
-                  surface={drawerFeedbackSurface(pageSurface, Boolean(scopeId))}
-                  mode={t.mode ?? answerMode}
-                  entry={questionEntry({ coreSurface: pageSurface, source })}
-                  tools={t.tools ?? []}
-                  onRated={(rating) => setTurns((all) => all.map((x) => (x.id === t.id ? { ...x, rating } : x)))}
-                />
+              {/*
+                Copy and the thumbs share ONE row at the foot of an answer (2026-11-24, the simplify pass).
+                They were two rows — Copy under the prose, the thumbs at the bottom — around four more, so an
+                answer carried seven rows of controls. Copy is offered for a written answer only, as before.
+              */}
+              {t.role === 'chimmy' && (t.answerId || !readDeepAnalysisPreview(t.analysisPreview)) ? (
+                <div className="af-cm-answer-foot" data-testid="chimmy-answer-foot">
+                  {!readDeepAnalysisPreview(t.analysisPreview) ? <ChimmyCopyActions text={t.text} /> : null}
+                  {t.answerId ? (
+                    <ChimmyAnswerRating
+                      answerId={t.answerId}
+                      rating={t.rating ?? null}
+                      leagueId={(t.grounding?.grounded === true ? t.grounding.leagueId : null) ?? scopeId ?? null}
+                      surface={drawerFeedbackSurface(pageSurface, Boolean(scopeId))}
+                      mode={t.mode ?? answerMode}
+                      entry={questionEntry({ coreSurface: pageSurface, source })}
+                      tools={t.tools ?? []}
+                      onRated={(rating) => setTurns((all) => all.map((x) => (x.id === t.id ? { ...x, rating } : x)))}
+                    />
+                  ) : null}
+                </div>
               ) : null}
 
               {/*

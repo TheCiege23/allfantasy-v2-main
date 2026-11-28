@@ -110,7 +110,7 @@ async function scanLeague(league: LeagueRow, now: Date): Promise<LeagueScan | nu
   return { seasonId: season.id, season: season.season, week, teams: out }
 }
 
-const native = (league: LeagueRow) => resolveWriteAuthority(league.platform) === 'NATIVE'
+const native = (league: LeagueRow) => resolveWriteAuthority(league) === 'NATIVE'
 
 export type IrAutoMoveView =
   | { supported: false }

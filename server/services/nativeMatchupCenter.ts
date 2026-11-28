@@ -8,8 +8,14 @@
  * each player counted for when the week has no stored player rows (playoff weeks store none).
  */
 
+import { applyInjuryStatuses } from '@/lib/redraft/rosterInjuryStatus'
+import { resolveStoredHeadshotsBatch } from '@/lib/draft-room/storedPickHeadshot'
 import { prisma } from '@/lib/prisma'
+import { nbaSurvivorStarterPoints } from '@/lib/survivor/survivorNbaWeeklyScoring'
+import { loadNbaRosterOutlook } from '@/lib/redraft/nbaRosterOutlook'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { runsOnAllFantasy } from '@/lib/league/switching/switchingLeague'
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
 import { NATIVE_PLAYER_SCORE_SOURCE, nativeRosterSeat } from '@/lib/redraft/nativePlayerWeeklyScores'
@@ -43,7 +49,9 @@ import {
   type NativeBoardGame,
   type NativeMatchupExtras,
   type NativeStarter,
+  type NativeTeamProjection,
   type NativeWeekGame,
+  withBoardProjections,
 } from '@/lib/matchup-center/nativeMatchupModel'
 
 type LeagueRow = {
@@ -79,9 +87,16 @@ const record = (v: unknown): Record<string, unknown> =>
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
-/** The season the Matchup tab reads for this league, or null when it has none (so it is not native-run). */
+/**
+ * The season the Matchup tab reads for this league, or null when it has none (so it is not native-run).
+ *
+ * An imported league that its commissioner made official on AllFantasy is read here too: from then on
+ * AllFantasy scores it, and its schedule was copied into `RedraftMatchup` before it went official
+ * (lib/league/switching/takeOverSchedule.ts). The platform's `WeeklyMatchup` rows are shared with every
+ * other user who imported the same league, so AllFantasy never writes its scores there.
+ */
 export async function loadNativeMatchupSeason(league: LeagueRow, askedYear?: number | null): Promise<SeasonRow | null> {
-  if (!isNativePlatform(league.platform)) return null
+  if (!runsOnAllFantasy(league)) return null
   const seasons = await prisma.redraftSeason.findMany({
     where: { leagueId: league.id },
     select: {
@@ -95,6 +110,20 @@ export async function loadNativeMatchupSeason(league: LeagueRow, askedYear?: num
     },
   })
   return pickNativeSeason(seasons, askedYear ?? null)
+}
+
+/**
+ * The viewer's team in this season. A native team names its AllFantasy owner. An imported team names
+ * the PLATFORM's user, so in an official imported league the viewer is found through their `Roster`
+ * (the team they claimed, or the one they switched to), the way every other screen finds it.
+ */
+export async function viewerSeasonRosterId(league: LeagueRow, season: SeasonRow, userId: string): Promise<string | null> {
+  if (!isNativePlatform(league.platform)) {
+    const viewing = await resolveViewingRoster(league.id, userId).catch(() => null)
+    const id = viewing?.redraftRosterId ?? null
+    if (id && season.rosters.some((r) => r.id === id)) return id
+  }
+  return pickViewerRosterId(season.rosters, userId)
 }
 
 /** Every game of one week: the regular-season schedule, plus any playoff round played that week. */
@@ -190,7 +219,7 @@ function weekScoringMode(settings: unknown, seasonYear: number, week: number): s
   return String(s.scoring_mode ?? record(s.scoringSettings).scoringMode ?? 'points')
 }
 
-type PlayerScore = { playerId: string; points: number; isStarter: boolean }
+type PlayerScore = { playerId: string; points: number; isStarter: boolean; isFinalized?: boolean }
 
 /**
  * What each player counted for in one team's week, or null when the week has not been scored for it.
@@ -221,12 +250,12 @@ async function loadWeekPlayerScores(args: {
           source: NATIVE_PLAYER_SCORE_SOURCE,
           rosterId: { in: [...seatOf.values()] },
         },
-        select: { playerId: true, rosterId: true, points: true, isStarter: true },
+        select: { playerId: true, rosterId: true, points: true, isStarter: true, isFinalized: true },
       })
       .catch(() => [])
     for (const [rosterId, seat] of seatOf) {
       const mine = rows.filter((r) => r.rosterId === seat)
-      if (mine.length) out.set(rosterId, mine.map((r) => ({ playerId: r.playerId, points: r.points, isStarter: r.isStarter })))
+      if (mine.length) out.set(rosterId, mine.map((r) => ({ playerId: r.playerId, points: r.points, isStarter: r.isStarter, isFinalized: r.isFinalized })))
     }
   }
   for (const rosterId of args.redraftRosterIds) {
@@ -256,15 +285,6 @@ function slotGameStatus(game: NativeWeekGame | null, hasPoints: boolean): Matchu
 }
 
 /** The flat per-position estimate the tab has always used where no real projection exists. */
-function positionProjectionFallback(position: string): number {
-  const p = position.toUpperCase()
-  if (p === 'QB') return 17
-  if (p === 'RB') return 12
-  if (p === 'WR' || p === 'TE') return 10
-  if (p === 'K') return 8
-  if (p === 'DST' || p === 'DEF') return 9
-  return 10
-}
 
 export type NativeMatchupCenterPayload = MatchupCenterPayload & { native: NativeMatchupExtras }
 
@@ -284,7 +304,7 @@ export async function buildNativeMatchupCenterPayload(params: {
   const season = await loadNativeMatchupSeason(league, params.season ?? league.season)
   if (!season) return null
 
-  const myRosterId = pickViewerRosterId(season.rosters, params.viewerUserId)
+  const myRosterId = await viewerSeasonRosterId(league, season, params.viewerUserId)
   if (!myRosterId) return { error: 'Roster not found', status: 404, code: 'NO_CLAIMED_TEAM' }
 
   const week = nativeMatchupWeek(params.week, season.currentWeek)
@@ -327,7 +347,42 @@ export async function buildNativeMatchupCenterPayload(params: {
   }
   const myStarters = startersOf(myRosterId)
   const oppStarters = oppRosterId ? startersOf(oppRosterId) : []
-  const injuryOf = new Map(players.filter((p) => p.droppedAt == null).map((p) => [`${p.rosterId}|${p.playerId}`, p.injuryStatus]))
+  /*
+   * 🛑 THE STORED STATUS IS STALE BY CONSTRUCTION (2026-11-24). `RedraftRosterPlayer.injuryStatus` is a
+   * snapshot from draft/import time; the roster route already discards it for the live `SportsInjury`
+   * designation (app/api/redraft/roster/route.ts), and the matchup tab read it raw. Same read here: the
+   * snapshot is cleared and only a live row (id + name agreeing, see rosterInjuryStatus.ts) sets a status.
+   */
+  const activeRows = players.filter((p) => p.droppedAt == null)
+  const injuryOf = new Map<string, string | null>()
+  try {
+    const starterIds = new Set([...myStarters, ...oppStarters].map((s) => s.playerId))
+    const wanted = activeRows.filter((p) => starterIds.has(p.playerId))
+    const leagueSport = String(league.sport ?? 'NFL').toUpperCase()
+    if (wanted.length > 0) {
+      const rows = await prisma.sportsInjury.findMany({
+        where: {
+          sport: leagueSport,
+          expiresAt: { gte: new Date() },
+          AND: [
+            { OR: [{ playerId: { in: wanted.map((p) => p.playerId) } }, { playerName: { in: wanted.map((p) => p.playerName) } }] },
+            { OR: [{ season: season.season }, { season: null }] },
+            // An NFL designation is for a week; a daily sport's rows are not week-tagged.
+            ...(leagueSport === 'NFL' ? [{ OR: [{ week }, { week: null }] }] : []),
+          ],
+        },
+        orderBy: [{ fetchedAt: 'desc' }],
+        take: Math.max(50, wanted.length * 3),
+      })
+      const stamped = applyInjuryStatuses(
+        wanted.map((p) => ({ rosterId: p.rosterId, playerId: p.playerId, playerName: p.playerName, sport: leagueSport, injuryStatus: null as string | null })),
+        rows,
+      )
+      for (const p of stamped) injuryOf.set(`${p.rosterId}|${p.playerId}`, p.injuryStatus ?? null)
+    }
+  } catch {
+    // No live read: no flag, rather than last month's.
+  }
 
   const sport = normalizeToSupportedSport(String(league.sport)) ?? 'NFL'
   let mediaMap: Awaited<ReturnType<typeof attachPlayerMediaBatch>> | null = null
@@ -338,7 +393,13 @@ export async function buildNativeMatchupCenterPayload(params: {
   } catch {
     mediaMap = null
   }
+  // Outside the NFL a hosted league's ids are Rolling Insights ids, which collide with Sleeper ids, so the
+  // photo comes from the RI row (name-checked) and the Sleeper-id media is never used for it.
+  const storedHeadshots = sport === 'NFL'
+    ? new Map<string, string>()
+    : await resolveStoredHeadshotsBatch(sport, [...myStarters, ...oppStarters].map((p) => ({ playerId: p.playerId, playerName: p.name, team: p.team ?? null })))
   const afByPlayer = await loadMatchupAfProjections({
+    leagueId: league.id,
     playerIds: [...myStarters, ...oppStarters].map((p) => p.playerId),
     season: season.season,
     week,
@@ -354,10 +415,38 @@ export async function buildNativeMatchupCenterPayload(params: {
     players: [...myStarters, ...oppStarters].map((p) => ({ id: p.playerId, team: p.team ?? null, position: p.position ?? null })),
     week,
   }).catch((): Awaited<ReturnType<typeof loadNflRosterOutlook>> => new Map())
+  // NBA: the same picture for a daily sport — next game, its tip-off, the week's game count, crests
+  // and the opponent's rank against the position (./nbaRosterOutlook.ts).
+  if (sport === 'NBA') {
+    const nba = await loadNbaRosterOutlook(prisma, {
+      league: { sport: String(league.sport), season: season.season },
+      players: [...myStarters, ...oppStarters].map((p) => ({ id: p.playerId, team: p.team ?? null, position: p.position ?? null })),
+      week,
+    }).catch((): Awaited<ReturnType<typeof loadNbaRosterOutlook>> => new Map())
+    for (const [id, o] of nba) if (!outlook.has(id)) outlook.set(id, o)
+  }
+
+  /*
+   * An NBA Survivor league plays no head-to-head game, so nothing here writes per-player points and every
+   * starter read "—" all week (owner report, 2026-11-24). Its points are Survivor's own (one game per
+   * player, or every game), from the same scorer as the weekly total: final once his NBA week is
+   * finalized, otherwise what his played games are worth so far.
+   */
+  let survivorPoints: Map<string, { points: number; final: boolean; games: number }> | null = null
+  if (sport === 'NBA' && league.leagueVariant === 'survivor') {
+    try {
+      const legacy = await prisma.roster.findFirst({ where: { leagueId: league.id, redraftRosterId: myRosterId }, select: { id: true } })
+      survivorPoints = legacy ? await nbaSurvivorStarterPoints({ leagueId: league.id, legacyRosterId: legacy.id, week, season: season.season }) : null
+    } catch {
+      // Points are a read; the matchup stands without them.
+      survivorPoints = null
+    }
+  }
 
   const toSlot = (rosterId: string, row: NativeStarter): MatchupPlayerSlot => {
-    const pts = row.points ?? 0
-    const status = slotGameStatus(game, row.points != null)
+    const sv = rosterId === myRosterId ? survivorPoints?.get(row.playerId) : undefined
+    const pts = sv ? sv.points : row.points ?? 0
+    const status = sv ? (sv.final ? 'final' : sv.games > 0 ? 'live' : 'upcoming') : slotGameStatus(game, row.points != null)
     const o = outlook.get(row.playerId)
     return sanitizeStarterRow({
       playerId: row.playerId,
@@ -365,11 +454,12 @@ export async function buildNativeMatchupCenterPayload(params: {
       position: row.position,
       team: row.team,
       opponent: o?.opponent ?? null,
-      headshotUrl: mediaMap?.get(row.playerId)?.media.headshotUrl ?? o?.headshotUrl ?? null,
+      headshotUrl: sport === 'NFL'
+        ? mediaMap?.get(row.playerId)?.media.headshotUrl ?? o?.headshotUrl ?? null
+        : storedHeadshots.get(row.playerId) ?? o?.headshotUrl ?? null,
       currentPoints: pts,
-      // No provider projection is stored for a native lineup: the flat estimate, marked as one.
-      projectedPoints: Math.max(pts, positionProjectionFallback(row.position)),
-      hasRealProjection: false,
+      projectedPoints: afByPlayer.get(row.playerId) ?? pts,
+      hasRealProjection: afByPlayer.has(row.playerId),
       afProjectedPoints: afByPlayer.get(row.playerId) ?? null,
       injuryStatus: injuryOf.get(`${rosterId}|${row.playerId}`) ?? null,
       newsBlurb: null,
@@ -378,7 +468,7 @@ export async function buildNativeMatchupCenterPayload(params: {
       gameLabel: status === 'final' ? 'Final' : row.points != null && pts !== 0 ? 'Scoring' : 'Scheduled',
       aiInsight: null,
       outlook: o
-        ? { homeAway: o.homeAway, kickoffTimeIso: o.kickoffTimeIso, opponentRank: o.opponentRank, teamLogoUrl: o.teamLogoUrl, byeWeek: o.byeWeek, weather: o.weather, providerProjection: o.projectionSource === 'sleeper' && o.projectedPoints != null ? { points: o.projectedPoints, source: 'sleeper' } : null }
+        ? { homeAway: o.homeAway, kickoffTimeIso: o.kickoffTimeIso, opponentRank: o.opponentRank, teamLogoUrl: o.teamLogoUrl, byeWeek: o.byeWeek, gamesThisWeek: o.gamesThisWeek ?? null, weather: o.weather, providerProjection: o.projectionSource === 'sleeper' && o.projectedPoints != null ? { points: o.projectedPoints, source: 'sleeper' } : null }
         : null,
     })
   }
@@ -466,10 +556,61 @@ export async function loadNativeScoreboard(params: {
   const week = nativeMatchupWeek(params.week, season.currentWeek)
   // Rotisserie has no weekly opponent: its schedule rows are scoring containers pinned at 0-0.
   if (weekScoringMode(params.league.settings, season.season, week) === 'roto') return { season: season.season, week, games: [] }
-  const games = await loadNativeWeekGames(params.league, season, week)
-  return {
+  const [games, viewerRosterId] = await Promise.all([
+    loadNativeWeekGames(params.league, season, week),
+    viewerSeasonRosterId(params.league, season, params.viewerUserId),
+  ])
+  const board = buildNativeBoard(games, teamNameOf(season), viewerRosterId)
+  // Points weeks only: a category league's score is categories won, which no points projection predicts.
+  if (weekScoringMode(params.league.settings, season.season, week) !== 'points' || board.length === 0) {
+    return { season: season.season, week, games: board }
+  }
+  const projections = await loadBoardTeamProjections(params.league, season, week, board).catch(() => new Map<string, NativeTeamProjection>())
+  return { season: season.season, week, games: withBoardProjections(board, projections) }
+}
+
+/**
+ * Every playing team's AF projection for the week: its starters that week (the saved lineup), each
+ * projected in this league's scoring by the same reader the matchup card uses — so the scoreboard's
+ * number for the viewer's team matches the "Proj" on their own matchup. Three reads for the whole league.
+ */
+async function loadBoardTeamProjections(
+  league: LeagueRow,
+  season: SeasonRow,
+  week: number,
+  board: readonly NativeBoardGame[],
+): Promise<Map<string, NativeTeamProjection>> {
+  const rosterIds = [...new Set(board.flatMap((g) => [g.home.rosterId, ...(g.away ? [g.away.rosterId] : [])]))]
+  const [players, lineups] = await Promise.all([
+    prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: { in: rosterIds }, droppedAt: null },
+      select: { rosterId: true, playerId: true, slotType: true, position: true },
+    }),
+    loadWeekLineups(prisma, { redraftRosterIds: rosterIds, season: season.season, week }),
+  ])
+  const startersByRoster = new Map<string, string[]>()
+  for (const p of players) {
+    if (!isNflRedraftScoringStarterSlot(weekSlotType(p, lineups))) continue
+    const list = startersByRoster.get(p.rosterId) ?? []
+    list.push(p.playerId)
+    startersByRoster.set(p.rosterId, list)
+  }
+  const allStarters = [...startersByRoster.values()].flat()
+  if (allStarters.length === 0) return new Map()
+  const af = await loadMatchupAfProjections({
+    leagueId: league.id,
+    playerIds: allStarters,
     season: season.season,
     week,
-    games: buildNativeBoard(games, teamNameOf(season), pickViewerRosterId(season.rosters, params.viewerUserId)),
+    sport: String(league.sport),
+    platform: league.platform ?? null,
+    leagueSettings: league.settings,
+  })
+  const out = new Map<string, NativeTeamProjection>()
+  for (const [rosterId, ids] of startersByRoster) {
+    const t = afSideTotal(ids.map((id) => ({ afProjectedPoints: af.get(id) ?? null })))
+    if (t.total == null) continue
+    out.set(rosterId, { total: t.total, complete: t.from === ids.length })
   }
+  return out
 }

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { leagueWorkspaceHref, leagueWorkspaceMode } from '@/lib/league/league-workspace-navigation'
+import { platformOnlyAuthority } from '@/lib/league/write-authority'
 import { useEffect, useRef } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -78,7 +79,7 @@ export function OpenLeagueLink({ leagueId, platform = null }: { leagueId: string
   const { language } = useOptionalLanguage()
   const m = useMessages(leagueTabsMessages)
   return (
-    <Link className="af-lt-workspace-open" href={leagueWorkspaceHref(leagueId)} title={leagueWorkspaceMode(platform, language).description}>
+    <Link className="af-lt-workspace-open" href={leagueWorkspaceHref(leagueId)} title={leagueWorkspaceMode(platformOnlyAuthority(platform), language).description}>
       <span className="af-lt-workspace-label">{m.openLeague}</span> <span aria-hidden>↗</span>
     </Link>
   )
@@ -223,7 +224,7 @@ export function LeagueTabs({
           </div>
         )
       })()}
-      {activeKey === 'home' ? <p className="af-lt-workspace-note">{leagueWorkspaceMode(platform, language).description}</p> : null}
+      {activeKey === 'home' ? <p className="af-lt-workspace-note">{leagueWorkspaceMode(platformOnlyAuthority(platform), language).description}</p> : null}
 
       {/*
         🛑 A TAB THAT VANISHES WITHOUT A REASON IS THE BUG THIS GATING CREATED.

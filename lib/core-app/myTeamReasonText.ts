@@ -33,8 +33,8 @@ const EXACT_ES: Record<string, string> = {
   'Your current Sleeper lineup could not be verified. Open Sleeper to check your starters, then refresh.':
     'No se pudo verificar tu alineación actual de Sleeper. Abre Sleeper para revisar tus titulares y luego actualiza.',
   'no roster rows imported for your team in this league': 'no se importaron jugadores de tu equipo en esta liga',
-  'We need prices for most of this league’s rosters to rank yours against them, and we don’t have them yet.':
-    'Necesitamos valores para la mayoría de las plantillas de esta liga para comparar la tuya con ellas, y aún no los tenemos.',
+  'Ranked once most rosters in this league have prices.':
+    'Se clasifica cuando la mayoría de las plantillas de esta liga tengan valores.',
   'no starters to project on this roster': 'no hay titulares que proyectar en esta plantilla',
   'no weekly projection feed has been ingested yet': 'aún no se ha importado el feed semanal de proyecciones',
   'no starting lineup recorded on this roster': 'no hay una alineación titular registrada en esta plantilla',

@@ -178,6 +178,12 @@ describe('the hub headline', () => {
     expect(onTabChange).toHaveBeenCalledWith('notifications')
   })
 
+  it('has no intro sentence under the headline (2026-11-24, the simplify pass)', () => {
+    const { container } = hub()
+    expect(container.querySelector('.ns-hubg-intro')).toBeNull()
+    expect(container.textContent).not.toContain('Search, or pick a section below')
+  })
+
   it('waits for the plan before claiming anything about it', () => {
     ents.value = { ...SUPREME, loading: true, snapshot: null }
     hub()

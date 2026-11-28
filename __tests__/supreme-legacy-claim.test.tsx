@@ -5,12 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 
 /*
- * 🛑 AF SUPREME IS AF PRO + AF COMMISSIONER. IT DOES NOT INCLUDE AF LEGACY.
- * SUPREME_INCLUDED_PLAN_IDS has been [pro, commissioner] since Legacy was split out, and
- * lib/monetization/__tests__/planCopyHasNoTokenClaims.test.ts guards the catalog and planIncludes.
- * The claim survived anyway in five other places customers read — /upgrade's "Why Subscribe", the
- * Supreme spotlight, /all-access, the Survivor command center — because each guard read only the
- * files its author had just fixed. This one reads every .tsx under app/ and components/.
+ * 🛑 AF SUPREME IS AF PRO + AF COMMISSIONER + AF LEGACY (owner's decision 2026-11-27).
+ * From 2026-10-25 to 2026-11-27 SUPREME_INCLUDED_PLAN_IDS was [pro, commissioner] and this file guarded
+ * the opposite claim. It is inverted now: no customer-facing file may say Legacy is sold separately or
+ * not included in Supreme — the five places that said so (/upgrade's "Why Subscribe", the Supreme
+ * spotlight, /all-access, the Survivor command center, the World Cup card) now list all three plans.
+ * It still reads every .tsx under app/ and components/, for the reason it always did.
  */
 
 vi.mock('next/navigation', () => ({
@@ -61,16 +61,16 @@ function withoutComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'`])\/\/.*$/gm, '$1')
 }
 
-const SUPREME_INCLUDES_LEGACY = [
-  /Pro\s*\+\s*(AF\s+)?Commissioner\s*\+\s*(AF\s+)?Legacy/i,
-  /Pro,\s*(AF\s+)?Commissioner,?\s*(and|&)\s*(AF\s+)?Legacy/i,
-  /Legacy\s+(class\s+access|stack)/i,
-  /all premium plan families/i,
+const SUPREME_EXCLUDES_LEGACY = [
+  /AF Legacy is sold separately/i,
+  /Legacy is not included/i,
+  /AF Legacy is sold on its own/i,
+  /does not include (AF )?Legacy/i,
 ]
 
-describe('no customer-facing file says Supreme includes AF Legacy', () => {
+describe('no customer-facing file says Supreme leaves out AF Legacy', () => {
   it('the precondition this guard depends on still holds', () => {
-    expect(SUPREME_INCLUDED_PLAN_IDS).not.toContain('war_room')
+    expect(SUPREME_INCLUDED_PLAN_IDS).toContain('war_room')
   })
 
   const files = [...tsxFiles(join(ROOT, 'app')), ...tsxFiles(join(ROOT, 'components'))]
@@ -78,15 +78,16 @@ describe('no customer-facing file says Supreme includes AF Legacy', () => {
   it('scans a real file set (guards against a vacuous pass)', () => {
     expect(files.length).toBeGreaterThan(200)
     // The positive control: the pattern set matches the claim as it used to read.
-    expect(SUPREME_INCLUDES_LEGACY.some((re) => re.test('the full Pro + Commissioner + AF Legacy stack'))).toBe(true)
-    expect(SUPREME_INCLUDES_LEGACY.some((re) => re.test('(Pro + Commissioner + Legacy\n class access)'))).toBe(true)
+    // The positive control: the pattern set matches the claim as it read until 2026-11-27.
+    expect(SUPREME_EXCLUDES_LEGACY.some((re) => re.test('AF Pro and AF Commissioner in one subscription. AF Legacy is sold separately.'))).toBe(true)
+    expect(SUPREME_EXCLUDES_LEGACY.some((re) => re.test('AF Legacy is not included — it is sold on its own.'))).toBe(true)
   })
 
   it('finds no such claim', () => {
     const hits: string[] = []
     for (const file of files) {
       const src = withoutComments(readFileSync(file, 'utf8'))
-      for (const re of SUPREME_INCLUDES_LEGACY) {
+      for (const re of SUPREME_EXCLUDES_LEGACY) {
         const m = src.match(re)
         if (m) hits.push(`${relative(ROOT, file)}: "${m[0]}"`)
       }
@@ -96,23 +97,23 @@ describe('no customer-facing file says Supreme includes AF Legacy', () => {
 })
 
 describe('the Supreme surfaces say what Supreme is', () => {
-  it('the /upgrade?plan=supreme spotlight lists Pro and Commissioner only, at the catalog prices', () => {
+  it('the /upgrade?plan=supreme spotlight lists Pro, Commissioner and Legacy, at the catalog prices', () => {
     render(<AFSupremeBundleSpotlight />)
-    expect(screen.queryByTestId('af-supreme-includes-af-legacy')).toBeNull()
+    expect(screen.getByTestId('af-supreme-includes-af-legacy')).toBeTruthy()
     expect(screen.getByTestId('af-supreme-includes-af-pro')).toBeTruthy()
     expect(screen.getByTestId('af-supreme-includes-af-commissioner')).toBeTruthy()
-    expect(screen.queryByTestId('af-supreme-switch-from-war-room')).toBeNull()
+    expect(screen.getByTestId('af-supreme-switch-from-war-room')).toBeTruthy()
     const monthly = getMonetizationCatalogItemBySku('af_supreme_monthly')!.amountUsd.toFixed(2)
     const yearly = getMonetizationCatalogItemBySku('af_supreme_yearly')!.amountUsd.toFixed(2)
     expect(screen.getByTestId('af-supreme-price-monthly').textContent).toBe(`$${monthly} monthly`)
     expect(screen.getByTestId('af-supreme-price-yearly').textContent).toBe(`$${yearly} yearly`)
   })
 
-  it('"Why Subscribe" says AF Legacy is sold separately', () => {
+  it('"Why Subscribe" says AF Supreme includes AF Legacy', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
     render(<MonetizationPurchaseSurface pagePath="/pricing" title="t" subtitle="s" conversionHero />)
-    const line = screen.getByText(/AF Pro and AF Commissioner in one subscription/)
-    expect(line.textContent).toMatch(/AF Legacy is sold separately/)
+    const line = screen.getByText(/AF Pro, AF Commissioner and AF Legacy in one subscription/)
+    expect(line.textContent).not.toMatch(/sold separately/)
   })
 
   it('/pricing metadata names only the plans the page sells', () => {

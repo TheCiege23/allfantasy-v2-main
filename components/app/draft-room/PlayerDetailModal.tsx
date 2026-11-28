@@ -28,6 +28,8 @@ import { NflDraftPoolStatsGroupHeader, NflDraftPoolStatsRow } from '@/components
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import type { PlayerDraftOutlook } from '@/lib/draft-room/playerDraftOutlook'
 import { PlayerDraftOutlookSection } from './PlayerDraftOutlookSection'
+import PlayerGameLogTable, { gameLogSupported } from '@/components/player-game-log/PlayerGameLogTable'
+import { NcaabSeasonsSection } from './NcaabSeasonsSection'
 
 interface PlayerDetailPlayer {
   id?: string | null
@@ -45,6 +47,10 @@ interface PlayerDetailPlayer {
   yearsExp?: number | null
   college?: string | null
   jersey?: number | null
+  /** A college player's transfer-portal move, as one line (lib/devy/portalMoves.ts). */
+  transferNote?: string | null
+  /** A college football player's place at his school by usage, not a published depth chart (lib/college/usageDepth.ts). */
+  depthNote?: string | null
 }
 
 interface LeagueContext {
@@ -54,6 +60,8 @@ interface LeagueContext {
   rosteredByTeamName?: string | null
   /** 'draft' | 'trade' | 'waiver' | 'import' */
   acquiredVia?: string | null
+  /** Why Chimmy auto-picked this player for that team, when it did. */
+  autoPickReason?: string | null
 }
 
 /** Live digest from `/draft/assistant-context` mapped to this player / league. */
@@ -90,6 +98,8 @@ interface PlayerDetailModalProps {
   nflDraftProjectionSplits?: NflDraftProjectionSplits | null
   /** Live draft: survival to the viewer's next pick, falling, who's circling. */
   draftOutlook?: PlayerDraftOutlook | null
+  /** The draft's league: the box-score game log scores each game on its settings (members only). */
+  scoringLeagueId?: string | null
 }
 
 /** Matches lib/player-card-analytics/types.ts PlayerCardAnalyticsPayload */
@@ -220,6 +230,39 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
   )
   const [activeYear, setActiveYear] = useState<number>(currentYear)
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null)
+  // Bio and news from Postgres (/api/players/card, 2026-11-21): the board and pool pass little or no
+  // bio, and the analytics payload has no news, so every card showed dashes and "No recent news."
+  const [storedCard, setStoredCard] = useState<{
+    bio?: { age: number | null; heightIn: number | null; weightLbs: number | null; yearsExp: number | null; college: string | null }
+    news?: Array<{ title: string; body: string | null; source: string | null; publishedAt: string | null; url: string | null }>
+  } | null>(null)
+  const [cardLoading, setCardLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open || !player?.name) return
+    let alive = true
+    setStoredCard(null)
+    setCardLoading(true)
+    const q = new URLSearchParams({ sport: String(sport ?? ''), name: player.name })
+    if (player.id) q.set('playerId', String(player.id))
+    if (player.position) q.set('position', String(player.position))
+    if (player.team) q.set('team', String(player.team))
+    Promise.resolve()
+      .then(() => fetch(`/api/players/card?${q.toString()}`))
+      .then(async (r) => (r?.ok ? r.json() : null))
+      .then((body) => {
+        if (alive) setStoredCard(body)
+      })
+      .catch(() => {
+        if (alive) setStoredCard(null)
+      })
+      .finally(() => {
+        if (alive) setCardLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [open, player?.name, player?.id, player?.position, player?.team, sport])
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [gameLogs, setGameLogs] = useState<WeekLog[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
@@ -321,9 +364,34 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
 
   if (!open) return null
 
+  // College basketball has its own seasons and game log, from our stored box scores (NcaabSeasonsSection),
+  // keyed by the Rolling Insights id the draft pool carries. Other sports keep the year tabs below.
+  const isNcaabCard = String(sport).toUpperCase() === 'NCAAB'
+  const ncaabPlayerId = isNcaabCard && /^\d+$/.test(String(player.id ?? '')) ? String(player.id) : null
+  /*
+   * NHL / NBA / MLB / soccer: the per-game box log (final score, TOI first, hits and blocks, fantasy
+   * points on this league's scoring) — the same table as the player card. Outside NFL a pool id is
+   * the Rolling Insights id (normalize-draft-player.ts), and the route answers "not linked" for any
+   * id it cannot resolve rather than guessing by name. NCAAB keeps its own seasons section.
+   */
+  const boxLogRiId =
+    !isNcaabCard && String(sport).toUpperCase() !== 'NFL' && gameLogSupported(sport) && /^\d+$/.test(String(player.id ?? ''))
+      ? String(player.id)
+      : null
   const colSet = columnSetForPosition(player.position)
   const rankings = analytics?.rankings ?? null
-  const news = analytics?.news ?? []
+  const news =
+    analytics?.news && analytics.news.length > 0
+      ? analytics.news
+      : (storedCard?.news ?? []).map((n) => ({ title: n.title, body: n.body ?? undefined, source: n.source ?? undefined, publishedAt: n.publishedAt ?? undefined, url: n.url ?? undefined }))
+  // What the caller passed wins; the stored bio fills what it left empty.
+  const bio = storedCard?.bio
+  const age = player.age ?? bio?.age ?? null
+  const heightIn = player.heightIn ?? bio?.heightIn ?? null
+  const weightLbs = player.weightLbs ?? bio?.weightLbs ?? null
+  const yearsExp = player.yearsExp ?? bio?.yearsExp ?? null
+  const college = player.college ?? bio?.college ?? null
+  const newsLoading = analyticsLoading || cardLoading
 
   // Rendered into <body>: inside a panel (the phone's player tray is `relative z-10`) a
   // `fixed` overlay is trapped in that panel's stacking context and can land under other layers.
@@ -394,15 +462,34 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
 
                 {/* Physical-stat chip bar */}
                 <div className="mt-3 grid max-w-xl grid-cols-3 gap-2 text-center sm:grid-cols-5 sm:gap-3">
-                  <StatChip label="Age" value={player.age ? String(player.age) : '—'} />
-                  <StatChip label="Height" value={formatHeight(player.heightIn)} />
+                  <StatChip label="Age" value={age ? String(age) : '—'} />
+                  <StatChip label="Height" value={formatHeight(heightIn)} />
                   <StatChip
                     label="Weight"
-                    value={player.weightLbs ? `${player.weightLbs} lbs` : '—'}
+                    value={weightLbs ? `${weightLbs} lbs` : '—'}
                   />
-                  <StatChip label="Exp" value={player.yearsExp != null ? String(player.yearsExp) : '—'} />
-                  <StatChip label="College" value={player.college ?? '—'} />
+                  <StatChip label="Exp" value={yearsExp == null ? '—' : yearsExp === 0 ? 'Rookie' : String(yearsExp)} />
+                  <StatChip label="College" value={college ?? '—'} />
                 </div>
+                {player.depthNote ? (
+                  <p
+                    className="mt-2 flex max-w-xl items-start gap-1.5 text-[12px] font-semibold leading-snug text-cyan-100/90"
+                    data-testid="player-detail-depth-note"
+                    title="From his snaps in recent games. College football has no published depth charts."
+                  >
+                    <span className="shrink-0 rounded bg-cyan-400/20 px-1 text-[11px] font-black uppercase tracking-wide">Role</span>
+                    <span>{player.depthNote}</span>
+                  </p>
+                ) : null}
+                {player.transferNote ? (
+                  <p
+                    className="mt-2 inline-flex max-w-xl items-start gap-1.5 rounded-md border border-amber-300/30 bg-amber-400/10 px-2 py-1 text-[12px] font-semibold leading-snug text-amber-100"
+                    data-testid="player-detail-transfer-note"
+                  >
+                    <span className="shrink-0 rounded bg-amber-300/25 px-1 text-[11px] font-black uppercase tracking-wide">Portal</span>
+                    <span>{player.transferNote}</span>
+                  </p>
+                ) : null}
 
                 {/* Rankings bar */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[12px]">
@@ -641,6 +728,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
           ) : null}
 
           {/* Year tabs */}
+          {!isNcaabCard && (
           <div className="flex items-center gap-2 border-b border-white/8 px-6 pt-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Game logs</p>
             <div className="ml-auto flex items-center gap-1">
@@ -663,6 +751,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
               })}
             </div>
           </div>
+          )}
 
           {/* Career trends + season summary (from analytics) */}
           {/* Career stats (from DB-first PlayerSeasonStats) + meta trend badge */}
@@ -714,6 +803,20 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
           )}
 
           {/* Game-log table */}
+          {isNcaabCard ? (
+            <NcaabSeasonsSection playerId={ncaabPlayerId} open={open} />
+          ) : boxLogRiId ? (
+            <div className="px-6 pb-6 pt-3" data-testid="draft-player-box-log">
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">Game log</p>
+              <PlayerGameLogTable
+                compact
+                sport={String(sport).toUpperCase()}
+                playerName={player.name ?? undefined}
+                playerKey={{ externalId: boxLogRiId, source: 'rolling_insights' }}
+                scoringContext={{ leagueId: props.scoringLeagueId ?? null, position: player.position ?? null }}
+              />
+            </div>
+          ) : (
           <div className="px-6 pb-6 pt-3">
             {logsLoading && <p className="py-4 text-center text-[12px] text-white/50">Loading game logs…</p>}
             {!logsLoading && logsError && (
@@ -732,6 +835,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
               <GameLogTable colSet={colSet} rows={gameLogs} />
             )}
           </div>
+          )}
 
           {/* League context footer */}
           {leagueContext && (leagueContext.draftedPickLabel || leagueContext.rosteredByTeamName) && (
@@ -754,6 +858,12 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                   </span>
                 )}
               </div>
+              {leagueContext.autoPickReason ? (
+                <p className="mt-2 text-white/70" data-testid="player-card-auto-pick-reason">
+                  <span className="font-bold text-cyan-200">Why Chimmy picked this player: </span>
+                  {leagueContext.autoPickReason}
+                </p>
+              ) : null}
             </div>
           )}
         </div>
@@ -764,8 +874,8 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Latest news</p>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {analyticsLoading && <p className="px-4 py-3 text-[12px] text-white/45">Loading…</p>}
-            {!analyticsLoading && news.length === 0 && (
+            {newsLoading && news.length === 0 && <p className="px-4 py-3 text-[12px] text-white/45">Loading…</p>}
+            {!newsLoading && news.length === 0 && (
               <p className="px-4 py-3 text-[12px] text-white/45">No recent news.</p>
             )}
             {news.slice(0, 6).map((n, i) => (

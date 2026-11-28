@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ClipboardList, Search, SlidersHorizontal } from 'lucide-react'
+import { ClipboardList, Search } from 'lucide-react'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import type { UserLeague } from '@/app/dashboard/types'
 import { PlayerHeadshot } from '@/components/league/PlayerHeadshot'
@@ -22,11 +22,14 @@ import {
 import { StartVsComparisonLauncher } from '@/components/app/player-comparison/StartVsComparisonLauncher'
 import WaiverWirePage from '@/components/waiver-wire/WaiverWirePage'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import type { LeaguePlayerMetric, LeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import { mergeNbaCampusPlayers } from '@/lib/league/collegePro/mergeNbaCampusPlayers'
 import { displayPlayerFromUnifiedRow, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 // Roster codes ("ACT"/"INACT") are not injuries — this used to dot every healthy RI-mapped player.
 import { injuryNeedsAttention } from '@/lib/injuries/injuryStatusDisplay'
 import { REDRAFT_POSITION_FILTERS, isFootballTheme } from '@/lib/league-media/redraftScreens'
 import { PosPill } from '@/components/league/native/screens/NativeScreenParts'
+import { ProjectionFactorLine } from '@/components/projections/ProjectionFactorLine'
 import { RedraftScreen, useRedraftScreen } from '@/components/league/native/screens/RedraftScreenParts'
 
 type RiBatchEntry = {
@@ -49,6 +52,8 @@ type PosFilter = string
 type PlayerSubtab = 'available' | 'waivers' | 'freeAgents' | 'claims'
 type PlayerPoolRow = DisplayPlayerRecord & {
   normalizedStats?: Record<string, unknown>
+  afProjectionPlayerId?: string | null
+  alternateIds?: string[]
 }
 
 const NFL_FILTERS: PosFilter[] = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DL', 'LB', 'DB', 'K', 'DEF', 'MORE']
@@ -98,7 +103,7 @@ function matchesPosition(sportU: string, p: SlimPlayer, pos: PosFilter): boolean
   return up === pos
 }
 
-type FaRow = { id: string; name: string; position: string | null; team: string | null }
+type FaRow = { id: string; name: string; position: string | null; team: string | null; afProjectionPlayerId?: string | null }
 
 const PLAYER_SUBTABS: Array<{ id: PlayerSubtab; label: string }> = [
   { id: 'available', label: 'Available Players' },
@@ -122,12 +127,20 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
    */
   const rd = useRedraftScreen(league)
   const leaguePool = Boolean(rd && rd.sport !== 'nfl' && rd.sport !== 'nba')
-  const footballStats = !rd || isFootballTheme(rd.sport)
+  const campusPoolEnabled = sportU === 'NBA' && league.platform === 'fantrax' && league.leagueType?.trim().toLowerCase() === 'c2c'
+  const footballStats = !campusPoolEnabled && (!rd || isFootballTheme(rd.sport))
   const seasonYear = new Date().getFullYear()
-  const [weekNum, setWeekNum] = useState(1)
-  const [seasonSel, setSeasonSel] = useState(seasonYear)
+  const [selectedWeek, setWeekNum] = useState<number | null>(null)
+  const [selectedSeason, setSeasonSel] = useState(seasonYear)
+  const [campusBoard, setCampusBoard] = useState<LeaguePlayerMetrics | null>(null)
+  const [campusLoading, setCampusLoading] = useState(campusPoolEnabled)
+  const activeCampusBoard = campusBoard?.leagueId === league.id && (selectedWeek == null || campusBoard.week === selectedWeek)
+    ? campusBoard : null
+  const weekNum = selectedWeek ?? (campusPoolEnabled ? activeCampusBoard?.week ?? league.currentWeek : null) ?? 1
   const [pos, setPos] = useState<PosFilter>('ALL')
   const [projection, setProjection] = useState(true)
+  const seasonSel = campusPoolEnabled && projection
+    ? activeCampusBoard?.season ?? (Number(league.season) || seasonYear) : selectedSeason
   const [activeSubtab, setActiveSubtab] = useState<PlayerSubtab>('available')
   const [watchlist, setWatchlist] = useState(false)
   const [rookies, setRookies] = useState(false)
@@ -143,6 +156,21 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   const [normalizedError, setNormalizedError] = useState<string | null>(null)
   const freeAgents = activeSubtab === 'freeAgents'
   const waiverSurfaceMode = activeSubtab === 'waivers' || activeSubtab === 'claims'
+
+  useEffect(() => {
+    if (!campusPoolEnabled || waiverSurfaceMode) return
+    const controller = new AbortController()
+    setCampusLoading(true)
+    setCampusBoard(null)
+    const params = new URLSearchParams({ leagueId: league.id, sport: 'NBA', view: 'weekly-player-pool' })
+    if (selectedWeek != null) params.set('week', String(selectedWeek))
+    void fetch('/api/projections/af?' + params, { cache: 'no-store', signal: controller.signal })
+      .then(async (res) => res.ok ? (await res.json()) as LeaguePlayerMetrics : null)
+      .then((data) => { if (!controller.signal.aborted) setCampusBoard(data) })
+      .catch(() => {})
+      .finally(() => { if (!controller.signal.aborted) setCampusLoading(false) })
+    return () => controller.abort()
+  }, [campusPoolEnabled, waiverSurfaceMode, league.id, selectedWeek])
 
   const positionRow = useMemo(() => {
     if (rd) return ['ALL', ...REDRAFT_POSITION_FILTERS[rd.sport]]
@@ -207,10 +235,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   )
 
   const toggleWatchPlayer = useCallback(
-    (playerId: string) => {
+    (player: PlayerPoolRow) => {
       const next = new Set(wlIds)
-      if (next.has(playerId)) next.delete(playerId)
-      else next.add(playerId)
+      const ids = [player.id, ...(player.alternateIds ?? [])]
+      if (ids.some((id) => next.has(id))) ids.forEach((id) => next.delete(id))
+      else next.add(player.id)
       persistWatchlist(next)
     },
     [wlIds, persistWatchlist],
@@ -308,6 +337,16 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
     [normalizedRows],
   )
 
+  const campusMetricsById = useMemo(() => {
+    const byId = new Map<string, LeaguePlayerMetric>()
+    for (const row of activeCampusBoard?.rows ?? []) {
+      byId.set(row.playerId, row)
+      if (row.rosterPlayerId) byId.set(row.rosterPlayerId, row)
+      if (row.availabilityId) byId.set(row.availabilityId, row)
+    }
+    return byId
+  }, [activeCampusBoard])
+
   const poolList = useMemo((): PlayerPoolRow[] => {
     if (normalizedPlayerSurfaceEnabled && !waiverSurfaceMode) {
       return normalizedPoolList
@@ -318,12 +357,21 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
         name: r.name,
         position: r.position ?? '—',
         team: r.team?.trim() || 'FA',
+        afProjectionPlayerId: r.afProjectionPlayerId,
       }))
     }
     // Redraft, not NFL/NBA: never fall back to the NFL map (see `leaguePool`).
     if (leaguePool) return []
+    if (campusPoolEnabled && projection && !freeAgents) {
+      return mergeNbaCampusPlayers(activeCampusBoard?.rows ?? [], Object.values(players))
+    }
     return Object.values(players)
-  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, normalizedPoolList, freeAgents, leaguePool, faRows, players])
+  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, normalizedPoolList, freeAgents, leaguePool, faRows, players, campusPoolEnabled, projection, activeCampusBoard])
+
+  const weeklyProjectionFor = useCallback((player: PlayerPoolRow) => campusPoolEnabled
+    ? campusMetricsById.get(player.afProjectionPlayerId ?? player.id)?.weekly ?? null
+    : player.projectedPoints ?? player.fantasyPointsPerGame ?? riBySleeper[player.id]?.fantasyPointsPerGame ?? null,
+  [campusPoolEnabled, campusMetricsById, riBySleeper])
 
   const filtered = useMemo(() => {
     let rows = poolList.filter((p) => p.position)
@@ -345,28 +393,20 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       rows = rows.filter((p) => p.years_exp === 0)
     }
     if (watchlist) {
-      rows = rows.filter((p) => wlIds.has(p.id))
+      rows = rows.filter((p) => wlIds.has(p.id) || p.alternateIds?.some((id) => wlIds.has(id)))
     }
     rows.sort((a, b) => {
       // Honest sort: only REAL metrics rank; players with no sourced value sort last
       // instead of being ranked by a fabricated baseline (Honesty Pack 1A).
-      const pa =
-        a.projectedPoints ??
-        a.fantasyPointsPerGame ??
-        riBySleeper[a.id]?.fantasyPointsPerGame ??
-        null
-      const pb =
-        b.projectedPoints ??
-        b.fantasyPointsPerGame ??
-        riBySleeper[b.id]?.fantasyPointsPerGame ??
-        null
+      const pa = weeklyProjectionFor(a)
+      const pb = weeklyProjectionFor(b)
       if (pa == null && pb == null) return 0
       if (pa == null) return 1
       if (pb == null) return -1
       return pb - pa
     })
     return rows.slice(0, 100)
-  }, [poolList, pos, playerQuery, teamQuery, rookies, watchlist, wlIds, sportU, riBySleeper])
+  }, [poolList, pos, playerQuery, teamQuery, rookies, watchlist, wlIds, sportU, weeklyProjectionFor])
 
   const filteredIdsKey = useMemo(
     () => [...filtered.map((p) => p.id)].sort().join(','),
@@ -417,7 +457,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
         ? normalizedLoading
         : leaguePool
           ? faLoading || faRows == null
-          : sleeperLoading || (freeAgents && faLoading)
+          : (campusPoolEnabled ? campusLoading : sleeperLoading) || (freeAgents && faLoading)
 
   return (
     <RedraftScreen identity={rd}>
@@ -462,8 +502,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
           </div>
         </div>
       ) : null}
-      <div className="rdp-bar sticky top-0 z-10 space-y-3 border-b border-white/[0.07] bg-[#07071a] px-5 pb-3 pt-4">
-        <div className="flex flex-wrap gap-1.5" data-testid="players-tab-waiver-subnav">
+      {/* Sticky from md up only (2026-11-24): on a phone the bar is ~600px, taller than the screen, and a sticky
+          block that tall would leave the list scrolling behind it. */}
+      <div className="rdp-bar z-10 space-y-3 md:sticky md:top-0 border-b border-white/[0.07] bg-[#07071a] px-5 pb-3 pt-4">
+        {/* One sideways-scrolling row on a phone, wrapping from sm up (2026-11-24): two rows of chips said nothing more. */}
+        <div className="flex flex-nowrap gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-visible [scrollbar-width:none]" data-testid="players-tab-waiver-subnav">
           {PLAYER_SUBTABS.map((tab) => (
             <button
               key={tab.id}
@@ -471,7 +514,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               onClick={() => setActiveSubtab(tab.id)}
               data-testid={`players-tab-subtab-${tab.id}`}
               aria-pressed={activeSubtab === tab.id}
-              className={`rdp-sub rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition ${
+              className={`rdp-sub shrink-0 whitespace-nowrap rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition ${
                 activeSubtab === tab.id
                   ? 'border-[#ff3d81]/60 bg-[#ff3d81]/20 text-[#ffd7e5]'
                   : 'border-white/10 bg-white/[0.03] text-white/55 hover:border-white/25 hover:text-white/80'
@@ -507,14 +550,14 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-nowrap gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-visible [scrollbar-width:none]" data-testid="players-tab-positions">
           {positionRow.map((p) => (
             <button
               key={p}
               type="button"
               onClick={() => setPos(p)}
               aria-pressed={pos === p}
-              className={`rdp-posbtn rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+              className={`rdp-posbtn shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                 pos === p
                   ? 'border-[#ff3d81] bg-[#ff3d81]/20 text-[#ff3d81]'
                   : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20'
@@ -554,9 +597,10 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             <select
               value={seasonSel}
               onChange={(e) => setSeasonSel(Number(e.target.value))}
+              disabled={campusPoolEnabled && projection}
               className="rdp-select rounded-lg border border-white/[0.08] bg-[#0c0c1e] px-2 py-1 text-[11px] text-white"
             >
-              {[seasonYear - 1, seasonYear, seasonYear + 1].map((y) => (
+              {(campusPoolEnabled && projection ? [seasonSel] : [seasonYear - 1, seasonYear, seasonYear + 1]).map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>
@@ -609,36 +653,28 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             </button>
           ))}
 
-          <button
-            type="button"
-            className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] text-white/50"
-            aria-label="Advanced filters"
-            data-testid="players-tab-advanced-filters"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-          </button>
+          {/* The "Advanced filters" icon went 2026-11-24: it had no handler, so it was a button that did nothing. */}
         </div>
+        {/* What the list is, said once (2026-11-24, the simplify pass). The second sentence named the data
+            pipeline ("the normalized redraft player foundation"), which tells a manager nothing. */}
         <p className="rdp-note text-[11px] text-white/35">
-          Showing top <span className="text-white/55">100</span> by projected points for this filter.{' '}
-          {freeAgents ? 'Free agents are not on any roster in this league (when available).' : null}{' '}
-          {normalizedPlayerSurfaceEnabled
-            ? 'Stats, projections, images, and logos are loading from the normalized redraft player foundation.'
-            : (
-              <>
-                Stats, injury, and season fantasy totals appear from the league player feed when available.
-              </>
-            )}
+          Showing top <span className="text-white/55">100</span> by projected points for this filter.
+          {freeAgents ? ' Free agents are not on any roster in this league.' : null}
         </p>
 
-        <div className="rdp-compare rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-3">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/45">Start A vs B</p>
-          <StartVsComparisonLauncher
-            leagueId={league.id}
-            sport={resolvedSport}
-            weekOrPeriod={`Week ${weekNum}`}
-            showNameInputs
-          />
-        </div>
+        {/* Start A vs B, folded until asked for (2026-11-24) — as the Scores tab already does: open, its two empty
+            name fields and hint were ~300px between the filters and the list. */}
+        <details className="rdp-compare rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-3" data-testid="players-tab-compare">
+          <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wide text-white/45">Start A vs B</summary>
+          <div className="mt-2">
+            <StartVsComparisonLauncher
+              leagueId={league.id}
+              sport={resolvedSport}
+              weekOrPeriod={`Week ${weekNum}`}
+              showNameInputs
+            />
+          </div>
+        </details>
           </>
         )}
       </div>
@@ -659,7 +695,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             <div className="flex py-1 text-[11px] font-semibold uppercase tracking-wide text-white/35">
               <div className="w-8 shrink-0" />
               <div className={footballStats ? 'w-[200px] shrink-0' : 'min-w-0 flex-1'}>Player</div>
-              <div className="rdp-pts w-14 shrink-0 text-right text-[#ff9ec0]/90">PTS</div>
+              <div className="rdp-pts w-14 shrink-0 text-right text-[#ff9ec0]/90">{campusPoolEnabled && projection ? 'WK PROJ' : 'PTS'}</div>
               {footballStats ? (
                 <>
                   <div className="w-[120px] shrink-0 text-center">Rushing</div>
@@ -722,17 +758,17 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                 const ri = riBySleeper[p.id]
                 const normalizedStats = parseRollingInsightsStatsJson(p.normalizedStats ?? null)
                 // Honest projection: real tiers only — no fabricated baseline (Honesty Pack 1A).
-                const projPts =
-                  p.projectedPoints ??
-                  p.fantasyPointsPerGame ??
-                  ri?.fantasyPointsPerGame ??
-                  null
+                const projPts = weeklyProjectionFor(p)
+                // The measured factors that moved this projection (injury designation, rest, form …), verbatim from the
+                // learner. Present only for AF Intelligence viewers — the server strips `afFactors` for everyone else.
+                const factorReasons = projection && campusPoolEnabled ? campusMetricsById.get(p.afProjectionPlayerId ?? p.id)?.afFactors?.reasons ?? [] : []
                 const seasonFp =
                   ri?.fantasyPointsSeason ??
                   (ri?.fantasyPointsPerGame != null && ri?.gamesPlayed != null
                     ? ri.fantasyPointsPerGame * ri.gamesPlayed
                     : null)
                 const inj = p.injuryStatus ?? ri?.injuryStatus
+                const watched = wlIds.has(p.id) || p.alternateIds?.some((id) => wlIds.has(id)) || false
                 return (
                   <div
                     key={p.id}
@@ -740,17 +776,17 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                   >
                     <button
                       type="button"
-                      onClick={() => toggleWatchPlayer(p.id)}
-                      aria-pressed={wlIds.has(p.id)}
+                      onClick={() => toggleWatchPlayer(p)}
+                      aria-pressed={watched}
                       className={`rdp-watch flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] transition ${
-                        wlIds.has(p.id)
+                        watched
                           ? 'border-[#ff3d81]/50 bg-[#ff3d81]/20 text-[#ffb8d1]'
                           : 'border-white/20 text-white/60 hover:border-[#ff3d81]/40'
                       }`}
-                      aria-label={wlIds.has(p.id) ? 'Remove from watchlist' : 'Add to watchlist'}
+                      aria-label={watched ? 'Remove from watchlist' : 'Add to watchlist'}
                       title="Watchlist"
                     >
-                      {wlIds.has(p.id) ? '★' : '+'}
+                      {watched ? '★' : '+'}
                     </button>
                     <button
                       type="button"
@@ -804,6 +840,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                             <span className="text-white/45">FA</span>
                           )}
                         </p>
+                        <ProjectionFactorLine reasons={factorReasons} testId={`players-tab-factors-${p.id}`} />
                       </div>
                     </button>
                     <div className="rdp-pts-cell w-14 shrink-0 text-right text-[11px] text-white/60">
@@ -816,6 +853,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                       {projection ? (
                         <ProjectionDisplay
                           projection={projPts}
+                          precision={campusPoolEnabled ? 2 : undefined}
                           suffix=""
                           pointsClassName="text-[11px] text-white/60"
                           afCrestProps={{
@@ -847,7 +885,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             )}
           </div>
           {!busy && filtered.length === 0 ? (
-            <p className="rdp-empty py-8 text-center text-sm text-white/40">No players match filters.</p>
+            <p className="rdp-empty py-8 text-center text-sm text-white/40">
+              {campusPoolEnabled && projection && !freeAgents && !activeCampusBoard
+                ? 'Weekly AF projections are unavailable right now.'
+                : 'No players match filters.'}
+            </p>
           ) : null}
         </div>
       </div>

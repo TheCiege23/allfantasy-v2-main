@@ -45,9 +45,13 @@ import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
+import { ScreenGuide } from '@/components/core-app/ScreenGuide'
+import { HowItWorks } from '@/components/core-app/HowItWorks'
 import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
+import { PartnerCodeMenuLink } from '@/components/partner-codes/PartnerCodeMenuLink'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
+import { RailScoresContext, withRailScores, type RailScores } from '@/components/core-app/railScores'
 import { ScopeResetLink, ScopeSwitcher, type ScopeSwitcherField, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { applyLeagueOrder, withoutHidden } from '@/lib/core-app/leaguePreferences'
 import {
@@ -97,9 +101,12 @@ import '@/components/core-app/af-core-redraft.css'
 import '@/components/core-app/af-core-dynasty.css'
 import '@/components/core-app/af-survivor-theme.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { cfpPromoLive } from '@/lib/brackets/hubTournaments'
 import {
   LEAGUE_CHIP_SECTION,
   LEAGUE_RAIL_OMITTED_SECTIONS,
+  LEAGUE_SCOPED_SECTIONS,
+  groupLeagueTabs,
   NAV_SECTION_ORDER,
   NAV_SECTION_ORDER_NO_LEAGUE,
   leagueDestinationHidden,
@@ -244,6 +251,9 @@ export type CoreNavKey =
   | 'draft-hq'
   | 'portfolio'
   | 'career'
+  /* My decisions (2026-11-26) — the decision log with its trade and outcome grades. Shown to everyone;
+     the screen itself is the AF Pro lock for a viewer without the plan (CoreDepthLock). */
+  | 'decisions'
   | 'rankings'
   | 'commissioner'
   | 'tools'
@@ -276,6 +286,7 @@ export type CoreNavKey =
   | 'live-scores'
   | 'brackets'
   | 'find-league'
+  | 'clubhouse'
   | 'settings'
   | 'plans'
   /*
@@ -570,6 +581,11 @@ type AfCoreShellProps = {
   /** Expected active-game window, including a provider status that is one poll late. */
   gameDayActive?: boolean
   children: React.ReactNode
+  /**
+   * The /core path the "What's this page?" strip explains. Unset in the app, where it reads the URL;
+   * the DB-free harness at /e2e/screen-guide sets it, because its own URL is not a /core one.
+   */
+  screenGuidePath?: string
 }
 
 /**
@@ -641,6 +657,9 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
     // Top level rather than only in the Play sheet: finding a league to join is how a
     // new player starts, and the sheet is two taps deep.
     { key: 'find-league', label: 'Find a League', glyph: '⌕', href: '/find-league' },
+    // The community board. Until this entry it had no desktop link at all: only the phone's Play
+    // sheet reached it, so a desktop player could find it only by typing the address.
+    { key: 'clubhouse', label: 'Clubhouse', glyph: '☰', href: '/clubhouse' },
     /*
      * ⚠ MY TEAM AND WAIVERS ARE LEAGUE-ONLY IN THE NAV SINCE 2026-11-12 (owner's call). With no
      * league selected they were cross-league boards ("10 lineups need a look", "processing in the
@@ -858,6 +877,12 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
         ? `/core/career?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/career',
     },
+    /*
+     * My decisions (2026-11-26), beside Your career: both are your own history across leagues. Not
+     * league-scoped in the href — the screen lists every league and filters by one. Listed for every
+     * viewer: the AF Pro lock is the screen, drawn from the server's paywall read, not a missing row.
+     */
+    { key: 'decisions', label: 'My decisions', glyph: '✓', href: '/core/decisions' },
     // 26b — replaces the dashboard entry that pointed at /af-legacy?tab=pulse.
     // 38a scopes it to one league's full standings table when a league is held.
     /*
@@ -1356,6 +1381,8 @@ function AfCoreShell(incoming: AfCoreShellProps) {
   const copy = (english: string) => coreUiCopy(english, language)
   const msg = useMessages(coreShellMessages)
   const railMsg = useMessages(railRowMessages)
+  /* The CFP card's window: Nov 1 (weekly rankings, projected bracket) – Jan 25 (lib/brackets/hubTournaments.ts). */
+  const cfpSeasonLive = cfpPromoLive()
   /*
    * The screen streams in after this shell paints, so the few pieces of chrome only a screen
    * can know (week label, tab badges, Chimmy's home signals, the live slate count) arrive by
@@ -1363,7 +1390,12 @@ function AfCoreShell(incoming: AfCoreShellProps) {
    * `props`, so nothing downstream had to change.
    */
   const [publishedSignals, setPublishedSignals] = useState<ShellSignals | null>(null)
-  const props = useMemo(() => withPublishedSignals(incoming, publishedSignals), [incoming, publishedSignals])
+  /* The rail's matchup scores arrive after the shell paints (railScores.tsx). */
+  const [railScores, setRailScores] = useState<RailScores | null>(null)
+  const props = useMemo(
+    () => withRailScores(withPublishedSignals(incoming, publishedSignals), railScores),
+    [incoming, publishedSignals, railScores],
+  )
   const router = useRouter()
   // A lineup set on the platform reaches these screens without a button press — on opening the
   // app, coming back to it, and opening a league. See lib/core-app/lineupAutoSync.ts.
@@ -1387,6 +1419,18 @@ function AfCoreShell(incoming: AfCoreShellProps) {
       return item ? [item] : []
     })
   }, [props])
+  /*
+   * The phone's More sheet, without what the bar below it already shows (2026-11-24, the simplify pass).
+   * It listed every screen — 27 rows, ~1,420px in a ~590px sheet — and five of them (Home, My team,
+   * Matchup, Waivers, Trades) were the bar's own tabs, visible under the sheet the whole time. The sheet
+   * is only opened from that bar, so nothing here becomes unreachable. A group left empty is dropped.
+   */
+  const moreSections = useMemo(() => {
+    const onBar = new Set(mobileItems.map((i) => i.key))
+    return sections
+      .map((section) => ({ ...section, items: section.items.filter((item) => !onBar.has(item.key)) }))
+      .filter((section) => section.items.length > 0)
+  }, [sections, mobileItems])
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
   /*
    * The nav entry to light for this screen. Portfolio has no entry of its own since 2026-11-12; it
@@ -1394,6 +1438,14 @@ function AfCoreShell(incoming: AfCoreShellProps) {
    * the SCREEN rather than the nav (refresh cadence, prompts) still reads `active`.
    */
   const navActive: CoreNavKey = active === 'portfolio' ? 'my-leagues' : active
+  /*
+   * Inside a league the rail is Sleeper's tabs (lib/core-app/leagueDestinations.ts LEAGUE_TABS, owner 2026-11-19): the
+   * league's screens fold into Matchup, Team, League, Trade and Settings, and the open tab's screens show as a row of
+   * links above the screen. Outside a league the rail is unchanged.
+   */
+  // A themed league (Survivor) keeps its show-named sections: the island theme is that league's identity, not clutter.
+  const leagueTabs = useMemo(() => (props.selectedLeagueId && !props.leagueTheme ? groupLeagueTabs(navRailSections) : null), [props.selectedLeagueId, props.leagueTheme, navRailSections])
+  const activeLeagueTab = leagueTabs?.find((tab) => tab.children.some((child) => child.key === navActive)) ?? null
 
   /*
    * A /core navigation in flight — see coreNavPending.tsx for the whole argument. A click on a
@@ -2460,7 +2512,40 @@ function AfCoreShell(incoming: AfCoreShellProps) {
           support") were the two furthest from the fold.
         */}
         <div className="af-nav-scroll">
-        {navRailSections.map((section) => (
+        {leagueTabs ? (
+          <div className="af-nav-group" data-league-tabs="">
+            {selectedLeagueName ? (
+              <div className="af-nav-league" title={selectedLeagueName}>
+                <span className="af-nav-league-dot" aria-hidden />
+                <span className="af-nav-league-name">{selectedLeagueName}</span>
+              </div>
+            ) : null}
+            <ul className="af-nav-items" aria-label={copy('League')}>
+              {leagueTabs.map((tab) => {
+                const first = tab.children[0]!
+                const on = tab === activeLeagueTab
+                // A tab carries a screen's badge (the waivers count, a live game), so folding hides no alert.
+                const badge = tab.children.find((child) => child.badge)?.badge
+                return (
+                  <li key={tab.id}>
+                    <Link href={first.href} className="af-nav-item" data-core-nav="" prefetch={false} data-active={on} aria-current={on ? 'page' : undefined} data-league-tab={tab.id}>
+                      <span className="af-nav-glyph" aria-hidden>
+                        <CoreNavIcon navKey={first.key} size={16} />
+                      </span>
+                      <span className="af-nav-label">{copy(tab.label)}</span>
+                      {badge ? (
+                        <span className="af-nav-badge" data-tone={badge.tone}>
+                          {badgeText(badge.text, language)}
+                        </span>
+                      ) : null}
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ) : null}
+        {(leagueTabs ? navRailSections.filter((s) => !LEAGUE_SCOPED_SECTIONS.has(s.id)) : navRailSections).map((section) => (
           <div className="af-nav-group" key={section.id}>
             {section.heading ? (
               <div className="af-nav-heading af-label" aria-hidden>
@@ -2790,6 +2875,9 @@ function AfCoreShell(incoming: AfCoreShellProps) {
               </div>
             </details>
 
+            {/* "How it works" (2026-11-20, HowItWorks.tsx): every page explained, one tap from anywhere. */}
+            <HowItWorks leagueCount={leagues.length} />
+
             {/*
               Notifications, with its count, while a league is open (2026-11-15). The rail drops its
               "Manage" group inside a league, and this count was only ever there. Not on a phone
@@ -2870,6 +2958,7 @@ function AfCoreShell(incoming: AfCoreShellProps) {
                     </Link>
                   ) : null}
                   <Link href="/pricing">{copy('Plans & tokens')}</Link>
+                  <PartnerCodeMenuLink />
                   <Link href="/settings">{msg.profileAndSettings}</Link>
                 </nav>
               </div>
@@ -2945,29 +3034,53 @@ function AfCoreShell(incoming: AfCoreShellProps) {
               selectedLeagueId={props.selectedLeagueId}
             />
           ) : null}
+          {activeLeagueTab && activeLeagueTab.children.length > 1 ? (
+            <nav className="af-subtabs" aria-label={copy('Sections of this tab')} data-testid="af-subtabs">
+              {activeLeagueTab.children.map((child) => (
+                <Link key={child.key} href={child.href} className="af-subtab" data-core-nav="" prefetch={false} aria-current={child.key === navActive ? 'page' : undefined} data-subtab={child.key}>
+                  {copy(child.label)}
+                  {child.badge ? (
+                    <span className="af-nav-badge" data-tone={child.badge.tone}>
+                      {badgeText(child.badge.text, language)}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
+          {/*
+            "What's this page?" (2026-11-20, ScreenGuide.tsx): one line above every screen that
+            opens into what the page is for and where to start. Open the first time a page is seen,
+            one quiet line after that. In the shell so no screen can be left unexplained.
+          */}
+          <ScreenGuide path={props.screenGuidePath} />
           <ShellSignalsContext.Provider value={setPublishedSignals}>
-            <CoreNavPendingContext.Provider value={navPending != null}>
-              <PlayerCardProvider>{children}</PlayerCardProvider>
-            </CoreNavPendingContext.Provider>
+            <RailScoresContext.Provider value={setRailScores}>
+              <CoreNavPendingContext.Provider value={navPending != null}>
+                <PlayerCardProvider>{children}</PlayerCardProvider>
+              </CoreNavPendingContext.Provider>
+            </RailScoresContext.Provider>
           </ShellSignalsContext.Provider>
           {/*
-            The bracket promo sits AFTER the screen on home (2026-11-06 phone pass). It used to open
-            the page, so on a phone the first screen was a promo and the setup guide while "16
-            lineups to fix" waited below the fold. Work first, offers after.
+            The College Football Playoff card, AFTER the screen on home (2026-11-06 phone pass: work
+            first, offers after). 2026-11-23 (owner): the generic "Bracket leagues — Explore and create"
+            ad is gone; in its place, ONLY during the college playoff window (lib/brackets/hubTournaments.ts
+            `cfpPromoLive`: Nov 1 – Jan 25), the CFP bracket. Its projection is synced from CFBD rankings
+            (lib/playoffs/syncCfpPreview.ts). Outside that window nothing is drawn here.
           */}
-          {active === 'home' ? (
-            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry" data-in-league={props.selectedLeagueId ? 'true' : undefined}>
+          {active === 'home' && cfpSeasonLive ? (
+            <section className="af-core-bracket-promo" aria-labelledby="af-core-bracket-promo-title" data-testid="core-bracket-entry" data-promo="cfp" data-in-league={props.selectedLeagueId ? 'true' : undefined}>
               <div className="af-core-bracket-promo-copy">
-                <p className="af-core-bracket-promo-kicker">{msg.bracketKicker}</p>
-                <h2 id="af-core-bracket-promo-title">{msg.bracketTitle}</h2>
-                <p>{msg.bracketBody}</p>
+                <p className="af-core-bracket-promo-kicker">{msg.cfpKicker}</p>
+                <h2 id="af-core-bracket-promo-title">{msg.cfpTitle}</h2>
+                <p>{msg.cfpBody}</p>
               </div>
               <div className="af-core-bracket-promo-actions">
-                <Link href="/brackets" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
-                  {msg.bracketExplore}
+                <Link href="/brackets/cfp/preview" className="af-core-bracket-promo-button" data-testid="core-open-brackets">
+                  {msg.cfpPreview}
                 </Link>
-                <Link href="/brackets/join" className="af-core-bracket-promo-browse">
-                  {msg.bracketJoin}
+                <Link href="/brackets/leagues/new?sport=NCAAF&challengeType=playoff_challenge" className="af-core-bracket-promo-browse">
+                  {msg.cfpStart}
                 </Link>
               </div>
             </section>
@@ -3141,6 +3254,20 @@ function AfCoreShell(incoming: AfCoreShellProps) {
               </div>
             ) : (
             <div className="af-mobile-more-list">
+              <div className="af-mobile-more-group" data-testid="af-more-add">
+                {/*
+                  Import and Create, first thing in More (2026-11-24, owner: adding a league on a phone
+                  "shouldn't be so hard"). They were only on the computer's rail and in the league switcher.
+                */}
+                <Link href="/import" className="af-mobile-more-link af-mobile-more-add" data-testid="af-more-import" data-core-nav="" onClick={() => setMobileMoreOpen(false)}>
+                  <span className="af-mobile-more-icon" aria-hidden>⇣</span>
+                  <span>{copy('Import a league')}</span>
+                </Link>
+                <Link href="/create-league" className="af-mobile-more-link af-mobile-more-add" data-testid="af-more-create" data-core-nav="" onClick={() => setMobileMoreOpen(false)}>
+                  <span className="af-mobile-more-icon" aria-hidden>＋</span>
+                  <span>{copy('Create a league')}</span>
+                </Link>
+              </div>
               {/* The league tray, which had its own bar tab until Waivers took the slot (see MOBILE_BAR_KEYS). */}
               <div className="af-mobile-more-group">
                 <button
@@ -3180,7 +3307,7 @@ function AfCoreShell(incoming: AfCoreShellProps) {
                   </ScopeResetLink>
                 ) : null}
               </div>
-              {sections.map((section) => (
+              {moreSections.map((section) => (
                 <div className="af-mobile-more-group" key={section.id}>
                   {section.heading ? <span className="af-label">{copy(section.heading)}</span> : null}
                   {section.items.map((item) => (

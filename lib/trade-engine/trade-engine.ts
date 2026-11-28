@@ -336,22 +336,51 @@ function estimatePlayerPPG(asset: Asset): number {
 
 type SlotRequirement = { slot: string; eligiblePositions: string[] }
 
-function parseRosterSlots(rosterPositions: string[]): SlotRequirement[] {
+/**
+ * Which positions each lineup slot accepts, by every spelling the importers store.
+ *
+ * 🛑 TWO FLEX SLOTS WERE MAPPED WRONG UNTIL 2026-11-23, IN OPPOSITE DIRECTIONS. Sleeper's `REC_FLEX` (a
+ * receiver flex: WR or TE) was lumped in with `FLEX` and so let a running back fill it, and ESPN's `WR/TE`
+ * was mapped to WR/RB — so a tight end could not fill it and a running back could. In a league with either
+ * slot the lineup value of a trade was computed for a lineup the league does not allow: a TE-for-RB deal
+ * read as costing a starter that the RB could never have replaced. Only `WRRB_FLEX` → WR/RB was right.
+ * The same mapping in lib/trade-intel/rosterNeed.ts and lib/core-app/slotEligibility.ts agrees with this one.
+ */
+const SLOT_ELIGIBILITY: Readonly<Record<string, { slot: string; eligiblePositions: string[] }>> = {
+  QB: { slot: 'QB', eligiblePositions: ['QB'] },
+  RB: { slot: 'RB', eligiblePositions: ['RB'] },
+  WR: { slot: 'WR', eligiblePositions: ['WR'] },
+  TE: { slot: 'TE', eligiblePositions: ['TE'] },
+  // RB/WR/TE — Sleeper FLEX, Yahoo W/R/T, ESPN RB/WR/TE
+  FLEX: { slot: 'FLEX', eligiblePositions: ['RB', 'WR', 'TE'] },
+  'W/R/T': { slot: 'FLEX', eligiblePositions: ['RB', 'WR', 'TE'] },
+  'RB/WR/TE': { slot: 'FLEX', eligiblePositions: ['RB', 'WR', 'TE'] },
+  // WR/TE — Sleeper REC_FLEX, ESPN WR/TE, Yahoo W/T
+  REC_FLEX: { slot: 'REC_FLEX', eligiblePositions: ['WR', 'TE'] },
+  'WR/TE': { slot: 'REC_FLEX', eligiblePositions: ['WR', 'TE'] },
+  'W/T': { slot: 'REC_FLEX', eligiblePositions: ['WR', 'TE'] },
+  // RB/WR — Sleeper WRRB_FLEX, ESPN RB/WR, Yahoo W/R
+  WRRB_FLEX: { slot: 'WRRB_FLEX', eligiblePositions: ['RB', 'WR'] },
+  'RB/WR': { slot: 'WRRB_FLEX', eligiblePositions: ['RB', 'WR'] },
+  'W/R': { slot: 'WRRB_FLEX', eligiblePositions: ['RB', 'WR'] },
+  // QB/RB/WR/TE — Sleeper SUPER_FLEX, ESPN OP, Yahoo Q/W/R/T
+  SUPER_FLEX: { slot: 'SUPER_FLEX', eligiblePositions: ['QB', 'RB', 'WR', 'TE'] },
+  OP: { slot: 'SUPER_FLEX', eligiblePositions: ['QB', 'RB', 'WR', 'TE'] },
+  'Q/W/R/T': { slot: 'SUPER_FLEX', eligiblePositions: ['QB', 'RB', 'WR', 'TE'] },
+}
+
+/** Exported for tests. Slots it does not know (K, DEF, bench, IDP) are left out, as before. */
+export function parseRosterSlots(rosterPositions: string[]): SlotRequirement[] {
   const slots: SlotRequirement[] = []
   for (const rp of rosterPositions) {
-    const upper = rp.toUpperCase()
-    if (upper === 'QB') slots.push({ slot: 'QB', eligiblePositions: ['QB'] })
-    else if (upper === 'RB') slots.push({ slot: 'RB', eligiblePositions: ['RB'] })
-    else if (upper === 'WR') slots.push({ slot: 'WR', eligiblePositions: ['WR'] })
-    else if (upper === 'TE') slots.push({ slot: 'TE', eligiblePositions: ['TE'] })
-    else if (upper === 'FLEX' || upper === 'REC_FLEX') slots.push({ slot: 'FLEX', eligiblePositions: ['RB', 'WR', 'TE'] })
-    else if (upper === 'SUPER_FLEX') slots.push({ slot: 'SUPER_FLEX', eligiblePositions: ['QB', 'RB', 'WR', 'TE'] })
-    else if (upper === 'WR/TE' || upper === 'WRRB_FLEX') slots.push({ slot: 'FLEX', eligiblePositions: ['WR', 'RB'] })
+    const spec = SLOT_ELIGIBILITY[rp.trim().toUpperCase()]
+    if (spec) slots.push({ slot: spec.slot, eligiblePositions: [...spec.eligiblePositions] })
   }
   return slots
 }
 
-function computeBestLineupPPG(roster: Asset[], rosterPositions: string[]): number {
+/** Exported for tests. */
+export function computeBestLineupPPG(roster: Asset[], rosterPositions: string[]): number {
   const slots = parseRosterSlots(rosterPositions)
   if (slots.length === 0) return 0
 

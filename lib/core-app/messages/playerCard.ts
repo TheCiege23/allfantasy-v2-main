@@ -30,6 +30,9 @@ const UNREADABLE_ES = (() => {
 
 export const playerCardMessages = defineMessages<PlayerCardCopy>({
   en: {
+    afRank: 'AF league rank', afTrade: 'AF league trade value', afWeek: week => `AF week ${week}`,
+    afFullSeason: 'AF full season', afRemaining: 'AF rest of season', afPerGame: 'per game',
+    afStandardSeason: 'standard season length', afPoints: 'fantasy points', afCategory: 'category score',
     back: '‹ Back',
     dialogLabel: (name) => `${name} player card`,
     follow: (name) => `Follow ${name}`,
@@ -115,6 +118,9 @@ export const playerCardMessages = defineMessages<PlayerCardCopy>({
     notGraded: (reason) => `Not graded: ${reason}`,
   },
   es: {
+    afRank: 'Ranking AF en la liga', afTrade: 'Valor de intercambio AF', afWeek: week => `AF semana ${week}`,
+    afFullSeason: 'Temporada completa AF', afRemaining: 'Resto de temporada AF', afPerGame: 'por partido',
+    afStandardSeason: 'duración estándar', afPoints: 'puntos de fantasía', afCategory: 'puntos de categoría',
     back: '‹ Volver',
     dialogLabel: (name) => `Ficha de ${name}`,
     follow: (name) => `Seguir a ${name}`,

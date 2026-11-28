@@ -78,6 +78,11 @@ export async function GET(
     tradeGrade: receiptGradeFields(result.receipt),
     /** The receipt this review rests on. Null until the receipts migration is applied. */
     reviewId: result.receipt.receiptId,
+    /**
+     * What the panel needs to decide whether the letter's graded record applies (NFL redraft only —
+     * `letterRecordApplies`): the league's sport and the league type the grade was priced under.
+     */
+    recordScope: { sport: result.trade.sport, leagueType: result.receipt.grade.leagueType?.type ?? null },
     explanation: {
       noteToLeague: explanation.verdict.commissioner?.noteToLeague ?? null,
       headline: explanation.verdict.headline,

@@ -58,7 +58,7 @@ describe('the server side has Spanish', () => {
     expect(reasons.length).toBeGreaterThan(20)
     expect(reasons).toEqual(expect.arrayContaining([
       'nobody on injured reserve',
-      'We need prices for most of this league’s rosters to rank yours against them, and we don’t have them yet.',
+      'Ranked once most rosters in this league have prices.',
       'no starters to project on this roster', 'no weekly projection feed has been ingested yet',
       'no week 4 game found for any of your starters yet', 'this league has no future-pick inventory yet',
     ]))
@@ -148,7 +148,7 @@ const PAGES: Array<[string, MyTeamData]> = [
     bench: { available: false, reason: 'no bench players recorded on this roster' },
     lock: { available: false, reason: 'no upcoming game found for your starters, so there is no lock time to count down to' },
     projections: { available: false, reason: 'no weekly projection feed has been ingested yet' },
-    rosterGrade: { available: false, reason: 'We need prices for most of this league’s rosters to rank yours against them, and we don’t have them yet.' },
+    rosterGrade: { available: false, reason: 'Ranked once most rosters in this league have prices.' },
     nextMatchup: { available: false, reason: 'no week 4 matchup recorded for your team yet' },
   })],
   ['picks via another team', base({

@@ -5,12 +5,15 @@
  * the round floor. AF Commissioner (`commissioner_automation`): the same-round rules that MOVE a
  * keeper (`lose_round_before` / `lose_round_after`) — docs/AF_COMMISSIONER_SETTINGS_SPEC.md §1.2 —
  * and the "AF picks best value" missed-deadline rule (`auto_best_value`, ./missedDeadline, §4.3).
+ * AF Commissioner too (AF Supreme includes it): turning ON automatic keeper placement on the draft
+ * board (`keeper_auto_place_board`, ./keeperAutoBoard). Turning it off is always free.
  * Checked only when the rule CHANGES, so a league keeps a rule saved before its plan lapsed.
  */
 
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { SAME_ROUND_RESOLVING_RULES, type KeeperSameRoundRule } from './keeperRules'
 import { MISSED_DEADLINE_RULES } from './missedDeadline'
+import { KEEPER_AUTO_BOARD_SETTING } from './keeperAutoBoardSetting'
 
 const ROUND_KEYS = ['keeper_waiver_cost_round', 'keeper_min_cost_round'] as const
 const ALL_RULES = ['lose_round_before', 'lose_round_after', 'player_chooses', 'reject_both']
@@ -18,7 +21,7 @@ const ALL_RULES = ['lose_round_before', 'lose_round_after', 'player_chooses', 'r
 export async function keeperRuleSettingsRefusal(
   userId: string,
   body: Record<string, unknown>,
-  current: { keeperConflictRule: string | null; keeperMissedDeadlineRule?: string | null },
+  current: { keeperConflictRule: string | null; keeperMissedDeadlineRule?: string | null; keeperAutoBoard?: boolean },
 ): Promise<{ status: number; message: string } | null> {
   if (body.keeperRoundPenalty != null) {
     const n = Number(body.keeperRoundPenalty)
@@ -32,6 +35,15 @@ export async function keeperRuleSettingsRefusal(
     if (!merge || !(key in merge) || merge[key] == null) continue
     const n = Number(merge[key])
     if (!Number.isInteger(n) || n < 1 || n > 40) return { status: 400, message: `${key} must be a round from 1 to 40` }
+  }
+
+  if (merge && KEEPER_AUTO_BOARD_SETTING in merge && merge[KEEPER_AUTO_BOARD_SETTING] != null) {
+    const v = merge[KEEPER_AUTO_BOARD_SETTING]
+    if (typeof v !== 'boolean') return { status: 400, message: `${KEEPER_AUTO_BOARD_SETTING} must be true or false` }
+    if (v && current.keeperAutoBoard !== true) {
+      const access = await new FeatureGateService().evaluateUserFeatureAccess(userId, 'commissioner_automation').catch(() => null)
+      if (!access?.allowed) return { status: 403, message: 'Placing keepers on the draft board automatically requires AF Commissioner or AF Supreme.' }
+    }
   }
 
   if (body.keeperMissedDeadlineRule !== undefined && body.keeperMissedDeadlineRule !== current.keeperMissedDeadlineRule) {

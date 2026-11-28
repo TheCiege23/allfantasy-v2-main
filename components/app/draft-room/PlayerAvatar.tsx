@@ -38,6 +38,8 @@ export interface PlayerAvatarProps {
   className?: string
   /** When true, render a colored ring around the avatar (used for selection / on-clock). */
   highlighted?: boolean
+  /** Team-logo badge size in px. Default: about a third of `size`. */
+  badgeSize?: number
 }
 
 export function PlayerAvatar({
@@ -50,12 +52,17 @@ export function PlayerAvatar({
   testIdBase = 'player-avatar',
   className = '',
   highlighted = false,
+  badgeSize: badgeSizeProp,
 }: PlayerAvatarProps) {
   const source = classifyAvatarSource(headshotUrl)
   const [imgError, setImgError] = useState(false)
   const [defLogoError, setDefLogoError] = useState(false)
+  // The badge logo that failed to load, so a 404 falls back to the abbreviation chip instead of an
+  // empty grey box — and a different logo in the same slot (a re-render for another player) gets a fresh try.
+  const [failedBadgeLogo, setFailedBadgeLogo] = useState<string | null>(null)
   const teamLogoSource = classifyAvatarSource(teamLogoUrl)
   const showTeamLogo = teamLogoSource === 'headshot' || teamLogoSource === 'team_logo_badge_only'
+  const badgeLogoUsable = Boolean(teamLogoUrl) && String(teamLogoUrl) !== failedBadgeLogo
 
   // F.1 — DEF (team defense) rows promote the team logo to the primary avatar.
   // We only enter this branch when there's a usable logo URL; otherwise we fall
@@ -70,7 +77,7 @@ export function PlayerAvatar({
   const ringClass = highlighted ? 'ring-2 ring-white/60' : 'ring-1 ring-white/10'
   // For DEF rows the badge would duplicate the primary avatar — suppress it.
   const showBadge = !isDefRow
-  const badgeSize = Math.max(12, Math.round(size * 0.36))
+  const badgeSize = badgeSizeProp ?? Math.max(12, Math.round(size * 0.36))
 
   return (
     <div
@@ -147,7 +154,7 @@ export function PlayerAvatar({
           </span>
         </div>
       )}
-      {showBadge && showTeamLogo && teamLogoUrl ? (
+      {showBadge && showTeamLogo && badgeLogoUsable ? (
         <span
           className="absolute -bottom-0.5 -right-0.5 inline-flex items-center justify-center rounded-md border border-white/15 bg-[#0a1228] p-px shadow-md"
           aria-hidden
@@ -160,6 +167,7 @@ export function PlayerAvatar({
             testId={`${testIdBase}-team-logo`}
             className="rounded object-contain"
             lazy
+            onError={() => setFailedBadgeLogo(String(teamLogoUrl))}
           />
         </span>
       ) : showBadge && teamAbbr ? (

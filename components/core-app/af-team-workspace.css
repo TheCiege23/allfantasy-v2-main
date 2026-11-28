@@ -43,3 +43,31 @@
 .af-tw .af-tw-optin input[type="checkbox"] { width:28px; min-height:28px; margin:8px; padding:0; flex:0 0 28px; }
 
 #af-team-alert-decision:focus, #af-team-deadline-alert:focus { outline: 2px solid var(--af-accent, #20d4e8); outline-offset: 3px; scroll-margin-block: 6rem; }
+
+/*
+ * My team's roster-decision rows as one grouped list (2026-11-23). The section's grid puts a 16px gap
+ * between its children, so the rows live in their own column; each row keeps its own panel look, joined
+ * edge to edge with one hairline between, rounded only at the ends. An open row stands apart.
+ * Scoped to `.af-tw-group`: `.af-tw-panel` is shared with the Commissioner Hub cards, which keep theirs.
+ */
+.af-tw-group { display:flex; flex-direction:column; min-width:0; }
+.af-tw-group > .af-tw-panel { border-radius:0; padding-top:4px; padding-bottom:4px; }
+.af-tw-group > .af-tw-panel + .af-tw-panel { margin-top:-1px; }
+.af-tw-group > .af-tw-panel:first-child { border-top-left-radius:var(--af-radius-card, 16px); border-top-right-radius:var(--af-radius-card, 16px); }
+.af-tw-group > .af-tw-panel:last-child { border-bottom-left-radius:var(--af-radius-card, 16px); border-bottom-right-radius:var(--af-radius-card, 16px); }
+.af-tw-group > .af-tw-panel[open] { margin:8px 0; border-radius:var(--af-radius-card, 16px); padding-top:14px; padding-bottom:14px; }
+.af-tw-group > .af-tw-panel[open]:first-child { margin-top:0; }
+
+/*
+ * Roster decisions in the page's type (2026-11-24): the heading at section size, the checks as a plain
+ * list — no bullets, a 14px name and a muted 13px line — rather than browser-default list and paragraph text.
+ */
+.af-tw-heading h2 { font-size:18px; margin:0; }
+.af-tw-group > .af-tw-panel ul { list-style:none; margin:0 0 8px; padding:0; display:grid; gap:10px; }
+.af-tw-group > .af-tw-panel li strong { font-size:14px; font-weight:700; line-height:1.35; }
+.af-tw-group > .af-tw-panel li p { margin:2px 0 0; font-size:13px; line-height:1.45; color:var(--muted); }
+.af-tw-group > .af-tw-panel > p { font-size:14px; color:var(--muted); }
+
+/* Chimmy as a manager: who it is for a team, and whether the team takes trade offers. */
+.af-tw-chimmy-profile { display:grid; gap:6px; margin:8px 0 14px; padding-left:12px; border-left:2px solid var(--line); }
+.af-tw-chimmy-profile p { margin:0; }

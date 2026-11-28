@@ -2,13 +2,13 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { SurvivorTribeBadge, SurvivorTribeMark } from '@/components/league/survivor/SurvivorTribeBadge'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel, Lock } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel, Lock, UserRound } from 'lucide-react'
 import { DraftBoardCell, type DraftBoardCellPick, type PickHighlightTone } from './DraftBoardCell'
 import type { DraftPickSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import type { KeeperSessionSnapshot } from '@/lib/live-draft-engine/types'
 import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
 import { isDraftPickRowEmptyFromSnapshot } from '@/lib/live-draft-engine/draftPickEmpty'
-import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
+import { buildPickOwnerResolver } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { getRoundNavigationState } from '@/lib/draft-room/DraftBoardRenderer'
 import { getManagerColorBySlot, withAlpha } from '@/lib/draft-room'
 import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draftRoomDisplayFields'
@@ -21,7 +21,8 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 import { useStickyBoardHeader } from './useStickyBoardHeader'
-import { seatDisplayName } from '@/lib/draft-room/seatLabel'
+import { OPEN_SEAT_LABEL, seatDisplayName } from '@/lib/draft-room/seatLabel'
+import { tradeForPickTileEligible } from '@/lib/draft-room/tradeForPick'
 
 /**
  * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
@@ -60,6 +61,8 @@ type DraftBoardProps = {
   aiManagedRosterIds?: string[]
   /** Teams picking by themselves right now (auto-pick on, or Chimmy-run). Marked AUTO in the header. */
   autoDraftRosterIds?: string[]
+  /** Auto draft (execution mode `auto`): the current tile reads "Picking", not "On the clock". */
+  autoDraft?: boolean
   orderSourceLabel?: string | null
   /** Open pick-trade modal from a cell with rounds / receiver prefilled (logged-in user must have a roster). */
   onCellTrade?: (ctx: {
@@ -68,6 +71,12 @@ type DraftBoardProps = {
     ownerRosterId: string
     overall: number
   }) => void
+  /**
+   * "Trade for this pick" (slow drafts only — the caller decides with `tradeForPickDraftEligible`). When set,
+   * another team's upcoming pick in their own slot becomes a ≥44px tap target that opens the pick-trade
+   * composer asking for that pick (`tradeForPickTileEligible` picks the tiles).
+   */
+  onTradeForPick?: (ctx: { round: number; slot: number; overall: number; ownerRosterId: string }) => void
   /** Open the read-only pick-trade history modal. */
   onOpenTradeHistory?: () => void
   /** Premium chrome for live redraft snake route. */
@@ -178,6 +187,9 @@ function buildAuctionCellPick(
   }
 }
 
+/** Above this many teams the board opens on one round. */
+const BIG_BOARD_TEAMS = 16
+
 function DraftBoardInner({
   picks,
   slotOrder,
@@ -196,8 +208,10 @@ function DraftBoardInner({
   currentUserRosterId = null,
   aiManagedRosterIds = [],
   autoDraftRosterIds = [],
+  autoDraft = false,
   orderSourceLabel,
   onCellTrade,
+  onTradeForPick,
   onOpenTradeHistory,
   onViewCellTradeHistory,
   canCommissionerEditPicks = false,
@@ -215,7 +229,8 @@ function DraftBoardInner({
   const rs = presentationVariant === 'redraft_snake'
   const { t } = useOptionalLanguage()
   const headerCopy = useMessages(draftRoomHeaderMessages)
-  const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
+  // A big league opens on the current round: every round of 100+ teams is thousands of cells (2026-11-24).
+  const [viewMode, setViewMode] = useState<'all' | 'single'>(() => (teamCount > BIG_BOARD_TEAMS ? 'single' : 'all'))
   const [selectedRound, setSelectedRound] = useState(1)
   const boardRef = useRef<HTMLElement | null>(null)
   const teamGridRef = useRef<HTMLDivElement | null>(null)
@@ -224,6 +239,58 @@ function DraftBoardInner({
   // `position: sticky` cannot do this here.
   useStickyBoardHeader(teamGridRef, teamHeaderRef, draftType !== 'auction')
   const lastFollowedOverallRef = useRef<number | null>(null)
+  /*
+   * FOLLOW THE LIVE PICK — UNTIL THE MANAGER LOOKS ELSEWHERE. The board used to scroll to the
+   * current cell (and jump the focused round) after EVERY pick, so anyone studying another team's
+   * column or an earlier round was dragged back mid-read — the "draft board keeps reverting to its
+   * original position" complaint about Yahoo's 2026 room. Any scroll, swipe or round change made by
+   * the person pauses following; "Back to live pick" resumes it. Programmatic scrolls do not count:
+   * only wheel / touch / keyboard input from the person does.
+   */
+  const [followLive, setFollowLive] = useState(true)
+  const followLiveRef = useRef(true)
+  followLiveRef.current = followLive
+  useEffect(() => {
+    const el = boardRef.current
+    if (!el || draftType === 'auction') return
+    const pause = () => {
+      if (followLiveRef.current) setFollowLive(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) pause()
+    }
+    el.addEventListener('wheel', pause, { passive: true })
+    el.addEventListener('touchmove', pause, { passive: true })
+    el.addEventListener('keydown', onKey)
+    return () => {
+      el.removeEventListener('wheel', pause)
+      el.removeEventListener('touchmove', pause)
+      el.removeEventListener('keydown', onKey)
+    }
+  }, [draftType])
+  const pickRound = (manual: (prev: number) => number) => {
+    setFollowLive(false)
+    setSelectedRound(manual)
+  }
+  const scrollToLivePick = () => {
+    if (currentOverallPick == null) return
+    const el = boardRef.current?.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
+    el?.scrollIntoView?.({
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    })
+    el?.classList.add('draft-live-focus-ring')
+    window.setTimeout(() => el?.classList.remove('draft-live-focus-ring'), 900)
+  }
+  const resumeFollowing = () => {
+    setFollowLive(true)
+    if (currentOverallPick == null) return
+    const round = Math.ceil(currentOverallPick / teamCount)
+    setSelectedRound(Math.min(rounds, Math.max(1, round)))
+    // After the round switch paints, so the cell exists in a single-round view.
+    window.requestAnimationFrame(() => scrollToLivePick())
+  }
 
   useEffect(() => {
     setSelectedRound((prev) => Math.min(Math.max(1, prev), Math.max(1, rounds)))
@@ -236,6 +303,7 @@ function DraftBoardInner({
     lastFollowedOverallRef.current = currentOverallPick
     if (prev === null) return
     if (currentOverallPick <= prev) return
+    if (!followLiveRef.current) return
     const round = Math.ceil(currentOverallPick / teamCount)
     setSelectedRound((r) => Math.min(rounds, Math.max(1, round)))
     setViewMode((mode) => (mode === 'all' ? 'all' : 'single'))
@@ -243,17 +311,11 @@ function DraftBoardInner({
 
   useEffect(() => {
     if (draftType === 'auction' || currentOverallPick == null) return
-    const raf = window.requestAnimationFrame(() => {
-      const el = boardRef.current?.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
-      el?.scrollIntoView?.({
-        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'nearest',
-        inline: 'nearest',
-      })
-      el?.classList.add('draft-live-focus-ring')
-      window.setTimeout(() => el?.classList.remove('draft-live-focus-ring'), 900)
-    })
+    if (!followLiveRef.current) return
+    const raf = window.requestAnimationFrame(() => scrollToLivePick())
     return () => window.cancelAnimationFrame(raf)
+    // scrollToLivePick reads only refs and currentOverallPick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOverallPick, draftType])
 
   const slotOrderBySlot = useMemo(() => new Map(slotOrder.map((entry) => [entry.slot, entry])), [slotOrder])
@@ -297,6 +359,9 @@ function DraftBoardInner({
     return map
   }, [keeperLocks])
 
+  /** Picks by overall number: a cell finds its pick in constant time (the board looked each one up in a full scan). */
+  const pickByOverall = useMemo(() => new Map(picks.map((entry) => [entry.overall, entry])), [picks])
+
   const keeperCountByRoster = useMemo(() => {
     const counts = new Map<string, number>()
     for (const lock of keeperLocks) counts.set(lock.rosterId, (counts.get(lock.rosterId) ?? 0) + 1)
@@ -307,6 +372,7 @@ function DraftBoardInner({
   const boardRowsByRoundAndSlot = useMemo(() => {
     const totalPicks = rounds * teamCount
     const byRoundSlot: Record<number, Map<number, SequentialBoardEntry>> = {}
+    const ownerOf = buildPickOwnerResolver(slotOrder, tradedPicks)
 
     for (let overall = 1; overall <= totalPicks; overall += 1) {
       const round = Math.ceil(overall / teamCount)
@@ -320,7 +386,7 @@ function DraftBoardInner({
       const key = `${round}-${ownerSlot}`
       const existing = pickByKey[key]
       const lock = keeperByKey[key]
-      const resolved = resolvePickOwner(round, ownerSlot, slotOrder, tradedPicks)
+      const resolved = ownerOf(round, ownerSlot)
       const defaultOwner = slotOrderBySlot.get(ownerSlot) ?? null
       const ownerRosterId = resolved?.rosterId ?? defaultOwner?.rosterId ?? null
       const currentOwner = resolved?.rosterId ? (slotOrderByRosterId.get(resolved.rosterId) ?? null) : null
@@ -377,6 +443,7 @@ function DraftBoardInner({
         signatureChip: existing?.playerName ? signatureByOverall?.[overall] ?? null : null,
         // A kept player is not a draft-slot contract; every other tile shows its slot's salary.
         slotSalary: useLock ? null : slotSalaryByOverall?.[overall] ?? null,
+        keeperPlacementNote: useLock ? lock?.placementNote ?? null : null,
         keeperYear: useLock && lock && keeperYearsByPlayer
           ? keeperPlayerKeys(lock).map((key) => keeperYearsByPlayer[key]).find((n) => typeof n === 'number') ?? null
           : null,
@@ -528,7 +595,7 @@ function DraftBoardInner({
               with no roster has no such cells, and naming a state that cannot appear is noise.
             */}
             <span
-              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/45 max-md:hidden"
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] uppercase tracking-[0.12em] text-white/50 max-md:hidden"
               data-testid="draft-board-legend"
             >
               {/* Each swatch is a miniature of the real cell: same tile, same ring. The old legend
@@ -592,7 +659,7 @@ function DraftBoardInner({
               <button
                 type="button"
                 data-testid="draft-board-prev-round"
-                onClick={() => setSelectedRound((prev) => Math.max(1, prev - 1))}
+                onClick={() => pickRound((prev) => Math.max(1, prev - 1))}
                 disabled={!navigation.canGoPrev}
                 className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[11px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
               >
@@ -601,7 +668,10 @@ function DraftBoardInner({
               <select
                 value={navigation.round}
                 data-testid="draft-board-round-selector"
-                onChange={(event) => setSelectedRound(Math.max(1, Number(event.target.value) || 1))}
+                onChange={(event) => {
+                  const round = Math.max(1, Number(event.target.value) || 1)
+                  pickRound(() => round)
+                }}
                 className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white shadow-inner"
                 aria-label="Draft board round selector"
               >
@@ -614,7 +684,7 @@ function DraftBoardInner({
               <button
                 type="button"
                 data-testid="draft-board-next-round"
-                onClick={() => setSelectedRound((prev) => Math.min(rounds, prev + 1))}
+                onClick={() => pickRound((prev) => Math.min(rounds, prev + 1))}
                 disabled={!navigation.canGoNext}
                 className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[11px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
               >
@@ -700,7 +770,7 @@ function DraftBoardInner({
                       )
                     }
 
-                    const existing = picks.find((entry) => entry.overall === pick.overall)
+                    const existing = pickByOverall.get(pick.overall)
                     return (
                       <DraftBoardCell
                         key={pick.overall}
@@ -713,6 +783,7 @@ function DraftBoardInner({
                         tradedPickColorMode={tradedPickColorMode}
                         showNewOwnerInRed={showNewOwnerInRed}
                         pickHighlight={pickHighlight(existing)}
+                        isOwnPick={Boolean(currentUserRosterId && pick.ownerRosterId === currentUserRosterId)}
                         onTradeFromCell={
                           currentUserRosterId && onCellTrade && pick.ownerRosterId && typeof pick.slot === 'number'
                             ? () =>
@@ -759,10 +830,17 @@ function DraftBoardInner({
           <div ref={teamGridRef} className="min-w-max sm:min-w-full max-md:[--af-board-col-max:84px]" data-testid="draft-board-grid">
             <div
               ref={teamHeaderRef}
-              className={`relative z-10 grid will-change-transform gap-[4px] border-b pb-0.5 backdrop-blur-md ${
+              /*
+               * Solid, not glass. This row is pinned over the rounds as the board scrolls, and with a
+               * 95% background plus `backdrop-blur` a manager's browser drew the tiles straight through
+               * it during a live draft (reported 2026-11-25: "the manager names have blended into the
+               * draft board"). An opaque fill has nothing to composite, and the rounds below sit in
+               * their own lower stacking context, so no tile can paint over a name.
+               */
+              className={`relative z-20 grid will-change-transform gap-[4px] border-b pb-0.5 ${
                 rs
-                  ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
-                  : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
+                  ? 'border-cyan-500/25 bg-[#070d1c] shadow-[0_16px_40px_rgba(0,0,0,0.6)]'
+                  : 'border-white/[0.12] bg-[#0b1428] shadow-[0_12px_32px_rgba(0,0,0,0.55)]'
               }`}
               style={{ gridTemplateColumns: `${ROUND_COLUMN} repeat(${teamCount}, ${BOARD_COLUMN})` }}
               data-testid="draft-board-team-header"
@@ -785,7 +863,8 @@ function DraftBoardInner({
                   title={[headerName, entry.tribe ? `${entry.tribe.name} tribe` : null, meta?.aiArchetypeLabel ?? null].filter(Boolean).join(' · ')}
                   className={`group relative flex h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 transition duration-150 ${
                     currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
-                  } ${isUser ? 'bg-white/[0.07]' : ''}`}
+                  } ${isUser ? 'bg-white/[0.16] ring-1 ring-inset ring-white/70' : ''}`}
+                  data-viewer={isUser ? 'true' : undefined}
                 >
                   <span
                     className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-bold uppercase tracking-[0.03em] shadow-sm ${
@@ -806,6 +885,9 @@ function DraftBoardInner({
                           ;(e.currentTarget as HTMLImageElement).style.display = 'none'
                         }}
                       />
+                    ) : headerName === OPEN_SEAT_LABEL ? (
+                      // An empty seat has no manager to take initials from ("OS" read as a name).
+                      <UserRound className="h-3.5 w-3.5 opacity-70" aria-hidden data-testid="draft-board-open-seat-icon" />
                     ) : (
                       managerInitials(headerName)
                     )}
@@ -844,6 +926,14 @@ function DraftBoardInner({
                       AUTO
                     </span>
                   ) : null}
+                  {isUser ? (
+                    <span
+                      className={`absolute right-0.5 rounded-[3px] bg-white px-1 text-[11px] font-extrabold uppercase leading-[13px] tracking-[0.04em] text-[#0b1428] ${keeperCountByRoster.get(entry.rosterId) ? "top-[15px]" : "top-0"}`}
+                      data-testid="draft-board-team-header-you"
+                    >
+                      {headerCopy.you}
+                    </span>
+                  ) : null}
                   {currentOwnerSlot === entry.slot ? (
                     <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
                   ) : null}
@@ -872,7 +962,7 @@ function DraftBoardInner({
               })}
             </div>
 
-            <div className="space-y-[2px] pt-0.5">
+            <div className="relative z-0 isolate space-y-[2px] pt-0.5" data-testid="draft-board-rounds">
               {visibleRounds.map((round) => (
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
@@ -917,7 +1007,7 @@ function DraftBoardInner({
                         )
                       }
                       const { pick, overall } = cell
-                      const existing = picks.find((entry) => entry.overall === overall)
+                      const existing = pickByOverall.get(overall)
                       const isPickDisplayEmpty =
                         pick.isKeeper
                           ? false
@@ -953,7 +1043,33 @@ function DraftBoardInner({
                             isDevyRound={devyRounds.includes(round) && isPickDisplayEmpty}
                             isCollegeRound={c2cCollegeRounds.includes(round) && isPickDisplayEmpty}
                             pickHighlight={isCurrentPick ? 'none' : pickHighlight(existing)}
+                            autoDraft={autoDraft}
+                            viewerUpcomingLabel={
+                              isPickDisplayEmpty && Boolean(currentUserRosterId) && pick.ownerRosterId === currentUserRosterId
+                                ? headerCopy.yourPick
+                                : null
+                            }
                             emptyCellDirection={emptyCellDirection}
+                            isOwnPick={Boolean(currentUserRosterId && pick.ownerRosterId === currentUserRosterId)}
+                            onTradeForPick={
+                              onTradeForPick &&
+                              pick.ownerRosterId &&
+                              tradeForPickTileEligible({
+                                viewerRosterId: currentUserRosterId,
+                                ownerRosterId: pick.ownerRosterId,
+                                slotRosterId: slotEntry.rosterId,
+                                made: !isPickDisplayEmpty,
+                                keeperLocked: Boolean(pick.isKeeper || keeperByKey[`${round}-${slotEntry.slot}`]),
+                              })
+                                ? () =>
+                                    onTradeForPick({
+                                      round,
+                                      slot: slotEntry.slot,
+                                      overall,
+                                      ownerRosterId: pick.ownerRosterId ?? '',
+                                    })
+                                : undefined
+                            }
                             onTradeFromCell={
                               currentUserRosterId && onCellTrade && pick.ownerRosterId && typeof pick.slot === 'number'
                                 ? () =>
@@ -991,6 +1107,17 @@ function DraftBoardInner({
           </div>
         </div>
       )}
+      {/* Fixed, not absolute: the board is taller than the screen, so its own bottom edge is off-screen. */}
+      {!followLive && draftType !== 'auction' && currentOverallPick != null ? (
+        <button
+          type="button"
+          data-testid="draft-board-follow-live"
+          onClick={resumeFollowing}
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+112px)] left-1/2 z-[60] min-h-[44px] -translate-x-1/2 rounded-full border border-cyan-300/50 bg-[#06263a] px-4 text-[12px] font-semibold text-cyan-50 shadow-[0_8px_24px_rgba(0,0,0,0.5)] transition hover:bg-[#0a3550] active:scale-95"
+        >
+          Back to live pick · #{currentOverallPick}
+        </button>
+      ) : null}
     </section>
   )
 }

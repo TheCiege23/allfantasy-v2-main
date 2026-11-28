@@ -1,21 +1,27 @@
 'use client'
 
 import Link from 'next/link'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SerializedConference } from '@/lib/tournament/tournamentPageData'
 import type { SerializedTournamentLeague } from '@/lib/tournament/tournamentPageData'
 import type { TournamentParticipantUiStatus } from '@/lib/tournament/useTournamentParticipantState'
 
+/**
+ * Your place in the tournament: one headline, your record, points and conference rank, and the one next step.
+ * The round is not repeated here — the Home header carries it (2026-11-24 audit). Every word is translated.
+ */
 export function TournamentStatusCard({
   status,
   conference,
   league,
   shellName,
   currentRound,
-  totalRounds,
   recordW,
   recordL,
   pointsFor,
   conferenceRank,
+  pointsRank,
+  pointsRankOf,
   basePath,
   nextDraftAt,
   isDraftLive,
@@ -26,16 +32,21 @@ export function TournamentStatusCard({
   league: SerializedTournamentLeague | null
   shellName: string
   currentRound: number
-  totalRounds: number
+  /** Kept for callers; the round is said in the Home header, not here. */
+  totalRounds?: number
   recordW: number
   recordL: number
   pointsFor: number
   conferenceRank: number | null
+  /** Your place on the whole field by points scored, said under Points for rather than as a separate panel. */
+  pointsRank?: number | null
+  pointsRankOf?: number
   basePath: string
   nextDraftAt: Date | null
   isDraftLive: boolean
   isWildcardAdvance?: boolean
 }) {
+  const { t, tInterpolate } = useLanguage()
   const wl = `${recordW}-${recordL}`
 
   let centerTitle = ''
@@ -43,104 +54,99 @@ export function TournamentStatusCard({
   let centerClass = 'text-[var(--tournament-active)]'
 
   if (status === 'champion') {
-    centerTitle = '🏆 Tournament Champion'
-    centerSub = `You won ${shellName}`
+    centerTitle = t('tournament.status.champion.title')
+    centerSub = tInterpolate('tournament.status.champion.sub', { name: shellName })
     centerClass = 'bg-gradient-to-r from-yellow-200 via-amber-300 to-yellow-200 bg-clip-text text-transparent'
   } else if (status === 'eliminated') {
-    centerTitle = 'Your tournament run has ended'
-    centerSub = `Round ${currentRound} · ${wl} · ${pointsFor.toFixed(1)} PF`
+    centerTitle = t('tournament.status.eliminated.title')
+    centerSub = tInterpolate('tournament.status.eliminated.sub', {
+      round: String(currentRound),
+      record: wl,
+      points: pointsFor.toFixed(1),
+    })
     centerClass = 'text-[var(--tournament-elim)]'
   } else if (status === 'bubble') {
-    centerTitle = '⚠ You are in the bubble'
-    centerSub = 'Every point counts — climb the cutline to advance.'
+    centerTitle = t('tournament.status.bubble.title')
+    centerSub = t('tournament.status.bubble.sub')
     centerClass = 'text-[var(--tournament-bubble)]'
   } else if (status === 'advanced') {
-    const wild = Boolean(isWildcardAdvance)
-    centerTitle = wild ? '🃏 Wildcard qualifier' : '🏆 You qualified for the next round'
-    centerSub = `Round ${currentRound} → keep an eye on your new league & draft`
+    centerTitle = isWildcardAdvance ? t('tournament.status.advanced.wildcard') : t('tournament.status.advanced.title')
+    centerSub = t('tournament.status.advanced.sub')
     centerClass = 'text-[var(--tournament-gold)]'
   } else if (isDraftLive || nextDraftAt) {
-    centerTitle = 'Draft window'
-    centerSub = isDraftLive ? 'Draft is live — head to your league room.' : `Scheduled draft · check Drafts tab`
+    centerTitle = t('tournament.status.draft.title')
+    centerSub = isDraftLive ? t('tournament.status.draft.live') : t('tournament.status.draft.scheduled')
     centerClass = 'text-[var(--tournament-gold)]'
   } else {
-    centerTitle = `You are competing in Round ${currentRound}`
-    centerSub = 'Standings update as scores sync — no invite needed when you advance.'
+    centerTitle = tInterpolate('tournament.status.competing.title', { round: String(currentRound) })
+    centerSub = t('tournament.status.competing.sub')
     centerClass = 'text-[var(--tournament-active)]'
   }
 
+  const ctaClass = 'mt-4 inline-flex w-full min-h-[48px] items-center justify-center rounded-xl text-[14px] font-semibold'
   const cta =
     status === 'eliminated' ? (
-      <Link
-        href={`${basePath}/history`}
-        className="mt-4 inline-flex w-full min-h-[48px] items-center justify-center rounded-xl bg-white/10 text-[14px] font-semibold text-white hover:bg-white/15"
-        data-testid="tournament-status-history"
-      >
-        View tournament history
+      <Link href={`${basePath}/history`} className={`${ctaClass} bg-white/10 text-white hover:bg-white/15`} data-testid="tournament-status-history">
+        {t('tournament.status.cta.history')}
       </Link>
     ) : status === 'bubble' ? (
       <Link
         href={`${basePath}/standings`}
-        className="mt-4 inline-flex w-full min-h-[48px] items-center justify-center rounded-xl bg-amber-500/20 text-[14px] font-semibold text-amber-100 hover:bg-amber-500/30"
+        className={`${ctaClass} bg-amber-500/20 text-amber-100 hover:bg-amber-500/30`}
         data-testid="tournament-status-bubble-standings"
       >
-        View bubble standings
+        {t('tournament.status.cta.bubble')}
       </Link>
     ) : status === 'advanced' ? (
       <Link
         href={`${basePath}/league`}
-        className="mt-4 inline-flex w-full min-h-[48px] items-center justify-center rounded-xl bg-yellow-500/25 text-[14px] font-semibold text-yellow-50 hover:bg-yellow-500/35"
+        className={`${ctaClass} bg-yellow-500/25 text-yellow-50 hover:bg-yellow-500/35`}
         data-testid="tournament-status-new-league"
       >
-        See your new league
+        {t('tournament.status.cta.newLeague')}
       </Link>
     ) : nextDraftAt || isDraftLive ? (
       <Link
         href={league?.leagueId ? `/league/${league.leagueId}` : `${basePath}/drafts`}
-        className="mt-4 inline-flex w-full min-h-[48px] items-center justify-center rounded-xl bg-cyan-500/20 text-[14px] font-semibold text-cyan-100 hover:bg-cyan-500/30"
+        className={`${ctaClass} bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30`}
         data-testid="tournament-status-draft"
       >
-        {isDraftLive ? 'Enter draft room' : 'View draft room'}
+        {isDraftLive ? t('tournament.status.cta.enterDraft') : t('tournament.status.cta.viewDraft')}
       </Link>
     ) : (
       <Link
         href={`${basePath}/league`}
-        className="mt-4 inline-flex w-full min-h-[48px] items-center justify-center rounded-xl bg-cyan-500/20 text-[14px] font-semibold text-cyan-100 hover:bg-cyan-500/30"
+        className={`${ctaClass} bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30`}
         data-testid="tournament-status-league"
       >
-        View my league
+        {t('tournament.status.cta.myLeague')}
       </Link>
     )
 
   return (
-    <div className="tournament-panel relative overflow-hidden p-4 md:p-5">
+    <div className="tournament-panel relative overflow-hidden p-4 md:p-5" data-testid="tournament-status-card">
       {status === 'eliminated' ? (
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-gray-900/40 to-transparent" />
       ) : null}
       <div className="relative flex flex-col gap-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {conference ? (
-              <span
-                className="rounded-full border px-3 py-1 text-[11px] font-bold"
-                style={{
-                  borderColor: `${conference.colorHex ?? '#fff'}55`,
-                  background: `${conference.colorHex ?? '#333'}22`,
-                  color: 'var(--tournament-text-full)',
-                }}
-              >
-                {conference.name}
-              </span>
-            ) : null}
-            {league ? (
-              <span className="text-[14px] font-bold text-white">{league.name}</span>
-            ) : (
-              <span className="text-[14px] font-bold text-white/80">League TBD</span>
-            )}
-          </div>
-          <span className="rounded-md bg-white/10 px-2 py-1 font-mono text-[11px] text-[var(--tournament-active)]">
-            Round {currentRound}
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {conference ? (
+            <span
+              className="rounded-full border px-3 py-1 text-[11px] font-bold"
+              style={{
+                borderColor: `${conference.colorHex ?? '#fff'}55`,
+                background: `${conference.colorHex ?? '#333'}22`,
+                color: 'var(--tournament-text-full)',
+              }}
+            >
+              {conference.name}
+            </span>
+          ) : null}
+          {league ? (
+            <span className="text-[14px] font-bold text-white">{league.name}</span>
+          ) : (
+            <span className="text-[14px] font-bold text-white/80">{t('tournament.status.leagueTbd')}</span>
+          )}
         </div>
 
         <div className="py-2 text-center">
@@ -150,15 +156,20 @@ export function TournamentStatusCard({
 
         <div className="grid grid-cols-3 gap-2 border-t border-[var(--tournament-border)] pt-4 text-center">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">Record</p>
+            <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">{t('tournament.status.stat.record')}</p>
             <p className="text-[15px] font-bold text-white">{wl}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">Points for</p>
+            <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">{t('tournament.status.stat.points')}</p>
             <p className="text-[15px] font-bold text-white">{pointsFor.toFixed(1)}</p>
+            {pointsRank != null && pointsRankOf ? (
+              <p className="text-[11px] text-[var(--tournament-text-dim)]" data-testid="tournament-status-points-rank">
+                {tInterpolate('tournament.status.stat.pointsRank', { rank: String(pointsRank), total: String(pointsRankOf) })}
+              </p>
+            ) : null}
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">Conf. rank</p>
+            <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">{t('tournament.status.stat.confRank')}</p>
             <p className="text-[15px] font-bold text-white">{conferenceRank ?? '—'}</p>
           </div>
         </div>

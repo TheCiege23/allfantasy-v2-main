@@ -93,6 +93,26 @@ export function guillotineHeadline(args: {
   return `Week ${week} · You’re ${me.margin.toFixed(1)} points over the cut`
 }
 
+/**
+ * The hub hero's title: this week's verdict for the viewer, or null when they hold no roster in the league. The
+ * hero leads with this rather than the league's name — the workspace banner above already carries the identity.
+ * Short on purpose: it is set in the display face, and "You're … points over the cut" wrapped to a lone "CUT".
+ */
+export function guillotineVerdict(args: { me: ChopLineRow | null; myChoppedWeek: number | null }): string | null {
+  const { me, myChoppedWeek } = args
+  if (myChoppedWeek != null) return `Chopped in week ${myChoppedWeek}`
+  if (!me) return null
+  if (me.tier === 'chop_zone') return 'In the chop zone'
+  return `${me.margin.toFixed(1)} over the cut`
+}
+
+/** "Week 4 of 11" when the league's last chop week is configured and not yet passed; otherwise "Week 4". */
+export function guillotineWeekLabel(week: number, endWeek: number | null | undefined, periodWeeks?: number | null): string {
+  // A two-week period is keyed by its last week (lib/guillotine/eliminationPeriods.ts): "Weeks 3–4 of 18".
+  const span = (periodWeeks ?? 1) > 1 ? `Weeks ${week - (periodWeeks ?? 1) + 1}–${week}` : `Week ${week}`
+  return endWeek != null && endWeek >= week ? `${span} of ${endWeek}` : span
+}
+
 const TIEBREAK_LABEL: Record<string, string> = {
   season_points: 'Total season points',
   previous_period: 'Last week’s points',
@@ -112,7 +132,72 @@ export function tiebreakLabels(order: readonly string[] | null | undefined, peri
   )
 }
 
+/**
+ * The Rules & Settings card, in words. It used to print the stored config verbatim ("Elimination end 11",
+ * `season_points → previous_period`, "— pts"); the tiebreak order uses tiebreakLabels so it reads exactly as the
+ * hub's "Ties are broken by" card on the same page.
+ */
+export type GuillotineTradeWindow = {
+  tradesAllowed: boolean
+  tradesCloseAtTeamsLeft: number | null
+  tradesClosed: boolean
+  /** Teams alive now; null when trades are off or the count could not be read. */
+  teamsLeft: number | null
+}
+
+/**
+ * The one line the home shows about trades (lib/guillotine/guillotineTrades.ts), or null when there is nothing to
+ * warn about: trades off, or on with no closing point.
+ */
+export function guillotineTradeWindowLine(t: GuillotineTradeWindow | null | undefined): string | null {
+  if (!t?.tradesAllowed || t.tradesCloseAtTeamsLeft == null) return null
+  if (t.tradesClosed) return `Trades are closed. They closed once ${t.tradesCloseAtTeamsLeft} teams were left.`
+  const now = t.teamsLeft != null ? ` ${t.teamsLeft} are left now.` : ''
+  return `Trades close once ${t.tradesCloseAtTeamsLeft} teams are left.${now}`
+}
+
+export function guillotineRuleRows(config: {
+  eliminationStartWeek: number
+  eliminationEndWeek: number | null
+  teamsPerChop: number
+  tiebreakerOrder?: readonly string[] | null
+  dangerMarginPoints: number | null
+  trades?: GuillotineTradeWindow | null
+  freeAgencyFromWeek?: number | null
+  /** 2 in a two-week league: a chop ends each two-week period, not each week. */
+  periodWeeks?: number | null
+}): { label: string; value: string | string[] }[] {
+  const ties = tiebreakLabels(config.tiebreakerOrder)
+  const t = config.trades
+  return [
+    { label: 'First chop', value: `Week ${config.eliminationStartWeek}` },
+    { label: 'Last chop', value: config.eliminationEndWeek != null ? `Week ${config.eliminationEndWeek}` : 'No last week set' },
+    { label: (config.periodWeeks ?? 1) > 1 ? 'Chopped each two-week period' : 'Chopped each week', value: `${config.teamsPerChop} ${config.teamsPerChop === 1 ? 'team' : 'teams'}` },
+    {
+      label: 'Danger tier',
+      value: config.dangerMarginPoints != null ? `Within ${config.dangerMarginPoints} points of the cut` : 'Not set',
+    },
+    { label: 'Ties are broken by', value: ties.length > 0 ? ties : 'Not set' },
+    ...(t
+      ? [{
+          label: 'Trades',
+          value: !t.tradesAllowed ? 'Off' : t.tradesClosed ? 'Closed' : t.tradesCloseAtTeamsLeft != null ? `On until ${t.tradesCloseAtTeamsLeft} teams are left` : 'On',
+        }]
+      : []),
+    ...(config.freeAgencyFromWeek != null ? [{ label: 'Chopped players skip waivers', value: `From week ${config.freeAgencyFromWeek}` }] : []),
+  ]
+}
+
 /** Tier → the spec's words. Colour is never the only signal; this text always renders. */
 export function tierLabel(tier: ChopLineRow['tier']): string {
   return tier === 'chop_zone' ? 'Chop zone' : tier === 'danger' ? 'Danger' : 'Safe'
+}
+
+/**
+ * Who a replayed chop names. The replay overlay reads "Chopped @name"; it was handed "Week 3" and read
+ * "Chopped @Week 3". Undefined when no name is known: the overlay then plays without one.
+ */
+export function choppedTeamNames(chopped: ReadonlyArray<{ name?: string | null; week?: number | null }> | null | undefined, week: number): string | undefined {
+  const names = (chopped ?? []).filter((c) => c.week === week).map((c) => c.name?.trim()).filter((n): n is string => Boolean(n))
+  return names.length > 0 ? names.join(' & ') : undefined
 }

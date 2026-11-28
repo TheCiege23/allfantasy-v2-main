@@ -12,6 +12,7 @@ import { leagueValueForPlayer, valuePositionsAgree, type TradePlayerIdentity } f
 import type { LeagueNamedValue } from './league-values/leagueTradeValues';
 
 export interface ValuationContext {
+  afLeagueMarketBook?: ReturnType<typeof import('./core-app/valueBook').valueBookFor>;
   leagueValueBySleeperId?: ReadonlyMap<string, LeagueNamedValue>;
   leagueUnpricedReasonBySleeperId?: ReadonlyMap<string, UnpricedReason>;
   leagueUnpricedReasonByNameLower?: ReadonlyMap<string, UnpricedReason>;
@@ -55,6 +56,7 @@ export interface AssetValue {
 }
 
 export interface PricedAsset {
+  valueAsOf?: string;
   name: string;
   type: 'player' | 'pick';
   value: number;
@@ -86,6 +88,7 @@ export interface PricedAsset {
   source:
     | 'excel'
     | 'fantasycalc'
+    | 'allfantasy'
     | 'curve'
     | 'idp-vorp'
     | 'kicker-flat'
@@ -941,69 +944,4 @@ export async function computeTradeDeltaFromUserTrades(
     valuationStats: combinedStats,
     idpCeilingBand: idpCeilingGradeBand(received.items, gave.items)
   };
-}
-
-export type ValuationMode = 'atTime' | 'hindsight';
-
-export function createValuationContext(
-  trade: { timestamp?: number },
-  isSuperFlex: boolean,
-  mode: ValuationMode = 'atTime'
-): ValuationContext {
-  const asOfDate = mode === 'hindsight'
-    ? new Date().toISOString().slice(0, 10)
-    : trade.timestamp
-      ? new Date(trade.timestamp).toISOString().slice(0, 10)
-      : new Date().toISOString().slice(0, 10);
-
-  return { asOfDate, isSuperFlex };
-}
-
-export async function computeDualModeTradeDelta(
-  trade: UserTrade,
-  viewerUserId: string,
-  isSuperFlex: boolean,
-  sleeperUserId?: string,
-  leagueContext?: Pick<ValuationContext, 'isDynasty' | 'numTeams' | 'ppr'>
-): Promise<{
-  atTheTime: TradeDelta | null;
-  withHindsight: TradeDelta | null;
-  comparison: string;
-}> {
-  const atTimeCtx = { ...createValuationContext(trade, isSuperFlex, 'atTime'), ...leagueContext };
-  const hindsightCtx = { ...createValuationContext(trade, isSuperFlex, 'hindsight'), ...leagueContext };
-
-  let fcPlayers: FantasyCalcPlayer[] = [];
-  try {
-    fcPlayers = await getFantasyCalcValuesDbFirst({
-      isDynasty: leagueContext?.isDynasty ?? true,
-      numQbs: isSuperFlex ? 2 : 1,
-      numTeams: leagueContext?.numTeams ?? 12,
-      ppr: leagueContext?.ppr ?? 1
-    });
-  } catch (e) {
-    console.warn('FantasyCalc fetch failed:', e);
-  }
-
-  atTimeCtx.fantasyCalcPlayers = fcPlayers;
-  hindsightCtx.fantasyCalcPlayers = fcPlayers;
-
-  const [atTheTime, withHindsight] = await Promise.all([
-    computeTradeDeltaFromUserTrades(trade, viewerUserId, atTimeCtx, sleeperUserId),
-    computeTradeDeltaFromUserTrades(trade, viewerUserId, hindsightCtx, sleeperUserId)
-  ]);
-
-  let comparison = 'Unable to compare';
-  if (atTheTime && withHindsight) {
-    const diff = withHindsight.percentDiff - atTheTime.percentDiff;
-    if (Math.abs(diff) < 5) {
-      comparison = 'Trade grade remained consistent over time';
-    } else if (diff > 0) {
-      comparison = 'Trade has aged well - looks better now than it did then';
-    } else {
-      comparison = 'Trade looked better at the time than it does now';
-    }
-  }
-
-  return { atTheTime, withHindsight, comparison };
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
 import { startPhoneCodeSignIn } from "@/lib/auth/phoneCodeSignIn"
+import { SMS_REGION_MESSAGE } from "@/lib/phone/smsRegion"
 
 export const runtime = "nodejs"
 
@@ -35,10 +36,12 @@ export async function POST(req: Request) {
   const result = await startPhoneCodeSignIn(phone)
   if (result.ok) return NextResponse.json({ ok: true })
 
-  const status = result.error === "INVALID_PHONE" ? 400 : 503
+  const status = result.error === "INVALID_PHONE" || result.error === "PHONE_REGION_NOT_SUPPORTED" ? 400 : 503
   const message =
     result.error === "INVALID_PHONE"
       ? "Enter a valid phone number, including the area code."
-      : "Text codes aren't available right now. Sign in with your password instead."
+      : result.error === "PHONE_REGION_NOT_SUPPORTED"
+        ? `${SMS_REGION_MESSAGE} Sign in with your password instead.`
+        : "Text codes aren't available right now. Sign in with your password instead."
   return NextResponse.json({ error: result.error, message }, { status })
 }

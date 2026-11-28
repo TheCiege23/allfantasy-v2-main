@@ -23,6 +23,8 @@ const hm = vi.hoisted(() => ({
   listInjuryFacts: vi.fn(),
   playerSeasonStatsFindMany: vi.fn(),
   sportsPlayerFindMany: vi.fn(),
+  loadDevySchoolConferences: vi.fn(),
+  isDevyLeague: vi.fn(),
 }))
 
 vi.mock('@/lib/injuries/injuryReadPort', async (orig) => ({
@@ -56,8 +58,23 @@ vi.mock('@/lib/sport-teams/SportPlayerPoolResolver', () => ({
   getPlayerPoolForLeague: hm.getPlayerPoolForLeague,
 }))
 
+// The devy school → conference map is a DB read; the scope rule itself (devySchoolsInScope) stays real.
+vi.mock('@/lib/college/devySchoolConferences', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  loadDevySchoolConferences: (...a: unknown[]) => hm.loadDevySchoolConferences(...a),
+}))
+
+// The usage depth index is a DB read; its matching (usageForSchool) stays real.
+vi.mock('@/lib/college/usageDepthStore', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  loadUsageDepthIndex: async () => ({
+    bySchool: new Map([['texas', { games: 4, byStat: { att: [], car: [], rec: [{ name: 'Cam Coleman', nameKey: 'camcoleman', rank: 1, total: 24, share: 0.3, perGame: 6 }] } }]]),
+    riToCfbd: new Map(),
+  }),
+}))
+
 vi.mock('@/lib/devy', () => ({
-  isDevyLeague: vi.fn().mockResolvedValue(false),
+  isDevyLeague: (...a: unknown[]) => hm.isDevyLeague(...a),
   getPromotedProPlayerIdsExcludedFromRookiePool: vi.fn().mockResolvedValue(new Set()),
 }))
 
@@ -172,6 +189,8 @@ describe('getResolvedDraftPoolForLeague', () => {
     })
     hm.playerAnalyticsFindMany.mockResolvedValue([])
     hm.devyPlayerFindMany.mockResolvedValue([])
+    hm.isDevyLeague.mockResolvedValue(false)
+    hm.loadDevySchoolConferences.mockResolvedValue(new Map())
     hm.loadRollingInsightsSeasonByDraftPoolKey.mockResolvedValue({
       identityByPoolKey: new Map(),
       riSeasonByPlayerId: new Map(),
@@ -180,6 +199,46 @@ describe('getResolvedDraftPoolForLeague', () => {
     hm.adpDataFindFirst.mockResolvedValue(null)
     hm.adpDataFindMany.mockResolvedValue([])
     hm.playerSeasonStatsFindMany.mockResolvedValue([])
+  })
+
+  /*
+   * A devy league can limit its college players to chosen conferences (2026-11-25). The college read asks
+   * for in-scope schools only, so the take limit fills from them; pros are untouched.
+   */
+  it('devy: reads only in-scope schools for the college pool, and every school without a scope', async () => {
+    const schools = new Map([['Alabama', 'Southeastern Conference'], ['Ohio State', 'Big Ten Conference'], ['Boise State', 'Pac-12 Conference'], ['Notre Dame', 'Independent']])
+    hm.loadDevySchoolConferences.mockResolvedValue(schools)
+    hm.isDevyLeague.mockResolvedValue(true)
+    hm.getLiveADP.mockResolvedValue([])
+    hm.getPlayerPoolForLeague.mockResolvedValue([])
+    hm.draftSessionFindUnique.mockResolvedValue({ devyConfig: { enabled: true, devyRounds: [1] }, c2cConfig: null, keeperSelections: null, draftType: 'snake' })
+    // The college pool read (eligible devy players); later reads, such as graduated players, are not it.
+    const collegeWhere = () =>
+      hm.devyPlayerFindMany.mock.calls.map((c) => (c[0] as { where: Record<string, unknown> }).where).find((w) => w?.devyEligible === true)
+
+    hm.leagueFindUnique.mockResolvedValue({ sport: 'NFL', leagueVariant: 'devy_dynasty', settings: { collegeConferenceScope: { preset: 'power' } }, starters: [{ slot: 'QB' }], leagueSettings: { draftType: 'snake' } })
+    hm.devyPlayerFindMany.mockImplementation(async (args: { where?: { devyEligible?: boolean } }) =>
+      args?.where?.devyEligible
+        ? [{ id: 'devy-1', name: 'Cam Coleman', position: 'WR', school: 'Texas', devyAdp: 3, transferStatus: true, transferFromSchool: 'Auburn', transferToSchool: 'Texas', transferEligibility: 'Immediate' }]
+        : [])
+    let getResolvedDraftPoolForLeague = await loadPool()
+    const scoped = await getResolvedDraftPoolForLeague('league-unit', { effectiveLeagueTemplate: effectiveNflNoK() })
+    expect(hm.devyPlayerFindMany).toHaveBeenCalled()
+    // The college player's portal move rides along to his card (lib/devy/portalMoves.ts).
+    const coleman = scoped.entries.find((e) => e.name === 'Cam Coleman') as { transferNote?: string | null } | undefined
+    expect(coleman?.transferNote).toMatch(/^Transferred from Auburn to Texas \(\d{4} portal\), eligible right away$/)
+    // And his place at his school by usage (lib/college/usageDepth.ts): college football has no published chart.
+    expect((coleman as { depthNote?: string | null } | undefined)?.depthNote).toBe('1st at Texas in catches, last 4 games (6 a game, 30%)')
+    expect(collegeWhere()?.school).toEqual({ in: ['Alabama', 'Ohio State', 'Notre Dame'] })
+    expect(collegeWhere()?.sport).toBe('NCAAF')
+
+    // Control: the same league with no scope reads every school.
+    hm.devyPlayerFindMany.mockClear()
+    hm.leagueFindUnique.mockResolvedValue({ sport: 'NFL', leagueVariant: 'devy_dynasty', settings: {}, starters: [{ slot: 'QB' }], leagueSettings: { draftType: 'snake' } })
+    getResolvedDraftPoolForLeague = await loadPool()
+    await getResolvedDraftPoolForLeague('league-unit', { effectiveLeagueTemplate: effectiveNflNoK() })
+    expect(hm.devyPlayerFindMany).toHaveBeenCalled()
+    expect(collegeWhere()).not.toHaveProperty('school')
   })
 
   it('returns empty pool when roster schema is not persisted', async () => {

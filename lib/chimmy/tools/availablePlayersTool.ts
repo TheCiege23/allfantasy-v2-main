@@ -3,9 +3,11 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import type { FantasyCalcSettings } from '@/lib/fantasycalc'
-import { isForeignIdSpace, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
+import { espnSportOf, isForeignIdSpace, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
 import { excludeUntranslatedEspn } from '@/lib/decision-os/waiver/pool'
+import { declaredAvailability, type DeclaredAvailability } from '@/lib/core-app/declaredAvailability'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { valueBookFor, type ValueBook } from '@/lib/core-app/valueBook'
 
 /**
  * PLAYERS NOT ON ANY ROSTER IN THE LEAGUE IN SCOPE.
@@ -264,11 +266,18 @@ type Rostered = { ids: Set<string>; untranslated: number; hidesByName: (row: Nam
  * other foreign platforms are refused before this is called, and an ESPN id the map cannot place is
  * still a player on somebody's team, so it is hidden by name exactly as the waiver pool hides it.
  */
-async function rosteredPlayerIds(leagueId: string, platform: string | null, sport: string): Promise<Rostered> {
+async function rosteredPlayerIds(
+  leagueId: string,
+  platform: string | null,
+  sport: string,
+  /** A pasted Yahoo league's verdict: its unmatched rostered players are hidden by name too. */
+  declared: DeclaredAvailability | null = null,
+): Promise<Rostered> {
   const raw = await prisma.roster
     .findMany({ where: { leagueId }, select: { playerData: true } })
     .catch(() => [] as Array<{ playerData: unknown }>)
-  const { rosters, untranslatedEspnIds } = await sleeperReadableRostersWithGaps(raw, platform)
+  // ESPN's sport only: a native league of another sport is read by the sport pool as it always was.
+  const { rosters, untranslatedEspnIds } = await sleeperReadableRostersWithGaps(raw, platform, espnSportOf(platform, sport))
   const hide =
     untranslatedEspnIds.length > 0
       ? await excludeUntranslatedEspn(untranslatedEspnIds, sport).catch(() => null)
@@ -297,12 +306,42 @@ async function rosteredPlayerIds(leagueId: string, platform: string | null, spor
       }
     }
   }
+  const hidesDeclared = (row: NameRow) =>
+    Boolean(declared?.hides({ name: row.full_name, position: row.position, team: row.team_abbreviation }))
   return {
     ids,
     untranslated: untranslatedEspnIds.length,
-    hidesByName: hide ? (row) => hide.hides(row) : () => false,
+    hidesByName: hide ? (row) => hide.hides(row) || hidesDeclared(row) : hidesDeclared,
   }
 }
+
+/**
+ * The league's own value chart — the one the player card, `get_player_value` and the trade screens price on
+ * (`valueBookFor`) — at its latest capture, highest value first. Null when the chart has no capture.
+ */
+const CHART_READ_MAX = 600
+async function loadChartBoard(
+  book: ValueBook,
+): Promise<{ capturedAt: Date; rows: Array<{ sleeperId: string; name: string; position: string | null; value: number }> } | null> {
+  // Any failure — including a missing delegate, which throws before a `.catch` — is "no chart": the paths below answer.
+  try {
+    const where = { source: book.source, format: book.format, qbFormat: book.qbFormat }
+    const latest = await prisma.playerValueSnapshot.findFirst({ where, orderBy: { capturedAt: 'desc' }, select: { capturedAt: true } })
+    if (!latest) return null
+    const rows = await prisma.playerValueSnapshot.findMany({
+      where: { ...where, capturedAt: latest.capturedAt },
+      select: { sleeperId: true, name: true, position: true, value: true },
+      orderBy: { value: 'desc' },
+      take: CHART_READ_MAX,
+    })
+    return rows.length ? { capturedAt: latest.capturedAt, rows } : null
+  } catch {
+    return null
+  }
+}
+
+const chartName = (book: ValueBook) =>
+  `${book.format === 'DYNASTY' ? 'dynasty' : 'redraft'}, ${book.qbFormat === 'SUPERFLEX' ? 'superflex' : 'one-QB'}`
 
 /** Taken by id, or (an untranslated ESPN player) by name. */
 function isTaken(rostered: Rostered, id: string, row: NameRow): boolean {
@@ -349,7 +388,34 @@ export async function buildAvailablePlayersContext(
    * it anyway listed their own rostered players as "available". Refused, the same way the lineup
    * optimizer refuses — with the real reason, not "the rosters have not synced".
    */
-  if (isForeignIdSpace(league.platform)) {
+  /*
+   * ⚠ EXCEPT A PASTED YAHOO LEAGUE (declaredAvailability.ts): its matched players carry Sleeper ids.
+   * Above the coverage bar it is read, its unmatched rostered players hidden by name and counted; below
+   * it, nobody may be named as available.
+   */
+  const declared = isForeignIdSpace(league.platform)
+    ? declaredAvailability(
+        league.platform,
+        (
+          await prisma.roster
+            .findMany({ where: { leagueId }, select: { playerData: true } })
+            .catch(() => [] as Array<{ playerData: unknown }>)
+        ).map((r) => r.playerData),
+      )
+    : null
+  if (declared && !declared.verified) {
+    return [
+      `${declared.unmatched} player${declared.unmatched === 1 ? '' : 's'} on the rosters in "${leagueName}" couldn't be matched to ours,`,
+      'so we cannot tell who is taken and who is free there. Say that plainly and suggest checking free agents',
+      `in ${league.platform} directly; do NOT name anyone as available.`,
+    ].join(' ')
+  }
+  const unmatchedLine = declared?.unmatched
+    ? `${declared.unmatched} player${declared.unmatched === 1 ? '' : 's'} on rosters in this league couldn't be matched to ours; they are kept off this list. Say so when naming anyone.`
+    : null
+  // An ESPN league of another sport is refused here too: its ids would otherwise be read through the
+  // NFL crosswalk (ESPN 15847 → Sleeper 1466, which is NFL Travis Kelce and NBA JaVale McGee).
+  if (!declared && isForeignIdSpace(league.platform, espnSportOf(league.platform, sportCode))) {
     return [
       `"${leagueName}" is a ${league.platform} league, and AllFantasy cannot yet match ${league.platform} roster entries to players,`,
       'so we cannot tell who is taken and who is free there. Say that plainly and suggest checking free agents',
@@ -359,7 +425,7 @@ export async function buildAvailablePlayersContext(
 
   let rostered: Rostered
   try {
-    rostered = await rosteredPlayerIds(leagueId, league.platform ?? null, sportCode)
+    rostered = await rosteredPlayerIds(leagueId, league.platform ?? null, sportCode, declared)
   } catch {
     return `The rosters in "${leagueName}" could not be fully read just now, so who is free is unknown. Say so; do NOT name anyone as available.`
   }
@@ -411,6 +477,41 @@ export async function buildAvailablePlayersContext(
       'Everyone would look available, which would be wrong. Say the rosters have not synced;',
       'do NOT name any players as available.',
     ].join(' ')
+  }
+
+  /*
+   * 🛑 THE LEAGUE'S OWN CHART FIRST (2026-11-20 re-score push). This ranked the waiver wire on the AllFantasy house
+   * set — 165 rows, every one dynasty — and switched to FantasyCalc only when that ran out or was the wrong concept.
+   * So the "who's available" list priced players on a different number from the player card, `get_player_value` and
+   * the trade screens, which all read the league's chart (`valueBookFor`). Now the chart the league prices on is
+   * the ranking, so a value quoted here is the value the user sees when they tap the player. The house set and the
+   * FantasyCalc fallback below remain for a chart with no capture or too few free players.
+   */
+  const book = valueBookFor(league.settings, league.leagueType ?? null)
+  const chart = await loadChartBoard(book)
+  if (chart) {
+    const free = chart.rows.filter(
+      (r) => !isTaken(rostered, String(r.sleeperId), { full_name: r.name, position: shortPosition(r.position) }),
+    )
+    if (free.length >= MIN_USEFUL) {
+      const shown = free.slice(0, MAX_SHOWN).map((r) => {
+        const pos = shortPosition(r.position)
+        return `${pos ? `${r.name} (${pos})` : r.name} — value ${Math.round(r.value)}`
+      })
+      const more = free.length > shown.length ? ` (+${free.length - shown.length} more ranked players available)` : ''
+      const limits = limitLines(`${chartName(book)} chart`, unranked).map((l) =>
+        l.startsWith('3.') && book.format === 'REDRAFT'
+          ? '3. These are this-season (redraft) chart values — what a player is worth for the rest of the season, not a this-week start ranking.'
+          : l,
+      )
+      return [
+        `UNROSTERED PLAYERS in "${leagueName}", highest value on this league's chart (${chartName(book)}) first — the same values the player card shows:`,
+        `${shown.join('; ')}${more}`,
+        `That is ${free.length} of the ${chart.rows.length} players on the chart.`,
+        ...limits,
+        ...(unmatchedLine ? [unmatchedLine] : []),
+      ].join('\n')
+    }
   }
 
   const valued = await prisma.allFantasyMarketPlayerValue
@@ -534,6 +635,7 @@ export async function buildAvailablePlayersContext(
           : 'This league has no roster positions on file, so these ranks come from a SUPERFLEX (2QB), 12-team dynasty baseline rather than its own settings. If it is a 1QB league, quarterbacks are ranked higher here than they are worth to them — say so rather than recommending a quarterback off this list alone.',
       )
       lines.push(...limitLines(fcSettings.isDynasty ? 'FantasyCalc dynasty' : 'FantasyCalc redraft', unranked))
+      if (unmatchedLine) lines.push(unmatchedLine)
       return lines.join('\n')
     }
   }
@@ -564,6 +666,7 @@ export async function buildAvailablePlayersContext(
   }
 
   lines.push(...limitLines(concepts, unranked))
+  if (unmatchedLine) lines.push(unmatchedLine)
 
   return lines.join('\n')
 }

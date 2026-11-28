@@ -7,6 +7,7 @@ import { buildWaiverRecommendationContext } from '@/lib/ai/SportAwareRecommendat
 import { resolveSportVariantContext } from '@/lib/league-defaults-orchestrator/SportVariantContextResolver';
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver';
 import { z } from 'zod';
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware';
 
 const requestSchema = z.object({
   leagueId: z.string().min(1),
@@ -15,12 +16,21 @@ const requestSchema = z.object({
 
 export async function POST(req: Request) {
   const session = (await getServerSession(authOptions as any)) as {
-    user?: { id?: string };
+    user?: { id?: string; email?: string | null };
   } | null;
 
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  /*
+   * 🛑 AF PRO (`ai_waivers`) — the same gate as /api/waiver-ai, /api/waiver-ai/engine and /api/ai/waiver
+   * (owner's decision 2026-11-27; gating audit H4). This twin ran OpenAI for any signed-in user, so the
+   * /waiver-ai wire and the redraft Waiver Center handed out the paid answer free. Refused before the
+   * body, the league read and the model.
+   */
+  const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: session.user.email ?? null, featureId: 'ai_waivers' });
+  if (!plan.ok) return plan.response;
 
   let body: any;
   try {

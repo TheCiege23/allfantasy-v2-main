@@ -15,8 +15,10 @@ type CouponState =
       subtotalCents: number | null
       discountAmountCents: number | null
       totalCents: number | null
+      /** Commissioner Partner Codes: e.g. "10% off your first 3 months" — shown instead of the default line. */
+      appliedLabel: string | null
     }
-  | { status: "error"; reason: "not_found" | "already_used" | "not_applicable" | "requires_auth" | "inactive" | "unknown" }
+  | { status: "error"; reason: "not_found" | "already_used" | "not_applicable" | "requires_auth" | "inactive" | "own_code" | "unknown" }
 
 type Props = {
   /** "token_pack" | "subscription" */
@@ -42,6 +44,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_applicable: "This code doesn't apply to this product.",
   requires_auth: "Sign in to use this one-time sponsor code.",
   inactive: "This code is no longer active.",
+  own_code: "You can't use your own code.",
   unknown: "Could not apply code. Please try again.",
 }
 
@@ -93,6 +96,7 @@ export default function CouponInput({
         subtotalCents: data.subtotalCents ?? null,
         discountAmountCents: data.discountAmountCents ?? null,
         totalCents: data.totalCents ?? null,
+        appliedLabel: typeof data.appliedLabel === "string" ? data.appliedLabel : null,
       })
 
       onApplied?.(data.normalizedCode, data.discountPercent)
@@ -126,7 +130,7 @@ export default function CouponInput({
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
             <span className="text-sm font-bold text-emerald-300">
-              {couponState.displayCode} applied — {couponState.discountPercent}% off your first purchase
+              {couponState.displayCode} applied — {couponState.appliedLabel ?? `${couponState.discountPercent}% off your first purchase`}
             </span>
           </div>
           <button

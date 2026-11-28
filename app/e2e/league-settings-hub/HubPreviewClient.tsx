@@ -218,6 +218,7 @@ export function HubPreviewClient({
       advanced={commish ? { label: 'Advanced settings', onOpen: () => {} } : undefined}
       cb={{
         onToggleSetting: () => {},
+        onSetSetting: async () => null,
         onSaveTeamName: async () => null,
         onSaveNote: async (t) => { setNote(t); return null },
         onToggleNotification: (id, isOn) => setMuted((m) => (isOn ? m.filter((x) => x !== id) : [...m, id])),

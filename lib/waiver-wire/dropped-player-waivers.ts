@@ -42,6 +42,7 @@
  * The position is read from the player tables; a player whose position cannot be found takes the
  * league period. FCFS still has no hold for anyone.
  */
+import { choppedPlayersAreFreeAgents, readFreeAgencyFromWeek } from '@/lib/guillotine/freeAgencyFromWeek'
 import { prisma } from '@/lib/prisma'
 import { ourIdOrSleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { droppedPlayerHoldPolicy, holdHoursForPosition, maxHoldHours, type DroppedPlayerHoldPolicy } from './hold-by-position'
@@ -142,7 +143,9 @@ export async function loadDroppedPlayerPositions(ids: readonly string[], sport: 
   if (ids.length === 0) return out
   const list = [...ids]
   const sportsRows = (await prisma.sportsPlayer.findMany({
-    where: ourIdOrSleeperIdWhere(list, sport ?? undefined),
+    // No sport → our own row ids only (globally unique). A bare Sleeper id names a different person
+    // in each sport (NFL 1466 Travis Kelce / NBA 1466 JaVale McGee), so it is not read unscoped.
+    where: sport ? ourIdOrSleeperIdWhere(list, sport) : { id: { in: list } },
     select: { id: true, externalId: true, sleeperId: true, position: true },
   })) as Array<{ id: string; externalId: string | null; sleeperId: string | null; position: string | null }>
   const wanted = new Set(list)
@@ -176,12 +179,37 @@ export async function loadChopReleaseDropRows(
   since: Date,
   playerIds?: readonly string[],
 ): Promise<DropRow[]> {
+  /*
+   * 🛑 "RIGHT AFTER THE CHOP" WAS A SETTING THAT DID NOTHING. The commissioner's choice between
+   * "At the next waiver run" and "Right after the chop" (`rosterReleaseTiming`) was saved, shown on the
+   * rules page and quoted in the chop alert ("are free agents now"), and read by nothing that decides
+   * who may add a player: every chopped player was held like a drop either way. A league that chose
+   * "Right after the chop" now gets it: its chop releases are not held. Any failure to read the choice
+   * keeps the hold, the fair default.
+   */
+  let immediate = false
+  // "Chopped players stop hitting waivers after week N" (lib/guillotine/freeAgencyFromWeek.ts): a chop in week N
+  // or later is not held, the same as a league set to "Right after the chop". Unreadable = no such rule.
+  let freeFrom: number | null = null
+  try {
+    const [config, league] = await Promise.all([
+      prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { rosterReleaseTiming: true } }),
+      prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
+    ])
+    immediate = config?.rosterReleaseTiming === 'immediate'
+    freeFrom = readFreeAgencyFromWeek(league?.settings)
+  } catch {
+    immediate = false
+  }
+  if (immediate) return []
   try {
     const rows = (await prisma.guillotineWaiverRelease.findMany({
       where: { leagueId, availableAt: { gte: since }, ...(playerIds ? { playerId: { in: [...playerIds] } } : {}) },
-      select: { playerId: true, availableAt: true, eliminatedRosterId: true },
-    })) as Array<{ playerId: string; availableAt: Date; eliminatedRosterId: string }>
-    return rows.map((r) => ({ dropPlayerId: r.playerId, processedAt: r.availableAt, rosterId: r.eliminatedRosterId, source: 'chop_release' as const }))
+      select: { playerId: true, availableAt: true, eliminatedRosterId: true, scoringPeriod: true },
+    })) as Array<{ playerId: string; availableAt: Date; eliminatedRosterId: string; scoringPeriod: number }>
+    return rows
+      .filter((r) => !choppedPlayersAreFreeAgents(freeFrom, r.scoringPeriod))
+      .map((r) => ({ dropPlayerId: r.playerId, processedAt: r.availableAt, rosterId: r.eliminatedRosterId, source: 'chop_release' as const }))
   } catch (error) {
     console.warn('[waiver-wire] chop releases unreadable; no chop hold this read', { leagueId, error: error instanceof Error ? error.message : String(error) })
     return []

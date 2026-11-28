@@ -12,6 +12,7 @@ import { MatchupAiAnalysisPanel } from '@/components/matchup-center/MatchupAiAna
 import { MatchupStartSitModal } from '@/components/matchup-center/MatchupStartSitModal'
 import { useInflightRequestDedupe } from '@/hooks/useInflightRequestDedupe'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
+import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 import { useLeagueMatchupAi } from '@/hooks/useLeagueMatchupAi'
 import type { MatchupPlayerSlot } from '@/lib/matchup-center/types'
 import type { LeagueMatchupAiResult, StartSitAiResult } from '@/lib/ai-matchup-engine/types'
@@ -158,7 +159,12 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
     const id = window.setInterval(() => {
       void load({ silent: true })
     }, ms)
-    return () => window.clearInterval(id)
+    // This screen polls its own scores; the league page's 30-second server re-render stands down.
+    const release = claimRouteRefresh()
+    return () => {
+      window.clearInterval(id)
+      release()
+    }
   }, [payload?.refreshIntervalMs, payload?.matchupStatus, season, week, load])
 
   const rows = useMemo(() => (payload ? zipStarters(payload.left, payload.right) : []), [payload])
@@ -296,6 +302,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
                   position={row.pos}
                   left={row.left}
                   right={row.right}
+                  sport={sportU}
                   onStartSit={handleStartSit}
                 />
               ))

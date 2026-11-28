@@ -11,6 +11,8 @@ import { sha256Hex, makeToken, isStrongPassword } from "@/lib/tokens"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
 import { attributeSignup } from "@/lib/referral"
+import { attachReferral, findPartnerCode } from "@/lib/partner-codes/service"
+import { isPartnerCodesEnabled, PARTNER_CODE_COOKIE } from "@/lib/partner-codes/flags"
 import { attributeSignupFromLandingInviteToken } from "@/lib/dashboard/attributeSignupFromLandingInvite"
 import { recordAttribution } from "@/lib/viral-loop"
 import { recordFunnelEvent } from "@/lib/analytics/recordFunnelEvent"
@@ -286,6 +288,26 @@ export async function POST(req: Request) {
 
     if (email ? !email.includes("@") : !isPhoneSignup) {
       return NextResponse.json({ error: "Please enter a valid email address." }, { status: 400 })
+    }
+
+    /*
+     * A Partner Code TYPED on the sign-up form (2026-11-24). The /with/CODE cookie only exists for
+     * someone who opened the commissioner's link in this browser; a friend who saw the code on a
+     * share image and signed up in the iPhone or Android app has no cookie, so the box is their
+     * only way to count. Checked here, before anything is created, so a typo is fixable rather
+     * than silently dropped. A new account cannot hit own_code or already_redeemed, so the only
+     * refusals are an unknown or inactive code.
+     */
+    const typedPartnerCode =
+      typeof body?.partnerCode === "string" ? body.partnerCode.replace(/[^A-Za-z0-9]/g, "").slice(0, 20) : ""
+    if (typedPartnerCode && isPartnerCodesEnabled()) {
+      const found = await findPartnerCode(typedPartnerCode).catch(() => null)
+      if (!found || found.status !== "active") {
+        return NextResponse.json(
+          { error: "We don't recognize that partner code. Check it, or leave the box empty." },
+          { status: 400 },
+        )
+      }
     }
 
     // ── P0-1 BETA-GATE (credentials path) ────────────────────────────────────────────
@@ -642,6 +664,19 @@ export async function POST(req: Request) {
       userId: user.id,
       username: user.username,
     })
+
+    // Commissioner Partner Codes (lib/partner-codes): a signup that came through /with/CODE is tied
+    // to that commissioner now, so it counts on their active-user meter before it ever pays.
+    // Best-effort and off unless PARTNER_CODES_ENABLED=1.
+    if (!isE2ERequest && isPartnerCodesEnabled()) {
+      // A code they typed wins over the link cookie: it is what they chose on this page.
+      const partnerCode = typedPartnerCode || cookieStore.get(PARTNER_CODE_COOKIE)?.value?.trim()
+      if (partnerCode) {
+        await attachReferral({ userId: user.id, rawCode: partnerCode, email: user.email, ip }).catch((err) =>
+          console.warn("[register] partner code not attached (non-blocking):", err?.message ?? err),
+        )
+      }
+    }
 
     // Growth attribution is best-effort and should not block account creation.
     if (!isE2ERequest) {

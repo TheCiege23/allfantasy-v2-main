@@ -45,12 +45,17 @@ html[data-mode='light'] .af-league-admin :is(input, select, textarea) { color-sc
 }
 .af-league-admin .af-admin-pulse .bdx-disp { font-style: normal; text-transform: none; font-size: 16px; letter-spacing: 0; }
 .af-league-admin .af-admin-pulse [data-testid='commissioner-pulse'] { margin-top: 0 !important; }
+/* The "Switch to AllFantasy" checklist on an imported league (components/league-home/NativeReadinessCard.tsx). */
+.af-league-admin .af-readiness { background: var(--surface); border-color: var(--line2); border-radius: 12px; }
+.af-league-admin .af-readiness[data-status='ready'] { border-color: var(--good); }
+.af-league-admin .af-readiness .af-readiness-index { background: var(--warn-soft); color: var(--warn); }
+.af-league-admin .af-readiness .af-readiness-primary { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
 .af-league-admin .af-admin-action-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
-.af-league-admin .af-admin-action { border-radius: 12px; background: var(--surface); border-color: var(--line2); padding: 20px; }
+.af-league-admin .af-admin-action { border-radius: 12px; background: var(--surface); border-color: var(--line2); padding: 12px 14px; }
 .af-league-admin .af-admin-action:enabled:hover { border-color: var(--accent); background: var(--surface2); }
-.af-league-admin .af-admin-action p { line-height: 1.6; }
-.af-league-admin .af-admin-action > div > span:first-child { background: var(--accent-soft); color: var(--accent); }
-.af-league-admin .af-admin-action > div > span:last-child { text-transform: none; letter-spacing: 0; font-weight: 550; }
+.af-league-admin .af-admin-action span span { line-height: 1.5; }
+.af-league-admin .af-admin-action .af-admin-action-icon { background: var(--accent-soft); color: var(--accent); }
+.af-league-admin .af-admin-action .af-admin-action-state { text-transform: none; letter-spacing: 0; font-weight: 550; }
 .af-league-admin [data-testid^='commissioner-group-'] { scroll-margin-top: 16px; }
 .af-league-admin .af-settings-mobile-nav { min-width: 0; padding: 8px 0; gap: 6px; }
 .af-league-admin :is(.af-settings-mobile-nav, .af-settings-sidebar) { scrollbar-width: thin; scrollbar-color: var(--line2) var(--surface2); }
@@ -267,5 +272,6 @@ html[data-mode='light'] .af-league-admin.af-settings-dialog .af-ls-mode-tabs .af
 .af-league-admin .af-admin-section-nav a:hover, .af-league-admin .af-admin-section-nav a:focus-visible { background:var(--accent-soft); color:var(--accent); }
 .af-league-admin .af-admin-sections { min-width:0; display:flex; flex-direction:column; gap:24px; }
 .af-league-admin .af-admin-action-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); }
-.af-league-admin .af-admin-action { min-height:108px; padding:16px; }
+/* A tool is one row now (2026-11-24): no 108px tile height; 44px+ comes from the icon and its padding. */
+.af-league-admin .af-admin-action { min-height:64px; padding:12px 14px; }
 @media(max-width:767px) { .af-league-admin .af-admin-settings-layout { grid-template-columns:minmax(0,1fr); gap:16px; } .af-league-admin .af-admin-section-nav { position:static; flex-direction:row; flex-wrap:nowrap; overflow-x:auto; padding:6px; } .af-league-admin .af-admin-section-nav a { width:auto; flex:0 0 auto; } }

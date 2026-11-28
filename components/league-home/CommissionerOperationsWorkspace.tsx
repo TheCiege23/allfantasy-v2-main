@@ -9,9 +9,7 @@ import {
   CalendarDays,
   ClipboardList,
   FileText,
-  LockKeyhole,
   Megaphone,
-  MessageSquare,
   Settings,
   ShieldCheck,
   Trophy,
@@ -25,6 +23,10 @@ import { RedraftCommishHealth } from '@/components/decide/RedraftCommishHealth'
 import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { MAKE_NATIVE_LABEL, NATIVE_SWITCH_ANCHOR } from '@/lib/league/makeNativeLeague'
+import { NativeReadinessCard } from '@/components/league-home/NativeReadinessCard'
+import { ImportedLeagueSwitchCard } from '@/components/league-home/SwitchingLeagueCard'
+import { NativeUndoCard } from '@/components/league-home/NativeUndoCard'
 
 type WorkspaceAction = {
   id: string
@@ -38,7 +40,6 @@ type WorkspaceAction = {
 type ActionGroup = {
   id: string
   title: string
-  description: string
   actions: WorkspaceAction[]
 }
 
@@ -57,23 +58,25 @@ function ActionCard({ action }: { action: WorkspaceAction }) {
   const unavailable = action.state === 'unavailable' || !action.onClick
   const label = action.state === 'host-managed' ? 'Host managed' : unavailable ? 'Not available yet' : 'Open'
   return (
+    // One row per tool (2026-11-24, the simplify pass): icon, name and what it does, then Open. As a 132px tile
+    // with the icon on a line of its own, twenty tools were ~3,000px of a phone.
     <button
       type="button"
       disabled={unavailable}
       onClick={action.onClick}
       data-testid={`commissioner-operation-${action.id}`}
-      className="af-admin-action flex min-h-[132px] w-full touch-manipulation flex-col rounded-2xl border border-white/[0.08] bg-black/20 p-4 text-left transition enabled:hover:bg-white/[0.055] disabled:cursor-not-allowed disabled:opacity-55"
+      className="af-admin-action flex w-full touch-manipulation items-center gap-3 rounded-2xl border border-white/[0.08] bg-black/20 p-3 text-left transition enabled:hover:bg-white/[0.055] disabled:cursor-not-allowed disabled:opacity-55"
     >
-      <div className="flex w-full items-start justify-between gap-3">
-        <span className="af-admin-action-icon flex h-10 w-10 items-center justify-center rounded-xl">
-          <Icon className="h-5 w-5" aria-hidden />
-        </span>
-        <span className="af-admin-action-state rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
-          {label}
-        </span>
-      </div>
-      <h3 className="mt-3 text-sm font-black text-white">{action.title}</h3>
-      <p className="mt-1 text-xs leading-5 text-white/50">{action.description}</p>
+      <span className="af-admin-action-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+        <Icon className="h-5 w-5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-black text-white">{action.title}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-white/50">{action.description}</span>
+      </span>
+      <span className="af-admin-action-state shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
+        {label}
+      </span>
     </button>
   )
 }
@@ -105,18 +108,15 @@ export function CommissionerOperationsWorkspace({
     {
       id: 'league-operations',
       title: 'League Operations',
-      description: 'Run the season and recover common league-state issues.',
       actions: [
         { id: 'schedule', title: 'Schedule', description: 'Review weekly pairings, byes, completed scores, and playoff timing.', icon: CalendarDays, onClick: () => onOpenTab('schedule') },
-        { id: 'standings-playoffs', title: 'Standings & Playoffs', description: 'Review seeds and use the existing generate, advance, and finalize controls.', icon: Trophy, onClick: () => onOpenTab('standings') },
+        { id: 'standings-playoffs', title: 'Standings & Playoffs', description: 'Seeds, and generating, advancing and finalizing the bracket.', icon: Trophy, onClick: () => onOpenTab('standings') },
         { id: 'league-controls', title: 'Commissioner Controls', description: 'Open roster locks, score corrections, lineup edits, and host-managed recovery tools.', icon: ShieldCheck, onClick: () => onOpenSettings('commish-controls') },
-        { id: 'advance-week', title: 'Advance / Finalize Week', description: 'No standalone audited week-advance control is exposed in the canonical product yet.', icon: LockKeyhole, state: 'unavailable' },
       ],
     },
     {
       id: 'league-settings',
       title: 'League Settings',
-      description: 'Edit existing league rules without duplicating settings forms.',
       actions: [
         { id: 'general-settings', title: 'General', description: 'League identity, visibility, timezone, and core configuration.', icon: Settings, onClick: () => onOpenSettings('commish-general') },
         { id: 'scoring-settings', title: 'Scoring', description: 'Review and update this league\'s scoring rules and bonuses.', icon: ClipboardList, onClick: () => onOpenSettings('scoring') },
@@ -128,9 +128,8 @@ export function CommissionerOperationsWorkspace({
     {
       id: 'transactions',
       title: 'Transactions',
-      description: 'Review existing trade and waiver workflows in their canonical surfaces.',
       actions: [
-        { id: 'trade-review', title: 'Trade Review', description: 'Review pending trades and use existing approve or reject actions.', icon: ArrowLeftRight, onClick: () => onOpenTab('trades') },
+        { id: 'trade-review', title: 'Trade Review', description: 'Approve or reject pending trades.', icon: ArrowLeftRight, onClick: () => onOpenTab('trades') },
         { id: 'waiver-operations', title: 'Waiver Operations', description: 'Process claims, lock submissions, and review commissioner overrides.', icon: WalletCards, onClick: () => onOpenTab('waivers') },
         { id: 'trade-settings', title: 'Trade Settings', description: 'Review window, deadline, voting, and pick-trading rules.', icon: ArrowLeftRight, onClick: () => onOpenSettings('trade') },
       ],
@@ -138,7 +137,6 @@ export function CommissionerOperationsWorkspace({
     {
       id: 'draft',
       title: 'Draft',
-      description: 'Use the live draft room as the authority for draft operations.',
       actions: [
         { id: 'draft-room', title: draftActive ? 'Live Draft Controls' : 'Draft Room', description: 'Open pause/resume, timer, force-pick, undo, skip, manager, and audit controls when the draft is active.', icon: ClipboardList, onClick: () => onOpenTab('draft') },
       ],
@@ -146,20 +144,17 @@ export function CommissionerOperationsWorkspace({
     {
       id: 'members',
       title: 'Members',
-      description: 'Invite managers and manage existing league membership.',
       actions: [
         { id: 'members', title: 'Manage Members', description: 'Review assignments, commissioner roles, removals, and roster ownership.', icon: UserCog, onClick: () => onOpenSettings('members-commish') },
-        { id: 'invite', title: 'Invite Managers', description: 'Open the existing invitation and join-link workflow.', icon: Users, onClick: () => onOpenSettings('invite') },
+        { id: 'invite', title: 'Invite Managers', description: 'Invite links and join codes.', icon: Users, onClick: () => onOpenSettings('invite') },
       ],
     },
     {
       id: 'communication',
       title: 'Communication',
-      description: 'Keep operational messages in the existing league communication system.',
       actions: [
         { id: 'announcements', title: 'Announcements & Chat', description: 'Post league announcements and messages through League Chat.', icon: Megaphone, onClick: () => onOpenTab('league_chat') },
-        { id: 'commissioner-note', title: 'Commissioner Note', description: 'Create or update the commissioner note using the existing settings panel.', icon: FileText, onClick: () => onOpenSettings('commish-note') },
-        { id: 'league-messages', title: 'League Messages', description: 'Open the canonical chat destination for manager communication.', icon: MessageSquare, onClick: () => onOpenTab('league_chat') },
+        { id: 'commissioner-note', title: 'Commissioner Note', description: 'The note every manager sees.', icon: FileText, onClick: () => onOpenSettings('commish-note') },
       ],
     },
   ]
@@ -171,8 +166,7 @@ export function CommissionerOperationsWorkspace({
           <div>
             <p className="af-admin-eyebrow text-[11px] font-black uppercase italic tracking-[0.18em]">Commissioner OS</p>
             <h2 className="mt-1 text-xl font-black italic">{league.name}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Run the league from one place — live manager-health signals from the Decision OS above, and every authoritative workflow one tap below.</p>
-          </div>
+                </div>
           <span className="rounded-full px-3 py-1.5 text-xs font-extrabold" data-testid="commissioner-league-state">{leagueStateLabel}</span>
         </div>
         <div className="af-admin-shortcuts mt-4 flex flex-wrap gap-2">
@@ -194,10 +188,12 @@ export function CommissionerOperationsWorkspace({
           ) : null}
           {!isNativePlatform(league.platform) ? (
             <a
-              href={`/create-league?fromLeague=${encodeURIComponent(leagueId)}`}
+              // Same page: jump to the switch card below (the readiness card carries the button).
+              href={`#${NATIVE_SWITCH_ANCHOR}`}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-[12px] font-extrabold transition"
+              data-testid="commissioner-make-native"
             >
-              Create standalone AllFantasy league →
+              {MAKE_NATIVE_LABEL} →
             </a>
           ) : null}
         </div>
@@ -211,6 +207,13 @@ export function CommissionerOperationsWorkspace({
       </nav>
 
       <div className="af-admin-sections">
+      {/* Imported leagues: what the in-place switch to AllFantasy would need. A league that switched in place: undo, while
+          it is open (it renders nothing otherwise). Both routes answer the head commissioner alone. */}
+      {/* In season (or once official), the switching league's "Make it official" takes that place instead: one switch
+          card at a time (components/league-home/SwitchingLeagueCard.tsx). */}
+      {!isNativePlatform(league.platform)
+        ? <ImportedLeagueSwitchCard leagueId={leagueId} offseasonCard={<NativeReadinessCard leagueId={leagueId} />} />
+        : <NativeUndoCard leagueId={leagueId} />}
       {/* Decision OS commissioner lens — the same live CommissionerPulse engine
           the Decide tab renders: inactive/at-risk managers from counted signals
           (empty starters, transaction drought, scoring trend, orphan rosters). */}
@@ -230,7 +233,6 @@ export function CommissionerOperationsWorkspace({
       {groups.map((group) => (
         <section key={group.id} id={`commissioner-group-${group.id}`} aria-labelledby={`commissioner-title-${group.id}`} data-testid={`commissioner-group-${group.id}`}>
           <h2 id={`commissioner-title-${group.id}`} className="af-admin-section-title text-sm font-black text-white">{group.title}</h2>
-          <p className="mt-1 text-xs text-white/45">{group.description}</p>
           <div className="af-admin-action-grid mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {group.actions.map((action) => <ActionCard key={action.id} action={action} />)}
           </div>

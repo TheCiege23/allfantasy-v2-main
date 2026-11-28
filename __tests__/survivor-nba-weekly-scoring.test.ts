@@ -15,7 +15,7 @@ vi.mock('@/lib/redraft/weekLineupSlots', () => ({ loadWeekLineups: vi.fn().mockR
 vi.mock('@/lib/redraft/scoringEngine', () => scoring)
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: (_id: string, fn: (tx: typeof db) => unknown) => fn(db) }))
 
-import { getNbaSurvivorGameOptions, saveNbaSurvivorGamePick, scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from '@/lib/survivor/survivorNbaWeeklyScoring'
+import { getNbaSurvivorGameOptions, nbaSurvivorStarterPoints, saveNbaSurvivorGamePick, scoreNbaSurvivorAllGamesRoster, scoreNbaSurvivorOneGameRoster } from '@/lib/survivor/survivorNbaWeeklyScoring'
 
 const first = new Date('2026-10-20T23:00:00Z')
 const second = new Date('2026-10-23T23:00:00Z')
@@ -86,6 +86,22 @@ describe('NBA Survivor one-game scoring', () => {
     expect(await scoreNbaSurvivorAllGamesRoster(score('legacy-1'))).toEqual({ pts: 24, allFinalized: true })
     expect(await scoreNbaSurvivorAllGamesRoster(score('legacy-2'))).toEqual({ pts: 18, allFinalized: true })
     expect(db.redraftRosterPlayer.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ OR: [{ droppedAt: null }, { droppedAt: expect.any(Object) }] }) }))
+  })
+
+  // The Matchup tab's per-starter points: "—" all week before this, because nothing stored them.
+  it('gives each starter his Survivor points: final once counted, live before, the total unchanged', async () => {
+    const input = { leagueId: 'league-1', legacyRosterId: 'legacy-1', week: 1, season: 2026 }
+    expect(await nbaSurvivorStarterPoints(input)).toEqual(new Map([['player-1', { points: 24, final: true, games: 1 }]]))
+
+    // Week not finalized: the played game shows live, and the weekly total still counts nothing yet.
+    db.playerWeeklyScore.findUnique.mockResolvedValue({ isFinalized: false })
+    expect(await nbaSurvivorStarterPoints(input)).toEqual(new Map([['player-1', { points: 24, final: false, games: 1 }]]))
+    expect(await scoreNbaSurvivorOneGameRoster(input)).toEqual({ pts: 0, allFinalized: false })
+  })
+
+  it('[control] is nothing for a league that is not NBA Survivor', async () => {
+    db.league.findUnique.mockResolvedValue({ sport: 'NFL', season: 2026, survivorMode: true, settings: {} })
+    expect(await nbaSurvivorStarterPoints({ leagueId: 'league-1', legacyRosterId: 'legacy-1', week: 1, season: 2026 })).toBeNull()
   })
 
   it('does not award a selected game after a player has left the roster', async () => {

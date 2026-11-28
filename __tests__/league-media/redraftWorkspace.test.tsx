@@ -65,6 +65,49 @@ describe('redraft identity on the native workspace', () => {
     expect(root.querySelector('.nl-phase')).not.toBeNull()
   })
 
+  it('every tab except League home gets the compact header: this week, no season race, no chips', () => {
+    const root = mount({}, { activeTab: 'roster', seasonFacts: { totalWeeks: 21, playoffStartWeek: 19 } })
+    const heading = root.querySelector('.nl-league-heading')!
+    expect(heading.getAttribute('data-compact')).toBe('true')
+    expect(root.querySelector('[data-testid=redraft-season-track]')).toBeNull()
+    expect(root.querySelector('[data-testid=redraft-week-pill]')!.textContent).toBe('Week 4 of 21')
+    // The league name stays the page heading (visually hidden on phones, where the top pill shows it).
+    expect(heading.querySelector('h1')!.textContent).toBe('Sunday League')
+  })
+
+  it('the compact header keeps the format FAQ as a settings-sized icon, not a second row', () => {
+    const root = mount({}, { activeTab: 'roster', seasonFacts: { totalWeeks: 21 } })
+    const heading = root.querySelector('.nl-league-heading')!
+    expect(heading.querySelector('.nl-heading-name a[href^="/league-types/faq"]')).toBeNull()
+    const faq = heading.querySelector(':scope > a[href^="/league-types/faq"]')!
+    expect(faq).not.toBeNull()
+    expect(faq.classList.contains('nl-button')).toBe(true)
+    expect(faq.getAttribute('aria-label')).toBe('Format rules FAQ')
+    expect(faq.textContent).toBe('')
+  })
+
+  it('League home shows the format FAQ with its words, under the league line', () => {
+    const root = mount({}, { seasonFacts: { totalWeeks: 21 } })
+    const faq = root.querySelector('.nl-heading-name a[href^="/league-types/faq"]')!
+    expect(faq.textContent).toBe('Format rules FAQ')
+  })
+
+  it('League home keeps the full header', () => {
+    const root = mount({}, { seasonFacts: { totalWeeks: 21 } })
+    expect(root.querySelector('.nl-league-heading')!.getAttribute('data-compact')).toBeNull()
+    expect(root.querySelector('[data-testid=redraft-week-pill]')).toBeNull()
+  })
+
+  it('the compact header falls back to the phase before there is a week', () => {
+    const root = mount({ currentWeek: null, lifecycleState: 'pre_draft' }, { activeTab: 'roster' })
+    expect(root.querySelector('[data-testid=redraft-week-pill]')!.textContent!.length).toBeGreaterThan(0)
+  })
+
+  it('a dynasty league is never compacted', () => {
+    const root = mount({ leagueType: 'dynasty', isDynasty: true }, { activeTab: 'roster' })
+    expect(root.querySelector('.nl-league-heading')!.getAttribute('data-compact')).toBeNull()
+    expect(root.querySelector('.nl-phase')).not.toBeNull()
+  })
   it('a guillotine banner wins over the redraft identity', () => {
     const root = mount({}, { guillotineBanner: { line: 'Chop line', mood: 'calm' } })
     expect(root.getAttribute('data-format')).toBe('guillotine')

@@ -22,7 +22,7 @@
  * the shadow half is one argument rather than a data migration.
  */
 
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { NATIVE_PLATFORM_VALUES } from '@/lib/dashboard/platform-label'
 
 /**
@@ -140,7 +140,17 @@ export function engineSeasonScope(
   }
 
   if (!options.includeShadowLeagues) {
-    where.league = { platform: { in: [...NATIVE_PLATFORM_VALUES] } }
+    /*
+     * Native leagues, plus imported leagues made official on AllFantasy (lib/league/switching, rule 3:
+     * AllFantasy scoring is official once the league is). An official league has `switching.official`
+     * set; every other league has it absent or null, so this adds nothing for them.
+     */
+    where.league = {
+      OR: [
+        { platform: { in: [...NATIVE_PLATFORM_VALUES] } },
+        { NOT: { settings: { path: ['switching', 'official'], equals: Prisma.AnyNull } } },
+      ],
+    }
   }
 
   return where

@@ -101,7 +101,9 @@ export const defaultSleeperCheckDeps: SleeperCheckDeps = {
   leagueRosters: getLeagueRosters,
   playerRows: (sleeperIds) =>
     prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: sleeperIds } },
+      // NFL by construction: `/check` reads only a username's NFL leagues, and Sleeper reuses ids
+      // across sports (NBA 1466 JaVale McGee is not NFL 1466 Travis Kelce).
+      where: { sport: 'NFL', sleeperId: { in: sleeperIds } },
       // `sport` is required by composePlayerIdentities — it gates the NFL club fold.
       select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
     }),

@@ -292,7 +292,11 @@ function DraftPlayerCardInner({
   const meaningfulSummary = storedSummary && !/^(No stats available$|(?:Chimmy |Chimmy )?ADP\b|Bye\b)/i.test(storedSummary) ? storedSummary : null
   const statLine = meaningfulSummary ?? (projectedPoints != null ? `Proj ${projectedPoints.toFixed(1)} pts` : '')
   const boxScoreLine = compactStats || nbaRates
-  const displayStatLine = boxScoreLine ? [display?.stats?.seasonLabel, boxScoreLine].filter(Boolean).join(' · ') : statLine
+  // A player with no game this season carries last season's line; the label says so.
+  const seasonLabel = display?.stats?.seasonLabel
+    ? `${display.stats.seasonLabel}${display.stats.seasonIsPrevious ? ' (last season)' : ''}`
+    : null
+  const displayStatLine = boxScoreLine ? [seasonLabel, boxScoreLine].filter(Boolean).join(' · ') : statLine
   const headshotTestBase = testId ? `${testId}-headshot` : 'draft-player-headshot'
   const teamLogoTestBase = testId ? `${testId}-team-logo` : 'draft-player-team-logo'
 
@@ -461,8 +465,10 @@ function DraftPlayerCardInner({
           </span>
           <DraftPlayerLabelBadge player={labelInput} className="shrink-0" />
           {isQueued && (
+            /* Not on phones (2026-11-19): the row's queue button already shows a tick, and this pill
+               squeezed the name to "N…" on a 375px screen. */
             <span
-              className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-100"
+              className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-100 max-md:hidden"
               title="On your queue"
             >
               Queued

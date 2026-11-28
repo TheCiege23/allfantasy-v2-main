@@ -102,7 +102,7 @@ export async function readPayoutsView(leagueId: string, userId: string | null | 
     result: null,
     collected: null,
   }
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: true, ...empty }
+  if (resolveWriteAuthority(league) !== 'NATIVE') return { ok: true, ...empty }
 
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId },
@@ -165,7 +165,7 @@ export async function readPayoutsView(leagueId: string, userId: string | null | 
  */
 export async function readPayoutOvercommitment(leagueId: string): Promise<{ potCents: number; overCommittedCents: number; season: number } | null> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, settings: true } })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE') return null
+  if (!league || resolveWriteAuthority(league) !== 'NATIVE') return null
   const plan = readPayoutPlan(league.settings)
   if (plan.placePercents.length === 0) return null
   const config = readSideContests(league.settings)

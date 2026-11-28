@@ -3,6 +3,7 @@ import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import { getLeagueRosters, getAllPlayers, getLeagueInfo } from '@/lib/sleeper-client'
 import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch'
 import type { ConfidenceRiskOutput } from '@/lib/analytics/confidence-risk-engine'
+import { decisionGradeLine, decisionTradeGrade, tradeGradeCoverage } from '@/lib/decision-log-trade-grade'
 
 export type DecisionType = 'trade' | 'waiver' | 'sit_start' | 'trade_proposal' | 'trade_finder'
 export type RiskProfile = 'low' | 'moderate' | 'high' | 'extreme'
@@ -39,6 +40,8 @@ export interface DecisionSummary {
   ignoredWinRate: number
   avgConfidence: number
   byType: Record<string, { total: number; followed: number; avgOutcome: number | null }>
+  /** Trade decisions, and how many identify their deal's one trade grade (`lib/decision-log-trade-grade.ts`). */
+  tradeGradeCoverage: { tradeDecisions: number; linked: number; graded: number }
 }
 
 export async function logDecision(input: LogDecisionInput) {
@@ -254,8 +257,17 @@ export async function evaluateOutcome(input: EvaluateOutcomeInput) {
   return outcome
 }
 
-export async function getDecisionSummary(userId: string, leagueId?: string): Promise<DecisionSummary> {
-  const where: any = { userId }
+/**
+ * The `where` for one decision-log key, or for all of a manager's keys (`scope=mine`). A list matches any
+ * of them; the username half case-insensitively, the way the route's own-key check compares it.
+ */
+export function decisionUserWhere(userKeys: string | readonly string[]): Record<string, unknown> {
+  if (typeof userKeys === 'string') return { userId: userKeys }
+  return { OR: userKeys.map((k) => ({ userId: { equals: k, mode: 'insensitive' } })) }
+}
+
+export async function getDecisionSummary(userKeys: string | readonly string[], leagueId?: string): Promise<DecisionSummary> {
+  const where: any = decisionUserWhere(userKeys)
   if (leagueId) where.leagueId = leagueId
 
   const logs = await prisma.decisionLog.findMany({
@@ -306,6 +318,7 @@ export async function getDecisionSummary(userId: string, leagueId?: string): Pro
     ignoredWinRate,
     avgConfidence,
     byType,
+    tradeGradeCoverage: tradeGradeCoverage(logs),
   }
 }
 
@@ -319,7 +332,14 @@ export async function getDecisionLogsForCoach(
   risk: string
   followed: boolean | null
   outcome: string | null
+  /** The OUTCOME grade: roster-value change `outcomeWeeks` after the decision. Not a grade of the deal. */
   grade: string | null
+  outcomeWeeks: number | null
+  /** A trade decision's one trade grade, as given when it was logged. Null when the row does not identify its deal. */
+  tradeGrade: string | null
+  tradeGradeWithheld: string | null
+  /** Both letters, each labelled: "Trade grade B · Outcome after 4 weeks: A". */
+  gradeLine: string
   delta: number | null
   createdAt: string
 }>> {
@@ -333,6 +353,7 @@ export async function getDecisionLogsForCoach(
   return logs.map(log => {
     const rec = log.aiRecommendation as Record<string, unknown>
     const summary = (rec.summary as string) || (rec.action as string) || JSON.stringify(rec).slice(0, 120)
+    const tradeGrade = decisionTradeGrade(log)
 
     return {
       decisionType: log.decisionType,
@@ -342,6 +363,10 @@ export async function getDecisionLogsForCoach(
       followed: log.userFollowed,
       outcome: log.outcome?.actualResult ?? null,
       grade: log.outcome?.outcomeGrade ?? null,
+      outcomeWeeks: log.outcome?.evaluationWeeks ?? null,
+      tradeGrade: tradeGrade?.letter ?? null,
+      tradeGradeWithheld: tradeGrade?.withheldReason ?? null,
+      gradeLine: decisionGradeLine(tradeGrade, log.outcome),
       delta: log.outcome?.rosterValueDelta ?? null,
       createdAt: log.createdAt.toISOString(),
     }

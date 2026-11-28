@@ -44,6 +44,20 @@ import type { RawIdpValueRow, RawPlayerValueRow, RawProjectionRow } from '@/lib/
 import type { RawAfProjectionRow } from '@/lib/decision-os/world/port'
 
 /**
+ * The id space a caller's player ids are in.
+ *
+ *   sleeper           every Sleeper league, and a native NFL league (its pool is Sleeper-keyed).
+ *   rolling_insights  a NATIVE NBA / NCAAB / NHL league: its roster ids are Rolling Insights numbers.
+ *
+ * 🛑 EVERY SOURCE BELOW EXCEPT AF PROJECTIONS IS SLEEPER-KEYED (ADP, the metadata cache's `sleeperId`
+ * index, FantasyCalc, IDP, provider projections). Asked with a Rolling Insights number, a Sleeper-keyed
+ * source does not merely miss — it can answer for a DIFFERENT player with that Sleeper id. So in the
+ * `rolling_insights` space those sources are SKIPPED, not tried, and positions come from the rows
+ * that speak the space (`loadNativePositions`).
+ */
+export type TradeIdSpace = 'sleeper' | 'rolling_insights'
+
+/**
  * Below this share of trades-per-day a price is thin: the market has rarely been asked to
  * defend it.
  *
@@ -80,7 +94,13 @@ export interface TradeEnrichmentPort {
    * comment used to say "under the league's own rules"; that is true only of the READ-TIME IDP and
    * kicker rescores, which this seam does not call.
    */
-  loadAfProjections: (sport: string, playerIds: string[], season: number, week: number | null) => Promise<RawAfProjectionRow[]>
+  loadAfProjections: (sport: string, playerIds: string[], season: number, week: number | null, idSpace?: TradeIdSpace) => Promise<RawAfProjectionRow[]>
+  /**
+   * Positions for a NATIVE league's non-Sleeper ids (`TradeIdSpace` `rolling_insights`), read only from
+   * the rows that speak that space. Optional so a reduced test port still works; the default reads
+   * `resolveNativeRosterPlayers`.
+   */
+  loadNativePositions?: (sport: string, playerIds: string[]) => Promise<Map<string, string | null>>
   /**
    * READ-ONLY: persisted FantasyCalc valuations, matched to the league's own
    * format and QB format.
@@ -153,7 +173,12 @@ export const defaultTradeEnrichmentPort: TradeEnrichmentPort = {
   loadAdp: (sport, ids) => loadAdpRecords(sport, ids),
   resolveMetadata: (sport, ids) => resolvePlayerMetadata(sport, ids),
   loadProjections: (sport, ids, season, week) => loadProjectionRows(sport, ids, season, week),
-  loadAfProjections: (sport, ids, season, week) => loadAfProjectionRows(sport, ids, season, week),
+  loadAfProjections: (sport, ids, season, week, idSpace) => loadAfProjectionRows(sport, ids, season, week, idSpace ?? 'sleeper'),
+  loadNativePositions: async (sport, ids) => {
+    const { resolveNativeRosterPlayers } = await import('@/lib/player-identity/resolveNativeRosterPlayers')
+    const found = await resolveNativeRosterPlayers(ids, sport)
+    return new Map([...found].map(([id, p]) => [id, p.position ?? null]))
+  },
   loadMarketValue: (ids, format, qbFormat) => loadPlayerValueRows(ids, format, qbFormat),
   loadIdpValue: (args) => loadIdpValueRows(args),
   loadPickMarketValues: async ({ qbFormat, numTeams, ppr }) => {
@@ -256,11 +281,16 @@ export async function resolveTradeEnrichment(
       numTeams: number
       isDynasty: boolean
     } | null
+    /** The id space `playerIds` are in (`TradeIdSpace`). Absent ⇒ `sleeper`, every caller before this existed. */
+    idSpace?: TradeIdSpace
   },
   port: TradeEnrichmentPort = defaultTradeEnrichmentPort,
 ): Promise<TradeEnrichmentResult> {
   const ids = Array.from(new Set(args.playerIds.filter((x) => typeof x === 'string' && x.length > 0)))
   if (ids.length === 0) return emptyResult()
+  /** See `TradeIdSpace`: outside the Sleeper space, only the sources that speak it are asked. */
+  const idSpace: TradeIdSpace = args.idSpace ?? 'sleeper'
+  const sleeperKeyed = idSpace === 'sleeper'
 
   const adpByPlayerId: Record<string, number | null> = {}
   const positionByPlayerId: Record<string, string | null> = {}
@@ -281,7 +311,8 @@ export async function resolveTradeEnrichment(
   const contributing: string[] = []
 
   // ADP (freshest-first dedup) — the rows are ordered createdAt desc, so the FIRST row per id wins.
-  try {
+  if (!sleeperKeyed) warnings.push('adp_skipped_id_space')
+  else try {
     const rows = await port.loadAdp(args.sport, ids)
     const seen = new Set<string>()
     for (const r of rows) {
@@ -297,7 +328,22 @@ export async function resolveTradeEnrichment(
   }
 
   // Position (authoritative) — persisted SportsPlayer cache via the D.1 seam. Overrides the ADP fallback.
-  try {
+  if (!sleeperKeyed) {
+    try {
+      const positions = port.loadNativePositions ? await port.loadNativePositions(args.sport, ids) : new Map<string, string | null>()
+      let contributed = false
+      for (const id of ids) {
+        const position = positions.get(id)
+        if (typeof position === 'string' && position.trim()) {
+          positionByPlayerId[id] = position
+          contributed = true
+        }
+      }
+      if (contributed) contributing.push('sports_player_cache')
+    } catch {
+      warnings.push('player_metadata_source_unavailable')
+    }
+  } else try {
     const meta = await port.resolveMetadata(args.sport, ids)
     let metaContributed = false
     for (const id of ids) {
@@ -333,7 +379,7 @@ export async function resolveTradeEnrichment(
   let afProjectionResolved = 0
   if (args.season != null) {
     try {
-      const afRows = await port.loadAfProjections(args.sport, ids, args.season, args.week ?? null)
+      const afRows = await port.loadAfProjections(args.sport, ids, args.season, args.week ?? null, idSpace)
       const seenAf = new Set<string>()
       const seenPerGame = new Set<string>()
       for (const row of afRows) {
@@ -388,7 +434,9 @@ export async function resolveTradeEnrichment(
   }
 
   // Provider projections — now the FALLBACK, filling only players AF did not cover.
-  if (args.season != null && args.week != null && args.week > 0) {
+  if (!sleeperKeyed) {
+    warnings.push('provider_projection_skipped_id_space')
+  } else if (args.season != null && args.week != null && args.week > 0) {
     try {
       const rows = await port.loadProjections(args.sport, ids, String(args.season), args.week)
       const rowsByPlayer = new Map<string, RawProjectionRow[]>()
@@ -426,7 +474,7 @@ export async function resolveTradeEnrichment(
    * uses above.
    */
   let marketValueResolved = 0
-  if (args.valueFormat) {
+  if (args.valueFormat && sleeperKeyed) {
     try {
       const rows = await port.loadMarketValue(
         ids,
@@ -491,7 +539,7 @@ export async function resolveTradeEnrichment(
    */
   const idpValueByPlayerId: Record<string, number | null> = {}
   let idpValueResolved = 0
-  if (args.idpLeague) {
+  if (args.idpLeague && sleeperKeyed) {
     try {
       const rows = await port.loadIdpValue({
         leagueId: args.idpLeague.leagueId,

@@ -12,6 +12,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
 import { dailyScheduleWaitingNotice, loadDailyBestBallScheduleStatus } from '@/lib/bestball/dailyScheduleStatus'
+import { buildImportedBestBallTab, importedBestBallNote, teamWeeksFromMatchupFacts } from '@/lib/bestball/importedBestBallTab'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,7 @@ export async function GET(
       bbMatchupFormat: true,
       bbScoringPeriod: true,
       platform: true,
+      platformLeagueId: true,
       rosters: {
         select: {
           id: true,
@@ -92,14 +94,17 @@ export async function GET(
     settings: league.settings,
     requestedWeek: Number.parseInt(req.nextUrl.searchParams.get('week') ?? '', 10),
     rankBy: bestBallSettings.matchupFormat === 'cumulative' ? 'points' : 'record',
+    viewerUserId: userId,
   })
+  // The older and imported paths: the viewer's roster is the one their user id is on.
+  const legacyViewerRosterIds = league.rosters.filter((roster) => roster.platformUserId === userId).map((roster) => roster.id)
   // Why scoring and competition settings are frozen (the draft has started / the season exists), or null.
   const structureLock = await structuralSettingsLockReason(leagueId).catch(() => null)
   // Daily best ball needs the season's regular-season opener (recorded, or derived from the stored
   // schedule). Without one it cannot score days, and the panel and the tab say so rather than nothing.
   // Only for a league we score ourselves, and never for a tournament (always weekly).
   const dailySchedule =
-    resolveWriteAuthority(league.platform) === 'NATIVE' && bestBallSettings.contestStructure !== 'tournament'
+    resolveWriteAuthority(league) === 'NATIVE' && bestBallSettings.contestStructure !== 'tournament'
       ? await loadDailyBestBallScheduleStatus(
           { sport: String(league.sport), season: native ? native.season : league.season },
           { db: prisma as never },
@@ -112,7 +117,7 @@ export async function GET(
   // one. Either way, say so.
   let draftNotice: string | null = null
   if (
-    resolveWriteAuthority(league.platform) === 'NATIVE' &&
+    resolveWriteAuthority(league) === 'NATIVE' &&
     currentSeasonAwaitsDraft(league.season, native ? native.season : null)
   ) {
     try {
@@ -153,6 +158,53 @@ export async function GET(
     Number.isFinite(requestedWeek) && weeksAvailable.includes(requestedWeek)
       ? requestedWeek
       : weeksAvailable[weeksAvailable.length - 1] ?? 1
+
+  /*
+   * An imported league: the legacy tables above hold nothing for it, but its weekly team scores are
+   * stored (lib/bestball/importedBestBallTab.ts). Any failure falls through to the tab as it was.
+   */
+  if (weeksAvailable.length === 0 && resolveWriteAuthority(league) !== 'NATIVE') {
+    try {
+      const [teamWeeks, importedTeams] = await Promise.all([
+        league.platformLeagueId && league.season != null
+          ? prisma.weeklyMatchup.findMany({
+              where: { leagueId: league.platformLeagueId, seasonYear: league.season },
+              select: { week: true, rosterId: true, pointsFor: true, matchupId: true, game: true },
+            })
+          : Promise.resolve([]),
+        prisma.leagueTeam.findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } }),
+      ])
+      // The older store, only for a league the regular sync has written nothing for.
+      const rows = teamWeeks.some((r) => r.pointsFor > 0)
+        ? teamWeeks
+        : teamWeeksFromMatchupFacts(
+            await prisma.matchupFact.findMany({
+              where: { leagueId, season: league.season },
+              select: { weekOrPeriod: true, teamA: true, teamB: true, scoreA: true, scoreB: true },
+            }),
+          )
+      const imported = buildImportedBestBallTab(rows, importedTeams, Number.isFinite(requestedWeek) ? requestedWeek : null)
+      if (imported.weeksAvailable.length > 0) {
+        return NextResponse.json({
+          league: { id: league.id, name: league.name, sport: league.sport, season: league.season, summary: buildBestBallSettingsSummary(bestBallSettings), settings: bestBallSettings, profile, structureLock },
+          source: 'imported',
+          importedNote: importedBestBallNote(league.platform),
+          ...imported,
+          viewerRosterIds: legacyViewerRosterIds,
+          draftNotice,
+          dailySchedule,
+          dailyScheduleNotice,
+          rosterComposition: league.rosters.map((roster) => {
+            const players = (roster.playerData as { players?: unknown[] } | null)?.players
+            const team = league.teams.find((t) => t.platformUserId && t.platformUserId === roster.platformUserId)
+            return { rosterId: roster.id, teamName: team?.teamName ?? team?.ownerName ?? 'Team', playerCount: Array.isArray(players) ? players.length : 0 }
+          }),
+        })
+      }
+    } catch (error) {
+      console.error('[bestball] imported tab read failed', { leagueId, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
 
   const [weeklyScores, weeklyResults, standings, historyRows] = await Promise.all([
     prisma.weeklyScore.findMany({
@@ -265,6 +317,7 @@ export async function GET(
     dailyScheduleNotice,
     lineups: lineupCards,
     rosterComposition,
+    viewerRosterIds: legacyViewerRosterIds,
     standings: standings.map((row) => ({
       rosterId: row.rosterId,
       rank: row.rank,

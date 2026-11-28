@@ -34,6 +34,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { reapOnce } from './cron-build-reaper.mjs'
 import { readCronSchedule, slowTierSchedules } from './cron-tier.mjs'
+import { catchupOnce } from './worker-release-catchup.mjs'
 
 /** A fast window that ends sooner than this (crash, config error) waits out the rest before respawning. */
 const MIN_FAST_WINDOW_MS = 60_000
@@ -189,6 +190,16 @@ async function reaperLoop() {
   }
 }
 
+/** Once a minute at second 45; catchupOnce never throws and returns at once outside its minutes. */
+async function catchupLoop() {
+  while (!stopping) {
+    const wait = Math.floor(Date.now() / 60_000) * 60_000 + 105_000 - Date.now()
+    await sleep(wait > 60_000 ? wait - 60_000 : wait)
+    if (stopping) break
+    await catchupOnce({ log: (...a) => log(...a) })
+  }
+}
+
 async function main() {
   const live = process.env.CRON_SCHEDULER_LIVE === '1'
   const schedules = slowTierSchedules(readCronSchedule(path.resolve(here, '..')))
@@ -217,7 +228,7 @@ async function main() {
   process.on('SIGTERM', () => stop('SIGTERM'))
   process.on('SIGINT', () => stop('SIGINT'))
 
-  await Promise.all([fastTier(live), slowTier(live, compiled), reaperLoop()])
+  await Promise.all([fastTier(live), slowTier(live, compiled), reaperLoop(), catchupLoop()])
   // Only reachable once stopping; let in-flight children finish inside the grace period.
   while (children.size) await sleep(250)
   process.exit(0)

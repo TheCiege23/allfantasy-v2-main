@@ -86,6 +86,37 @@ export function sleeperIdWhere(sleeperIds: readonly string[], sport?: string) {
 }
 
 /**
+ * Look players up by Sleeper id when the ids come from SEVERAL leagues of different sports.
+ *
+ * 🛑 A SLEEPER ID IS NOT A PERSON UNTIL ITS SPORT IS KNOWN. Sleeper numbers each sport
+ * separately: NFL 1466 is Travis Kelce, NBA 1466 is JaVale McGee, NFL 4866 is Saquon Barkley and
+ * NBA 4866 AJ Dybantsa — every pair `source='sleeper'` in `SportsPlayer`. A dashboard that reads a
+ * user's NFL and NBA rosters in one `sleeperId IN (...)` gets both people under each id. This
+ * builds one `(sport, sleeperId IN ids)` arm per sport, so a row comes back only in a sport where
+ * that id is actually rostered. Entries with no sport are dropped, not widened: an unscoped arm is
+ * the bug. No arms → `OR: []`, which Prisma reads as "match nothing".
+ *
+ * Keying the RESULT is still the caller's job: if one id is rostered in two sports, an id-keyed
+ * map cannot hold both — `composePlayerIdentities` refuses such an id rather than picking.
+ */
+export function sleeperIdsBySportWhere(
+  bySport: Iterable<readonly [string | null | undefined, Iterable<string | null | undefined>]>,
+) {
+  const merged = new Map<string, Set<string>>()
+  for (const [rawSport, rawIds] of bySport) {
+    const sport = String(rawSport ?? '').trim().toUpperCase()
+    if (!sport) continue
+    const set = merged.get(sport) ?? new Set<string>()
+    for (const id of rawIds) {
+      const v = String(id ?? '').trim()
+      if (v) set.add(v)
+    }
+    if (set.size) merged.set(sport, set)
+  }
+  return { OR: [...merged].map(([sport, ids]) => ({ sport, sleeperId: { in: [...ids] } })) }
+}
+
+/**
  * Look players up by OUR row id or a Sleeper id — the two spellings a native league's player ids
  * come in (its pools are seeded from Sleeper; some paths store `SportsPlayer.id`).
  *

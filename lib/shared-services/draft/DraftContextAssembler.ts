@@ -52,6 +52,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { picksUntilNextTurn, type ScoringWindow } from '@/lib/draft-helper/draftContextSignals'
+import { ownDraftSlot, planOwnNextPick, poolAtPlannedPick, type OwnPickPlan } from './planForOwnPick'
 import { projectionKey, projectionsFromPoolEntries } from '@/lib/draft-room/poolProjections'
 
 /**
@@ -119,20 +120,70 @@ export async function resolveDraftRosterShape(
   league: { sport: string; settings: unknown; starters: unknown },
 ): Promise<{ rosterSlots: string[]; isSF: boolean; is2QB: boolean }> {
   try {
-    const { isSF, is2QB } = resolveLeagueScoringFlags(league.settings, league.starters)
-    const rosterFormatType = (await isIdpLeague(leagueId)) ? 'IDP' : 'standard'
-    const template = await getRosterTemplate(league.sport as LeagueSport, rosterFormatType, leagueId)
-    const rosterSlots = template.slots.flatMap((slot) => Array(Math.max(0, slot.starterCount)).fill(slot.slotName))
+    const { rosterSlots, isSF, is2QB } = await readDraftRosterRules(leagueId, league)
     return { rosterSlots, isSF, is2QB }
   } catch {
     return { rosterSlots: [], isSF: false, is2QB: false }
   }
 }
 
+/**
+ * The league's draft rules as the draft engine reads them: starting slots, IDP or not, superflex / 2QB, the scoring
+ * format and TE premium. Everything `buildDraftDecisionContext` takes from the league's configuration.
+ */
+export interface DraftRosterRules {
+  rosterSlots: string[]
+  idp: boolean
+  isSF: boolean
+  is2QB: boolean
+  scoringFormat: 'standard' | 'half_ppr' | 'ppr'
+  tePremiumValue: number | null
+}
+
+type DraftRulesLeague = { sport: string; settings: unknown; starters: unknown }
+
+/**
+ * Derive the draft rules live — the ONE derivation, which Draft OS's feed caches (`draftRosterRulesSource`). Pass the
+ * league row when the caller already holds it. Resolves null for a missing league; a failing read throws, as the
+ * inline reads it replaced did.
+ */
+export async function deriveDraftRosterRules(leagueId: string, league?: DraftRulesLeague | null): Promise<DraftRosterRules | null> {
+  const row =
+    league ??
+    (await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, starters: true } }))
+  if (!row) return null
+  const flags = resolveLeagueScoringFlags(row.settings, row.starters)
+  const idp = await isIdpLeague(leagueId)
+  const template = await getRosterTemplate(row.sport as LeagueSport, idp ? 'IDP' : 'standard', leagueId)
+  const rosterSlots = template.slots.flatMap((slot) => Array(Math.max(0, slot.starterCount)).fill(slot.slotName))
+  return { rosterSlots, idp, ...flags }
+}
+
+/**
+ * The draft rules through Draft OS's 60-second cache (2026-11-20). A live draft re-assembled these on every poll —
+ * an IDP lookup and the roster template, for a fact that does not move mid-draft. Cached, every manager polling one
+ * league in the same minute shares one read; a commissioner's settings change is seen within a minute. When the
+ * cache cannot answer, the live derivation runs here, so a cache problem never becomes a draft problem.
+ */
+export async function readDraftRosterRules(leagueId: string, league: DraftRulesLeague): Promise<DraftRosterRules> {
+  const { loadDraftRosterRules } = await import('@/lib/decision-os/draft-os')
+  const cached = await loadDraftRosterRules({ leagueId, sport: league.sport }).catch(() => null)
+  if (cached) return cached
+  const live = await deriveDraftRosterRules(leagueId, league)
+  if (!live) throw new Error(`League not found: ${leagueId}`)
+  return live
+}
+
 export interface BuildDraftDecisionContextInput {
   leagueId: string
   rosterId: string
   mode?: 'bpa' | 'needs'
+  /**
+   * Off the clock, rank for the roster's own next turn (`plannedFor`). Only the pick DECISION asks for this
+   * (`pickDecision.ts`, the decision route). The pick outlook must see the pool as it stands NOW — its whole job
+   * is to say who is likely gone — and the shadow compare is about the pick on the clock, so both leave it off.
+   */
+  planForOwnTurn?: boolean
 }
 
 export interface DraftDecisionContext {
@@ -157,6 +208,12 @@ export interface DraftDecisionContext {
   pickInRound: number
   /** The weeks this draft scores, for a tournament-stage league; null for a season-long one. */
   scoringWindow: ScoringWindow | null
+  /**
+   * Set when the roster is NOT on the clock — before the draft, or while another team picks (build item 8,
+   * 2026-11-19). `round`, `pick`, `pickInRound` and the engine input are then for the roster's NEXT turn, and the
+   * players ADP says go before it are left out of the pool (`planForOwnPick.ts`). Null on the clock.
+   */
+  plannedFor: OwnPickPlan | null
   totalTeams: number
   status: string | null
   draftType: string | null
@@ -577,19 +634,15 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     orderBy: { overall: 'asc' },
   })
 
-  const { isSF, is2QB, scoringFormat, tePremiumValue } = resolveLeagueScoringFlags(league.settings, league.starters)
-  // Phase 32: resolve the real roster-template format instead of a hardcoded
-  // 'standard' -- previously this made RosterTemplateService.ts's real IDP
-  // branch (gated on formatType === 'IDP') permanently unreachable from
-  // Draft OS, even for a real IDP league. Reuses isIdpLeague() (lib/idp),
-  // the same real detector lib/league/getEffectiveLeagueRosterTemplate.ts
-  // already establishes as the canonical way to check IDP status.
-  const rosterFormatType = (await isIdpLeague(input.leagueId)) ? 'IDP' : 'standard'
-
+  /*
+   * The league's draft rules — slots, IDP, superflex/2QB, scoring — through Draft OS's 60-second cache
+   * (`readDraftRosterRules`). Phase 32's fix still holds inside the derivation: the roster template is resolved for
+   * the league's real format (`isIdpLeague`), never a hardcoded 'standard'.
+   */
   const isFootball = league.sport === 'NFL' || league.sport === 'NCAAF'
-  const [adpResult, template, pool, byeByTeam, scoringWindow, projectionByKey] = await Promise.all([
+  const [adpResult, draftRules, pool, byeByTeam, scoringWindow, projectionByKey] = await Promise.all([
     readAllFantasyAdpForLeague(input.leagueId),
-    getRosterTemplate(league.sport, rosterFormatType, input.leagueId),
+    readDraftRosterRules(input.leagueId, league),
     getPlayerPoolForLeague(input.leagueId, league.sport as LeagueSport, { limit: 800 }).catch(() => []),
     // Byes and the scoring window (2026-11-14): the specifics that separate this draft from a generic one.
     isFootball ? resolveTeamByeWeeks(league.sport, league.season).catch(() => new Map<string, number>()) : Promise.resolve(new Map<string, number>()),
@@ -598,7 +651,7 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
   ])
 
   const poolByKey = new Map(pool.map((p) => [playerKey(p.full_name, p.position), p]))
-  const rosterSlots = template.slots.flatMap((slot) => Array(Math.max(0, slot.starterCount)).fill(slot.slotName))
+  const { rosterSlots, isSF, is2QB, scoringFormat, tePremiumValue } = draftRules
 
   const totalTeams = session.teamCount ?? Math.max(1, new Set(picks.map((p) => p.rosterId)).size || 1)
   /*
@@ -618,6 +671,22 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
   })
   const ownPickIds = new Set([input.rosterId, ...targetRosterAliases])
   const targetRosterPickCount = picks.filter((p) => ownPickIds.has(p.rosterId)).length
+  /*
+   * Off the clock, rank for the roster's own next turn rather than the pick being made now (planForOwnPick.ts):
+   * before the draft that is the roster's first pick, not overall pick 1.
+   */
+  const plan = !input.planForOwnTurn
+    ? null
+    : planOwnNextPick({
+        status: session.status ?? null,
+        draftType: session.draftType ?? null,
+        currentOverall: overallPick,
+        ownSlot: ownDraftSlot({ slotOrder: session.slotOrder, ownIds: ownPickIds, picks }),
+        totalTeams,
+        rounds: session.rounds ?? null,
+      })
+  const targetRound = plan?.round ?? round
+  const targetPickInRound = plan?.pickInRound ?? pickInRound
   const auctionContext = resolveAuctionContext(session, input.rosterId, rosterSlots, targetRosterPickCount)
 
   const assembled = assembleEngineInputFromPicks({
@@ -638,8 +707,8 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     adpEntries: adpResult.entries,
     poolByKey,
     rosterSlots,
-    round,
-    pick: pickInRound,
+    round: targetRound,
+    pick: targetPickInRound,
     totalTeams,
     sport: league.sport,
     isDynasty: league.isDynasty,
@@ -652,6 +721,13 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     mode: input.mode ?? 'needs',
   })
 
+  let plannedFor: OwnPickPlan | null = null
+  if (plan) {
+    const { pool, leftOut } = poolAtPlannedPick(assembled.engineInput.available, plan.picksAway)
+    assembled.engineInput.available = pool
+    plannedFor = { ...plan, leftOut }
+  }
+
   return {
     leagueId: input.leagueId,
     rosterId: input.rosterId,
@@ -661,10 +737,11 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     isDynasty: league.isDynasty,
     isSF,
     is2QB,
-    round,
-    pick: overallPick,
-    pickInRound,
+    round: targetRound,
+    pick: plannedFor?.overall ?? overallPick,
+    pickInRound: targetPickInRound,
     scoringWindow,
+    plannedFor,
     totalTeams,
     status: session.status,
     draftType: session.draftType ?? null,

@@ -21,5 +21,5 @@ it('translates paired ESPN opponents across leagues in one read and ignores unpa
  identities.mockResolvedValue([{espnId:'10',sleeperId:'p'},{espnId:'11',sleeperId:'p'}])
  expect(await portfolioOpponentExposure(rows)).toEqual([{id:'p',name:'NFL Player',sport:'NFL',leagues:[{id:'af',name:'League',week:5},{id:'af2',name:'League',week:5}]}])
  expect(identities).toHaveBeenCalledTimes(1)
- expect(identities).toHaveBeenCalledWith(expect.objectContaining({where:{espnId:{in:['10','11']},sleeperId:{not:null}}}))
+ expect(identities).toHaveBeenCalledWith(expect.objectContaining({where:{sport:'NFL',espnId:{in:['10','11']},sleeperId:{not:null}}}))
 })

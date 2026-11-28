@@ -80,21 +80,23 @@ const sides = (c: HTMLElement) => [...c.querySelectorAll('.af-rail-row-side')].m
 const tile = (c: HTMLElement, id: string) => c.querySelector(`.af-rail-tile.af-platform[href*="${id}"]`)!
 
 describe('the league rail', () => {
-  it('the projection tooltip, both re-scored and generic-PPR forms', () => {
+  it('the AF projection tooltip and unavailable state are translated', () => {
     const [mine, theirs] = sides(renderShell('es'))
     expect(mine).toBe(
-      'Proyección base semanal — proyección de Sleeper con 9 de 9 titulares, recalculada con la configuración de esta liga · el marcador en vivo se muestra aparte',
+      'Proyección base semanal de AllFantasy con 8 de 9 titulares según la puntuación de esta liga · el marcador en vivo se muestra aparte',
     )
-    expect(theirs).toContain(', PPR genérico porque no se pudo recalcular con la puntuación de esta liga')
+    expect(theirs).toBe('Proyección base semanal no disponible · el marcador en vivo se muestra aparte')
     for (const en of ['Weekly', 'starters', 're-scored', 'shown separately']) expect(mine + theirs).not.toContain(en)
   })
 
-  it('CONTROL — English tooltip unchanged', () => {
-    const [mine, theirs] = sides(renderShell('en'))
+  it('shows the AF total and its own coverage even when legacy provider figures exist', () => {
+    const shell = renderShell('en')
+    const [mine, theirs] = sides(shell)
+    expect([...shell.querySelectorAll('.af-rail-row-projected')].map(el => el.textContent)).toEqual(['proj49.0', 'proj—'])
     expect(mine).toBe(
-      'Weekly baseline projection — Sleeper’s projection from 9 of 9 starters, re-scored with this league’s settings · live score is shown separately',
+      'Weekly baseline projection from AllFantasy for 8 of 9 starters under this league’s scoring · live score is shown separately',
     )
-    expect(theirs).toContain(', generic PPR because this league’s scoring could not be re-scored')
+    expect(theirs).toBe('Weekly baseline projection unavailable · live score is shown separately')
   })
 
   it('each league’s label and tooltip, with the career line translated where it shows', () => {
@@ -214,13 +216,14 @@ describe('badges — LIVE and the rankings level', () => {
 
   it('the phone’s More sheet reads Spanish too', () => {
     const b = sheetBadges('es')
-    expect(b).toEqual(expect.arrayContaining(['EN VIVO', 'NIV 12', '3']))
+    // The live-game count ('3') is on the bar's Live tab, which the sheet no longer repeats (2026-11-24).
+    expect(b).toEqual(expect.arrayContaining(['EN VIVO', 'NIV 12']))
     expect(b).not.toContain('LIVE')
     expect(b).not.toContain('LVL 12')
   })
 
   it('CONTROL — the More sheet in English', () => {
-    expect(sheetBadges('en')).toEqual(expect.arrayContaining(['LIVE', 'LVL 12', '3']))
+    expect(sheetBadges('en')).toEqual(expect.arrayContaining(['LIVE', 'LVL 12']))
   })
 
   it('badgeText: words translate, counts pass through', () => {

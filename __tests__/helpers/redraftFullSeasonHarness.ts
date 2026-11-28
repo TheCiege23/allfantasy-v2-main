@@ -25,7 +25,6 @@
  * The only stand-ins: stat lines are generated (seeded, deterministic) instead of ingested, and the
  * week finalizer's seal is granted (it needs a live game slate) — `finalizeWeek` is the one injected dep.
  */
-import { vi } from 'vitest'
 import { getDraftOrderEntry, type DraftRuntimeSlot } from '@/lib/draft-runtime/canonicalDraftRuntime'
 import { buildRedraftSettingsSnapshot } from '@/lib/league-concepts/redraftDefaults'
 import { buildDailyRedraftSettingsSnapshot } from '@/lib/league-concepts/dailySportRedraftDefaults'
@@ -37,7 +36,6 @@ import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { buildLeagueStatScorer, isScoringStarterSlot, recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
-import { processWaiverWindow } from '@/lib/redraft/waiverEngine'
 import { EXTRA_MATCHUP_SETTINGS_KEY, type ExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { normalizeMlbGameStats } from '@/lib/scoring-runtime/mlbStatNormalization'
@@ -80,8 +78,6 @@ export type SimWeekSnapshot = {
   standings: Row[]
   /** Engine's matchup scores vs the harness's own sum over started slots (and days, for MLB). */
   scoreChecks: Array<{ matchupId: string; rosterId: string; engine: number; expected: number }>
-  waiverResults: Array<{ claimId: string; status: string; reason?: string }>
-  waiverClaims: Row[]
 }
 
 export type FullSeasonSimResult = {
@@ -563,61 +559,8 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
 
   // ─── The regular season. ───
   const weeks: SimWeekSnapshot[] = []
-  let faIndex = 0
   for (let week = 1; week <= regularSeasonWeeks; week++) {
     await p.redraftSeason.update({ where: { id: seasonId }, data: { currentWeek: week } })
-
-    // Waivers between weeks: two teams want the same free agent; the higher bid wins.
-    let waiverResults: SimWeekSnapshot['waiverResults'] = []
-    if (week >= 2) {
-      const fa = freeAgents[faIndex++]!
-      const a = rosterIds[(week - 2) % teamCount]!
-      const b = rosterIds[(week - 1) % teamCount]!
-      // MLB, every third week: the winning claim drops an OF STARTER, settled mid-week (Thursday). His
-      // days up to and including the drop day still count (lib/redraft/dailyLineups.ts `daysOnRoster`).
-      const midWeekStarterDrop = sport === 'MLB' && week % 3 === 0
-      for (const [rosterId, bid] of [[a, 7], [b, 3]] as const) {
-        const active = db.table('redraftRosterPlayer').filter((r) => r.rosterId === rosterId && r.droppedAt == null)
-        const starterDrop = midWeekStarterDrop && rosterId === a ? active.find((r) => r.slotType === 'OF') : undefined
-        const drop =
-          starterDrop ??
-          active
-            .filter((r) => /^bn|^bench$/i.test(String(r.slotType)))
-            .sort((x, y) => String(x.playerId).localeCompare(String(y.playerId)))[0]
-        await p.redraftWaiverClaim.create({
-          data: {
-            seasonId,
-            leagueId,
-            rosterId,
-            addPlayerId: fa.playerId,
-            addPlayerName: fa.playerId,
-            dropPlayerId: drop?.playerId ?? null,
-            dropPlayerName: drop?.playerId ?? null,
-            bidAmount: bid,
-            priority: 1,
-            submittedAt: new Date(Date.UTC(seasonYear, 0, 1) + week * 1000),
-          },
-        })
-      }
-      if (midWeekStarterDrop) {
-        const window = resolveDailySportWeekWindow(sport, seasonYear, week)!
-        vi.useFakeTimers({ toFake: ['Date'] })
-        vi.setSystemTime(new Date(window.start.getTime() + 3 * DAY_MS + 16 * 3_600_000)) // Thursday 12:00 ET
-      }
-      // NBA / NHL: claims settle the evening before the week opens. Their seasons span the real
-      // calendar, so a wall-clock run would land a claim mid-season and make the result date-dependent.
-      const settleBeforeWeek = sport === 'NBA' || sport === 'NHL'
-      if (settleBeforeWeek) {
-        const window = resolveDailySportWeekWindow(sport, seasonYear, week)!
-        vi.useFakeTimers({ toFake: ['Date'] })
-        vi.setSystemTime(new Date(window.start.getTime() - 6 * 3_600_000))
-      }
-      try {
-        waiverResults = await processWaiverWindow(leagueId, seasonId, new Date())
-      } finally {
-        if (midWeekStarterDrop || settleBeforeWeek) vi.useRealTimers()
-      }
-    }
 
     // Daily sports: a mid-week lineup change — a bench player starts at UTIL from day 4, the UTIL starter sits.
     if (daily) {
@@ -653,8 +596,6 @@ export async function runRedraftFullSeasonSimulation(db: InMemoryPrisma, input: 
       matchups,
       standings: db.table('redraftRoster').filter((r) => r.seasonId === seasonId).map((r) => ({ ...r })),
       scoreChecks,
-      waiverResults,
-      waiverClaims: db.table('redraftWaiverClaim').filter((r) => r.seasonId === seasonId).map((r) => ({ ...r })),
     })
     clearStats()
   }

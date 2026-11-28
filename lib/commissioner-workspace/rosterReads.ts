@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { isUnownedTeam, ownedTeamNames } from '@/lib/core-app/commissioner/activity'
+import { readEliminatedTeams } from '@/lib/guillotine/eliminatedTeams'
 
 /**
  * Roster-shape reads for Workspace's task detection.
@@ -22,6 +23,12 @@ export interface OrphanTeamCounts {
    * had a stored task reading "2 managers inactive"; the other 6 were invisible to it.
    */
   ownedTeamNames: string[]
+  /**
+   * Team and owner names of the teams a chopped league has eliminated (lib/guillotine/eliminatedTeams.ts).
+   * Left out of `ownedTeamNames`, and the move list is filtered by it: a chopped manager can make no
+   * move, so without this every eliminated team was reported as an inactive manager.
+   */
+  eliminatedTeamNames: string[]
 }
 
 /**
@@ -43,16 +50,20 @@ export interface OrphanTeamCounts {
  */
 export async function readOrphanTeamCounts(leagueId: string): Promise<OrphanTeamCounts> {
   try {
-    const teams = await prisma.leagueTeam.findMany({
-      where: { leagueId },
-      select: { teamName: true, ownerName: true, isOrphan: true, claimedByUserId: true, platformUserId: true },
-    })
+    const [teams, eliminated] = await Promise.all([
+      prisma.leagueTeam.findMany({
+        where: { leagueId },
+        select: { teamName: true, ownerName: true, isOrphan: true, claimedByUserId: true, platformUserId: true },
+      }),
+      readEliminatedTeams(leagueId),
+    ])
     return {
       totalTeams: teams.length,
       orphanCount: teams.filter(isUnownedTeam).length,
-      ownedTeamNames: ownedTeamNames(teams),
+      ownedTeamNames: ownedTeamNames(teams).filter((name) => !eliminated.names.has(name)),
+      eliminatedTeamNames: [...eliminated.names],
     }
   } catch {
-    return { totalTeams: 0, orphanCount: 0, ownedTeamNames: [] }
+    return { totalTeams: 0, orphanCount: 0, ownedTeamNames: [], eliminatedTeamNames: [] }
   }
 }

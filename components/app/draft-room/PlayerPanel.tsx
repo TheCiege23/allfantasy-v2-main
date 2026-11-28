@@ -13,7 +13,8 @@ import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
 import { compactDraftPlayerStats } from '@/lib/draft-room/compactDraftPlayerStats'
 import { DraftPlayerCard } from './DraftPlayerCard'
 import { SleeperPoolTable } from './SleeperPoolTable'
-import { applyPoolSort, nextSortState, sortKeyForColumn, type PoolSortKey } from './SleeperPoolSort'
+import { applyPoolSort, defaultSortDirectionForKey, nextSortState, sortKeyForColumn, type PoolSortKey } from './SleeperPoolSort'
+import { phonePoolSortOptions } from './phonePoolSortOptions'
 // NflDraftPoolStatsGroupHeader import removed in Slice D.1.5 Path B; re-add when D.2 ships the
 // Sleeper-style table mode and rows actually align to those columns.
 import { PlayerDetailModal, type DraftAssistantRoomContext } from './PlayerDetailModal'
@@ -101,6 +102,10 @@ export type PlayerEntry = {
   /** Devy: school (e.g. "Ohio State") */
   school?: string | null
   classYearLabel?: string | null
+  /** A college player's transfer-portal move, one line (lib/devy/portalMoves.ts). */
+  transferNote?: string | null
+  /** A college football player's place at his school by usage (lib/college/usageDepth.ts). */
+  depthNote?: string | null
   draftGrade?: string | null
   projectedLandingSpot?: string | null
   /** Devy: promoted to NFL */
@@ -163,6 +168,7 @@ export type PlayerPanelProps = {
   devyConfig?: { enabled: boolean; devyRounds: number[] }
   /** C2C: when enabled, show College/Pro filter and college/pro round hint */
   c2cConfig?: { enabled: boolean; collegeRounds: number[] }
+  combinedAnnualDraft?: boolean
   /** Current draft round (for devy/C2C round hints) */
   currentRound?: number
   /** When 'IDP', position filter includes Offense, DL, LB, DB, DE, DT, CB, S, IDP FLEX */
@@ -177,6 +183,8 @@ export type PlayerPanelProps = {
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
   /** Viewer's next pick — the pool table adds a LEFT @ survival column when set. */
   leftAtPick?: { overall: number; label: string } | null
+  /** The viewer's next pick, drawn as a line in the list when it is in its default order and unfiltered. */
+  nextPickLine?: { picksAway: number; text: string; title?: string } | null
   /** Player card "draft outlook" for the selected player; null when the draft is not running. */
   getDraftOutlook?: (player: PlayerEntry) => PlayerDraftOutlook | null
   /** Shared Chimmy overlay visibility state from parent surfaces (queue/helper/top bar). */
@@ -400,6 +408,7 @@ function PlayerPanelInner({
   onNominate,
   devyConfig,
   c2cConfig,
+  combinedAnnualDraft = false,
   currentRound,
   formatType,
   selectedPlayerTarget = null,
@@ -407,6 +416,7 @@ function PlayerPanelInner({
   aiRowBadges,
   aiOverlaySignals,
   leftAtPick = null,
+  nextPickLine = null,
   getDraftOutlook,
   showAiOverlays,
   onShowAiOverlaysChange,
@@ -484,8 +494,8 @@ function PlayerPanelInner({
    */
   const [watchlistKeys, setWatchlistKeys] = useState<Set<string>>(new Set())
   const isDevyRound = Boolean(devyConfig?.enabled && !c2cConfig?.enabled && currentRound != null && devyConfig.devyRounds?.includes(currentRound))
-  const isCollegeRound = Boolean(c2cConfig?.enabled && currentRound != null && c2cConfig.collegeRounds?.includes(currentRound))
-  const isProRound = Boolean(c2cConfig?.enabled && currentRound != null && !c2cConfig.collegeRounds?.includes(currentRound))
+  const isCollegeRound = Boolean(!combinedAnnualDraft && c2cConfig?.enabled && currentRound != null && c2cConfig.collegeRounds?.includes(currentRound))
+  const isProRound = Boolean(!combinedAnnualDraft && c2cConfig?.enabled && currentRound != null && !c2cConfig.collegeRounds?.includes(currentRound))
   const showPoolFilter = Boolean(devyConfig?.enabled || c2cConfig?.enabled)
   const hasAiOverlaySignals = Boolean(aiOverlaySignals && Object.keys(aiOverlaySignals).length > 0)
 
@@ -615,6 +625,11 @@ function PlayerPanelInner({
     () => sleeperPoolStatOptionsFromPositionFilter(sport, positionFilter),
     [sport, positionFilter],
   )
+  /** Phone only: the card list has no column headers, so it sorts from this list instead. */
+  const phoneSortOptions = useMemo(
+    () => phonePoolSortOptions(sport, sleeperStatOpts, effectiveUseAiAdp),
+    [sport, sleeperStatOpts, effectiveUseAiAdp],
+  )
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -739,7 +754,7 @@ function PlayerPanelInner({
   const selectedIsWatchlisted = selectedPlayer ? watchlistKeys.has(watchKeyFor(selectedPlayer)) : false
 
   useEffect(() => {
-    if (!showPoolFilter || currentRound == null) return
+    if (!showPoolFilter || currentRound == null || combinedAnnualDraft) return
     if (c2cConfig?.enabled) {
       setPoolFilter(isCollegeRound ? 'College' : 'Pro')
       return
@@ -747,7 +762,7 @@ function PlayerPanelInner({
     if (devyConfig?.enabled) {
       setPoolFilter(isDevyRound ? 'Devy' : 'Pro')
     }
-  }, [showPoolFilter, currentRound, c2cConfig?.enabled, devyConfig?.enabled, isCollegeRound, isDevyRound])
+  }, [showPoolFilter, currentRound, combinedAnnualDraft, c2cConfig?.enabled, devyConfig?.enabled, isCollegeRound, isDevyRound])
 
   useEffect(() => {
     if (!selectedPlayerTarget?.name) return
@@ -917,6 +932,42 @@ function PlayerPanelInner({
             <span data-testid="draft-player-filter-toggle">{filtersOpen ? 'Done' : 'Filters'}</span>
             {collapsedFilterCount > 0 ? <span data-testid="draft-mobile-filters-count">{collapsedFilterCount}</span> : null}
           </button>
+          {/* Phone sort (2026-11-28). The desktop table sorts from its headers; the phone card list
+              had no sort at all ("you weren't able to sort by average points per game last year").
+              Same sort state and keys as the headers, so switching layout keeps the order. */}
+          {phoneLayout ? (
+            <div className="flex items-center gap-1" data-testid="draft-mobile-sort">
+              <label className="sr-only" htmlFor={`${filterRegionId}-sort`}>Sort players by</label>
+              <select
+                id={`${filterRegionId}-sort`}
+                data-testid="draft-mobile-sort-key"
+                value={phoneSortOptions.some((o) => o.key === sortBy) ? sortBy : ''}
+                onChange={(e) => {
+                  const key = e.target.value
+                  if (!key) return
+                  setSortBy(key)
+                  setSortDirection(defaultSortDirectionForKey(key))
+                }}
+                className="min-h-[44px] max-w-[120px] rounded-lg border border-white/15 bg-black/40 px-2 text-sm text-cyan-100"
+              >
+                {phoneSortOptions.some((o) => o.key === sortBy) ? null : <option value="">Sorted</option>}
+                {phoneSortOptions.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                data-testid="draft-mobile-sort-direction"
+                onClick={() => setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                aria-label={sortDirection === 'asc' ? 'Sorted low to high. Switch to high to low' : 'Sorted high to low. Switch to low to high'}
+                className="min-h-[44px] min-w-[44px] rounded-lg border border-white/15 px-2 text-sm text-cyan-100"
+              >
+                {sortDirection === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+          ) : null}
           {/* D.6.1 — position pills replacing the legacy <select>. Each pill shows the
               available pool count for that position; the active pill fills with that
               position's board colour, and idle pills carry it in their label.
@@ -958,7 +1009,7 @@ function PlayerPanelInner({
                   <span>{opt.label}</span>
                   <span
                     className={`text-[11px] font-medium tabular-nums ${
-                      isActive ? 'opacity-70' : 'text-white/45'
+                      isActive ? 'opacity-70' : 'text-white/50'
                     }`}
                   >
                     {opt.drafted}/{opt.available}
@@ -1227,6 +1278,7 @@ function PlayerPanelInner({
       )}
       {selectedPlayer && (
         <PlayerDetailModal
+          scoringLeagueId={leagueId ?? null}
           open={true}
           onClose={() => setSelectedPlayer(null)}
           draftOutlook={getDraftOutlook?.(selectedPlayer) ?? null}
@@ -1255,6 +1307,8 @@ function PlayerPanelInner({
               null,
             teamLogoUrl: selectedNormalized?.teamLogoUrl ?? selectedPlayer.display?.assets?.teamLogoUrl ?? null,
             status: getDraftRoomDisplayInjury(selectedPlayer) ?? selectedPlayer.display?.metadata?.injuryStatus ?? null,
+            transferNote: selectedPlayer.transferNote ?? null,
+            depthNote: selectedPlayer.depthNote ?? null,
             college: selectedPlayer.school ?? selectedPlayer.display?.metadata?.collegeOrPipeline ?? null,
             age: selectedPlayer.display?.metadata?.age ?? null,
             heightIn: null,
@@ -1518,6 +1572,13 @@ function PlayerPanelInner({
                   sortState={{ key: sortBy, direction: sortDirection }}
                   onSortChange={handleColumnHeaderSort}
                   leftAtPick={leftAtPick}
+                  nextPickLine={
+                    // Only in the default order with nothing filtered out: "N players above the line"
+                    // means nothing in a position-filtered or re-sorted list.
+                    !hasSecondaryPoolFilters && sortDirection === 'asc' && (sortBy === 'adp' || sortBy === 'aiAdp')
+                      ? nextPickLine
+                      : null
+                  }
                   showExperienceLabel={isDynasty}
                 />
               </div>

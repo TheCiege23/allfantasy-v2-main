@@ -17,13 +17,14 @@ const m = vi.hoisted(() => ({
   upsertWaiverSettings: vi.fn(),
   refreshNextRun: vi.fn(),
   derivedSync: vi.fn(),
+  hasAccess: true,
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/lib/league/permissions', () => ({ requireCommissionerRole: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/lib/subscription/EntitlementResolver', () => ({
   EntitlementResolver: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
-    this.resolveForUser = vi.fn().mockResolvedValue({ hasAccess: false })
+    this.resolveForUser = vi.fn(async () => ({ hasAccess: m.hasAccess }))
   }),
 }))
 vi.mock('@/lib/league/league-settings-draft-sync', () => ({ syncDraftSessionFromLeagueSettings: vi.fn() }))
@@ -64,6 +65,7 @@ function lastSettingsWrite(): Record<string, unknown> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  m.hasAccess = true // these tests run as an AF Commissioner; the gate has its own tests below
   settingsInDb = {}
   leagueRow = {
     id: 'L', platform: 'manual', leagueSize: 12, timezone: 'UTC', teams: [], leagueSettings: null,
@@ -131,5 +133,47 @@ describe('daily waiver schedule through executeLeagueSettingsPatch', () => {
     const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', dailyWaiverSchedule: { enabled: true } }, { section: 'waivers' })
     expect(res.status).toBe(400)
     expect(m.prisma.league.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('the day-by-day schedule is AF Commissioner (owner, 2026-11-26)', () => {
+  it('without the plan, turning it on is refused and nothing is written', async () => {
+    m.hasAccess = false
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', dailyWaiverSchedule: schedule({}, { mon: 'waivers_then_fa' }) }, { section: 'waivers' })
+    expect(res.status).toBe(403)
+    expect(((await res.json()) as { code?: string }).code).toBe('DAILY_WAIVER_SCHEDULE_REQUIRES_AF_COMMISSIONER')
+    expect(m.prisma.league.update).not.toHaveBeenCalled()
+  })
+
+  it('without the plan, a league can still turn its schedule off, and re-save the one it has', async () => {
+    m.hasAccess = false
+    const current = schedule({}, { mon: 'rolling' })
+    settingsInDb = { [KEY]: current }
+    expect((await executeLeagueSettingsPatch('u', { leagueId: 'L', dailyWaiverSchedule: current }, { section: 'waivers' })).status).toBe(200)
+    expect((await executeLeagueSettingsPatch('u', { leagueId: 'L', dailyWaiverSchedule: { ...current, enabled: false } }, { section: 'waivers' })).status).toBe(200)
+  })
+})
+
+describe('AF Commissioner waiver extras save (2026-11-26)', () => {
+  const extras = { version: 1, conditionalClaims: true, faabRefills: [], rebuildPriority: false, secondChance: { enabled: false, maxGap: 1 }, runReport: { enabled: false, hideLosingBids: false }, faLockWindows: [] }
+
+  it('without the plan, turning an extra on is refused', async () => {
+    m.hasAccess = false
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', waiverExtras: extras }, { section: 'waivers' })
+    expect(res.status).toBe(403)
+    expect(((await res.json()) as { code?: string }).code).toBe('WAIVER_EXTRAS_REQUIRE_AF_COMMISSIONER')
+  })
+
+  it('with the plan it is stored on league settings; without it, turning everything off is still allowed', async () => {
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', waiverExtras: extras }, { section: 'waivers' })
+    expect(res.status).toBe(200)
+    expect(lastSettingsWrite().af_waiver_extras).toEqual(extras)
+    m.hasAccess = false
+    const off = { ...extras, conditionalClaims: false }
+    expect((await executeLeagueSettingsPatch('u', { leagueId: 'L', waiverExtras: off }, { section: 'waivers' })).status).toBe(200)
+  })
+
+  it('a malformed record is a 400', async () => {
+    expect((await executeLeagueSettingsPatch('u', { leagueId: 'L', waiverExtras: { version: 2 } }, { section: 'waivers' })).status).toBe(400)
   })
 })

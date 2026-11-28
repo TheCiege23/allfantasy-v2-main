@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -149,6 +151,27 @@ describe('eviction night', () => {
     expect(moment.getAttribute('data-state')).toBe('sealed')
   })
 
+  it('the privacy promise is a closed row; what happens after the eviction stays open (2026-11-24)', () => {
+    render(<BigBrotherEvictionMoment eviction={eviction} nameOf={nameOf} avatarOf={() => null} />)
+    const privacy = screen.getByTestId('bb-privacy') as HTMLDetailsElement
+    expect(privacy.tagName).toBe('DETAILS')
+    expect(privacy.open).toBe(false)
+    expect(privacy.querySelector('summary')?.textContent).toContain('What’s shown, what stays private')
+    expect(screen.getByText('After the eviction').closest('details')).toBeNull()
+  })
+
+  it('the phone layout puts the nominees side by side and the houseguests two across', () => {
+    const css = readFileSync(join(process.cwd(), 'components/big-brother/big-brother-specialty.module.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    const phone = css.slice(css.indexOf('@media (max-width: 560px)'))
+    expect(phone).toMatch(/\.evictStage \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+    expect(phone).toMatch(/\.hgGrid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+  })
+
+  it('"How winners are decided" is a closed row on the house view', () => {
+    const src = readFileSync(join(process.cwd(), 'components/big-brother/BigBrotherHome.tsx'), 'utf8')
+    expect(src).toMatch(/<details className="[^"]*" data-testid="bb-how-winners">\s*<summary className="[^"]*min-h-\[44px\][^"]*">\s*<h3[^>]*>How winners are decided<\/h3>/)
+  })
+
   it('a league with private totals reveals the result only', () => {
     render(<BigBrotherEvictionMoment eviction={{ ...eviction, votesByNominee: null }} nameOf={nameOf} avatarOf={() => null} />)
     fireEvent.click(screen.getByTestId('bb-reveal-vote'))
@@ -209,7 +232,8 @@ describe('BigBrotherSpecialtyHome', () => {
         }}
       />,
     )
-    expect(screen.getAllByText('Blah House').length).toBeGreaterThan(0)
+    // 2026-11-23: the house view's title is "Big Brother", not the league name.
+    expect(screen.getAllByRole('heading', { name: 'Big Brother' }).length).toBeGreaterThan(0)
     expect(screen.getByText('5 houseguests · 4 in the house')).toBeTruthy()
     expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 6 · Veto meeting')
     expect(screen.getByTestId('bb-phase-tracker').querySelector('[aria-current="step"]')?.textContent).toContain('Veto meeting')

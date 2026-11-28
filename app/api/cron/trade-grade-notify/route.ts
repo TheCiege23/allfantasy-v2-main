@@ -20,6 +20,7 @@ import {
   sweepProviderTradeOffers,
   type OfferSweepResult,
 } from '@/lib/provider-trades/syncProviderTradeOffers'
+import { sweepEspnTradeOffers } from '@/lib/provider-trades/syncEspnTradeOffers'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -89,7 +90,8 @@ export async function GET(req: NextRequest) {
     const pendingReminders = await withSyncJobRun(
       { jobName: 'cron-pending-trade-reminders', trigger: 'cron' },
       () => remindPendingTrades(),
-      (r) => ({ rowsRead: r.checked, rowsWritten: r.sent }),
+      // Each reminder re-grades its offer for the receiver (Trade OS's scheduled grade beyond Sleeper).
+      (r) => ({ rowsRead: r.checked, rowsWritten: r.sent, metadata: { regraded: r.regraded, moved: r.moved } }),
     ).catch((e) => {
       console.error('[cron/trade-grade-notify] pending reminder sweep failed', e)
       return { checked: 0, sent: 0, error: e instanceof Error ? e.message : String(e) }
@@ -185,6 +187,30 @@ export async function GET(req: NextRequest) {
     }
 
     /*
+     * ESPN PENDING OFFERS (2026-11-27) — every tick, one `mPendingTransactions` read per ESPN football
+     * league in the slice, with that league's connected user's cookies only. Writes the same ledger the
+     * Trade Center, the inbox and Chimmy read; notifies the user once per new offer waiting on them.
+     * Budgeted (stops STARTING leagues at 45s) and separately identified, like every passenger here.
+     * See lib/provider-trades/syncEspnTradeOffers.ts.
+     */
+    const espnOffers = await withSyncJobRun(
+      { jobName: 'cron-espn-trade-offer-sweep', trigger: 'cron' },
+      () => sweepEspnTradeOffers({ maxLeagues: 25, deadlineMs: 45_000 }),
+      (r) => ({
+        rowsRead: r.leaguesSwept,
+        rowsWritten: r.offersWritten,
+        errors: r.results.filter((x) => x.error).map((x) => `${x.leagueId}: ${x.error}`),
+        metadata: { eligible: r.leaguesEligible, expired: r.expired, vanished: r.vanished, notified: r.notified, feedIncomplete: r.feedIncomplete },
+      }),
+    ).then(
+      (r) => ({ leaguesEligible: r.leaguesEligible, leaguesSwept: r.leaguesSwept, offersWritten: r.offersWritten, expired: r.expired, vanished: r.vanished, notified: r.notified, feedIncomplete: r.feedIncomplete }),
+      (e) => {
+        console.error('[cron/trade-grade-notify] ESPN offer sweep failed', e instanceof Error ? e.name : typeof e)
+        return { error: e instanceof Error ? e.message : String(e) }
+      },
+    )
+
+    /*
      * The full-feed rotation and the offer-ledger sweep keep their 15-minute cadence while the route
      * ticks every 5: they read 18 weeks a league, and their cost was sized against 15.
      */
@@ -272,6 +298,7 @@ export async function GET(req: NextRequest) {
       pendingReminders,
       providerTradeAlerts,
       offerSweep,
+      espnOffers,
       rotation: rotationDue ? ('ran' as const) : ('not due' as const),
       offerLedger,
       leagues: results.length,

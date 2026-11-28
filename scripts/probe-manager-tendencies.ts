@@ -36,7 +36,7 @@ function qbFormat(starters: string[]): 'ONE_QB' | 'SUPERFLEX' {
 async function main() {
   const leagues = await prisma.league.findMany({
     where: { platform: { equals: 'sleeper', mode: 'insensitive' } },
-    select: { id: true, name: true, settings: true, leagueType: true },
+    select: { id: true, name: true, settings: true, leagueType: true, sport: true },
   })
 
   const observations: TradeSideObservation[] = []
@@ -67,7 +67,8 @@ async function main() {
     }
 
     const players = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: [...ids] } },
+      // The league's sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+      where: { sport: String(league.sport ?? 'NFL').toUpperCase(), sleeperId: { in: [...ids] } },
       select: { sleeperId: true, age: true },
     })
     const ageOf = new Map<string, number>()

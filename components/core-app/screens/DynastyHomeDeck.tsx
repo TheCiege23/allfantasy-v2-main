@@ -26,8 +26,6 @@ const GAUGE_MIN = 21
 const GAUGE_MAX = 33
 const GAUGE_TICKS = [22, 26, 30]
 const at = (age: number) => `${(Math.min(GAUGE_MAX, Math.max(GAUGE_MIN, age)) - GAUGE_MIN) / (GAUGE_MAX - GAUGE_MIN) * 100}%`
-/** More taxi slots than this draw as a count only — a row of 20 dots says nothing a number does not. */
-const MAX_SLOT_DOTS = 8
 
 type Messages = typeof dynastyHomeDeckMessages.en
 
@@ -158,7 +156,8 @@ export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: stri
                 )}
               </h2>
             ) : null}
-            {off ? null : <p className="af-lh-dy-tagline">{m.tagline}</p>}
+            {/* The in-season tagline ("Rosters carry over. Every pick is an asset…") went 2026-11-24: the
+                cards under it say the same thing with the league's own numbers. */}
           </div>
         </div>
 
@@ -281,13 +280,7 @@ export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: stri
                     : m.taxiStashed(taxi.count)}
                 </span>
               </p>
-              {taxi.slots > 0 && taxi.slots <= MAX_SLOT_DOTS ? (
-                <ol className="af-lh-dy-slots">
-                  {Array.from({ length: taxi.slots }, (_, i) => (
-                    <li key={i} data-filled={i < taxi.count || undefined} aria-label={i < taxi.count ? m.slotFilled : m.slotOpen} />
-                  ))}
-                </ol>
-              ) : null}
+              {/* The slot boxes are gone (2026-11-24): drawn empty, filled ones read as blank, and the count says it. */}
             </section>
           ) : null}
         </div>

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeRedraftSeasonStatus, REDRAFT_SEASON_STATUS } from '@/lib/redraft/seasonStatus'
 import { isSealedWeek } from '@/lib/redraft/weekSealed'
+import { PRE_LEAGUE_MATCHUP_TYPE } from '@/lib/redraft/preLeagueWeeksRules'
 
 /**
  * When the commissioner may turn the league median game (`League.medianGame`, lib/redraft/medianGame.ts)
@@ -63,7 +64,12 @@ export async function medianGameChangeRefusal(
     select: {
       season: true,
       status: true,
-      schedule: { where: { isMedianMatchup: false }, select: { week: true, status: true, awayRosterId: true } },
+      // Pre-league weeks are final the moment they load (lib/redraft/preLeagueWeeksRules.ts); counting
+      // them here would lock the median on a late-starting league's draft day.
+      schedule: {
+        where: { isMedianMatchup: false, type: { not: PRE_LEAGUE_MATCHUP_TYPE } },
+        select: { week: true, status: true, awayRosterId: true },
+      },
     },
   })
   return medianGameTimingRefusal(seasons)

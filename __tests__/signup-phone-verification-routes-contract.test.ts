@@ -53,7 +53,7 @@ describe("Signup phone verification route contracts", () => {
       new Request("http://localhost/api/auth/phone/signup/start", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ phone: "5551234567" }),
+        body: JSON.stringify({ phone: "2015550123" }), // a real NANP shape: exchange cannot start with 1 (lib/phone/smsRegion)
       }) as any
     )
     expect(res.status).toBe(200)

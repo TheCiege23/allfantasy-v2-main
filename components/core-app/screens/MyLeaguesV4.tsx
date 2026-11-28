@@ -6,6 +6,7 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
@@ -26,6 +27,7 @@ import '@/components/core-app/af-my-leagues.css'
 import '@/components/core-app/af-my-leagues-redesign.css'
 // The plain-words guide (2026-11-14): the headline, the honest groups and the folds.
 import '@/components/core-app/af-my-leagues-guide.css'
+import '@/components/core-app/home/af-home-guide.css'
 import { myLeaguesGuideMessages } from '@/lib/core-app/messages/myLeaguesGuide'
 import { extraChips, myLeaguesHeadline, parseReason, type GuideReason } from '@/lib/core-app/myLeaguesGuide'
 
@@ -263,7 +265,9 @@ export function MyLeaguesV4({
         title={headline}
         sub={
           <>
-            <span className="af-mlg-intro">{counts.live === 0 ? g.introEmpty : g.intro}</span>
+            {/* 2026-11-24 (the simplify pass): the page's intro sentence went; only the empty page keeps
+                one, because it is the only place that says where leagues come from. */}
+            {counts.live === 0 ? <span className="af-mlg-intro">{g.introEmpty}</span> : null}
             {headChips.length > 0 ? (
               <span className="af-mlg-chips">
                 {headChips.map((c) => (
@@ -273,7 +277,6 @@ export function MyLeaguesV4({
                 ))}
               </span>
             ) : null}
-            {why ? <span className="af-mlg-why" data-testid="my-leagues-why">{why}</span> : null}
           </>
         }
         actions={
@@ -287,6 +290,15 @@ export function MyLeaguesV4({
           </>
         }
       />
+
+      {/* "Why it matters" is one closed row under the headline (2026-11-24): read once, it was a
+          paragraph on every visit. It sits outside the header because the header's sub is a <p>. */}
+      {why ? (
+        <details className="af-hg-whyfold af-mlg-whyfold" data-testid="my-leagues-why">
+          <summary>{head.lead === 'clear' ? g.whyClearLabel : g.whyLabel}</summary>
+          <p>{why}</p>
+        </details>
+      ) : null}
 
       {/* ── Search and sport stay in view; everything else folds ─────────── */}
       <div className="af-ml-controls af-mlg-controls">
@@ -639,9 +651,13 @@ export function MyLeaguesV4({
         ⚠ THE WITHHELD LIST STAYS PART OF THE SCREEN, NOT A DEV NOTE: it says
         plainly which things are not wired, so a reader can tell "we have nothing
         to show" from "nothing is happening". It is reference, so it folds.
+
+        2026-11-20 — "More detail" (owner: the core site is confusing). This was already the page's one
+        foot fold; it is now the shared <MoreDetail>, so it reads "More detail" like every /core page,
+        with its old summary as the note and its class and test id kept. Contents unchanged. The
+        filters fold and Hidden leagues stay where they are: they are part of using the list.
       */}
-      <details className="af-mlg-foot" data-testid="my-leagues-foot">
-        <summary>{g.footSummary(counts.history)}</summary>
+      <MoreDetail className="af-mlg-foot" testId="my-leagues-foot" note={g.footSummary(counts.history)}>
         <div className="af-mlg-foot-body">
           <p className="af-ml-foot-p">{counts.history > 0 ? g.footHistory : g.footNoHistory}</p>
           <div className="af-ml-foot-actions">
@@ -667,7 +683,7 @@ export function MyLeaguesV4({
             </section>
           ) : null}
         </div>
-      </details>
+      </MoreDetail>
     </div>
   )
 }

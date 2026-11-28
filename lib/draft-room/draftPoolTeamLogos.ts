@@ -22,6 +22,7 @@
  * the placeholder.
  */
 import { prisma } from '@/lib/prisma'
+import { loadSoccerClubNames, type SoccerClub } from '@/lib/soccer/soccerClubNames'
 import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
 import { collegeLogoNameCandidates, exactKey, looseTeamKey } from '@/lib/sports-data/collegeTeamNames'
 
@@ -118,6 +119,41 @@ export async function loadDraftPoolTeamLogoResolver(
 }
 
 /** Put the stored crest on each entry that has one; entries without a match keep what they had. */
+export type SoccerClubName = SoccerClub
+/** The shared club lookup (lib/soccer/soccerClubNames.ts): one naming for every surface. */
+export { loadSoccerClubNames }
+
+/**
+ * 🛑 DISPLAY ONLY. A Rolling Insights soccer player's `team` is the club's numeric id ("17"), and the
+ * board showed it as is. This names the club on what the board SHOWS — the display team and the
+ * metadata affiliation — and leaves `entry.team` alone: it is what a pick, a roster and scoring carry,
+ * and a value nothing else reads would be a silent change to all of them. Run after logos, which
+ * already resolve the id.
+ */
+export function applySoccerClubNames(
+  entries: NormalizedDraftEntry[],
+  clubs: ReadonlyMap<string, SoccerClubName>,
+): NormalizedDraftEntry[] {
+  if (clubs.size === 0) return entries
+  for (const entry of entries) {
+    const id = String(entry.team ?? '').trim()
+    if (!/^\d+$/.test(id)) continue
+    const club = clubs.get(id)
+    if (!club) continue
+    const team = entry.display?.team
+    if (team) {
+      team.displayName = club.name
+      team.abbreviation = club.shortName ?? club.name
+    }
+    const meta = entry.display?.metadata as { teamAffiliation?: string | null; teamAbbreviation?: string | null } | undefined
+    if (meta) {
+      meta.teamAffiliation = club.name
+      meta.teamAbbreviation = club.shortName ?? club.name
+    }
+  }
+  return entries
+}
+
 export function applyStoredTeamLogos(
   entries: NormalizedDraftEntry[],
   resolve: (team: string | null | undefined) => string | null,

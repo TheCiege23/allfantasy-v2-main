@@ -140,13 +140,13 @@ describe('the page', () => {
   it('says Supreme is cheaper once, with numbers, and follows the interval', () => {
     render(<PricingV4 plans={PLANS} packs={[]} />)
     const card = cardOf('AF Supreme')
-    expect(within(card).getByTestId('pricing-supreme-value').textContent).toBe('Both paid plans for $19.99 a month instead of $24.98.')
+    expect(within(card).getByTestId('pricing-supreme-value').textContent).toBe('AF Pro and AF Commissioner for $19.99 a month instead of $24.98 — AF Legacy included.')
     expect(within(card).queryByText(SUPREME_VALUE_BULLET)).toBeNull()
     expect(within(card).queryByText('Best value')).toBeNull()
     expect(card.textContent).not.toMatch(/less than buying both/)
 
     fireEvent.click(screen.getByRole('button', { name: 'Yearly' }))
-    expect(within(cardOf('AF Supreme')).getByTestId('pricing-supreme-value').textContent).toBe('Both paid plans for $159.99 a year instead of $209.98.')
+    expect(within(cardOf('AF Supreme')).getByTestId('pricing-supreme-value').textContent).toBe('AF Pro and AF Commissioner for $159.99 a year instead of $209.98 — AF Legacy included.')
   })
 
   it('shows yearly prices once — on the cards — and keeps the yearly checkout buttons', () => {

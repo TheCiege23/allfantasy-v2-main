@@ -316,8 +316,19 @@ export async function submitImportCreation(
      * imports with no cookies as a member (see `espnPublicMemberImport.ts`).
      */
     espnLeagueRunBy?: 'espn' | 'member' | 'me'
+    /**
+     * PASTED Yahoo league: `member` imports with the picked team and NO commissioner attestation (the
+     * same member path as ESPN's); `me` is the attested commissioner import.
+     */
+    yahooLeagueRunBy?: 'member' | 'me'
     /** Edits from the "Review your import" screen, applied server-side to the fresh fetch. */
     reviewOverrides?: ImportReviewOverrides | null
+    /** The league type picked on the confirm screen; omitted means keep what was detected. */
+    leagueType?: string | null
+    /** The other half of a college + pro league, picked on the confirm screen: linked once the league is built. */
+    pairWithLeagueId?: string | null
+    /** "Had this season's rookie draft?" — only sent when the confirm screen asked. */
+    rookieDraftDone?: boolean | null
   }
 ): Promise<SubmitImportResult> {
   // A pasted Yahoo league (yahoo-snapshot:<id>) is allowed through; the server decides who may use it.
@@ -341,7 +352,11 @@ export async function submitImportCreation(
         ...(options?.confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
         ...(options?.claimSourceTeamId?.trim() ? { claimSourceTeamId: options.claimSourceTeamId.trim() } : {}),
         ...(provider === 'espn' && options?.espnLeagueRunBy ? { espnLeagueRunBy: options.espnLeagueRunBy } : {}),
+        ...(provider === 'yahoo' && options?.yahooLeagueRunBy ? { yahooLeagueRunBy: options.yahooLeagueRunBy } : {}),
         ...(options?.reviewOverrides ? { reviewOverrides: options.reviewOverrides } : {}),
+        ...(options?.leagueType ? { leagueType: options.leagueType } : {}),
+        ...(options?.pairWithLeagueId ? { pairWithLeagueId: options.pairWithLeagueId } : {}),
+        ...(typeof options?.rookieDraftDone === 'boolean' ? { rookieDraftDone: options.rookieDraftDone } : {}),
       }),
     });
     const data = await readImportResponseBody(res);

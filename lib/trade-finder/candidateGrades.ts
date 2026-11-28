@@ -14,6 +14,28 @@ export type GradedFinderCandidate = TradeCandidate & {
 }
 
 /**
+ * A finder side as grader input: Sleeper players by id (qualified as Sleeper's) and name, picks by
+ * year and round. A pick with no year or round, or a player with no name, is a REASON — never dropped,
+ * which would grade the deal as though it were not in it. Shared by /api/trade-finder and Partner Match.
+ */
+export function finderGradeInputs(
+  assets: ReadonlyArray<Pick<PricedAsset, 'assetId' | 'name' | 'isPick' | 'pickYear' | 'pickRound'>>,
+): GradeInputs {
+  const out: GradeInputs = { assets: [], unpriceable: [] }
+  for (const a of assets) {
+    if (a.isPick) {
+      if (a.pickYear && a.pickRound) out.assets.push({ kind: 'pick', year: a.pickYear, round: a.pickRound, label: a.name })
+      else out.unpriceable.push(a.name)
+    } else if (a.name?.trim()) {
+      out.assets.push({ kind: 'player', name: a.name.trim(), providerIdentity: { provider: 'sleeper', id: a.assetId } })
+    } else {
+      out.unpriceable.push('an unnamed player')
+    }
+  }
+  return out
+}
+
+/**
  * THE grade on a /trade-finder candidate (2026-09-27).
  *
  * The page labelled its cards with a scale of its own — and worse, rendered the route's
@@ -30,20 +52,7 @@ export async function gradeFinderCandidates(args: {
   /** Only the candidates the page shows. */
   limit: number
 }): Promise<void> {
-  const inputs = (assets: PricedAsset[]): GradeInputs => {
-    const out: GradeInputs = { assets: [], unpriceable: [] }
-    for (const a of assets) {
-      if (a.isPick) {
-        if (a.pickYear && a.pickRound) out.assets.push({ kind: 'pick', year: a.pickYear, round: a.pickRound, label: a.name })
-        else out.unpriceable.push(a.name)
-      } else if (a.name?.trim()) {
-        out.assets.push({ kind: 'player', name: a.name.trim(), providerIdentity: { provider: 'sleeper', id: a.assetId } })
-      } else {
-        out.unpriceable.push('an unnamed player')
-      }
-    }
-    return out
-  }
+  const inputs = finderGradeInputs
 
   await Promise.all(
     args.candidates.slice(0, args.limit).map(async (c) => {

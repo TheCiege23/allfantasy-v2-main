@@ -15,7 +15,8 @@ describe('post-create handoff normalization', () => {
     const u = new URL(base, 'http://localhost')
     expect(u.searchParams.get('created')).toBe('1')
     expect(u.searchParams.get('guide')).toBe('settings')
-    expect(u.searchParams.get('openChat')).toBe('league')
+    // Chat no longer opens over a league you just made (owner, 2026-11-25).
+    expect(u.searchParams.get('openChat')).toBeNull()
     expect(u.searchParams.get('showInvite')).toBe('1')
     expect(u.searchParams.get('playIntro')).toBe('1')
   })

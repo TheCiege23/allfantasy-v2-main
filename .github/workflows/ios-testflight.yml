@@ -41,6 +41,16 @@ on:
         type: boolean
         required: false
         default: false
+      sign_in_with_apple:
+        description: "Ship native Sign in with Apple (one-tap sign-up in the app; the page shows the button only in a build with it). Needs Sign In with Apple enabled on the App ID ai.allfantasy.app first, or the export fails."
+        type: boolean
+        required: false
+        default: false
+      passkeys:
+        description: "Ship Face ID passkeys (sign in with the same passkeys as www.allfantasy.ai; the page shows Face ID only in a build with it). Adds webcredentials:www.allfantasy.ai to Associated Domains, so it needs universal_links ticked too."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -158,12 +168,14 @@ jobs:
       # shipped only when its input is ticked: a push-only run must not start carrying
       # associated-domains (added 2026-09-29) and fail on a capability nobody enabled.
       - name: Embed requested entitlements in the archive
-        if: ${{ inputs.push_notifications || inputs.universal_links || inputs.career_widget || inputs.notification_images }}
+        if: ${{ inputs.push_notifications || inputs.universal_links || inputs.career_widget || inputs.notification_images || inputs.sign_in_with_apple || inputs.passkeys }}
         env:
           PUSH: ${{ inputs.push_notifications }}
           LINKS: ${{ inputs.universal_links }}
           WIDGET: ${{ inputs.career_widget }}
           IMAGES: ${{ inputs.notification_images }}
+          SIWA: ${{ inputs.sign_in_with_apple }}
+          PASSKEYS: ${{ inputs.passkeys }}
         run: |
           app="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
           ent="$RUNNER_TEMP/App.entitlements"
@@ -179,6 +191,29 @@ jobs:
             if [ ! -d "$appex" ]; then echo "::error::career_widget was requested but $appex is not in the archive"; exit 1; fi
             # Nested code is signed before the bundle that contains it.
             codesign --force --sign - --entitlements ios/App/CareerWidget/CareerWidget.entitlements "$appex"
+          fi
+          if [ "$SIWA" = "true" ]; then
+            # Added HERE, not in App.entitlements, so default builds never ask for a capability the
+            # App ID may not have. The Info.plist flag is what AppBridgeViewController reads to
+            # register AppleSignInHandler; it must travel with the entitlement or the app offers a
+            # button Apple's sheet refuses (error 1000). Written before signing: the plist is sealed.
+            /usr/libexec/PlistBuddy -c "Add :com.apple.developer.applesignin array" "$ent"
+            /usr/libexec/PlistBuddy -c "Add :com.apple.developer.applesignin:0 string Default" "$ent"
+            /usr/libexec/PlistBuddy -c "Add :AFSignInWithApple bool true" "$app/Info.plist" 2>/dev/null               || /usr/libexec/PlistBuddy -c "Set :AFSignInWithApple true" "$app/Info.plist"
+          fi
+          if [ "$PASSKEYS" = "true" ]; then
+            # webcredentials rides the associated-domains entitlement universal_links ships, so a
+            # passkeys build without it has nothing to add the entry to: refuse rather than build an
+            # app whose Face ID sheet Apple will reject. The site's apple-app-site-association lists
+            # this app under webcredentials (lib/platform/appSiteAssociation.ts). The Info.plist flag
+            # is what AppBridgeViewController reads to register PasskeyHandler; it must travel with
+            # the entitlement, or the page offers Face ID that fails. Written before signing.
+            if [ "$LINKS" != "true" ]; then
+              echo "::error::passkeys needs universal_links ticked too (it adds webcredentials to the Associated Domains entitlement)."; exit 1
+            fi
+            /usr/libexec/PlistBuddy -c "Add :com.apple.developer.associated-domains: string webcredentials:www.allfantasy.ai" "$ent"
+            /usr/libexec/PlistBuddy -c "Add :AFPasskeys bool true" "$app/Info.plist" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Set :AFPasskeys true" "$app/Info.plist"
           fi
           if [ "$IMAGES" = "true" ]; then
             # No entitlements — but the app is signed below without --deep, and codesign refuses a
@@ -198,6 +233,12 @@ jobs:
           if [ "$LINKS" = "true" ] && ! grep -q com.apple.developer.associated-domains <<<"$signed"; then
             echo "::error::associated-domains is not in the archived app after signing"; exit 1
           fi
+          if [ "$SIWA" = "true" ] && ! grep -q com.apple.developer.applesignin <<<"$signed"; then
+            echo "::error::applesignin is not in the archived app after signing"; exit 1
+          fi
+          if [ "$PASSKEYS" = "true" ] && ! grep -q "webcredentials:www.allfantasy.ai" <<<"$signed"; then
+            echo "::error::webcredentials:www.allfantasy.ai is not in the archived app after signing"; exit 1
+          fi
           if [ "$WIDGET" = "true" ] && ! grep -q group.ai.allfantasy.app <<<"$signed"; then
             echo "::error::the App Group is not in the archived app after signing"; exit 1
           fi
@@ -211,6 +252,8 @@ jobs:
           LINKS: ${{ inputs.universal_links }}
           WIDGET: ${{ inputs.career_widget }}
           IMAGES: ${{ inputs.notification_images }}
+          SIWA: ${{ inputs.sign_in_with_apple }}
+          PASSKEYS: ${{ inputs.passkeys }}
         run: |
           run_export() {
             cat > "$RUNNER_TEMP/ExportOptions-$1.plist" <<PLIST
@@ -255,6 +298,20 @@ jobs:
             widget_ent="$(codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/App.app/PlugIns/CareerWidget.appex" 2>/dev/null || true)"
             if ! grep -q group.ai.allfantasy.app "$RUNNER_TEMP/entitlements.txt" || ! grep -q group.ai.allfantasy.app <<<"$widget_ent"; then
               echo "::error::career_widget was requested but the signed app or widget lacks the App Group. Enable App Groups (group.ai.allfantasy.app) on ai.allfantasy.app and ai.allfantasy.app.CareerWidget and re-run."
+              exit 1
+            fi
+          fi
+          if [ "$SIWA" = "true" ] && ! grep -q com.apple.developer.applesignin "$RUNNER_TEMP/entitlements.txt"; then
+            echo "::error::sign_in_with_apple was requested but the signed build has no applesignin entitlement. Enable Sign In with Apple on the App ID ai.allfantasy.app and re-run."
+            exit 1
+          fi
+          if [ "$PASSKEYS" = "true" ]; then
+            if ! grep -q "webcredentials:www.allfantasy.ai" "$RUNNER_TEMP/entitlements.txt"; then
+              echo "::error::passkeys was requested but the signed build has no webcredentials:www.allfantasy.ai entry in Associated Domains."
+              exit 1
+            fi
+            if [ "$(/usr/libexec/PlistBuddy -c "Print :AFPasskeys" "$RUNNER_TEMP/ipa/Payload/App.app/Info.plist" 2>/dev/null)" != "true" ]; then
+              echo "::error::passkeys was requested but the signed build's Info.plist has no AFPasskeys switch, so the app would never offer Face ID."
               exit 1
             fi
           fi

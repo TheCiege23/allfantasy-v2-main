@@ -766,6 +766,7 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
 
   /* AllFantasy's own projection for every player on the board — one read. */
   const afs = await loadDraftAfProjections({
+    leagueId,
     platform: boardLeague?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: boardLeague?.settings,
@@ -905,6 +906,7 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
     league?.sport,
   )
   const afs = await loadDraftAfProjections({
+    leagueId,
     platform: league?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: league?.settings,
@@ -1169,6 +1171,7 @@ export async function getDraftHqData(
     league.sport,
   ).catch(() => new Map<string, ResolvedDraftPlayer>())
   const madeAfs = await loadDraftAfProjections({
+    leagueId,
     platform: league.platform,
     playerIds: made.map((p) => p.playerId),
     leagueSettings: league.settings,

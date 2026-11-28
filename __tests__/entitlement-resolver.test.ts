@@ -74,7 +74,8 @@ describe("EntitlementResolver", () => {
     expect(snapshot.plans).toContain("supreme")
     expect(resolver.hasFeatureAccess(snapshot, "trade_analyzer")).toBe(true)
     expect(resolver.hasFeatureAccess(snapshot, "commissioner_automation")).toBe(true)
-    expect(resolver.hasFeatureAccess(snapshot, "draft_strategy_build")).toBe(false)
+    // AF Supreme includes AF Legacy again since 2026-11-27 (SUPREME_INCLUDED_PLAN_IDS).
+    expect(resolver.hasFeatureAccess(snapshot, "draft_strategy_build")).toBe(true)
   })
 
   it("treats expired subscriptions as locked features", async () => {

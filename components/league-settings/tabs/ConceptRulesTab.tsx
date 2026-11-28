@@ -4,6 +4,8 @@ import { useMemo } from 'react'
 import { DevyLeagueSettingsHub } from '@/components/devy/settings/DevyLeagueSettingsHub'
 import { BestBallSettingsCommissionerPanel } from '@/components/league-settings/BestBallSettingsCommissionerPanel'
 import { MergedDevyC2CCommissionerSettings } from '@/components/merged-devy-c2c/MergedDevyC2CCommissionerSettings'
+import { CollegeSideSettingsPanel } from '@/components/c2c/CollegeSideSettingsPanel'
+import { LeagueGroupPanel } from '@/components/league-groups/LeagueGroupPanel'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
@@ -40,6 +42,8 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
     return ctx.league.leagueType === 'devy' || Boolean(raw)
   }, [ctx.league.leagueType, ctx.league.settings])
 
+  const isC2C = String(ctx.league.leagueType ?? '').toLowerCase() === 'c2c' || ['c2c', 'merged_devy_c2c'].includes(String(ctx.league.leagueVariant ?? '').toLowerCase())
+
   const flags = useMemo(
     () => ({
       guillotine: ctx.league.guillotineMode === true,
@@ -67,6 +71,8 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         </p>
       </div>
 
+      <LeagueGroupPanel leagueId={leagueId} />
+
       {isDevy ? (
         <div className="space-y-3">
           <h4 className="text-[12px] font-bold uppercase tracking-wide text-white/55">Devy HQ</h4>
@@ -74,8 +80,13 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         </div>
       ) : null}
 
-      {canEdit && flags.variant === 'merged_devy_c2c' ? (
+      {/* A C2C league made in the create wizard carries leagueType 'c2c' and no variant (lib/c2c/campusLineup.ts). */}
+      {canEdit && (flags.variant === 'merged_devy_c2c' || isC2C) ? (
         <MergedDevyC2CCommissionerSettings leagueId={leagueId} />
+      ) : null}
+
+      {String(ctx.league.sport ?? '').toUpperCase() === 'NFL' && (isC2C || isDevy) ? (
+        <CollegeSideSettingsPanel leagueId={leagueId} canEdit={canEdit} />
       ) : null}
 
       {flags.bestBall ? (

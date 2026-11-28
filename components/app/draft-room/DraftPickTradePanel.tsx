@@ -5,6 +5,8 @@ import { DraftPickTradePanelRoot } from './DraftPickTradePanelRoot'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { readDraftPickTradeGrade } from './DraftPickTradeGradeLine'
 import type { DraftPickTradeGrade } from '@/lib/live-draft-engine/draftPickTradeGrade'
+import { TradeForPickOffers } from './TradeForPickOffers'
+import { TRADE_FOR_PICK_MAX_SUGGESTIONS } from '@/lib/draft-room/tradeForPick'
 
 export type ProposalSummary = {
   id: string
@@ -20,17 +22,10 @@ export type ProposalSummary = {
   createdAt: string
 }
 
+/** The draft-position fact only — the verdict is THE league grade (`tradeGrade`). */
 export type StructuredTradeAnalysis = {
   overallDelta: number | null
   moveDirection: 'up' | 'down' | 'neutral'
-  fairnessBand: 'favorable' | 'balanced' | 'costly'
-  guidanceTone: 'good_move' | 'okay_move' | 'risky_move'
-  fairnessLabel:
-    | 'strong_value'
-    | 'slight_edge_you'
-    | 'neutral'
-    | 'slight_edge_them'
-    | 'overpay'
 }
 
 export type AiReviewState = {
@@ -44,7 +39,7 @@ export type AiReviewState = {
   executionMode?: string | null
   structuredAnalysis?: StructuredTradeAnalysis | null
   aiConfidence?: number | null
-  /** THE grade (builder only, rookie drafts) — when graded, the private verdict chips are not shown. */
+  /** THE grade (rookie drafts) — the verdict above is read from it; withheld, it says why. */
   tradeGrade?: DraftPickTradeGrade | null
 } | null
 
@@ -59,9 +54,11 @@ export type DraftPickTradeSuggestion = {
   receiveSlot: number
   rationale: string
   aiEnhanced?: boolean
+  /** THE grade of this swap from your side, when the league's chart prices it. */
+  tradeGrade?: DraftPickTradeGrade | null
 }
 
-export type DraftPickTradeSuggestionKind = 'fair' | 'move_up' | 'move_down' | 'best_for_pick'
+export type DraftPickTradeSuggestionKind = 'fair' | 'move_up' | 'move_down' | 'best_for_pick' | 'for_their_pick'
 
 export type DraftPickTradePanelProps = {
   leagueId: string
@@ -84,6 +81,11 @@ export type DraftPickTradePanelProps = {
     giveRound?: number
     receiveRound?: number
     receiverRosterId?: string
+    /**
+     * "Trade for this pick" (slow drafts — `lib/draft-room/tradeForPick.ts`): the partner's pick asked for.
+     * The composer opens with it on their side and suggests up to three offers from the viewer's picks.
+     */
+    targetPick?: { round: number; slot: number; overall: number } | null
   } | null
   /** Bump when draft board / traded picks advance so traded UI can invalidate Chimmy caches. */
   draftStateFingerprint?: string
@@ -144,6 +146,12 @@ export function DraftPickTradePanel({
     notes?: string | null
     reasonCode?: string | null
   } | null>(null)
+
+  const [targetPick, setTargetPick] = useState<{ round: number; slot: number; overall: number } | null>(null)
+  const [targetOffers, setTargetOffers] = useState<DraftPickTradeSuggestion[]>([])
+  const [targetLoading, setTargetLoading] = useState(false)
+  const [targetEmptyReason, setTargetEmptyReason] = useState<string | null>(null)
+  const targetSeqRef = useRef(0)
 
   const fingerprintRef = useRef<string | undefined>(undefined)
   const analyzeSeqRef = useRef(0)
@@ -221,6 +229,9 @@ export function DraftPickTradePanel({
 
   useEffect(() => {
     if (tradePanelGeneration === 0) return
+    setTargetPick(initialTradeDraft?.targetPick ?? null)
+    setTargetOffers([])
+    setTargetEmptyReason(null)
     if (!initialTradeDraft) {
       setOfferGiveRound(1)
       setOfferReceiveRound(1)
@@ -321,11 +332,11 @@ export function DraftPickTradePanel({
             structuredAnalysis:
               sa &&
               typeof sa === 'object' &&
-              typeof sa.moveDirection === 'string' &&
-              typeof sa.fairnessBand === 'string'
+              typeof sa.moveDirection === 'string'
                 ? (sa as StructuredTradeAnalysis)
                 : null,
             aiConfidence: typeof data.aiConfidence === 'number' ? data.aiConfidence : null,
+            tradeGrade: readDraftPickTradeGrade(data.tradeGrade),
           })
         } else if (seq === reviewSeqRef.current) {
           setAiReview({
@@ -472,8 +483,7 @@ export function DraftPickTradePanel({
           structuredAnalysis:
             sa &&
             typeof sa === 'object' &&
-            typeof sa.moveDirection === 'string' &&
-            typeof sa.fairnessBand === 'string'
+            typeof sa.moveDirection === 'string'
               ? (sa as StructuredTradeAnalysis)
               : null,
           aiConfidence: typeof data.aiConfidence === 'number' ? data.aiConfidence : null,
@@ -571,6 +581,74 @@ export function DraftPickTradePanel({
     [tradesLocked, mySlot, partnerSlot],
   )
 
+  /*
+   * "Trade for this pick": once the partner is set, ask the existing suggestions route for the viewer's
+   * offers for that one pick (`for_their_pick`, ranked by THE grade, at most three). Re-asked when the
+   * board moves, so an offer for a pick that has since been made is never left on screen.
+   */
+  useEffect(() => {
+    if (!targetPick || !offerReceiverRosterId || tradesLocked) return
+    const seq = ++targetSeqRef.current
+    setTargetLoading(true)
+    setTargetOffers([])
+    setTargetEmptyReason(null)
+    void (async () => {
+      try {
+        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/trade-builder/suggestions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            partnerRosterId: offerReceiverRosterId,
+            suggestionKind: 'for_their_pick',
+            anchorReceiveRound: targetPick.round,
+            anchorReceiveSlot: targetPick.slot,
+            includeAi: false,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (seq !== targetSeqRef.current) return
+        if (res.ok && data.ok && Array.isArray(data.suggestions)) {
+          const offers = (data.suggestions as DraftPickTradeSuggestion[])
+            .filter((o) => o.receiveRound === targetPick.round && o.receiveSlot === targetPick.slot)
+            .slice(0, TRADE_FOR_PICK_MAX_SUGGESTIONS)
+            .map((o) => ({ ...o, tradeGrade: readDraftPickTradeGrade(o.tradeGrade) }))
+          setTargetOffers(offers)
+          setTargetEmptyReason(typeof data.emptyReason === 'string' ? data.emptyReason : null)
+          // The best offer goes into the composer, so its grade is on screen before anything is sent.
+          if (offers[0]) setOfferGiveRound(offers[0].giveRound)
+        } else {
+          setTargetEmptyReason(typeof data.error === 'string' ? data.error : 'No offers available.')
+        }
+      } catch {
+        if (seq === targetSeqRef.current) setTargetEmptyReason('Network error loading offers.')
+      } finally {
+        if (seq === targetSeqRef.current) setTargetLoading(false)
+      }
+    })()
+  }, [targetPick, offerReceiverRosterId, tradesLocked, leagueId, draftStateFingerprint])
+
+  const applyTargetOffer = useCallback(
+    (o: DraftPickTradeSuggestion) => {
+      if (tradesLocked) return
+      setOfferGiveRound(o.giveRound)
+      if (targetPick) setOfferReceiveRound(targetPick.round)
+      setBuilderAnalysis(null)
+    },
+    [tradesLocked, targetPick],
+  )
+
+  const targetPartnerName = targetPick ? otherManagers.find((m) => m.rosterId === offerReceiverRosterId)?.displayName ?? null : null
+  const offerHeader = targetPick ? (
+    <TradeForPickOffers
+      target={{ ...targetPick, ownerName: targetPartnerName }}
+      offers={targetOffers}
+      loading={targetLoading}
+      emptyReason={targetEmptyReason}
+      chosenGiveRound={offerReceiveRound === targetPick.round ? offerGiveRound : null}
+      onUse={applyTargetOffer}
+    />
+  ) : null
+
   const pendingForMe = proposals.filter((p) => p.status === 'pending' && p.receiverRosterId === currentUserRosterId)
   const pendingFromMe = proposals.filter((p) => p.status === 'pending' && p.proposerRosterId === currentUserRosterId)
 
@@ -633,6 +711,7 @@ export function DraftPickTradePanel({
       suggestionMeta={suggestionMeta}
       tradeAiPremium={tradeAiPremium}
       onClockTradeTimerBehavior={onClockTradeTimerBehavior}
+      offerHeader={offerHeader}
     />
   )
 }

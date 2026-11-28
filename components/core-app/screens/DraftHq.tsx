@@ -21,6 +21,14 @@ import { draftScreensMessages } from '@/lib/core-app/messages/draftScreens'
 import { draftHqLeagueGuideMessages } from '@/lib/core-app/messages/draftHqLeagueGuide'
 import { leagueDraftHeadline, leagueDraftPhase, type LeagueDraftHeadline, type LeagueDraftPhase } from '@/lib/core-app/draftHqLeagueGuide'
 import { DraftHqRookieRoom } from './DraftHqRookieRoom'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { defineMessages } from '@/lib/i18n/messages'
+
+/* The "More detail" fold's note — what is inside, in a few words (2026-11-20). */
+const draftHqMoreDetailMessages = defineMessages({
+  en: { prep: 'Prep tools: ADP, mock drafts, outlook', recorded: 'Last recorded draft board' },
+  es: { prep: 'Herramientas de preparación: ADP, drafts de prueba, perspectiva', recorded: 'Tablero del último draft registrado' },
+})
 
 /**
  * Screen 8 — one league's Draft HQ.
@@ -96,7 +104,7 @@ function headlineText(h: LeagueDraftHeadline, g: Guide): string {
     case 'live':
       return g.headLive(h.pick, h.total, h.next, h.away)
     case 'before':
-      return g.headBefore(h.slot, h.teams)
+      return h.first ? g.headBeforeFirst(h.first) : g.headBefore(h.slot, h.teams)
     case 'done':
       return g.headDone(h.drafted)
     default:
@@ -117,6 +125,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
   const copy = (value: string) => draftHqUiCopy(value, language)
   const m = useMessages(draftScreensMessages)
   const g = useMessages(draftHqLeagueGuideMessages)
+  const md = useMessages(draftHqMoreDetailMessages)
   /*
    * A dynasty league's draft room (data.rookieRoom — absent for every other league). When it carries
    * your exact picks from this session, Draft HQ's own "Your picks" list would repeat them word for
@@ -179,10 +188,13 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
             <div className="af-dh-fact-value af-num">{session.draftType}</div>
             <div className="af-label">{copy('Format')} <TopicTip topic="draftFormat" /></div>
           </div>
-          <div className="af-dh-fact">
-            <div className="af-dh-fact-value af-num">{session.rounds}</div>
-            <div className="af-label">{copy('Rounds')}</div>
-          </div>
+          {/* The rookie room's banner says the rounds (2026-11-24: "4 rounds" was on the page twice). */}
+          {room?.rounds != null ? null : (
+            <div className="af-dh-fact">
+              <div className="af-dh-fact-value af-num">{session.rounds}</div>
+              <div className="af-label">{copy('Rounds')}</div>
+            </div>
+          )}
           {/* Before the draft the headline already says "you pick 2nd of 12" — said once. */}
           {headline.kind !== 'before' || headline.slot == null ? (
             <>
@@ -443,8 +455,10 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
    * ── Queue & keepers ──────────────────────────────────────────────────────────────────────────
    * The queue shows before and during the draft even when empty: "you have not queued any players"
    * is the next thing to do, not a placeholder. Keepers show only when there are some.
+   * With no draft AllFantasy runs there is nothing to queue for, and the header already says so: the row
+   * only repeated it in other words (2026-11-24 audit).
    */
-  const queueSection = done ? null : (
+  const queueSection = done || (!data.queue.available && !data.session.available) ? null : (
     <section className="af-card af-dh-section">
       <h2 className="af-label">{copy('Prepared queue')}</h2>
       {data.queue.available ? (
@@ -501,23 +515,54 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
     ) : null
 
   /* ── Prep tools: ADP, mock drafts, outlook — folded; the checklist inside still leads ─────────── */
+  /*
+    2026-11-20: no longer its own fold. Before and during a draft it sits in the page's one "More detail"
+    fold (`moreFold` below) beside last season's board; the wrapper keeps `draft-hq-prep-fold`.
+  */
   const prep =
     data.preparation && !done ? (
-      <details className="af-dhl-fold" data-testid="draft-hq-prep-fold">
-        <summary>{g.prepTools}</summary>
+      <div className="af-dhl-more-part" data-testid="draft-hq-prep-fold">
         <DraftPreparation data={data.preparation} leagueId={data.league.id} draftComplete={false} />
-      </details>
+      </div>
     ) : null
   /* After the draft the prep block is its own review (draftComplete), so it stays as it was, unfolded. */
   const prepDone = data.preparation && done ? <DraftPreparation data={data.preparation} leagueId={data.league.id} draftComplete /> : null
 
   /* The recorded board is long (every pick by round) and, before or during a draft, last season's — folded everywhere. */
+  /*
+    2026-11-20: after the draft this IS the page's board, so it keeps its own "See the full board" fold
+    (the same one the live board uses). Before and during a draft it is last season's — history — so it
+    goes in "More detail" instead (`recordedPart`), wrapper keeping `draft-hq-recorded-fold`.
+  */
   const recordedFold = recordedBoard ? (
     <details className="af-dhl-fold" data-testid="draft-hq-recorded-fold">
       <summary>{g.seeFullBoard}</summary>
       {recordedBoard}
     </details>
   ) : null
+  const recordedPart = recordedBoard && !done ? (
+    <div className="af-dhl-more-part" data-testid="draft-hq-recorded-fold">
+      {recordedBoard}
+    </div>
+  ) : null
+
+  /*
+    ── More detail (2026-11-20) ─────────────────────────────────────
+    The page's one shared fold (MoreDetail.tsx), at the bottom, before and during a draft: the prep tools
+    and last season's board, which were two folds under their own names. Closed, as both were. After the
+    draft there is nothing secondary to hold — the prep block is the draft's own review and stays open.
+  */
+  const moreFold =
+    prep || recordedPart ? (
+      <MoreDetail
+        className="af-dhl-more"
+        testId="draft-hq-more"
+        note={[prep ? md.prep : null, recordedPart ? md.recorded : null].filter(Boolean).join(' · ')}
+      >
+        {prep}
+        {recordedPart}
+      </MoreDetail>
+    ) : null
 
   const edgeBlock = showEdge ? <DraftCompetitiveEdge access={edgeAccess} edge={edge} /> : null
   /* One line for everything that only exists once the draft is done, instead of a sentence per section. */
@@ -526,7 +571,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
   return (
     <div className="af-dh" data-dynasty-room={room ? 'true' : undefined} data-phase={phase ?? 'none'}>
       {header}
-      {room ? <DraftHqRookieRoom room={room} leagueId={data.league.id} /> : null}
+      {room ? <DraftHqRookieRoom room={room} leagueId={data.league.id} hideStatus={Boolean(session)} /> : null}
 
       {done ? (
         <>
@@ -546,10 +591,9 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
           {queuePair}
           {lotterySection}
           {edgeBlock}
-          {prep}
           {gradesSection}
-          {recordedFold}
           {laterLine}
+          {moreFold}
         </>
       ) : (
         <>
@@ -557,12 +601,11 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
           {queuePair}
           {lotterySection}
           {edgeBlock}
-          {prep}
           {boardBlock}
           {madeSection}
           {gradesSection}
-          {recordedFold}
           {laterLine}
+          {moreFold}
         </>
       )}
     </div>

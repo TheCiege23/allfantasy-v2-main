@@ -14,9 +14,16 @@ const h = vi.hoisted(() => ({
   values: new Map<string, number>(),
   settings: { roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN', 'BN'] } as unknown,
   readRows: vi.fn(),
+  /** Raw roster rows, for a pasted Yahoo league's coverage read (declaredAvailability.ts). */
+  rawRosters: [] as Array<{ playerData: unknown }>,
 }))
 
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: vi.fn(async () => ({ settings: h.settings })) } } }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    league: { findUnique: vi.fn(async () => ({ settings: h.settings })) },
+    roster: { findMany: vi.fn(async () => h.rawRosters) },
+  },
+}))
 vi.mock('@/lib/core-app/playerDepth', () => ({
   loadLeagueValueMap: vi.fn(async (ids: string[], leagueIds: string[]) =>
     new Map(leagueIds.map((l) => [l, new Map(ids.filter((id) => h.values.has(id)).map((id) => [id, { value: h.values.get(id)! }]))])),
@@ -133,6 +140,7 @@ beforeEach(() => {
   }
   h.info.set('him', { sleeperId: 'him', name: 'Him', position: 'RB', age: 24 })
   seedLeague('L1')
+  h.rawRosters = []
   h.readRows.mockImplementation(async (id: string) => h.rows.get(id) ?? { teams: [], rosters: [] })
 })
 const load = (over: Partial<Parameters<typeof loadWhoStartsHim>[0]> = {}) =>
@@ -179,6 +187,27 @@ describe('loadWhoStartsHim', () => {
   it(`a league whose rosters are under ${PRICED_SHARE_MIN * 100}% priced is not ranked — a half-read roster starts anyone`, async () => {
     for (const k of ['x', 'y']) for (const s of ['wr1', 'wr2', 'te']) h.values.delete(`${k}${s}`)
     expect((await load()).leagues[0]).toMatchObject({ state: 'unmeasured', note: expect.stringMatching(/too few players/) })
+  })
+
+  /*
+   * A PASTED Yahoo league: resolved players stored `sleeper:<id>`, the unmatched as `yahoo-paste:`.
+   * `readLeagueTradeRows` keeps the declared ids — so above the 80% coverage bar the teams are ranked,
+   * and below it a team reads short and would "start" anyone: unread, with the count, never scanned.
+   */
+  it('a pasted Yahoo league above the coverage bar is ranked like any other', async () => {
+    h.rows.set('Y1', h.rows.get('L1')!)
+    h.rawRosters = [{ playerData: { players: ['sleeper:him', ...['x', 'y'].flatMap((k) => ['qb', 'rb1', 'rb2', 'wr1', 'wr2', 'wr3', 'te'].map((s) => `sleeper:${k}${s}`)), 'yahoo-paste:pasted guy|RB|KC'] } }]
+    const v = await load({ yourLeagues: [{ leagueId: 'Y1', leagueName: 'Paste League', platform: 'yahoo' }] })
+    expect(v!.leagues[0]).toMatchObject({ state: 'ranked', otherTeams: 2 })
+    // 🛑 The unmatched pasted player is never named as anyone.
+    expect(JSON.stringify(v)).not.toMatch(/pasted guy|yahoo-paste/i)
+  })
+
+  it('a pasted Yahoo league below the coverage bar is unread, with the count, and never scanned', async () => {
+    h.rawRosters = [{ playerData: { players: ['sleeper:him', 'yahoo-paste:a|RB|KC', 'yahoo-paste:b|WR|KC'] } }]
+    const v = await load({ yourLeagues: [{ leagueId: 'Y1', leagueName: 'Paste League', platform: 'yahoo' }] })
+    expect(v!.leagues[0]).toMatchObject({ state: 'unread', note: "2 players on its rosters couldn't be matched to ours, so we can’t compare its teams yet" })
+    expect(h.readRows).not.toHaveBeenCalled()
   })
 
   it(`reads at most ${SELL_LEAGUE_CAP} leagues`, async () => {

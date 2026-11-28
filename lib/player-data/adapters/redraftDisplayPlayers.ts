@@ -25,6 +25,8 @@ export type DisplayPlayerRecord = SlimPlayer & {
   teamLogoUrl?: string | null
   injuryStatus?: string | null
   projectedPoints?: number | null
+  /** Why AF moved `projectedPoints` — only when the shown number IS the row's AF-priced one. */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
   fantasyPointsPerGame?: number | null
   profileSource?: string | null
   statsSource?: string | null
@@ -95,6 +97,14 @@ export function displayPlayerFromUnifiedRow(row: UnifiedPlayerWireDto): DisplayP
         : row.projectedPoints != null && Number.isFinite(Number(row.projectedPoints))
           ? Number(row.projectedPoints)
           : null,
+    // The reasons explain the row's own (AF-priced) number, so they travel only when that is the number shown.
+    ...(row.afFactors &&
+    liveScoringContext?.projectedFantasyPoints == null &&
+    intelligence?.projection.projectedFantasyPoints == null &&
+    canonical?.currentProjection.weeklyProjectedPoints == null &&
+    row.projectedPoints != null
+      ? { afFactors: row.afFactors }
+      : {}),
     fantasyPointsPerGame:
       row.fantasyPointsPerGame != null && Number.isFinite(Number(row.fantasyPointsPerGame))
         ? Number(row.fantasyPointsPerGame)

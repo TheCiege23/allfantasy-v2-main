@@ -37,6 +37,8 @@ const isElevatedCommissioner = vi.fn()
  * next one is named instead of discovered.
  */
 const findUniqueTradeDraft = vi.fn()
+const findUniqueLeague = vi.fn()
+const resolveNativeRosterPlayers = vi.fn()
 const findUniqueUserProfile = vi.fn()
 const findFirstLeagueTeam = vi.fn()
 const findManyTradeOfferEvent = vi.fn()
@@ -46,7 +48,7 @@ vi.mock('next-auth', () => ({ getServerSession: (...args: unknown[]) => getServe
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    league: { findFirst: (...args: unknown[]) => findFirstLeague(...args) },
+    league: { findFirst: (...args: unknown[]) => findFirstLeague(...args), findUnique: (...args: unknown[]) => findUniqueLeague(...args) },
     roster: {
       findFirst: (...args: unknown[]) => findFirstRoster(...args),
       findMany: (...args: unknown[]) => findManyRoster(...args),
@@ -83,6 +85,7 @@ vi.mock('@/lib/prisma', () => ({
     survivorIdol: { findMany: (...args: unknown[]) => findManySurvivorIdol(...args) },
   },
 }))
+vi.mock('@/lib/player-identity/resolveNativeRosterPlayers', () => ({ resolveNativeRosterPlayers: (...args: unknown[]) => resolveNativeRosterPlayers(...args) }))
 vi.mock('@/lib/league-trade-engine/tradeService', () => ({
   listAfLeagueTrades: (...args: unknown[]) => listAfLeagueTrades(...args),
 }))
@@ -540,6 +543,35 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
       const body = (await (await GET(makeRequest('league-1'))).json()) as { executedTrades: Array<{ sent: Array<{ teamLogoUrl: string | null }> }> }
       // Executed rows are what each side SENT: the proposer's item is under `sent`.
       expect(body.executedTrades[0].sent[0].teamLogoUrl).toBe(crest)
+    })
+
+    it('a native trade item that carries only an id is named from the id, not shown as "114"', async () => {
+      findFirstLeague.mockResolvedValue({ id: 'league-1', platform: 'manual', platformLeagueId: null, name: 'Hoops', sport: 'NBA' })
+      findUniqueLeague.mockResolvedValue({ platform: 'manual' })
+      resolveNativeRosterPlayers.mockResolvedValue(new Map([['114', { name: 'Nikola Jokic', position: 'C', team: 'Denver Nuggets', imageUrl: null, sport: 'NBA' }]]))
+      listAfLeagueTrades.mockResolvedValue([{
+        id: 'trade-ids', status: 'awaiting_commissioner', proposerRosterId: 'roster-proposer', receiverRosterId: 'roster-receiver',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        items: [{ id: 'item-1', itemType: 'player', fromRosterId: 'roster-proposer', toRosterId: 'roster-receiver', itemReference: '114', metadata: {} }],
+      }])
+      isElevatedCommissioner.mockResolvedValue(true)
+      const body = (await (await GET(makeRequest('league-1'))).json()) as { activeTrades: Array<{ sent: Array<{ label: string; sublabel: string | null }>; received: Array<{ label: string; sublabel: string | null }> }> }
+      const asset = [...body.activeTrades[0].sent, ...body.activeTrades[0].received][0]
+      expect(asset.label).toBe('Nikola Jokic')
+      expect(asset.sublabel).toBe('C · DENVER NUGGETS')
+      expect(resolveNativeRosterPlayers).toHaveBeenCalledWith(['114'], 'NBA')
+    })
+
+    it('an imported league is never looked up through the native resolver', async () => {
+      findFirstLeague.mockResolvedValue({ id: 'league-1', platform: 'native', platformLeagueId: null, name: 'Hoops', sport: 'NBA' })
+      findUniqueLeague.mockResolvedValue({ platform: 'sleeper' })
+      listAfLeagueTrades.mockResolvedValue([{
+        id: 'trade-ids', status: 'pending', proposerRosterId: 'roster-proposer', receiverRosterId: 'roster-receiver',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        items: [{ id: 'item-1', itemType: 'player', fromRosterId: 'roster-proposer', toRosterId: 'roster-receiver', itemReference: '114', metadata: {} }],
+      }])
+      await GET(makeRequest('league-1'))
+      expect(resolveNativeRosterPlayers).not.toHaveBeenCalled()
     })
 
     it('an NFL league never reads the stored rows — the registry already knows every club', async () => {

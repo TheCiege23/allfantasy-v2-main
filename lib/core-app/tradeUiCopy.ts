@@ -6,9 +6,11 @@ export function tradeUiCopy(english: string, language: string): string {
   if (language !== 'es') return english
   const exact = coreUiCopy(english, language)
   if (exact !== english) return exact
-  const received = (name: string) => name === 'Tú' ? 'tú recibiste' : `${name} recibió`
-  const won = (name: string) => name === 'Tú' ? 'Saliste' : `${name} salió`
-  const betterSide = (name: string) => name === 'Tú' ? 'Obtuviste' : `${name} obtuvo`
+  /* Second person arrives as "Tú", "You", or — mid-sentence since 2026-11-23 — "you". */
+  const isYou = (name: string) => /^(tú|you)$/i.test(name)
+  const received = (name: string) => isYou(name) ? 'tú recibiste' : `${name} recibió`
+  const won = (name: string) => isYou(name) ? 'Saliste' : `${name} salió`
+  const betterSide = (name: string) => isYou(name) ? 'Obtuviste' : `${name} obtuvo`
 
   const ahead = english.match(/^(.+) came out well ahead — (.+) got only ([\d,]+) in league value for ([\d,]+)\.$/)
   if (ahead) return `${won(ahead[1])} con mucha ventaja: ${received(ahead[2])} solo ${ahead[3]} por ${ahead[4]} en valor de liga.`
@@ -21,9 +23,9 @@ export function tradeUiCopy(english: string, language: string): string {
   const even = english.match(/^A near-even deal on league value — (.+) got ([\d,]+) for ([\d,]+)\.$/)
   if (even) return `Intercambio casi equilibrado según el valor de la liga: ${received(even[1])} ${even[2]} por ${even[3]}.`
   const best = english.match(/^The most valuable asset was (.+), and (.+) got (?:him|it)\.$/)
-  if (best) return `El activo más valioso fue ${best[1]} y lo recibió ${best[2]}.`
+  if (best) return isYou(best[2]) ? `El activo más valioso fue ${best[1]} y lo recibiste tú.` : `El activo más valioso fue ${best[1]} y lo recibió ${best[2]}.`
   const split = english.match(/^Quality and quantity pulled apart: the best single asset was (.+), and (.+) got (?:him|it) — the other side won on the rest of the deal\.$/)
-  if (split) return `La calidad y la cantidad dieron resultados distintos: ${split[2]} recibió el activo más valioso, ${split[1]}, pero el otro lado ganó con el resto del intercambio.`
+  if (split) return `La calidad y la cantidad dieron resultados distintos: ${isYou(split[2]) ? 'tú recibiste' : `${split[2]} recibió`} el activo más valioso, ${split[1]}, pero el otro lado ganó con el resto del intercambio.`
   // `tradeGradeBreakdown`: "Graded on this league's values <moment> (<chart basis>)." — the moment is a
   // `gradeMoment` phrase (today / at the time of the trade / from … after the trade / when first graded).
   const moment = english.match(/^Graded on this league's values (.+?) \(([^()]+)\)\.$/)

@@ -23,6 +23,14 @@ const db = vi.hoisted(() => ({
   calls: [] as string[],
 }))
 
+vi.mock('@/lib/af-projections/leagueRosterWeek', () => ({
+  loadLeagueRosterWeeks: async (requests: Array<{ leagueId: string; season: number; week: number; ids: string[] }>) => {
+    db.calls.push('afBoards')
+    const rows = db.projections as Array<{ playerId: string; season: string; week: number; projectedPoints: number }>
+    return new Map(requests.map(r => [r.leagueId, new Map(rows.filter(p => r.ids.includes(p.playerId) && +p.season === r.season && p.week === r.week)
+      .map(p => [p.playerId, { points: p.projectedPoints }]))]))
+  },
+}))
 vi.mock('@/lib/prisma', () => {
   const track = <T,>(name: string, value: () => T) => async () => {
     db.calls.push(name)
@@ -216,7 +224,7 @@ describe('getNativeRailMatchups — DB-first loader', () => {
     await getNativeRailMatchups('me', [G, H])
     const counts = db.calls.reduce<Record<string, number>>((acc, c) => ({ ...acc, [c]: (acc[c] ?? 0) + 1 }), {})
     // `league` twice: the classification read and the guillotine leagues' settings.
-    expect(counts).toEqual({ league: 2, redraftSeason: 1, roster: 1, guillotineRosterState: 1, redraftRosterPlayer: 1, playerWeeklyScore: 1, fantasyProjection: 1, redraftMatchup: 1 })
+    expect(counts).toEqual({ league: 2, redraftSeason: 1, roster: 1, guillotineRosterState: 1, redraftRosterPlayer: 1, playerWeeklyScore: 1, afBoards: 1, redraftMatchup: 1 })
     expect((await getNativeRailMatchups('stranger', [G, H])).byLeague).toEqual({})
   })
 

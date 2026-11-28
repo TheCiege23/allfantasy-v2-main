@@ -451,10 +451,12 @@ a.ch-pill:hover { border-color: var(--line2); color: var(--text); }
 .ch-badge[data-badge='commish'] { color: #34d399; background: rgba(52, 211, 153, 0.13); border-color: rgba(52, 211, 153, 0.3); }
 .ch-badge[data-badge='shipped'] { color: #e879f9; background: rgba(232, 121, 249, 0.13); border-color: rgba(232, 121, 249, 0.3); }
 .ch-badge[data-badge='new'] { color: #38bdf8; background: rgba(56, 189, 248, 0.13); border-color: rgba(56, 189, 248, 0.3); }
+.ch-badge[data-badge='top'] { color: #fb923c; background: rgba(251, 146, 60, 0.13); border-color: rgba(251, 146, 60, 0.3); }
 html[data-mode='light'] .ch-badge[data-badge='staff'] { color: #92400e; }
 html[data-mode='light'] .ch-badge[data-badge='commish'] { color: #065f46; }
 html[data-mode='light'] .ch-badge[data-badge='shipped'] { color: #86198f; }
 html[data-mode='light'] .ch-badge[data-badge='new'] { color: #075985; }
+html[data-mode='light'] .ch-badge[data-badge='top'] { color: #9a3412; }
 
 .ch-avatar {
   display: grid;
@@ -804,3 +806,31 @@ html[data-mode='light'] .ch [data-status='shipped'] { --tone: #065f46; }
   background: var(--tone-soft);
   border-color: color-mix(in srgb, var(--tone) 45%, transparent);
 }
+
+/* ─── League Lab attachments ─────────────────────────────────────────────── */
+.ch-attachments { margin: 18px 0 4px; display: grid; gap: 10px; }
+.ch-attach-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 640px) { .ch-attach-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
+.ch-attach-img {
+  display: block; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--panel2);
+}
+.ch-attach-img img { width: 100%; height: 100%; object-fit: cover; transition: transform .2s ease; }
+.ch-attach-img:hover img { transform: scale(1.03); }
+.ch-attach-docs { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.ch-attach-doc {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel2); color: var(--text); font-size: 14px;
+  text-decoration: none;
+}
+.ch-attach-doc:hover { border-color: var(--accent-line); }
+
+/* ─── Staff build plan ───────────────────────────────────────────────────── */
+.ch-plan { margin-top: 16px; border: 1px dashed var(--accent-line); border-radius: 14px; padding: 16px 18px; background: var(--panel2); }
+.ch-plan h3 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+.ch-plan ul, .ch-plan ol { padding-left: 20px; display: grid; gap: 4px; font-size: 14px; color: var(--text2); }
+.ch-plan ul { list-style: disc; }
+.ch-plan ol { list-style: decimal; }
+.ch-plan-summary { font-size: 15px; line-height: 1.55; color: var(--text); }
+.ch-plan-cols { display: grid; gap: 4px 20px; }
+@media (min-width: 640px) { .ch-plan-cols { grid-template-columns: 1fr 1fr; } }

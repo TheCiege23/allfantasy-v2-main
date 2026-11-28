@@ -7,6 +7,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
 import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTracker'
+import { FeatureGate } from '@/components/subscription/FeatureGate'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
 import { DEFAULT_SPORT, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
@@ -600,7 +602,7 @@ export default function SeasonStrategyPage() {
       }
 
       if (!response.ok || !payload.plan || !payload.meta) {
-        const baseMessage = payload.error ?? `Request failed with ${response.status}`
+        const baseMessage = readPlanRefusal(response.status, payload)?.message ?? payload.error ?? `Request failed with ${response.status}`
         const rateLimitMessage =
           typeof payload.retryAfterSec === 'number' ? `${baseMessage} Try again in ${payload.retryAfterSec}s.` : baseMessage
         throw new Error(rateLimitMessage)
@@ -756,6 +758,8 @@ export default function SeasonStrategyPage() {
                 </div>
               </div>
 
+              {/* AF Pro (`planning_tools`), the key /api/season-strategy now enforces (2026-11-27). */}
+              <FeatureGate featureId="planning_tools" featureNameOverride="Season Strategy">
               <button
                 type="button"
                 onClick={() => void generate()}
@@ -768,6 +772,7 @@ export default function SeasonStrategyPage() {
               >
                 🧠 Generate Season Strategy
               </button>
+              </FeatureGate>
 
               {error ? <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">{error}</div> : null}
             </div>

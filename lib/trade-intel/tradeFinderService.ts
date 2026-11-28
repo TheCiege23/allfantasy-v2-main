@@ -10,11 +10,18 @@ import 'server-only'
  *  - manager behavior = completed-trade counts from the graded ledger,
  *  - pirate house rule → floor/spread guidance lines when declared.
  *
- * A proposal is only emitted when the needs are COMPLEMENTARY (my surplus hits
+ * A proposal is only GENERATED when the needs are COMPLEMENTARY (my surplus hits
  * their gap and their surplus hits mine) and the ADP gap is inside a stated
- * fairness band. Every rationale line is a checkable fact; the payload carries
- * the method so the UI can show its work. This is a starting point for a
- * conversation, not a valuation verdict — and it says so.
+ * band. Every rationale line is a checkable fact; the payload carries the method
+ * so the UI can show its work.
+ *
+ * 🛑 THE VERDICT IS THE ONE GRADER'S (2026-11-26). Fairness used to be judged
+ * here on `marketValueService`'s FantasyCalc chart — a second engine's number
+ * next to the letter every other trade screen shows. Now each generated
+ * candidate is graded by `createLeagueTradeGrader` + `gradeDeal` (injected by
+ * the route as `grade`), and the fairness band, the ranking, the values shown
+ * and the "% apart" all come from that grade. A candidate the grader withholds
+ * on is SHOWN as withheld — with the grader's reason — after every graded one.
  */
 
 import {
@@ -26,26 +33,19 @@ import {
   type MarketPlayer,
 } from '@/lib/sports-data/sleeperMarketService'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
-import {
-  getMarketValues,
-  playerValue,
-  type MarketValuesPayload,
-} from '@/lib/trade-intel/marketValueService'
+import { liveLeagueRosters, liveLeagueUsers } from '@/lib/sleeper/liveLeagueFeed'
+import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { gradeAllWithinBudget, gradeGapPct, type FinderGrade } from '@/lib/trade-finder/finderGrade'
 
-const SLEEPER = 'https://api.sleeper.app/v1'
-const FAIRNESS_BAND = 30 // ADP fallback: max ADP gap for a suggested 1-for-1
-const VALUE_FAIRNESS_PCT = 20 // preferred: max % gap in market value
+const FAIRNESS_BAND = 30 // generation: max ADP gap for a candidate 1-for-1
+const VALUE_FAIRNESS_PCT = 20 // verdict: max % gap on THE league trade grade
+/** Candidates graded per request — generation-ranked first, so the cheap pass decides only who is graded. */
+const GRADE_POOL = 24
+const GRADE_BUDGET_MS = 8_000
+const NO_GRADER = 'This league’s trade grade is not available here.'
 const SURPLUS_ADP_CEILING = 200 // bench players ranked worse than this aren't trade bait
 
-async function j<T>(path: string): Promise<T | null> {
-  try {
-    const res = await fetch(`${SLEEPER}${path}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    return (await res.json()) as T
-  } catch {
-    return null
-  }
-}
 
 type WireRoster = { roster_id: number; owner_id: string | null; players?: string[] | null }
 type WireUser = {
@@ -176,7 +176,7 @@ export type TradeProposal = {
     position: string | null
     team: string | null
     adp: number
-    /** FantasyCalc market value in this league's format (null = unranked). */
+    /** This player's value on THE league trade grade (null = not graded). */
     marketValue: number | null
   }
   get: {
@@ -188,9 +188,11 @@ export type TradeProposal = {
     marketValue: number | null
   }
   adpGap: number
-  /** % gap in market value when both sides are ranked; null = ADP fallback used. */
+  /** % apart on THE league trade grade (absolute); null when the grade was withheld. */
   valueGapPct: number | null
-  /** Checkable facts only. */
+  /** THE grade, from your side. A withheld grade carries the grader's reason. */
+  leagueGrade: FinderGrade
+  /** Checkable facts only (the last line states the grade). */
   rationale: string[]
 }
 
@@ -208,23 +210,30 @@ export type TradeFinderPayload = {
 export async function getTradeFinder(
   sleeperLeagueId: string,
   viewerSleeperUserId: string | null,
+  opts: {
+    /** THE grade (`gradeDeal` on one `createLeagueTradeGrader`), from the viewer's side. Absent = withheld. */
+    grade?: ((give: GradeInputs, get: GradeInputs) => Promise<TradeGradeView>) | null
+    gradeBudgetMs?: number
+  } = {},
 ): Promise<TradeFinderPayload | null> {
   const missing: string[] = []
   const context = await getLeagueContext(sleeperLeagueId)
   if (!context) return null
 
-  const [rosters, users, board, grades, values] = await Promise.all([
-    j<WireRoster[]>(`/league/${sleeperLeagueId}/rosters`),
-    j<WireUser[]>(`/league/${sleeperLeagueId}/users`),
+  // Completed-trade COUNTS only (manager activity) — no letter from this ledger reaches a proposal.
+  const [rosters, users, board, grades] = await Promise.all([
+    // Through the allowlisted, short-cached Sleeper adapter — never a raw vendor call on a request path (DB-first guard).
+    liveLeagueRosters(sleeperLeagueId) as Promise<WireRoster[] | null>,
+    // The wire payload carries `avatar`; the adapter's type just does not declare it.
+    liveLeagueUsers(sleeperLeagueId) as Promise<WireUser[] | null>,
     getSeasonBoard(context.season),
     getTradeGrades(sleeperLeagueId).catch(() => null),
-    getMarketValues(context).catch(() => null as MarketValuesPayload | null),
   ])
   if (!rosters) return null
   if (!users) missing.push('managers')
   if (!board) missing.push('market ADP board')
   if (!grades) missing.push('trade-activity history')
-  if (!values) missing.push('market value chart (falling back to ADP fairness)')
+  if (!opts.grade) missing.push('league trade grade')
 
   const usersById = new Map((users ?? []).map((u) => [u.user_id, u]))
   const marketById = new Map(Object.entries(board?.players ?? {}))
@@ -242,7 +251,8 @@ export async function getTradeFinder(
   )
   const me = viewerSleeperUserId ? reads.find((r) => r.ownerId === viewerSleeperUserId) ?? null : null
 
-  const proposals: TradeProposal[] = []
+  type Candidate = Omit<TradeProposal, 'leagueGrade' | 'valueGapPct'> & { fillsOpenSlot: boolean }
+  const candidates: Candidate[] = []
   if (me && board) {
     const myNeedSlots = [...me.openSlots, ...me.weakSlots.map((w) => w.slot)]
     for (const them of reads) {
@@ -268,31 +278,20 @@ export async function getTradeFinder(
           const giveAdp = adpOf(giveP)
           if (giveAdp == null) continue
           const gap = Math.abs(giveAdp - getAdp)
-
-          // Fairness: MARKET VALUE first (FantasyCalc, format-matched); ADP fallback.
-          const giveVal = values ? playerValue(values, giveP.playerId) : null
-          const getVal = values ? playerValue(values, getP.playerId) : null
-          let valueGapPct: number | null = null
-          if (giveVal != null && getVal != null && Math.max(giveVal, getVal) > 0) {
-            valueGapPct =
-              Math.round((Math.abs(giveVal - getVal) / Math.max(giveVal, getVal)) * 1000) / 10
-            if (valueGapPct > VALUE_FAIRNESS_PCT) continue
-          } else if (gap > FAIRNESS_BAND) {
-            continue
-          }
+          // GENERATION only: a cheap ADP band decides what is worth grading. The verdict is the grade's.
+          if (gap > FAIRNESS_BAND) continue
 
           const completedTrades = them.ownerId ? tradeCountByOwner.get(them.ownerId) ?? 0 : 0
           const rationale = [
             `${getP.name} fills your ${myFilled} ${me.openSlots.includes(myFilled) ? '(open starter slot)' : '(weakest starter by ADP)'}`,
             `${giveP.name} fills ${them.name}'s ${theirFilled} ${them.openSlots.includes(theirFilled) ? '(open starter slot)' : '(weakest starter by ADP)'}`,
-            valueGapPct != null
-              ? `market value ${giveVal?.toLocaleString()} vs ${getVal?.toLocaleString()} (${values?.mode} chart) — ${valueGapPct.toFixed(1)}% gap, inside the ±${VALUE_FAIRNESS_PCT}% band`
-              : `ADP gap ${gap.toFixed(1)} in ${context.adpKeyLabel} — inside the ±${FAIRNESS_BAND} fallback band (no market value for one side)`,
+            `ADP gap ${gap.toFixed(1)} in ${context.adpKeyLabel} — inside the ±${FAIRNESS_BAND} band`,
           ]
           if (completedTrades > 0) {
             rationale.push(`${them.name} has completed ${completedTrades} trade${completedTrades === 1 ? '' : 's'} in league history`)
           }
-          proposals.push({
+          candidates.push({
+            fillsOpenSlot: me.openSlots.includes(myFilled),
             partner: {
               ownerId: them.ownerId,
               name: them.name,
@@ -306,7 +305,7 @@ export async function getTradeFinder(
               position: giveP.position,
               team: giveP.team,
               adp: Math.round(giveAdp * 10) / 10,
-              marketValue: giveVal,
+              marketValue: null,
             },
             get: {
               playerId: getP.playerId,
@@ -314,10 +313,9 @@ export async function getTradeFinder(
               position: getP.position,
               team: getP.team,
               adp: Math.round(getAdp * 10) / 10,
-              marketValue: getVal,
+              marketValue: null,
             },
             adpGap: Math.round(gap * 10) / 10,
-            valueGapPct,
             rationale,
           })
         }
@@ -325,34 +323,69 @@ export async function getTradeFinder(
     }
   }
 
-  // Rank: open-slot fixes first, then most-active partners, then tightest gap
-  // (value gap when known, ADP gap otherwise).
-  proposals.sort((a, b) => {
-    const aOpen = a.rationale[0].includes('(open starter slot)') ? 0 : 1
-    const bOpen = b.rationale[0].includes('(open starter slot)') ? 0 : 1
-    const aGap = a.valueGapPct ?? a.adpGap
-    const bGap = b.valueGapPct ?? b.adpGap
-    return (
-      aOpen - bOpen ||
+  /*
+   * Generation order decides only WHICH candidates are graded (open-slot fixes, active partners, tight
+   * ADP), bounded to GRADE_POOL. Everything after is on THE grade.
+   */
+  candidates.sort(
+    (a, b) =>
+      Number(b.fillsOpenSlot) - Number(a.fillsOpenSlot) ||
       b.partner.completedTrades - a.partner.completedTrades ||
-      aGap - bGap
-    )
+      a.adpGap - b.adpGap,
+  )
+  const pool = candidates.slice(0, GRADE_POOL)
+  const gradeFn = opts.grade
+  const sleeperSide = (side: { playerId: string; name: string }): GradeInputs => ({
+    assets: [{ kind: 'player', name: side.name, providerIdentity: { provider: 'sleeper', id: side.playerId } }],
+    unpriceable: [],
   })
+  const leagueGrades: FinderGrade[] = gradeFn
+    ? await gradeAllWithinBudget(pool, (c) => gradeFn(sleeperSide(c.give), sleeperSide(c.get)), opts.gradeBudgetMs ?? GRADE_BUDGET_MS)
+    : pool.map(() => ({ graded: false as const, reason: NO_GRADER }))
+
+  const proposals: Array<TradeProposal & { fillsOpenSlot: boolean }> = []
+  pool.forEach((c, i) => {
+    const leagueGrade = leagueGrades[i]!
+    const gap = gradeGapPct(leagueGrade)
+    // The fairness band, on THE grade. A withheld grade is not filtered — it is shown as withheld.
+    if (gap != null && Math.abs(gap) > VALUE_FAIRNESS_PCT) return
+    const valueGapPct = gap == null ? null : Math.round(Math.abs(gap) * 10) / 10
+    proposals.push({
+      ...c,
+      give: { ...c.give, marketValue: leagueGrade.graded ? leagueGrade.giveValue : null },
+      get: { ...c.get, marketValue: leagueGrade.graded ? leagueGrade.getValue : null },
+      valueGapPct,
+      leagueGrade,
+      rationale: [
+        ...c.rationale,
+        leagueGrade.graded
+          ? `League grade ${leagueGrade.letter} for you, ${leagueGrade.partnerLetter} for ${c.partner.name} — ${leagueGrade.giveValue.toLocaleString()} vs ${leagueGrade.getValue.toLocaleString()} on this league's chart (${(valueGapPct ?? 0).toFixed(1)}% apart, inside the ±${VALUE_FAIRNESS_PCT}% band)`
+          : `Not graded: ${leagueGrade.reason}`,
+      ],
+    })
+  })
+
+  // Rank: open-slot fixes first, graded before withheld, most-active partners, then THE grade's gap.
+  proposals.sort(
+    (a, b) =>
+      Number(b.fillsOpenSlot) - Number(a.fillsOpenSlot) ||
+      Number(b.leagueGrade.graded) - Number(a.leagueGrade.graded) ||
+      b.partner.completedTrades - a.partner.completedTrades ||
+      (a.valueGapPct ?? Number.POSITIVE_INFINITY) - (b.valueGapPct ?? Number.POSITIVE_INFINITY),
+  )
   // One best proposal per partner+get-player, cap at 6.
   const dedup = new Map<string, TradeProposal>()
-  for (const p of proposals) {
+  for (const { fillsOpenSlot: _open, ...p } of proposals) {
     const key = `${p.partner.ownerId}:${p.get.playerId}`
     if (!dedup.has(key)) dedup.set(key, p)
   }
   const finalProposals = [...dedup.values()].slice(0, 6)
 
   const contextNotes: string[] = [
-    values
-      ? `Fairness is judged by ${values.source} in ${values.mode} mode (${values.numQbs}QB, ${values.numTeams}-team, ${values.ppr} PPR); ADP (${context.adpKeyLabel}) is the fallback when a player is unranked.`
-      : `Player value = ${context.adpKeyLabel} (RotoWire market data) — the market value chart didn't sync this refresh.`,
+    opts.grade
+      ? `Fairness is this league's AllFantasy trade grade — the same letter every trade screen shows, priced on this league's chart; ADP (${context.adpKeyLabel}) only picks which pairs are worth grading.`
+      : `The league trade grade is not available here, so no suggestion is graded; ADP (${context.adpKeyLabel}) picked the pairs.`,
   ]
-  if (values?.bestBallNote) contextNotes.push(values.bestBallNote)
-  if (values) contextNotes.push(values.faab.formula)
   if (context.houseRules.pirate?.active) {
     contextNotes.push(
       'Pirate rules declared: favor consistent-floor targets and spreading value — a stolen stud hurts twice.',

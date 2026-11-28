@@ -9,15 +9,25 @@ function personMark(name: string): string {
   return `${words[0]![0]}${words[1]![0]}`.toUpperCase()
 }
 
+/** The club's short code for the crest corner, or null for no club (free agent, unknown). */
+export function clubAbbr(team: string | null | undefined): string | null {
+  const t = String(team ?? '').trim().toUpperCase()
+  if (!t || t === 'FA' || t === 'F/A' || t === 'FREE AGENT' || t === 'N/A' || t === '-' || t === '—') return null
+  return t.slice(0, 3)
+}
+
 export function PlayerFace({
   imageUrl,
   name,
   teamLogoUrl,
+  team,
   size = 'md',
 }: {
   imageUrl?: string | null
   name: string
   teamLogoUrl?: string | null
+  /** The club's abbreviation: drawn in the crest corner when there is no crest, or it fails to load. */
+  team?: string | null
   size?: 'md' | 'sm'
 }) {
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
@@ -38,6 +48,8 @@ export function PlayerFace({
       {teamLogoUrl && teamLogoUrl !== failedLogoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img className="af-bd-club" src={teamLogoUrl} alt="" width={15} height={15} loading="lazy" onError={() => setFailedLogoUrl(teamLogoUrl)} />
+      ) : clubAbbr(team) ? (
+        <span className="af-bd-club af-crest-abbr" aria-hidden>{clubAbbr(team)}</span>
       ) : null}
     </span>
   )

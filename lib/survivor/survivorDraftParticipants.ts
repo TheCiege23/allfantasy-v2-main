@@ -31,7 +31,7 @@ export async function prepareSurvivorDraftParticipants(
     where: { id: leagueId },
     select: { userId: true, platform: true, settings: true, survivorMode: true, leagueVariant: true },
   })
-  if (!league || resolveWriteAuthority(league.platform) !== 'NATIVE' || (!league.survivorMode && league.leagueVariant !== 'survivor')) {
+  if (!league || resolveWriteAuthority(league) !== 'NATIVE' || (!league.survivorMode && league.leagueVariant !== 'survivor')) {
     return { ok: false, code: 'not_native_survivor', error: 'Automatic Survivor setup requires a native AllFantasy Survivor league.' }
   }
   const session = await db.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, status: true, sessionKind: true, sleeperDraftId: true, teamCount: true, slotOrder: true } })

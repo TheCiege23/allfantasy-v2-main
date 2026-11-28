@@ -1,4 +1,5 @@
 import { seasonDraftSessionError } from '@/lib/tournament/seasonDraftBoard'
+import { syncDraftProgressPointer } from '@/lib/live-draft-engine/draftProgressPointer'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
 import { loadSeasonDraftContext, validateSeasonDraftPlayer } from '@/lib/tournament/seasonDraftRuntime'
 /**
@@ -13,6 +14,8 @@ import { assertDraftSessionBelongsToLeague } from '@/lib/engine-testing/hardenin
 import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invariantRuntime'
 import { computeTimerEndAt } from './DraftTimerService'
 import { absentClockSeconds, normalizeAbsentManagerRule } from '@/lib/draft-day/absentManager'
+import { ANNUAL_C2C_DRAFT, annualC2CDraftSeason } from './annualC2CDraft'
+import { resolveAnnualC2CPick } from './annualC2CPickEligibility'
 import { validatePickSubmission, validateDevyEligibilityAsync, validateC2CEligibilityAsync } from './PickValidation'
 import { validateSpecialtyDraftPools } from './SpecialtyDraftPoolValidation'
 import { isRookieRestrictedPlayerPool, resolveServerRookieStatus } from './serverRookieStatus'
@@ -51,6 +54,16 @@ import { verifyNcaabCollegeDraftPick } from '@/lib/devy/verifyNcaabDraftPick'
 import { createDraftCollegeRight } from '@/lib/devy/nbaDraftRights'
 import { isDevyLeague } from '@/lib/devy/DevyLeagueConfig'
 import { isC2CLeague } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
+
+/** `pickMetadata.autopick.reason`, when an automatic pick recorded why it chose this player. */
+function autoPickReasonFrom(meta: unknown): string | null {
+  const auto = meta && typeof meta === 'object' ? (meta as { autopick?: unknown }).autopick : null
+  const reason = auto && typeof auto === 'object' ? (auto as { reason?: unknown }).reason : null
+  return typeof reason === 'string' && reason.trim() ? reason.trim() : null
+}
+
+/** How close to its deadline an automatic pick still counts as the clock having run out. */
+const TIMEOUT_AUTO_GRACE_MS = 3_000
 
 export interface SubmitPickInput {
   leagueId: string
@@ -241,7 +254,17 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
   const isDispersalDraft =
     String((session as { draftModeLabel?: string | null }).draftModeLabel ?? '').toLowerCase() === 'dispersal' ||
     (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig != null
-  const namesAPlayer = (input.position || '').toUpperCase() !== 'SKIP' && (!input.assetType || input.assetType === 'player')
+  const annualCombined = session.draftModeLabel === ANNUAL_C2C_DRAFT
+  const skip = (input.position || '').toUpperCase() === 'SKIP'
+  const authorizedSkip = skip && (input.source === 'commissioner' || (input.source === 'auto' && !input.madeByUserId))
+  const annualAsset = annualCombined && !authorizedSkip
+    ? await resolveAnnualC2CPick(prisma, input.leagueId, league?.sport ?? '', input)
+    : null
+  if (annualCombined && !authorizedSkip && !annualAsset) {
+    return { success: false, error: 'Select an available, verified Canton rookie or Campus player from the combined draft board.' }
+  }
+  const namesAPlayer = !skip &&
+    (annualCombined ? annualAsset === 'player' : !input.assetType || input.assetType === 'player')
   if (!seasonContext && !isDispersalDraft && namesAPlayer && input.source !== 'keeper' && input.source !== 'promoted_devy') {
     const holder = rosteredHolder(await loadLeagueRosteredPlayers(input.leagueId), input)
     if (holder) {
@@ -252,10 +275,12 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
   const seasonError = await validateSeasonDraftPlayer(input.leagueId, effectiveRosterId, session.picks, input)
   if (seasonError) return { success: false, error: seasonError }
 
-  const rosterFit = seasonContext ? { valid: true } : await validateRosterFitForDraftPick({
+  const rosterFit = seasonContext || annualAsset === 'c2c_college' ? { valid: true } : await validateRosterFitForDraftPick({
     leagueId: input.leagueId,
     rosterId: effectiveRosterId,
-    existingPicks: session.picks.map((p) => ({ rosterId: p.rosterId, position: p.position })),
+    existingPicks: session.picks
+      .filter(p => !annualCombined || p.assetType !== 'c2c_college')
+      .map(p => ({ rosterId: p.rosterId, position: p.position })),
     newPickPosition: input.position,
   })
   if (!rosterFit.valid) return { success: false, error: rosterFit.error }
@@ -277,7 +302,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
   const nbaCollegeId = String(input.playerId ?? '').startsWith(ESPN_NCAAB_DEVY_ID_PREFIX)
   const nba = league?.sport === 'NBA'
   let verifiedNbaCollege: 'c2c_college' | 'devy_pick' | null = null
-  if (nbaCollegeId) {
+  if (nbaCollegeId && !annualCombined) {
     if (!nba || seasonContext) return { success: false, error: 'This college player is not eligible in this draft.' }
     const [c2cLeague, devyLeague, verified] = await Promise.all([
       isC2CLeague(input.leagueId), isDevyLeague(input.leagueId),
@@ -286,22 +311,22 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     if (!verified || (!c2cLeague && !devyLeague)) return { success: false, error: 'This college player is not on a verified current roster. Refresh the draft pool.' }
     verifiedNbaCollege = c2cLeague ? 'c2c_college' : 'devy_pick'
   }
-  if (nba && !verifiedNbaCollege && (input.source === 'college' || input.source === 'devy' || input.assetType === 'c2c_college' || input.assetType === 'devy_pick')) {
+  if (!annualCombined && nba && !verifiedNbaCollege && (input.source === 'college' || input.source === 'devy' || input.assetType === 'c2c_college' || input.assetType === 'devy_pick')) {
     return { success: false, error: 'Select a verified current college player.' }
   }
   const nbaCollegeRound = c2cConfig?.collegeRounds.includes(roundForEligibility) ?? devyConfig?.devyRounds.includes(roundForEligibility) ?? false
-  if (nba && (c2cConfig || devyConfig)) {
+  if (!annualCombined && nba && (c2cConfig || devyConfig)) {
     if (nbaCollegeRound && !verifiedNbaCollege) return { success: false, error: 'This round is college-only. Select a verified college player.' }
     if (!nbaCollegeRound && verifiedNbaCollege) return { success: false, error: 'This round is pro-only. Select a pro player.' }
   }
 
-  if (!nba && c2cConfig?.enabled) {
+  if (!annualCombined && !nba && c2cConfig?.enabled) {
     const c2cValidation = await validateC2CEligibilityAsync(
       { currentRound: roundForEligibility, playerName: input.playerName, c2cConfig },
       prisma
     )
     if (!c2cValidation.valid) return { success: false, error: c2cValidation.error }
-  } else if (!nba && devyConfig?.enabled) {
+  } else if (!annualCombined && !nba && devyConfig?.enabled) {
     const devyValidation = await validateDevyEligibilityAsync(
       {
         currentRound: roundForEligibility,
@@ -315,12 +340,13 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     if (!devyValidation.valid) return { success: false, error: devyValidation.error }
   }
 
-  const owner = resolvePickOwner(round, slot, slotOrder, input.tradedPicks ?? tradedPicks)
+  const owner = resolvePickOwner(round, slot, slotOrder, annualCombined ? tradedPicks : input.tradedPicks ?? tradedPicks)
   const displayName = owner?.displayName ?? current.displayName
   const slotOriginalRosterId = slotOrder.find((s) => s.slot === slot)?.rosterId ?? onClockRosterId
 
-  let assetType: string = verifiedNbaCollege ?? input.assetType ?? 'player'
-  if (!input.assetType && !verifiedNbaCollege) {
+  const draftCollegeAsset = annualAsset === 'c2c_college' ? annualAsset : verifiedNbaCollege
+  let assetType: string = annualCombined ? annualAsset ?? 'player' : verifiedNbaCollege ?? input.assetType ?? 'player'
+  if (!annualCombined && !input.assetType && !verifiedNbaCollege) {
     if (input.source === 'devy' || input.source === 'promoted_devy') assetType = 'devy_pick'
     else if (input.source === 'college') assetType = 'c2c_college'
     else assetType = 'player'
@@ -330,7 +356,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
   // (`filterCandidatesForPlayerPool`), because a refused autopick retries the same player.
   const pickSource = input.source ?? 'user'
   const serverRookieStatus =
-    isRookieRestrictedPlayerPool(session.playerPool) &&
+    !annualCombined && isRookieRestrictedPlayerPool(session.playerPool) &&
     (pickSource === 'user' || pickSource === 'auto') &&
     assetType === 'player'
       ? await resolveServerRookieStatus({ leagueId: input.leagueId, playerId: input.playerId, playerName: input.playerName })
@@ -338,7 +364,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
   const specialtyPool = validateSpecialtyDraftPools({
     draftModeLabel: (session as { draftModeLabel?: string | null }).draftModeLabel,
     dispersalPoolConfig: (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig,
-    playerPool: session.playerPool ?? 'all',
+    playerPool: annualCombined ? 'all' : session.playerPool ?? 'all',
     effectiveRosterId,
     onClockRosterId,
     playerId: input.playerId,
@@ -451,7 +477,10 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       if (!locked) {
         throw new Error('Draft state changed; please retry')
       }
-      if (seasonContext && (locked.version !== session.version || locked.status !== session.status || seasonDraftSessionError(seasonContext, locked))) throw new Error('Draft state changed; please retry')
+      if ((seasonContext || annualCombined) && (locked.version !== session.version || locked.status !== session.status)) {
+        throw new Error('Draft state changed; please retry')
+      }
+      if (seasonContext && seasonDraftSessionError(seasonContext, locked)) throw new Error('Draft state changed; please retry')
       if (locked.picks.length !== picksCountAtSubmit) {
         throw new Error('Draft state changed; please retry')
       }
@@ -464,10 +493,12 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       if (existingAtOverall) {
         await (tx as any).draftPick.delete({ where: { id: existingAtOverall.id } })
       }
+      const { draftCollegeRightsId: _untrustedRightsId, ...clientMetadata } = input.pickMetadata ?? {}
       let draftCollegeRightsId: string | undefined
-      if (verifiedNbaCollege && input.playerId) {
+      if (draftCollegeAsset && input.playerId) {
         draftCollegeRightsId = await createDraftCollegeRight(tx, {
-          leagueId: input.leagueId, rosterId: effectiveRosterId, playerId: input.playerId, assetType: verifiedNbaCollege,
+          leagueId: input.leagueId, rosterId: effectiveRosterId, playerId: input.playerId, assetType: draftCollegeAsset,
+          seasonYear: annualC2CDraftSeason(session) ?? undefined,
         })
       }
       const created = await (tx as any).draftPick.create({
@@ -493,7 +524,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
           source: input.source ?? 'user',
           assetType,
           ...(input.pickMetadata != null
-            ? { pickMetadata: input.pickMetadata as Prisma.InputJsonValue }
+            ? { pickMetadata: clientMetadata as Prisma.InputJsonValue }
             : {}),
           ownerUserId: input.madeByUserId ?? null,
         },
@@ -523,7 +554,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
               updatedAt: new Date(),
             },
       }
-      if (seasonContext) {
+      if (seasonContext || annualCombined) {
         const claim = await tx.draftSession.updateMany({ ...sessionMutation, where: { id: session.id, version: session.version, status: session.status, timerEndAt: session.timerEndAt } })
         if (claim.count !== 1) throw new Error('Draft state changed; please retry')
       } else await (tx as any).draftSession.update(sessionMutation)
@@ -535,12 +566,13 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
         owner:effectiveRosterId, originalRosterId:slotOriginalRosterId, pick:created,
       }, selectedAt)
       await tx.draftPick.update({where:{id:created.id},data:{pickedAt:selectedAt,pickMetadata:json({
-        ...input.pickMetadata,
+        ...clientMetadata,
         ...(draftCollegeRightsId ? { draftCollegeRightsId } : {}),
         ...(adpAtPick != null ? { adpAtPick } : {}),
         archive:{eventId:archived.eventId,context:archived.context,timing:archived.selected,clockAllowanceSeconds:timerSeconds,
           selectionRosterId:effectiveRosterId,originalRosterId:slotOriginalRosterId,actorUserId:input.madeByUserId??null},
       })}})
+      await syncDraftProgressPointer(tx as any, session.id)
 
       return created
     })
@@ -571,6 +603,26 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       }
     }
     throw error
+  }
+
+  // The system picked because this team's clock ran out: the team stays on auto for the rest of the
+  // draft (./instantAutopick.ts). Read off the clock this pick was made against, so an instant
+  // "Auto-pick me" or Chimmy pick on a running clock is not counted. A few seconds of grace covers
+  // the room's own expiry call landing just before the server's deadline.
+  if (
+    input.source === 'auto' &&
+    session.status === 'in_progress' &&
+    session.timerEndAt != null &&
+    session.timerEndAt.getTime() <= Date.now() + TIMEOUT_AUTO_GRACE_MS
+  ) {
+    await import('./instantAutopick')
+      .then(({ markTeamAutoAfterTimeout }) => markTeamAutoAfterTimeout({ draftSessionId: session.id, rosterId: effectiveRosterId }))
+      .catch((error) =>
+        logStructured('warn', 'submit_pick', 'mark_auto_after_timeout_failed', {
+          leagueId: input.leagueId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
   }
 
   // Sampled: record successful pick submission for draft-room analytics.
@@ -722,7 +774,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
   // Runs after the pick transaction commits; a failed write is logged loudly but
   // never voids the committed pick. 'promoted_devy' consumes an existing right
   // rather than creating one, so it is skipped.
-  if (!verifiedNbaCollege && (assetType === 'devy_pick' || assetType === 'c2c_college') && input.source !== 'promoted_devy') {
+  if (!draftCollegeAsset && (assetType === 'devy_pick' || assetType === 'c2c_college') && input.source !== 'promoted_devy') {
     try {
       const { recordDraftedDevyRights } = await import('@/lib/devy/rightsWriter')
       const rights = await recordDraftedDevyRights({
@@ -769,6 +821,8 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
         headshotUrl: pick.playerImageUrl ?? input.playerImageUrl ?? null,
         // D.6.3 — flips the AI badge on the rendered card. Mutually exclusive with commissionerOverride below.
         aiManager: input.source === 'auto',
+        // Why it was auto-picked (queue / Draft like me / best available), shown under the pick in chat.
+        autoPickReason: autoPickReasonFrom(input.pickMetadata),
         // Commit T — flips the Commissioner badge on the rendered card.
         commissionerOverride: input.source === 'commissioner',
       }),

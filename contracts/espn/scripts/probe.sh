@@ -13,6 +13,7 @@
 #   ./probe.sh roster <SPORT> <espn_team_id>
 #   ./probe.sh fantasy-league MLB <league_id> <season>
 #   ./probe.sh fantasy-league NFL <league_id> <season>
+#   ./probe.sh fantasy-matchup NFL <league_id> <season> <week>
 #   ./probe.sh fantasy-communication NFL <league_id> <season>
 #
 # The fantasy endpoints carry PEOPLE (member names, ESPN member ids, team names, chat). Their
@@ -39,7 +40,7 @@ set -euo pipefail
 BASE_URL="https://site.web.api.espn.com/apis/site/v2/sports"
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
 
-ENDPOINT="${1:?usage: probe.sh <teams|roster|fantasy-league> <SPORT> [id] [season]}"
+ENDPOINT="${1:?usage: probe.sh <teams|roster|fantasy-league|fantasy-matchup> <SPORT> [id] [season] [week]}"
 SPORT_RAW="${2:?missing SPORT}"
 TEAM_ID="${3:-}"
 SEASON="${4:-}"
@@ -48,12 +49,14 @@ SPORT="$(echo "$SPORT_RAW" | tr '[:lower:]' '[:upper:]')"
 case "$SPORT" in
   NBA)
     # teams: the copy-league team table (lib/league/copyLeagueTeamTables.ts, 2026-11-19).
-    case "$ENDPOINT" in scoreboard|teams) ;; *) echo "NBA currently supports scoreboard and teams capture" >&2; exit 2 ;; esac
+    # roster: current-team player headshots (owner OK 2026-11-27, GAPS E-08).
+    case "$ENDPOINT" in scoreboard|teams|roster) ;; *) echo "NBA currently supports scoreboard, teams and roster capture" >&2; exit 2 ;; esac
     SPORT_PATH="basketball/nba"
     ;;
   NHL)
     # teams: the copy-league team table (lib/league/copyLeagueTeamTables.ts, 2026-11-19).
-    if [[ "$ENDPOINT" != "teams" ]]; then echo "NHL currently supports only teams capture" >&2; exit 2; fi
+    # roster: current-team player headshots (owner OK 2026-11-27, GAPS E-08).
+    case "$ENDPOINT" in teams|roster) ;; *) echo "NHL currently supports teams and roster capture" >&2; exit 2 ;; esac
     SPORT_PATH="hockey/nhl"
     ;;
   NCAAB) SPORT_PATH="basketball/mens-college-basketball" ;;
@@ -61,14 +64,15 @@ case "$SPORT" in
     # scoreboard: the postseason rounds behind NFL playoff bracket pools (lib/playoffs/nflPlayoffs.ts).
     # fantasy-league / fantasy-communication: the ESPN fantasy football import (2026-11-08).
     # teams: the copy-league dark crests (lib/league/copyLeague.ts, 2026-11-19).
-    case "$ENDPOINT" in summary|scoreboard|fantasy-league|fantasy-communication|teams) ;; *)
-      echo "NFL currently supports summary, scoreboard, fantasy-league, fantasy-communication and teams capture" >&2; exit 2 ;;
+    case "$ENDPOINT" in summary|scoreboard|fantasy-league|fantasy-matchup|fantasy-communication|teams) ;; *)
+      echo "NFL currently supports summary, scoreboard, fantasy-league, fantasy-matchup, fantasy-communication and teams capture" >&2; exit 2 ;;
     esac
     SPORT_PATH="football/nfl"
     ;;
   MLB)
     # teams: the copy-league team table (lib/league/copyLeagueTeamTables.ts, 2026-11-19).
-    case "$ENDPOINT" in fantasy-league|teams) ;; *) echo "MLB currently supports fantasy-league and teams capture" >&2; exit 2 ;; esac
+    # roster: current-team player headshots (owner OK 2026-11-27, GAPS E-08).
+    case "$ENDPOINT" in fantasy-league|teams|roster) ;; *) echo "MLB currently supports fantasy-league, teams and roster capture" >&2; exit 2 ;; esac
     SPORT_PATH="baseball/mlb"
     ;;
   *)
@@ -89,6 +93,20 @@ case "$ENDPOINT" in
       QS="dates=${TEAM_ID}&limit=1000"
     fi
     NAME="scoreboard.${SPORT}.${TEAM_ID}"
+    ;;
+  fantasy-matchup)
+    # One FINISHED week's matchups with every roster slot's points, bench included (GAPS PS-01,
+    # 2026-11-23). Its own fixture name, so it never overwrites fantasy-league.NFL.<season>.json.
+    # mTeam is requested only so the redactor sees the team names it must replace.
+    WEEK="${5:-}"
+    if [[ "$SPORT" != "NFL" ]] || ! [[ "$TEAM_ID" =~ ^[0-9]+$ && "$SEASON" =~ ^[0-9]{4}$ && "$WEEK" =~ ^[0-9]{1,2}$ ]]; then
+      echo "usage: probe.sh fantasy-matchup NFL <public_league_id> <season> <finished_week>" >&2; exit 2
+    fi
+    PATH_SEG="/seasons/${SEASON}/segments/0/leagues/${TEAM_ID}"
+    BASE_URL="https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl"
+    QS="view=mTeam&view=mMatchup&view=mMatchupScore&scoringPeriodId=${WEEK}"
+    NAME="fantasy-matchup.${SPORT}.${SEASON}.week${WEEK}"
+    REDACT_LEAGUE_ID="$TEAM_ID"
     ;;
   fantasy-league)
     if ! [[ "$SPORT" == "MLB" || "$SPORT" == "NFL" ]] || ! [[ "$TEAM_ID" =~ ^[0-9]+$ && "$SEASON" =~ ^[0-9]{4}$ ]]; then
@@ -142,7 +160,7 @@ case "$ENDPOINT" in
     NAME="roster.${SPORT}.team${TEAM_ID}"
     ;;
   *)
-    echo "ERROR: unknown endpoint '${ENDPOINT}'. Known: teams, roster, fantasy-league, fantasy-communication, summary, scoreboard. See ENDPOINTS.yaml." >&2
+    echo "ERROR: unknown endpoint '${ENDPOINT}'. Known: teams, roster, fantasy-league, fantasy-matchup, fantasy-communication, summary, scoreboard. See ENDPOINTS.yaml." >&2
     exit 1
     ;;
 esac

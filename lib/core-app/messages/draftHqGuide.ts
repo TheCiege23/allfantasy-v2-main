@@ -27,7 +27,7 @@ export const draftHqGuideMessages = defineMessages({
     headUpcoming: (n: number) => `No draft is running · ${n} coming up`,
     headAllDone: 'Every draft you’re in is finished',
     intro:
-      'Every draft you’re in, in one place. The one that needs you comes first — open it to make your pick, or get ready for the ones that haven’t started.',
+      'Every draft you’re in, the one that needs you first.',
     secYourPick: 'Your pick now',
     secDrafting: 'Drafting now',
     secComingUp: 'Coming up · not started',
@@ -93,7 +93,7 @@ export const draftHqGuideMessages = defineMessages({
     headUpcoming: (n) => `Ningún draft en curso · ${n} por empezar`,
     headAllDone: 'Todos tus drafts han terminado',
     intro:
-      'Todos tus drafts en un solo lugar. Primero el que te necesita: ábrelo para hacer tu selección, o prepárate para los que aún no empiezan.',
+      'Todos tus drafts, primero el que te necesita.',
     secYourPick: 'Te toca ahora',
     secDrafting: 'En curso',
     secComingUp: 'Por empezar',

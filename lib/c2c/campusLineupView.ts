@@ -9,7 +9,8 @@
 import type { PrismaClient } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
-import { campusSeats, campusSport, campusStarterIds, collegePlayerIds, type CampusSport } from './campusLineup'
+import { campusSeats, campusStarterIds, collegePlayerIds, type CampusSport } from './campusLineup'
+import { collegeLineupSport, devyCollegeLineupSlots, isScoringDevyLeague } from './collegeLineupLeague'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { loadCfbWeeksForNflWeek } from './campusWeeks'
@@ -32,15 +33,17 @@ export type CampusLineupView = {
 export async function loadCampusLineupView(
   db: Pick<PrismaClient, 'redraftRosterPlayer' | 'redraftRoster' | 'sportsGame' | 'sportsDataCache'>,
   input: {
-    league: { id: string; platform: string | null; sport: string | null; leagueVariant: string | null }
+    league: { id: string; platform: string | null; sport: string | null; leagueVariant: string | null; leagueType?: string | null; settings?: unknown }
     playerData: unknown
     redraftRosterId: string | null
   },
 ): Promise<CampusLineupView | null> {
-  const sport = campusSport(input.league)
+  // C2C, or a devy league with a scoring college lineup (lib/c2c/collegeLineupLeague.ts).
+  const sport = collegeLineupSport(input.league)
   if (!input.redraftRosterId || !isNativePlatform(input.league.platform) || !sport) return null
+  const devy = isScoringDevyLeague(input.league)
   const [config, rows, redraft] = await Promise.all([
-    getC2CConfig(input.league.id),
+    devy ? Promise.resolve(null) : getC2CConfig(input.league.id),
     db.redraftRosterPlayer.findMany({
       where: { rosterId: input.redraftRosterId, droppedAt: null },
       select: { playerId: true, playerName: true, position: true, team: true },
@@ -66,7 +69,7 @@ export async function loadCampusLineupView(
   }
   return {
     sport,
-    seats: campusSeats(config?.collegeActiveLineupSlots),
+    seats: campusSeats(devy ? devyCollegeLineupSlots(input.league.settings) : config?.collegeActiveLineupSlots),
     starterIds: campusStarterIds(input.playerData).filter((id) => onTeam.has(id)),
     players,
     cfbWeeks,

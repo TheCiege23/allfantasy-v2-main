@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { suggestCatalog, type PlayerMatch } from './playerFinder'
 import { normalizePosition } from './positionNormalization'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
-import { isForeignIdSpace, translateRostersByLeague } from './rosterIdSpace'
+import { isForeignIdSpace, stripForeignIds, translateRostersByLeague } from './rosterIdSpace'
 import { finderIdentityKey, identitiesForFinderPlayers, rosterIdForFinderPlayer, type FinderIdentity } from './playerFinderIdentityBridge'
 
 /**
@@ -77,9 +77,10 @@ async function buildGlobalRosterCounts(): Promise<Map<string, number>> {
      * own numbers in Sleeper's range, so counting them credited real Sleeper players with rosters they
      * are not on and ranked them up the suggestions (isForeignIdSpace, rosterIdSpace.ts).
      */
-    if (isForeignIdSpace(r.league?.platform, r.league?.sport)) continue
+    /* Stripped, not skipped: only a pasted Yahoo roster's DECLARED ids (`sleeper:<id>`) survive, unwrapped. */
+    const pd = isForeignIdSpace(r.league?.platform, r.league?.sport) ? stripForeignIds(r.playerData) : r.playerData
     const sport = String(r.league?.sport ?? 'NFL').toUpperCase()
-    for (const id of allIds((r.playerData ?? {}) as Record<string, unknown>)) {
+    for (const id of allIds((pd ?? {}) as Record<string, unknown>)) {
       const key = `${sport}:${id}`
       counts.set(key, (counts.get(key) ?? 0) + 1)
     }

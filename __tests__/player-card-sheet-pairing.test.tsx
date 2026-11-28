@@ -1,5 +1,6 @@
 import React from 'react'
 import { describe, expect, it } from 'vitest'
+import { fireEvent } from '@testing-library/react'
 import { render } from '@testing-library/react'
 
 import PlayerCardSheet from '@/components/core-app/player-card/PlayerCardSheet'
@@ -108,8 +109,12 @@ function card(over: Partial<PlayerCardData> = {}): PlayerCardData {
   }
 }
 
-function mount(data: PlayerCardData) {
-  return render(
+/*
+ * 2026-11-26: the card's sections sit behind tabs (lib/core-app/playerCardTabs.ts), so a test opens the
+ * tab its rows live on first — schedule, playoffs and your roster on Schedule; trades and comps on History.
+ */
+function mount(data: PlayerCardData, tab?: string) {
+  const out = render(
     <PlayerCardSheet
       subject={{ sport: 'NFL', sleeperId: '11579', name: 'Audric Estime', position: 'RB' }}
       data={data}
@@ -118,6 +123,12 @@ function mount(data: PlayerCardData) {
       onOpen={() => {}}
     />
   )
+  if (tab) {
+    const button = out.container.querySelector(`[data-testid="player-card-tab-${tab}"]`)
+    if (!button) throw new Error(`no ${tab} tab`)
+    fireEvent.click(button)
+  }
+  return out
 }
 
 /** Every hairline row as the pair it renders: {key, value}. */
@@ -130,7 +141,7 @@ function pairs(container: HTMLElement): Array<{ k: string; v: string }> {
 
 describe('player card — every number stays with the thing it describes', () => {
   it('keeps each roster price on its own player row', () => {
-    const { container } = mount(card())
+    const { container } = mount(card(), 'schedule')
     const p = pairs(container)
     expect(p).toContainEqual({ k: 'Zach Charbonnet', v: '1,809' })
     expect(p).toContainEqual({ k: 'Aaron Jones', v: '1,114' })
@@ -139,12 +150,12 @@ describe('player card — every number stays with the thing it describes', () =>
 
   /* An unpriced player is a dash, never a zero and never the next man's price. */
   it('renders an unpriced roster player as a dash on HIS row', () => {
-    const { container } = mount(card())
+    const { container } = mount(card(), 'schedule')
     expect(pairs(container)).toContainEqual({ k: 'Joe Mixon', v: '—' })
   })
 
   it('keeps each projection on its own week', () => {
-    const { container } = mount(card())
+    const { container } = mount(card(), 'schedule')
     const p = pairs(container)
     expect(p).toContainEqual({ k: 'WK1 · @ DET', v: '1.5' })
     // Only week 1 is published; later weeks are fixtures, never a borrowed number.
@@ -160,7 +171,7 @@ describe('player card — every number stays with the thing it describes', () =>
    * itself is now pinned.
    */
   it('keeps each comp price inside its own chip (universal flavour)', () => {
-    const { container } = mount(card({ context: 'universal', league: null }))
+    const { container } = mount(card({ context: 'universal', league: null }), 'history')
     const chips = [...container.querySelectorAll('.af-pc-chip')].map((c) =>
       (c.textContent ?? '').replace(/\s+/g, ' ').trim()
     )
@@ -168,8 +179,10 @@ describe('player card — every number stays with the thing it describes', () =>
     expect(chips).toContain('Comp Beta 4,444')
   })
 
-  it('does NOT show comps on the league flavour — that column is league trades', () => {
-    const { container } = mount(card())
+  it('does NOT show comps on the league flavour — its History tab is league trades', () => {
+    const trade = { transactionId: 't1', platform: 'sleeper', leagueName: null, tradeDate: null, acquired: [], sent: ['Joe Mixon'], picks: [] }
+    const base = card()
+    const { container } = mount(card({ league: { ...base.league!, trades: [trade] } }), 'history')
     expect(container.querySelectorAll('.af-pc-chip')).toHaveLength(0)
     expect(container.textContent).toContain('TRADES IN THIS LEAGUE')
   })
@@ -180,10 +193,10 @@ describe('player card — every number stays with the thing it describes', () =>
    */
   it('renders the league price with the basis it was derived under', () => {
     const { container } = mount(card())
-    const tiles = [...container.querySelectorAll('.af-pc-tile')].map((t) => ({
-      label: t.querySelector('.af-pc-label')?.textContent?.trim(),
-      value: t.querySelector('.af-pc-tile-v')?.textContent?.trim(),
-      sub: t.querySelector('.af-pc-tile-sub')?.textContent?.replace(/\s+/g, ' ').trim(),
+    const tiles = [...container.querySelectorAll('.af-pc-stat')].map((t) => ({
+      label: t.querySelector('.af-pc-stat-l')?.textContent?.trim(),
+      value: t.querySelector('.af-pc-stat-v')?.textContent?.trim(),
+      sub: t.querySelector('.af-pc-stat-s')?.textContent?.replace(/\s+/g, ' ').trim(),
     }))
     const price = tiles.find((t) => t.label === 'LEAGUE PRICE')
     expect(price?.value).toBe('126')
@@ -194,7 +207,7 @@ describe('player card — every number stays with the thing it describes', () =>
 
 describe('player card — the playoff window comes from the league, not a literal', () => {
   it('labels the window with the league’s OWN weeks', () => {
-    const { container } = mount(card())
+    const { container } = mount(card(), 'schedule')
     const labels = [...container.querySelectorAll('.af-pc-label')].map((l) => l.textContent)
     expect(labels).toContain('PLAYOFF SCHEDULE · WK 15-17')
   })
@@ -223,7 +236,8 @@ describe('player card — the playoff window comes from the league, not a litera
             },
           },
         },
-      })
+      }),
+      'schedule'
     )
     const labels = [...container.querySelectorAll('.af-pc-label')].map((l) => l.textContent)
     expect(labels).toContain('PLAYOFF SCHEDULE · WK 14-16')
@@ -232,14 +246,15 @@ describe('player card — the playoff window comes from the league, not a litera
 
   /* Each playoff week keeps its own opponent — the pairing rule, again. */
   it('keeps each playoff opponent on its own week, and marks a bye', () => {
-    const { container } = mount(card())
+    const { container } = mount(card(), 'schedule')
     const p = pairs(container)
     expect(p).toContainEqual({ k: 'WK15 · vs TEN', v: '—' })
     expect(p).toContainEqual({ k: 'WK16 · @ HOU', v: '—' })
     expect(p).toContainEqual({ k: 'WK17 · BYE', v: '—' })
   })
 
-  it('states a reason when the league published no playoff start', () => {
+  /* 2026-11-26: no playoff start, no playoff section — and no sentence explaining its absence. */
+  it('hides the playoff section when the league published no playoff start', () => {
     const base = card()
     const { container } = mount(
       card({
@@ -249,6 +264,7 @@ describe('player card — the playoff window comes from the league, not a litera
         },
       })
     )
-    expect(container.textContent).toContain('no playoff start week on file')
+    expect(container.textContent).not.toContain('no playoff start week on file')
+    expect(container.textContent).not.toContain('PLAYOFF SCHEDULE')
   })
 })

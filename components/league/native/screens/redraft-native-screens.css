@@ -23,6 +23,13 @@
 .nl-workspace[data-format=redraft] .nls-card { border-radius: 14px; }
 .nl-workspace[data-format=redraft] .nls-card[data-tone=accent] { border-color: var(--rd-accent-line); background: var(--rd-surface-elev); }
 .nl-workspace[data-format=redraft] .nls-card[data-tone=accent] .nls-label { color: var(--rd-accent-text); }
+/* Titles read as words, data reads as data (2026-11-06). Screen eyebrows and card titles are sentence-case
+ * sans; mono caps stay on the data beside them — a card label's right-hand count, table headers, stat
+ * labels, chips. When every label was 11px mono caps nothing stood out, and a long one ("Sunday Night
+ * Redraft · My team") read slowest of all. */
+.nl-workspace[data-format=redraft] .nls-eyebrow,
+.nl-workspace[data-format=redraft] .nls-label { font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif); font-size: 13px; line-height: 1.3; letter-spacing: 0; text-transform: none; }
+.nl-workspace[data-format=redraft] .nls-label > span + span { font: 700 11px/1.2 var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
 .nl-workspace[data-format=redraft] .nls-seg { border-radius: 10px; }
 .nl-workspace[data-format=redraft] .nls-seg button { border-radius: 7px; }
 .nl-workspace[data-format=redraft] .nls-seg button[aria-pressed=true],
@@ -250,15 +257,26 @@
 .nl-workspace[data-format=redraft] .rdp-watch[aria-pressed=true] { border-color: var(--rd-accent-line); background: var(--rd-accent-soft); color: var(--rd-accent-text); }
 .nl-workspace[data-format=redraft] .rdp-empty { color: var(--muted); }
 
+/* Standings fit their card at every width (2026-11-05). The team column takes whatever is left and its
+ * name truncates, instead of every cell refusing to wrap and the table pushing the odds column off the
+ * card's right edge (440px of table in a 362px card on a phone, 809 in 502 on a tablet). */
+.nl-workspace[data-format=redraft] [data-rd-screen=standings] .nls-table td[data-align=left]:nth-child(2) { width: 100%; max-width: 0; }
+.nl-workspace[data-format=redraft] [data-rd-screen=standings] .nls-team strong { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: break-word; hyphens: auto; line-height: 1.25; }
+
 @media (max-width: 1199px) {
   .nls-rd-wire { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nls-rd-wire > div:nth-child(3) { border-left: 0; }
   .nls-rd-wire > div:nth-child(n+3) { border-top: 1px solid var(--line); }
+  /* Tablet and small laptop: the card sits beside two sidebars, so PA and streak go and the odds bar shortens. */
+  .nl-workspace[data-format=redraft] [data-rd-screen=standings] .nls-table [data-hide=phone] { display: none; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=standings] .nls-oddsbar > span:first-child { width: 64px; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=standings] .nls-team .nls-avatar { display: none; }
 }
 
 @media (max-width: 767px) {
   /* The redraft row rule above out-specifies native-screens.css's phone row, so the phone row is restated here. */
-  .nl-workspace[data-format=redraft] .nls-mrow { grid-template-columns: minmax(0, 1fr) 44px 44px 44px minmax(0, 1fr); gap: 6px; min-height: 64px; padding: 8px 12px; }
+  /* 40px middle columns and 4px gaps since the phone row lost its photos (2026-11-24): the names take the width. */
+  .nl-workspace[data-format=redraft] .nls-mrow { grid-template-columns: minmax(0, 1fr) 40px 40px 40px minmax(0, 1fr); gap: 4px; min-height: 64px; padding: 8px 12px; }
   .nl-workspace[data-format=redraft] .nls-mrow .nls-pts { font-size: 15px; }
   .nls-rd-bug { gap: 14px; padding: 16px; }
   .nls-rd-bug-main { gap: 8px; }
@@ -268,6 +286,12 @@
   .nls-rd-bug-vs { padding-bottom: 8px; }
   .nls-rd-bug-meter p { flex-direction: column; gap: 4px; }
   .nls-rd-wire > div { padding: 14px 16px; }
+  /* My team's three header buttons as a grid: two equal halves, then "Optimize lineup" across the full
+   * width, instead of wrapping to two odd widths and one orphan (121 + 98 then 130px at 390). DOM order
+   * is kept, so focus order matches what you see. */
+  .nl-workspace[data-format=redraft] [data-rd-screen=lineup] > .nls-head > .nls-head-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=lineup] > .nls-head > .nls-head-actions > .nls-btn { min-width: 0; padding: 0 12px; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=lineup] > .nls-head > .nls-head-actions > .nls-btn[data-variant=primary] { grid-column: 1 / -1; }
   .nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-aside { display: flex; align-items: stretch; }
   .nl-workspace[data-format=redraft] [data-rd-screen=matchup] > .nls-cols > .nls-aside { display: flex; align-items: stretch; }
   .nl-workspace[data-format=redraft] [data-rd-screen=standings] > .nls-cols > .nls-aside { display: flex; align-items: stretch; }
@@ -276,6 +300,10 @@
   .nl-workspace[data-format=redraft] [data-rd-screen=waivers] .nls-pcell [data-watch] { min-width: 36px; }
   .nls-rd-wire .nls-rd-faab { font-size: 22px; }
   .nls-rd-cutrow span { padding: 6px 14px 4px; }
+  /* Phone: odds read as the tinted percentage alone, under a one-word header ("Playoff" stays for screen readers). */
+  .nl-workspace[data-format=redraft] [data-rd-screen=standings] .nls-oddsbar > span:first-child { display: none; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=standings] .nls-oddsbar b { min-width: 0; font-size: 14px; }
+  .nl-workspace[data-format=redraft] [data-rd-screen=standings] .nls-rd-th-lead { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .nls-rd-bracket { grid-auto-columns: minmax(220px, 82%); padding: 16px 14px 18px; scroll-snap-type: x mandatory; }
   .nls-rd-round { scroll-snap-align: start; }
   .nls-rd-deadline { padding: 12px 16px; }

@@ -14,7 +14,8 @@
  */
 import { applyImmunity, immuneRosterIds, scheduledChops, type GuillotineAdvanced } from './chopSchedule'
 import { resolveTiebreak, type DraftSlotByRoster } from './GuillotineTiebreakResolver'
-import { splitChoppedFaab, type FaabOnChop } from './faabOnChop'
+import { draftSlotTiebreakLastWeek } from './eliminationPeriods'
+import { DEFAULT_FAAB_ON_CHOP_PERCENT, distributeChoppedFaab, faabTakenFromChopped, movesChoppedFaab, type FaabOnChop } from './faabOnChop'
 import { chopAnnouncementText } from './chopAnnouncement'
 import { RELEASE_OPTIONS, tiebreakLabel, type GuillotineRules } from './guillotineRules'
 import type { TiebreakStep } from './types'
@@ -28,6 +29,9 @@ export type ChopPreviewTeam = {
   previousPeriodPoints?: number
   /** Unspent FAAB; null when the league has no FAAB budget. */
   faab: number | null
+  /** The league's waiver order (lower is earlier) and payouts already had in turn: read by `waiver_order`. */
+  waiverPriority?: number | null
+  faabReceived?: number
   /** Players still on the roster — what reaches waivers if this team is chopped. */
   playerCount: number
 }
@@ -46,6 +50,8 @@ export type ChopPreviewInput = {
   tiebreakerOrder: TiebreakStep[]
   dangerMarginPoints: number
   faabOnChop: FaabOnChop
+  /** The share of a chopped team's FAAB that is passed on. Absent = all of it. */
+  faabOnChopPercent?: number
   rosterReleaseTiming: GuillotineRules['rosterReleaseTiming'] | string
   teams: ChopPreviewTeam[]
   /** Last week's scores, for immunity. */
@@ -128,7 +134,7 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
       ? { ...base, outcome: 'season_over', headline: 'One team is left — the season is decided.' }
       : { ...base, outcome: 'final_stage', headline: `${teams(alive)} left: the final stage decides the champion, with no more chops.` }
   }
-  const weekChops = scheduledChops(input.advanced, input.week, input.teamsPerChop)
+  const weekChops = scheduledChops(input.advanced, input.week, input.teamsPerChop, alive)
   if (weekChops === 0) {
     return { ...base, outcome: 'no_chop_week', headline: `Week ${input.week} is a no-chop week on your schedule. Scores still count for tiebreaks.` }
   }
@@ -148,6 +154,7 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
     teamsPerChop: chopCount,
     weekOrPeriod: input.week,
     draftSlotByRoster: input.draftSlotByRoster,
+    draftSlotLastWeek: draftSlotTiebreakLastWeek(input.eliminationStartWeek, input.periodWeeks ?? 1),
     tiebreakSeed: input.tiebreakSeed,
   })
   const chopped = new Set(choppedRosterIds)
@@ -155,25 +162,38 @@ export function buildChopPreview(input: ChopPreviewInput): ChopPreview {
   const byId = new Map(input.teams.map((t) => [t.rosterId, t]))
   const chopLine = choppedRosterIds.length ? Math.max(...choppedRosterIds.map((id) => byId.get(id)!.periodPoints)) : null
 
-  // FAAB: the same split the chop applies — survivors with a budget share the chopped teams' leftover.
+  // FAAB: the same payout the chop makes (./faabOnChop.ts `distributeChoppedFaab`, on this week's scores so far).
   let faab: ChopPreview['faab'] = null
   const faabChange = new Map<string, number>()
-  const survivorsWithFaab = input.teams.filter((t) => !chopped.has(t.rosterId) && t.faab != null).map((t) => ({ rosterId: t.rosterId, faab: t.faab as number }))
-  const pool = choppedRosterIds.reduce((sum, id) => sum + Math.max(0, byId.get(id)!.faab ?? 0), 0)
+  const survivorsWithFaab = input.teams
+    .filter((t) => !chopped.has(t.rosterId) && t.faab != null)
+    .map((t) => ({ rosterId: t.rosterId, faab: t.faab as number, weekPoints: t.periodPoints, waiverPriority: t.waiverPriority ?? null, received: t.faabReceived ?? 0 }))
+  const held = choppedRosterIds.reduce((sum, id) => sum + Math.max(0, byId.get(id)!.faab ?? 0), 0)
   if (input.teams.some((t) => t.faab != null)) {
-    if (input.faabOnChop === 'split' && survivorsWithFaab.length > 0) {
-      const split = splitChoppedFaab(pool, survivorsWithFaab)
-      for (const [id, amount] of split.shares) faabChange.set(id, amount)
-      for (const id of choppedRosterIds) if ((byId.get(id)!.faab ?? 0) > 0) faabChange.set(id, -(byId.get(id)!.faab as number))
-      faab = {
-        mode: 'split',
-        pool: split.pool,
-        note: split.pool > 0
-          ? `$${split.pool} is shared by the ${survivorsWithFaab.length} survivors.`
-          : 'The chopped team has no FAAB left to share.',
-      }
+    if (movesChoppedFaab(input.faabOnChop) && survivorsWithFaab.length > 0) {
+      const percent = input.faabOnChopPercent ?? DEFAULT_FAAB_ON_CHOP_PERCENT
+      const taken = new Map(choppedRosterIds.map((id) => [id, faabTakenFromChopped(byId.get(id)!.faab, percent)]))
+      const pool = [...taken.values()].reduce((a, b) => a + b, 0)
+      const split = distributeChoppedFaab(input.faabOnChop, pool, survivorsWithFaab)
+      for (const [id, amount] of split.shares) if (amount > 0) faabChange.set(id, amount)
+      for (const [id, amount] of taken) if (amount > 0) faabChange.set(id, -amount)
+      const paid = [...split.shares].filter(([, amount]) => amount > 0).map(([id]) => byId.get(id)!.name)
+      const who = paid.length <= 1 ? paid[0] ?? 'a survivor' : `${paid.slice(0, -1).join(', ')} and ${paid[paid.length - 1]}`
+      const left = held - split.pool
+      const rest = left > 0 ? ` $${left} leaves with the chopped team.` : ''
+      const note =
+        split.pool <= 0
+          ? 'The chopped team has no FAAB left to share.'
+          : split.applied === 'top_scorer'
+            ? `$${split.pool} goes to ${who}, the week's highest score so far.${rest}`
+            : split.applied === 'low_scorer'
+              ? `$${split.pool} goes to ${who}, the lowest score still alive.${rest}`
+              : split.applied === 'waiver_order'
+                ? `$${split.pool} goes to ${who}, next in waiver order.${rest}`
+                : `$${split.pool} is shared by the ${survivorsWithFaab.length} survivors.${rest}`
+      faab = { mode: split.applied === 'keep' ? input.faabOnChop : split.applied, pool: split.pool, note }
     } else {
-      faab = { mode: 'keep', pool, note: pool > 0 ? `$${pool} leaves the league with the chopped team.` : 'The chopped team has no FAAB left.' }
+      faab = { mode: 'keep', pool: held, note: held > 0 ? `$${held} leaves the league with the chopped team.` : 'The chopped team has no FAAB left.' }
     }
   }
 

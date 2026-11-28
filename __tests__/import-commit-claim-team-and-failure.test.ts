@@ -43,6 +43,9 @@ vi.mock('@/lib/league-import/importPersistenceService', () => ({
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   ImportedLeagueConflictError: class ImportedLeagueConflictError extends Error {},
   ImportedLeagueTombstonedError: class ImportedLeagueTombstonedError extends Error {},
+  ImportedLeagueAlreadyHereError: class ImportedLeagueAlreadyHereError extends Error {},
+  // The route names a switched-to-AllFantasy league (conversion plan, step 5); the mock must export it too.
+  ImportedLeagueConvertedError: class ImportedLeagueConvertedError extends Error {},
 }))
 
 import { POST } from '@/app/api/leagues/import/commit/route'

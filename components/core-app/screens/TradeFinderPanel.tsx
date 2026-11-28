@@ -6,6 +6,8 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 import { useCallback, useState } from 'react'
 import { readableApiError } from '@/lib/http/readableApiError'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import type { FinderTasteLock } from '@/lib/trade-finder/finderTaste'
+import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
 
 /**
  * Decision OS · Trade Finder, on the Trade Center.
@@ -33,6 +35,10 @@ type Proposal = {
   give: Side
   get: Side
   valueGapPct: number | null
+  /** THE league trade grade, from your side (2026-11-26). Values and "% apart" above are its. */
+  leagueGrade?:
+    | { graded: true; letter: string; partnerLetter: string; label: string }
+    | { graded: false; reason: string }
   /** Checkable facts only, per the service's own type comment. */
   rationale: string[]
 }
@@ -41,6 +47,8 @@ type FinderResponse = {
   supported?: boolean
   linked?: boolean
   error?: string
+  /** The free taste (2026-11-27): set when the server sent only the top proposal. */
+  lock?: FinderTasteLock | null
   finder?: {
     proposals: Proposal[]
     contextNotes: string[]
@@ -123,10 +131,21 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
                   <div className="af-tc-pair-value" style={{ fontSize: 13 }}>
                     {p.get.name} <span style={{ opacity: 0.5 }}>{copy("for")}</span> {p.give.name}
                   </div>
-                  <p className="af-tc-row-sub">
-                    {copy(money(p.get.marketValue))}{copy(" for ")}{copy(money(p.give.marketValue))}
-                    {copy(p.valueGapPct != null ? ` · ${Math.abs(Math.round(p.valueGapPct))}% apart` : '')}
-                  </p>
+                  {p.leagueGrade?.graded ? (
+                    <p className="af-tc-row-sub" data-testid="finder-panel-grade">
+                      {copy(`${p.leagueGrade.letter} for you · ${p.leagueGrade.partnerLetter} for them — ${p.leagueGrade.label}`)}
+                    </p>
+                  ) : p.leagueGrade ? (
+                    <p className="af-tc-row-sub" data-testid="finder-panel-grade-withheld">
+                      {copy(`Not graded: ${p.leagueGrade.reason}`)}
+                    </p>
+                  ) : null}
+                  {p.get.marketValue != null || p.give.marketValue != null ? (
+                    <p className="af-tc-row-sub">
+                      {copy(money(p.get.marketValue))}{copy(" for ")}{copy(money(p.give.marketValue))}
+                      {copy(p.valueGapPct != null ? ` · ${Math.abs(Math.round(p.valueGapPct))}% apart` : '')}
+                    </p>
+                  ) : null}
                   {/*
                     Rationale is checkable facts only — the service's own type says
                     so. Rendered verbatim rather than summarised, because a
@@ -141,6 +160,12 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
               ))}
             </div>
           )}
+
+          {data.lock && data.lock.lockedCount > 0 ? (
+            <div data-testid="finder-panel-taste-lock">
+              <CoreDepthLock access={data.lock.access} lang={language} />
+            </div>
+          ) : null}
 
           {data.finder.missing.length > 0 ? (
             <p className="af-tc-row-sub">{copy(" Working without: ")}{copy(data.finder.missing.join(', '))}{copy(". Suggestions are thinner than they would be with those. ")}</p>

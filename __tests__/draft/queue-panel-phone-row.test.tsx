@@ -37,8 +37,10 @@ describe('QueuePanel on a phone', () => {
   })
 
   it('puts search and sort side by side on a phone and scrolls the position pills', () => {
+    // Search, sort and positions only appear for a queue long enough to need them (2026-11-25).
+    const longQueue = Array.from({ length: 6 }, (_, i) => ({ ...queue[i % 2]!, playerName: `Example ${i}`, playerId: `p${i}` }))
     render(
-      <QueuePanel queue={queue} canDraft onRemove={() => {}} onReorder={() => {}} autoPickFromQueue={false}
+      <QueuePanel queue={longQueue} canDraft onRemove={() => {}} onReorder={() => {}} autoPickFromQueue={false}
         onAutoPickFromQueueChange={() => {}} awayMode={false} onAwayModeChange={() => {}} />,
     )
     const grid = screen.getByTestId('draft-queue-search').parentElement!
@@ -47,5 +49,25 @@ describe('QueuePanel on a phone', () => {
     expect(classes(screen.getByTestId('draft-queue-position-filter'))).toEqual(
       expect.arrayContaining(['order-last', 'col-span-2', 'flex-nowrap', 'overflow-x-auto']),
     )
+  })
+
+  /**
+   * The header's Auto-pick toggle (2026-11-26). Its tap target was a ~20px pill around a 12×12 checkbox
+   * — under the 44px touch minimum, on the phone tray's Queue tab. The LABEL is the target now, 44px
+   * tall; the visible pill inside keeps its size.
+   */
+  it('the Auto-pick toggle is a ≥44px-tall label around the unchanged pill', () => {
+    render(
+      <QueuePanel queue={queue} playerMetaById={{}} canDraft onRemove={() => {}}
+        onReorder={() => {}} autoPickFromQueue={false} onAutoPickFromQueueChange={() => {}} awayMode={false}
+        onAwayModeChange={() => {}} presentationVariant="redraft_snake" />,
+    )
+    const input = screen.getByTestId('draft-queue-autopick-toggle-header')
+    const label = input.closest('label')!
+    expect(label.getAttribute('data-testid')).toBe('draft-queue-autopick-toggle-target')
+    expect(classes(label)).toContain('min-h-[44px]')
+    const pill = input.parentElement!
+    expect(pill.tagName).toBe('SPAN')
+    expect(classes(pill)).toEqual(expect.arrayContaining(['rounded-full', 'py-0.5', 'text-[11px]']))
   })
 })

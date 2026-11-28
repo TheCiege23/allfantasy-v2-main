@@ -73,6 +73,17 @@ html[data-mode='light'] .af-mt-dyn-prospect{background:#6d28d9;color:#fff}
   .af-mt-dyn-key{gap:6px 10px}
 }
 
+/* Stacked layout (the page is under 900px, measured on itself), dynasty only: the starters come right after the
+ * header and the lock banner. The shared order — Sleeper check, lineup decision (742px), matchup, then the roster —
+ * put the first player at y~1945 on a 390px phone; the user chose starters first for dynasty. All three are ordered
+ * because the shared header(-2)/lock(-1) orders apply only at <=500px: a bare order:-1 here would jump the starters
+ * ABOVE the header between 501 and 899px. __tests__/dynasty/dynastyMyTeamStartersFirst.test.ts */
+@container af-mt (max-width: 899px){
+  .af-core.af-shell[data-dynasty-background=true] .af-mt > .af-mt-head{order:-3}
+  .af-core.af-shell[data-dynasty-background=true] .af-mt > .af-mt-lock{order:-2}
+  .af-core.af-shell[data-dynasty-background=true] .af-mt #af-mt-starters{order:-1}
+}
+
 /* Above the phone layout, dynasty only: the shared grid keeps a 104px status track from when the chip read
  * "QUESTIONABLE"; it is now a fixed 34px chip of at most three characters. With the right-hand column open the
  * roster is 542px wide at 1440, so those 70 idle px left the name 89px: 11 of 15 names wrapped and the age chip
@@ -82,3 +93,9 @@ html[data-mode='light'] .af-mt-dyn-prospect{background:#6d28d9;color:#fff}
 @media (min-width:861px){
   .af-core.af-shell[data-dynasty-background=true] .af-mt-row{grid-template-columns:46px minmax(0,1fr) 44px auto}
 }
+
+/* 2026-11-24: on My Team the chips lead the game line ("26 · KC vs DET · Sun 1:00p") rather than
+ * sitting beside the name, so a phone row is two lines, not three. Inside the closed abbreviations
+ * row, the age key needs a little room above it. */
+.af-mt-player-meta > .af-mt-dyn{margin:0 6px 0 0}
+.af-mt-key > .af-mt-dyn-key{margin:10px 0 0}

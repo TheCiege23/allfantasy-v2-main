@@ -171,6 +171,11 @@ describe('Dead routes deleted in cleanup must stay gone', () => {
      */
     'app/api/ai/saved-recommendations/route.ts',
     'app/api/ai/saved-recommendations/[id]/route.ts',
+    /*
+     * Anonymous OpenAI with no caller (2026-11-27, gating audit D2): censused by static, relative,
+     * dynamic and require imports and by every fetch path / app proxy before it was deleted.
+     */
+    'app/api/trade-partner/route.ts',
   ]
   for (const route of DELETED) {
     it(`${route} does not exist`, () => {

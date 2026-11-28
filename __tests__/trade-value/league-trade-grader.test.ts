@@ -8,6 +8,8 @@ const h = vi.hoisted(() => ({
   chart: [] as Array<{ player: { name: string; position: string }; value: number }>,
   needCalls: 0,
   pricePickCalls: 0,
+  /** Every NFL market-chart player price — how a test proves a deal never reached the chart. */
+  pricePlayerCalls: 0,
   leagueType: 'dynasty',
   needFactor: 1,
   rosterNeedCalls: [] as unknown[],
@@ -15,8 +17,28 @@ const h = vi.hoisted(() => ({
   guillotineLoads: [] as unknown[],
   zombieLoads: [] as unknown[],
   dynastySettings: false,
+  overlayCalls: [] as Array<Record<string, unknown>>,
+  overlayResult: undefined as unknown,
 }))
 
+// The learned market (owner's call, 2026-11-22): every grade on today's chart loads it. A spy records each load;
+// a test may set what it returns, otherwise the real loader runs (against the stubbed, empty prisma).
+vi.mock('@/lib/trade-value-console/tradeMarketOverlay', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/trade-value-console/tradeMarketOverlay')>()
+  return {
+    ...real,
+    loadTradeMarketOverlay: async (prisma: unknown, args: Record<string, unknown>) => {
+      h.overlayCalls.push(args)
+      return h.overlayResult !== undefined ? h.overlayResult : real.loadTradeMarketOverlay(prisma as never, args as never)
+    },
+  }
+})
+
+vi.mock('@/lib/trade-value-console/afLeaguePlayerPrice', () => ({
+  loadAfNflMarketQuote: async ({ name }: { name: string }) => h.prices.has(name)
+    ? { marketValue: h.prices.get(name), position: 'WR', generatedAt: new Date('2026-09-28T14:27:28.097Z') }
+    : null,
+}))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 vi.mock('@/lib/trade-value-console/league-loader', () => ({
@@ -97,6 +119,7 @@ vi.mock('@/lib/hybrid-valuation', () => {
   return {
     compositeScore: (v: { marketValue: number }) => v.marketValue,
     pricePlayer: async (name: string) => {
+      h.pricePlayerCalls += 1
       const mv = h.prices.get(name)
       return mv == null ? { ...asset(name, 0), unpriced: true, source: 'unknown' } : asset(name, mv)
     },
@@ -109,6 +132,7 @@ vi.mock('@/lib/hybrid-valuation', () => {
 })
 
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { NCAAF_KEEPER_REASON } from '@/lib/decision-os/trade/conceptGradingRegistry'
 import { oneGradeForCompletedTrade } from '@/lib/decision-os/trade/completedTradeGrade'
 import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
@@ -129,12 +153,16 @@ beforeEach(() => {
   ]
   h.needCalls = 0
   h.pricePickCalls = 0
+  h.pricePlayerCalls = 0
   h.needFactor = 1
   h.rosterNeedCalls = []
   h.sport = 'NFL'
   h.guillotineLoads = []
   h.zombieLoads = []
   h.dynastySettings = false
+  h.overlayCalls = []
+  h.overlayResult = undefined
+  delete process.env.TRADE_MARKET_IN_GRADES
 })
 
 const graded = <T extends { graded: boolean }>(v: T) => {
@@ -220,11 +248,58 @@ describe('createLeagueTradeGrader', () => {
     )
     expect([v.letter, v.partnerLetter]).toEqual(['A', 'F'])
     expect([v.giveValue, v.getValue]).toEqual([4000, 6000])
-    expect(v.basis).toBe('Dynasty · 1QB · 12 teams · PPR')
+    // The learned market's lineup sentence, exactly as the console shows it: no factor table is stored here.
+    expect(v.basis).toBe('Dynasty · 1QB · 12 teams · PPR Lineup adjustments are not measured yet.')
     expect(v.lines.map((l) => [l.side, l.name, l.leagueValue])).toEqual([
       ['give', 'Drake London', 4000],
       ['get', 'Puka Nacua', 6000],
     ])
+  })
+
+  it('the learned market reaches every grade on today\'s chart: loaded on the league\'s book and lineup, shown per line', async () => {
+    h.overlayResult = {
+      tradeMarket: { give: [{ kind: 'tradeMarket', factor: 1.1, reason: 'AllFantasy trade market +10%: what managers actually paid' }], get: [null] },
+      lineup: { give: [null], get: [null] },
+      lineupNote: null,
+    }
+    const g = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const v = graded(await g.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: true }))
+    expect(h.overlayCalls).toHaveLength(1)
+    expect(h.overlayCalls[0]).toMatchObject({ effectiveSport: 'NFL', chartIsDynasty: true, isSuperFlex: false, lineup: expect.objectContaining({ qbClass: expect.anything() }) })
+    // Drake London moves by what managers paid; Puka Nacua, unmeasured, stays on the chart.
+    expect(v.lines.map((l) => [l.name, l.leagueValue])).toEqual([['Drake London', 4400], ['Puka Nacua', 6000]])
+    // Said beside the letter, never a silent rewrite.
+    expect(v.basis).toBe('Dynasty · 1QB · 12 teams · PPR · 1 player adjusted by the AllFantasy trade market (completed trades)')
+  })
+
+  it('TRADE_MARKET_IN_GRADES=off grades on the bare chart and reads no market', async () => {
+    process.env.TRADE_MARKET_IN_GRADES = 'off'
+    const g = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const v = graded(await g.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: true }))
+    expect(h.overlayCalls).toHaveLength(0)
+    expect(v.basis).toBe('Dynasty · 1QB · 12 teams · PPR')
+  })
+
+  it('never on a past day: a dated grade (atMarket) and a marketless grader read no market', async () => {
+    const deal = { give: [{ kind: 'player' as const, name: 'Drake London' }], get: [{ kind: 'player' as const, name: 'Puka Nacua' }], viewerSide: false }
+    const today = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    expect(today.atMarket).toBeDefined()
+    const dated = today.atMarket!({
+      capturedOn: '2026-09-01',
+      book: { format: 'DYNASTY', qbFormat: 'ONE_QB' },
+      players: [
+        { player: { name: 'Drake London', position: 'WR' }, value: 3500 },
+        { player: { name: 'Puka Nacua', position: 'WR' }, value: 5500 },
+      ] as never,
+    })
+    await dated.grade(deal)
+    expect(h.overlayCalls).toHaveLength(0)
+    const marketless = (await createLeagueTradeGrader({ leagueId: 'L1', marketless: true }))!
+    await marketless.grade(deal)
+    expect(h.overlayCalls).toHaveLength(0)
+    // The control: the same grader on today's chart does read it.
+    await today.grade(deal)
+    expect(h.overlayCalls).toHaveLength(1)
   })
 
   it('every line records WHICH evidence priced it and WHEN — through the real grader (2026-09-28)', async () => {
@@ -233,8 +308,8 @@ describe('createLeagueTradeGrader', () => {
       await g.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: true }),
     )
     expect(v.lines.map((l) => [l.name, l.valueSource, l.valueAsOf])).toEqual([
-      ['Drake London', 'fantasycalc', '2026-09-28T14:27:28.097Z'],
-      ['Puka Nacua', 'fantasycalc', '2026-09-28T14:27:28.097Z'],
+      ['Drake London', 'af_completed_trades', '2026-09-28T14:27:28.097Z'],
+      ['Puka Nacua', 'af_completed_trades', '2026-09-28T14:27:28.097Z'],
     ])
   })
 
@@ -381,6 +456,39 @@ describe('P0 package and team-direction regression through the shared league gra
     expect(h.guillotineLoads).toEqual([expect.objectContaining({ id: 'L1', sport: 'NBA' })])
   })
 
+  /*
+   * Concept registry fixes (owner-approved, 2026-11-26). Each was a row the registry author flagged:
+   * the deal reached a sub-grader whose basis does not fit the concept.
+   */
+  it('an NCAAF keeper deal is withheld with its reason and never touches the NFL chart', async () => {
+    h.sport = 'NCAAF'
+    h.leagueType = 'keeper'
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const view = await grader.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: false })
+    expect(view).toMatchObject({ graded: false, reason: NCAAF_KEEPER_REASON })
+    expect(h.pricePlayerCalls).toBe(0)
+  })
+
+  it.each(['best_ball', 'guillotine', 'pirate', 'devy', 'c2c'])('an NCAAF %s deal is graded by the college grader, never the NFL chart', async (type) => {
+    h.sport = 'NCAAF'
+    h.leagueType = type
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const view = await grader.grade({ give: [{ kind: 'player', name: 'Drake London' }], get: [{ kind: 'player', name: 'Puka Nacua' }], viewerSide: false })
+    // The college base reads the (stubbed, empty) database and refuses — the college grader's own answer.
+    expect(view).toMatchObject({ graded: false, reason: expect.stringMatching(/college values could not be loaded/) })
+    expect(h.pricePlayerCalls).toBe(0)
+  })
+
+  it.each(['NCAAB', 'SOCCER'])('a %s Guilly league is graded on the guillotine survival basis, not whole-season points', async (sport) => {
+    h.leagueType = 'guillotine'
+    h.sport = sport
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const view = graded(await grader.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'faab', amount: 50 }], viewerSide: false }))
+    // Survival-weighted: (20 − 12) a week × W(0) = 1 expected week = 8 — not a season of points.
+    expect(view.lines.map((l) => [l.leagueValue, l.valueSource])).toEqual([[8, 'guillotine_points'], [10, 'guillotine_faab']])
+    expect(h.guillotineLoads).toEqual([expect.objectContaining({ id: 'L1', sport })])
+  })
+
   it('uses the Zombie free-agent replacement basis and withholds unpriced item deals', async () => {
     h.leagueType = 'zombie'
     const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
@@ -409,10 +517,21 @@ describe('P0 package and team-direction regression through the shared league gra
     expect(h.zombieLoads).toHaveLength(0)
   })
 
+  it('withholds a league type with no registered grading rule instead of pricing it on the default chart (Phase 5)', async () => {
+    h.leagueType = 'mystery_format'
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' }))!
+    const view = await grader.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'player', name: 'Drake London' }], viewerSide: false })
+    expect(view).toMatchObject({ graded: false, reason: expect.stringContaining('“mystery_format”') })
+    expect(view.leagueType).toMatchObject({ type: 'mystery_format' })
+    // Nothing was priced: the market overlay and the chart are never reached.
+    expect(h.overlayCalls).toHaveLength(0)
+    expect(h.needCalls).toBe(0)
+  })
+
   it('leaves every other league on the market chart', async () => {
     h.leagueType = 'redraft'
     const grader = await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u1' })
     const view = graded(await grader!.grade({ give: [{ kind: 'player', name: 'Puka Nacua' }], get: [{ kind: 'player', name: 'Drake London' }], viewerSide: false }))
-    expect(view.lines.every((l) => l.valueSource === 'fantasycalc')).toBe(true)
+    expect(view.lines.every((l) => l.valueSource === 'af_completed_trades')).toBe(true)
   })
 })

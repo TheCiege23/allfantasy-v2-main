@@ -67,7 +67,7 @@ export async function runLineupLockSnapshots(opts?: { limit?: number; deadline?:
       const week = leagueWeekFromSettings(league.settings)
       const season = league.season
       const reason =
-        resolveWriteAuthority(league.platform) !== 'NATIVE'
+        resolveWriteAuthority(league) !== 'NATIVE'
           ? 'not_native'
           : league.bestBallMode || automaticLineup(league.leagueType, league.settings)
             ? 'automatic_lineups'

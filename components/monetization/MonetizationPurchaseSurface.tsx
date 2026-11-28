@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { HIGHLIGHT_TO_PLAN_FAMILY } from "@/lib/monetization/entitlements";
 import { purchaseReturnPath, upgradePathForPlan } from "@/lib/monetization/upgradeDestination";
 import { usePostPurchaseSync } from "@/hooks/usePostPurchaseSync";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget";
 import { resolveCheckoutUrl } from "@/lib/monetization/checkout-client";
 import { trialAppliesTo, useTrialOffer, type TrialOffer } from "@/lib/monetization/useTrialOffer";
@@ -32,6 +33,7 @@ import CouponInput from "@/components/promotions/CouponInput";
 import { trackCouponApplied } from "@/lib/promotions/couponAnalytics";
 import { useLaunchOffer } from "@/components/launch/LaunchOfferContext";
 import { LaunchOfferStrip } from "@/components/launch/LaunchOfferStrip";
+import { HolidaySaleStrip, useHolidaySale } from "@/components/launch/HolidaySaleStrip";
 
 type PlanFamily =
   | "af_pro"
@@ -151,6 +153,19 @@ function TrialTerms({ offer, sku, price, per }: { offer: TrialOffer; sku: string
   );
 }
 
+/** In place of a buy button: the viewer already pays for this SKU, or holds it inside AF Supreme. */
+function HeldPlanNotice({ sku, included }: { sku: string; included: boolean }) {
+  return (
+    <p
+      className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-3 py-2.5 text-xs font-semibold text-emerald-100"
+      data-testid={included ? `pricing-included-${sku}` : `pricing-current-${sku}`}
+    >
+      <Check className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
+      {included ? "Included in your AF Supreme" : "Current plan"}
+    </p>
+  );
+}
+
 export default function MonetizationPurchaseSurface({
   pagePath,
   title,
@@ -180,6 +195,17 @@ export default function MonetizationPurchaseSurface({
   const [appliedCouponPct, setAppliedCouponPct] = useState<number>(0);
   const didTrackPageVisit = useRef(false);
 
+  /*
+   * What the viewer already holds (any store). These pages used to sell a plan to the person already
+   * paying for it: an App Store AF Pro purchase reloaded /pro still reading "Subscribe in app". The exact
+   * SKU held now reads "Current plan"; AF Pro / AF Commissioner inside AF Supreme read "Included". The
+   * hook refetches on the post-purchase sync event, focus and visibility, so it catches up on its own.
+   */
+  const ents = useEntitlements();
+  const isHeldSku = (sku: string) => ents.heldSkus.includes(sku);
+  const includedInSupreme = (family: PlanFamily) =>
+    ents.hasSupreme && (family === "af_pro" || family === "af_commissioner");
+
   const postPurchaseSync = usePostPurchaseSync({
     successMessage: "Purchase complete. We refreshed your access and token balance.",
   });
@@ -193,6 +219,7 @@ export default function MonetizationPurchaseSurface({
    * Stripe takes one discount per checkout, so typing a code replaces the founding discount.
    */
   const launchOffer = useLaunchOffer();
+  const holidaySale = useHolidaySale();
   const foundingMember = launchOffer?.founding?.audience === "member";
 
   const searchParams = useSearchParams();
@@ -425,8 +452,8 @@ export default function MonetizationPurchaseSurface({
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
-                    {/* ⚠ NOT "Pro + Commissioner + AF Legacy": SUPREME_INCLUDED_PLAN_IDS is [pro, commissioner]. */}
-                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> AF Pro and AF Commissioner in one subscription, for less than buying both. AF Legacy is sold separately.</span>
+                    {/* SUPREME_INCLUDED_PLAN_IDS is [pro, commissioner, war_room] — AF Legacy again since 2026-11-27. */}
+                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> AF Pro, AF Commissioner and AF Legacy in one subscription, for less than buying them separately.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
@@ -554,7 +581,8 @@ export default function MonetizationPurchaseSurface({
           <AFSupremeBundleSpotlight className="mb-4" />
         ) : null}
 
-        {!nativeApp && <LaunchOfferStrip offer={launchOffer} surface="upgrade" className="mb-4" />}
+        {/* Black Friday → Cyber Monday: its banner replaces the strip (its 50% outranks founding pricing). */}
+        {!nativeApp && (holidaySale ? <HolidaySaleStrip surface="pricing" className="mb-4" /> : <LaunchOfferStrip offer={launchOffer} surface="upgrade" className="mb-4" />)}
 
         <section className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="monetization-plan-explanations">
           <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300/80">What each plan includes</h2>
@@ -720,6 +748,9 @@ export default function MonetizationPurchaseSurface({
                               Includes {monthly.tokenAmount.toLocaleString()} tokens each month
                             </p>
                           ) : null}
+                          {includedInSupreme(family) || isHeldSku(monthly.sku) ? (
+                            <HeldPlanNotice sku={monthly.sku} included={!isHeldSku(monthly.sku)} />
+                          ) : (<>
                           <button
                             type="button"
                             onClick={() => startCheckout("subscription", monthly.sku)}
@@ -736,6 +767,7 @@ export default function MonetizationPurchaseSurface({
                                   : "Continue with Stripe — Monthly"}
                           </button>
                           {!nativeApp ? <TrialTerms offer={trialOffer} sku={monthly.sku} price={formatUsd(monthly.amountUsd)} per="a month" /> : null}
+                          </>)}
                           {!nativeApp && !appliedCouponCode && !foundingMember && (
                             <p className="mt-1.5 text-center text-[11px] text-white/30">
                               Use <span className="font-bold text-amber-300/60">WassupFred</span> for 20% off first purchase
@@ -761,6 +793,9 @@ export default function MonetizationPurchaseSurface({
                               Includes {yearly.tokenAmount.toLocaleString()} tokens each year
                             </p>
                           ) : null}
+                          {includedInSupreme(family) || isHeldSku(yearly.sku) ? (
+                            <HeldPlanNotice sku={yearly.sku} included={!isHeldSku(yearly.sku)} />
+                          ) : (<>
                           <button
                             type="button"
                             onClick={() => startCheckout("subscription", yearly.sku)}
@@ -775,6 +810,7 @@ export default function MonetizationPurchaseSurface({
                                 : "Continue with Stripe — Yearly"}
                           </button>
                           {!nativeApp ? <TrialTerms offer={trialOffer} sku={yearly.sku} price={formatUsd(yearly.amountUsd)} per="a year" /> : null}
+                          </>)}
                           {!nativeApp && (yearly.stripePriceConfigured ? (
                             <StripePaymentHint className="mt-2" />
                           ) : (

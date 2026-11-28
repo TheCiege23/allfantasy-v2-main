@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 
 const m = vi.hoisted(() => {
-  const state = { settings: {} as Record<string, unknown>, platform: 'allfantasy', ownerHasPlan: true }
+  const state = { settings: {} as Record<string, unknown>, platform: 'allfantasy', ownerHasPlan: true, owner: { email: 'someone@example.com', username: 'someone' } as { email: string; username: string } | null }
   const tx = {
     $queryRaw: vi.fn(async () => []),
     league: {
@@ -23,6 +23,7 @@ const m = vi.hoisted(() => {
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
       league: { findUnique: vi.fn(async () => ({ platform: state.platform, settings: state.settings, userId: 'league-owner' })) },
       roster: { findFirst: vi.fn() },
+      appUser: { findUnique: vi.fn(async () => state.owner) },
     },
     elevated: vi.fn(async () => true),
     log: vi.fn(async () => ({ id: 'a' })),
@@ -45,6 +46,11 @@ vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({ getNormalizedPlaye
 import {
   AUTOPILOT_OFF_ACTION,
   AUTOPILOT_ON_ACTION,
+  applyChimmyAutopilot,
+  setChimmyTradeMode,
+  setChimmyPersonality,
+  PERSONALITY_ACTION,
+  TRADES_MODE_ACTION,
   isOwnerOnAutopilot,
   DRAFT_AS_ME_ACTION,
   setChimmyAutopilot,
@@ -60,11 +66,112 @@ beforeEach(() => {
   m.state.settings = { other: 1 }
   m.state.platform = 'allfantasy'
   m.state.ownerHasPlan = true
+  m.state.owner = { email: 'someone@example.com', username: 'someone' }
+  m.prisma.appUser.findUnique.mockImplementation(async () => m.state.owner)
   m.elevated.mockResolvedValue(true)
   m.prisma.roster.findFirst.mockResolvedValue({ id: 'r1' })
 })
 
+describe('how many teams Chimmy may run', () => {
+  const hand = async (n: number) => {
+    const results = []
+    for (let i = 1; i <= n; i++) {
+      m.prisma.roster.findFirst.mockResolvedValueOnce({ id: `r${i}` })
+      results.push(await setChimmyAutopilot('L', 'commish', `r${i}`, undefined))
+    }
+    return results
+  }
+
+  it('an ordinary league stops at 4', async () => {
+    const results = await hand(5)
+    expect(results.slice(0, 4).every((r) => r.ok)).toBe(true)
+    expect(results[4]).toMatchObject({ ok: false, status: 409, error: expect.stringContaining('up to 4 teams') })
+    expect(autopilotRosterIds(readManagedLineups(m.state.settings))).toHaveLength(4)
+  })
+
+  it('a league a site admin owns can be filled: all 12 seats of a survivor test league', async () => {
+    m.state.owner = { email: 'founder@example.com', username: 'TheCiege26' }
+    const results = await hand(12)
+    expect(results.every((r) => r.ok)).toBe(true)
+    expect(autopilotRosterIds(readManagedLineups(m.state.settings))).toHaveLength(12)
+  })
+
+  it('and Chimmy plays all of them there, whatever the plan says', async () => {
+    const { autopilotEntitled } = await import('@/lib/inactive-manager/inactiveManagerService')
+    m.state.ownerHasPlan = false
+    expect(await autopilotEntitled('league-owner')).toBe(false)
+    m.state.owner = { email: 'founder@example.com', username: 'TheCiege26' }
+    expect(await autopilotEntitled('league-owner')).toBe(true)
+  })
+
+  it('a site admin who is only the one clicking, in someone else\'s league, gets the ordinary limit', async () => {
+    // The owner lookup is by the LEAGUE owner; the acting user is never consulted.
+    const results = await hand(5)
+    expect(results[4]).toMatchObject({ ok: false, status: 409 })
+    expect(m.prisma.appUser.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'league-owner' } }))
+  })
+
+  it('an account that cannot be read falls back to the ordinary limit', async () => {
+    m.prisma.appUser.findUnique.mockRejectedValue(new Error('db down'))
+    const results = await hand(5)
+    expect(results[4]).toMatchObject({ ok: false, status: 409 })
+  })
+})
+
+describe('setChimmyPersonality', () => {
+  it('the commissioner chooses who Chimmy is for a team; it replaces the drafted one and survives a style change', async () => {
+    await applyChimmyAutopilot('L', 'commish', 'r1', undefined, { personality: 'ZERO_RB' })
+    expect(await setChimmyPersonality('L', 'commish', 'r1', 'FLOOR_SAFE')).toEqual({ ok: true, personality: 'FLOOR_SAFE' })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'dynasty_owner', personality: 'FLOOR_SAFE' } })
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: PERSONALITY_ACTION, metadata: { rosterId: 'r1', personality: 'FLOOR_SAFE' } }))
+    await setChimmyAutopilot('L', 'commish', 'r1', 'rebuild')
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'rebuild', personality: 'FLOOR_SAFE' } })
+  })
+
+  it('refuses a non-commissioner, an unknown style, and a team Chimmy is not running', async () => {
+    await setChimmyAutopilot('L', 'commish', 'r1', undefined)
+    expect(await setChimmyPersonality('L', 'commish', 'r1', 'TANK')).toMatchObject({ ok: false, status: 400 })
+    expect(await setChimmyPersonality('L', 'commish', 'r9', 'BALANCED')).toMatchObject({ ok: false, status: 409 })
+    m.elevated.mockResolvedValueOnce(false)
+    expect(await setChimmyPersonality('L', 'member', 'r1', 'BALANCED')).toMatchObject({ ok: false, status: 403 })
+  })
+})
+
+describe('setChimmyTradeMode', () => {
+  it('a Chimmy team answers offers by default; the commissioner can switch that off and it is kept through a style change', async () => {
+    await setChimmyAutopilot('L', 'commish', 'r1', undefined)
+    expect(readManagedLineups(m.state.settings).r1.autopilot).not.toHaveProperty('trades')
+    expect(await setChimmyTradeMode('L', 'commish', 'r1', 'off')).toEqual({ ok: true, trades: 'off' })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'dynasty_owner', trades: 'off' } })
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ actionType: TRADES_MODE_ACTION, metadata: { rosterId: 'r1', trades: 'off' } }))
+    await setChimmyAutopilot('L', 'commish', 'r1', 'win_now')
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'win_now', trades: 'off' } })
+  })
+
+  it('refuses a non-commissioner, an unknown mode, and a team Chimmy is not running', async () => {
+    await setChimmyAutopilot('L', 'commish', 'r1', undefined)
+    expect(await setChimmyTradeMode('L', 'commish', 'r1', 'sometimes')).toMatchObject({ ok: false, status: 400 })
+    expect(await setChimmyTradeMode('L', 'commish', 'r9', 'off')).toMatchObject({ ok: false, status: 409 })
+    m.elevated.mockResolvedValueOnce(false)
+    expect(await setChimmyTradeMode('L', 'member', 'r1', 'off')).toMatchObject({ ok: false, status: 403 })
+  })
+})
+
 describe('setChimmyAutopilot', () => {
+  it('keeps the personality the team drafts with, through a later style change and a second handover', async () => {
+    expect(await applyChimmyAutopilot('L', 'commish', 'r1', undefined, { personality: 'ZERO_RB' })).toMatchObject({ ok: true })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'dynasty_owner', personality: 'ZERO_RB' } })
+    await setChimmyAutopilot('L', 'commish', 'r1', 'win_now')
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'win_now', personality: 'ZERO_RB' } })
+    await applyChimmyAutopilot('L', 'commish', 'r1', 'rebuild', { personality: 'RB_HEAVY' })
+    expect(entry('r1')).toMatchObject({ autopilot: { style: 'rebuild', personality: 'ZERO_RB' } })
+  })
+
+  it('saves no personality when none is known or it is not one', async () => {
+    await applyChimmyAutopilot('L', 'commish', 'r1', undefined, { personality: 'TANK' })
+    expect(entry('r1')!.autopilot).not.toHaveProperty('personality')
+  })
+
   it('defaults to playing like a dynasty owner, turns lineup management on too, and logs it', async () => {
     expect(await setChimmyAutopilot('L', 'commish', 'r1', undefined)).toMatchObject({ ok: true, style: 'dynasty_owner' })
     expect(entry('r1')).toMatchObject({ byUserId: 'commish', autopilot: { style: 'dynasty_owner', byUserId: 'commish' } })

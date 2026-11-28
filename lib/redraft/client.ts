@@ -1,4 +1,5 @@
 import type { CanonicalScheduleRuntimeState } from '@/lib/schedule-runtime/canonicalScheduleRuntime'
+import type { FinderTasteLock } from '@/lib/trade-finder/finderTaste'
 import type { NflRedraftPlayoffRuntimeState } from '@/lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime'
 import type { NflRedraftLiveScoringRuntimeState } from '@/lib/scoring-runtime/canonicalNflRedraftScoringRuntime'
 import type { NflRedraftTradeRuntimeState } from '@/lib/trade-runtime/canonicalNflRedraftTradeRuntime'
@@ -112,19 +113,6 @@ export type RedraftPlayoffRuntimeClient = NflRedraftPlayoffRuntimeState
 export type RedraftLiveScoringClient = NflRedraftLiveScoringRuntimeState
 export type RedraftTradeRuntimeClient = NflRedraftTradeRuntimeState
 export type RedraftWaiverRuntimeClient = NflRedraftWaiverRuntimeState
-
-export type RedraftWaiverClaimClient = {
-  id: string
-  addPlayerId: string
-  addPlayerName: string
-  dropPlayerName: string | null
-  bidAmount: number | null
-  priority: number | null
-  status: string
-  submittedAt: string
-  processedAt: string | null
-  denialReason: string | null
-}
 
 export type RedraftTradeProposal = {
   id: string
@@ -277,23 +265,26 @@ export type TradePackageSuggestion = {
   packageId: string
   giveAssets: TradePackageAsset[]
   receiveAssets: TradePackageAsset[]
-  myTotalValue: number
-  partnerTotalValue: number
-  valueDelta: number
+  /** THE league trade grade's values (2026-11-26); null when the grade was withheld. */
+  myTotalValue: number | null
+  partnerTotalValue: number | null
+  valueDelta: number | null
+  /** Banded on THE grade; `low confidence` when it was withheld (reason on `leagueGrade`). */
   fairnessBand: string
+  leagueGrade?: { graded: true; letter: string; partnerLetter: string; label: string; giveValue: number; getValue: number } | { graded: false; reason: string }
   confidence: number
   reasons: string[]
   warningFlags: string[]
   canStartProposal: boolean
 }
 
-export async function fetchTradeDiscovery(params: { leagueId: string; rosterId: string }): Promise<{ partners: TradePartnerMatch[]; summary: { myNeeds: string[]; mySurpluses: string[]; partnerCount: number; sport: string }; warnings: string[] }> {
+export async function fetchTradeDiscovery(params: { leagueId: string; rosterId: string }): Promise<{ partners: TradePartnerMatch[]; summary: { myNeeds: string[]; mySurpluses: string[]; partnerCount: number; sport: string }; warnings: string[]; lock?: FinderTasteLock | null }> {
   const qs = new URLSearchParams({ leagueId: params.leagueId, rosterId: params.rosterId })
   const res = await fetch(`/api/redraft/trades/discovery?${qs.toString()}`, { credentials: 'include' })
   return parseJson(res)
 }
 
-export async function fetchTradePackages(payload: { leagueId: string; myRosterId: string; partnerRosterId: string; targetPlayerId?: string | null; outgoingPlayerId?: string | null }): Promise<{ suggestedPackages: TradePackageSuggestion[]; warnings: string[]; canStartProposal: boolean }> {
+export async function fetchTradePackages(payload: { leagueId: string; myRosterId: string; partnerRosterId: string; targetPlayerId?: string | null; outgoingPlayerId?: string | null }): Promise<{ suggestedPackages: TradePackageSuggestion[]; warnings: string[]; canStartProposal: boolean; lock?: FinderTasteLock | null }> {
   const res = await fetch('/api/redraft/trades/package-finder', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   return parseJson(res)
 }
@@ -543,18 +534,6 @@ export async function fetchRedraftRoster(rosterId: string, week: number): Promis
   })
   const body = await parseJson<{ roster?: RedraftRosterClient }>(res)
   return body.roster ?? null
-}
-
-export async function fetchRedraftWaiverClaims(
-  seasonId: string,
-  rosterId: string,
-): Promise<RedraftWaiverClaimClient[]> {
-  const qs = new URLSearchParams({ seasonId, rosterId })
-  const res = await fetch(`/api/redraft/waivers?${qs.toString()}`, {
-    credentials: 'include',
-  })
-  const body = await parseJson<{ claims?: RedraftWaiverClaimClient[] }>(res)
-  return body.claims ?? []
 }
 
 export async function fetchRedraftWaiverRuntime(params: {

@@ -51,6 +51,8 @@ export function resolveBestBallRosterPolicy(league: {
   guillotineMode?: boolean | null
   bbWaiversEnabled?: boolean | null
   bbFaEnabled?: boolean | null
+  /** `League.settings`: an imported league made official on AllFantasy keeps its own policy (lib/league/switching). */
+  settings: unknown
 }): BestBallRosterPolicy | null {
   // Read through the one best ball read model (lib/bestball/bestBallLeagueState.ts), which applies
   // exactly the rules above: Classic shape only, never a guillotine row, native only.
@@ -76,7 +78,7 @@ export async function loadWaiverPhaseContext(leagueId: string): Promise<WaiverPh
         select: {
           lifecycleState: true, status: true, leagueType: true, isDynasty: true,
           platform: true, bestBallMode: true, leagueVariant: true, guillotineMode: true,
-          bbWaiversEnabled: true, bbFaEnabled: true,
+          bbWaiversEnabled: true, bbFaEnabled: true, settings: true,
         },
       }),
       prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverEngineConfig: true } }),
@@ -155,4 +157,14 @@ export async function loadWaiverRunPhaseGate(leagueId: string): Promise<(rosterI
     const policy = resolveWaiverPhasePolicy({ ...ctx, eliminated: eliminated ? eliminated.has(rosterId) : null })
     return policy.claimsAllowed ? null : policy.reason
   }
+}
+
+/**
+ * Rebuild priority (AF Commissioner waiver extra, lib/waivers/waiverExtras.ts): once the playoffs begin,
+ * the teams out of the title bracket. Empty before the playoffs, or when the bracket cannot be read.
+ */
+export async function loadRebuildPriorityRosterIds(leagueId: string): Promise<Set<string>> {
+  const ctx = await loadWaiverPhaseContext(leagueId)
+  if (ctx.phase !== 'playoffs' || !ctx.seasonId) return new Set()
+  return loadTitleBracketEliminatedRosterIds(leagueId, ctx.seasonId).catch(() => new Set<string>())
 }

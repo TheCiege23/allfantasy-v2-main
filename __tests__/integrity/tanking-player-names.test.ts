@@ -23,7 +23,13 @@ const PLAYERS: Player[] = [
 ]
 type Clause = { id?: { in: string[] }; sleeperId?: { in: string[] }; externalId?: { in: string[] } }
 
-const h = vi.hoisted(() => ({ platform: 'manual' as string, playerReads: 0 }))
+const h = vi.hoisted(() => ({
+  platform: 'manual' as string,
+  playerReads: 0,
+  starterId: '9228',
+  /** The league's roster rows, for a pasted Yahoo league's coverage read (declaredAvailability.ts). */
+  rosters: [] as Array<{ playerData: unknown }>,
+}))
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/ai/aiSpendGuard', () => ({ isAiSpendEnabled: () => false }))
@@ -42,7 +48,7 @@ vi.mock('@/lib/prisma', () => ({
           lineupSnapshots: [
             {
               rosterId: 'r1',
-              starters: [{ playerId: '9228', injuryStatus: 'OUT', projection: 0, position: 'QB', slot: 'QB' }],
+              starters: [{ playerId: h.starterId, injuryStatus: 'OUT', projection: 0, position: 'QB', slot: 'QB' }],
               // A healthy QB behind him: the only kind of bench player whose presence makes an OUT starter a choice.
               bench: [{ playerId: 'b1', projection: 14, position: 'QB' }],
             },
@@ -51,6 +57,7 @@ vi.mock('@/lib/prisma', () => ({
       ]),
     },
     league: { findFirst: vi.fn(async () => ({ playoffStartWeek: 15, sport: 'NFL', platform: h.platform })) },
+    roster: { findMany: vi.fn(async () => h.rosters) },
     sportsPlayer: {
       findMany: vi.fn(async ({ where }: { where: { OR: Clause[] } }) => {
         h.playerReads++
@@ -79,6 +86,8 @@ const startedName = async () =>
 beforeEach(() => {
   h.platform = 'manual'
   h.playerReads = 0
+  h.starterId = '9228'
+  h.rosters = []
 })
 
 describe('tanking flag — the started player’s name', () => {
@@ -89,6 +98,37 @@ describe('tanking flag — the started player’s name', () => {
   it('leaves a foreign league’s id unresolved rather than naming a stranger', async () => {
     h.platform = 'fleaflicker'
     expect(await startedName()).toBe('9228')
+    expect(h.playerReads).toBe(0)
+  })
+})
+
+/*
+ * A PASTED Yahoo league: resolved players stored `sleeper:<id>`, the unmatched as `yahoo-paste:`. Above
+ * the 80% coverage bar a declared starter is named as that player; anything else stays the bare id,
+ * exactly as below the bar. An accusation never names a guess.
+ */
+describe('tanking flag — a pasted Yahoo league', () => {
+  const declared = (n: number) => Array.from({ length: n }, (_, i) => `sleeper:${100 + i}`)
+
+  it('above the bar: a declared starter is named', async () => {
+    h.platform = 'yahoo'
+    h.starterId = 'sleeper:9228'
+    h.rosters = [{ playerData: { players: ['sleeper:9228', ...declared(8), 'yahoo-paste:x|WR|KC'] } }]
+    expect(await startedName()).toBe('Bryce Young')
+  })
+
+  it('🛑 an unmatched pasted starter is never named as anyone', async () => {
+    h.platform = 'yahoo'
+    h.starterId = 'yahoo-paste:bryce young|QB|CAR'
+    h.rosters = [{ playerData: { players: ['sleeper:9228', ...declared(8), 'yahoo-paste:bryce young|QB|CAR'] } }]
+    expect(await startedName()).toBe('yahoo-paste:bryce young|QB|CAR')
+  })
+
+  it('below the bar: nothing is looked up, the id stays as stored', async () => {
+    h.platform = 'yahoo'
+    h.starterId = 'sleeper:9228'
+    h.rosters = [{ playerData: { players: ['sleeper:9228', 'yahoo-paste:a|WR|KC', 'yahoo-paste:b|RB|KC'] } }]
+    expect(await startedName()).toBe('sleeper:9228')
     expect(h.playerReads).toBe(0)
   })
 })

@@ -8,6 +8,7 @@ import { GraphInsightDrawer } from "./GraphInsightDrawer";
 import { RivalryEngineList } from "./RivalryEngineList";
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
+import { StoryAiLockNotice, type StoryAiLock } from "@/components/league-story-ai/StoryAiLockNotice";
 
 export type GraphPanelView = "summary" | "graph" | "timeline" | "managers" | "rivalries";
 
@@ -45,6 +46,8 @@ export default function LeagueIntelligenceGraphPanel({
   const [sportFilter, setSportFilter] = useState<string>(ALL_SPORTS);
   const [rivalryExplainId, setRivalryExplainId] = useState<string | null>(null);
   const [rivalryExplainNarrative, setRivalryExplainNarrative] = useState<string | null>(null);
+  // Why Chimmy did not write the rivalry explainer (plan or daily cap); the fact-built one is shown either way.
+  const [rivalryExplainLock, setRivalryExplainLock] = useState<StoryAiLock>(null);
   const [rivalryTimelineId, setRivalryTimelineId] = useState<string | null>(null);
   const [rivalryTimelineData, setRivalryTimelineData] = useState<Array<{ eventType: string; description: string | null; createdAt: string }> | null>(null);
   const [selectedManagerEntityId, setSelectedManagerEntityId] = useState<string | null>(null);
@@ -244,6 +247,7 @@ export default function LeagueIntelligenceGraphPanel({
                 season={season}
                 onExplain={async (rivalryId) => {
                   setRivalryExplainId(rivalryId);
+                  setRivalryExplainLock(null);
                   setRivalryTimelineId(null);
                   setRivalryTimelineData(null);
                   try {
@@ -254,6 +258,7 @@ export default function LeagueIntelligenceGraphPanel({
                     });
                     const data = await res.json().catch(() => ({}));
                     setRivalryExplainNarrative(data.narrative ?? null);
+                    setRivalryExplainLock(data.aiLocked ?? null);
                   } catch {
                     setRivalryExplainNarrative("Could not load explanation.");
                   }
@@ -275,6 +280,7 @@ export default function LeagueIntelligenceGraphPanel({
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-sm text-white/90">
                   <div className="text-xs text-cyan-300/80 mb-1">Explain this rivalry</div>
                   <p>{rivalryExplainNarrative}</p>
+                  <StoryAiLockNotice lock={rivalryExplainLock} featureName="Chimmy rivalry write-ups" className="mt-2" />
                 </div>
               )}
               {rivalryTimelineData != null && rivalryTimelineId && (

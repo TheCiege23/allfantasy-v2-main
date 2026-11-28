@@ -113,7 +113,7 @@ const LEAGUE_SELECT = {
 } as const
 
 function sourceOf(league: LeagueRow): LineupSource | null {
-  if (resolveWriteAuthority(league.platform) === 'NATIVE') return 'native'
+  if (resolveWriteAuthority(league) === 'NATIVE') return 'native'
   const platform = String(league.platform ?? '').toLowerCase()
   if (platform === 'sleeper' && league.platformLeagueId) return 'sleeper'
   if (platform === 'espn') return 'espn'

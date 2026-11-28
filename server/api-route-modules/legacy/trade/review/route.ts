@@ -1,12 +1,16 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import {
-  buildLegacyMeta,
-  buildTradeReviewData,
-  errorResponse,
-  okResponse,
-  type TradeAsset,
-} from '@/lib/legacy-tool/tab-api'
+import { buildLegacyMeta, errorResponse, okResponse } from '@/lib/legacy-tool/tab-api'
+import { createLegacyPackageGrader, legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
+import { buildOneGradeTradeReview, type ReviewAsset } from '@/lib/legacy/legacyTradeReview'
+
+/*
+ * 🛑 THE REVIEW'S VERDICT IS THE ONE TRADE GRADE (2026-11-26) — see `lib/legacy/legacyTradeReview.ts`
+ * for the flat-65-per-player "fairness" it replaced. The grade is taken in the league the body names,
+ * for the SIGNED-IN user: `createLegacyPackageGrader` proves the league is theirs, so the body's
+ * `userId` (which anyone can type) never reaches the grader. With no session or a league that is not
+ * theirs, the grade is withheld with the reason.
+ */
 
 const TradeAssetSchema = z.object({
   assetType: z.enum(['player', 'pick']),
@@ -67,18 +71,24 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const data = await buildTradeReviewData({
+    const gradeOf = await createLegacyPackageGrader({
+      suppliedLeagueId: payload.leagueId,
+      userId: await legacySessionUserId(),
+      viewerSide: false,
+    })
+    const data = await buildOneGradeTradeReview({
       tradeId: payload.tradeId,
       trade: payload.trade
         ? {
             fromTeamId: payload.trade.fromTeamId,
             toTeamId: payload.trade.toTeamId,
-            send: payload.trade.send as TradeAsset[],
-            receive: payload.trade.receive as TradeAsset[],
+            send: payload.trade.send as ReviewAsset[],
+            receive: payload.trade.receive as ReviewAsset[],
           }
         : undefined,
       includeCounterSuggestions: payload.includeCounterSuggestions,
       includeRenegotiationAdvice: payload.includeRenegotiationAdvice,
+      gradeOf,
     })
 
     return NextResponse.json(
@@ -86,11 +96,13 @@ export async function POST(req: NextRequest) {
         'trade_review',
         data,
         buildLegacyMeta({
-          confidence: data.review.confidence,
-          usedLiveNewsOverlay: true,
+          // The one grade carries no confidence for a typed deal: 0, and named as missing, not invented.
+          confidence: 0,
+          usedLiveNewsOverlay: false,
           usedSimulation: false,
           needsRefreshMinutes: 2,
           requestId,
+          missingFields: ['confidence', ...(data.review.grade.graded ? [] : ['grade'])],
         }),
       ),
     )

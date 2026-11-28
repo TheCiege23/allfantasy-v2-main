@@ -24,7 +24,7 @@ vi.mock('@/lib/guillotine/GuillotineLeagueConfig', () => ({
 }))
 vi.mock('@/lib/guillotine/GuillotineWeeklySummaryService', () => ({ buildWeeklySummary: vi.fn() }))
 vi.mock('@/lib/share/guillotineEscape', () => ({ getGuillotineEscapesForUser: vi.fn() }))
-vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurrentWeek: vi.fn(), findViewerRosterId: vi.fn() }))
+vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurrentWeek: vi.fn(), resolveGuillotineLiveWeek: vi.fn(), resolveGuillotineCalendarWeek: vi.fn(async () => null), findViewerRosterId: vi.fn() }))
 // A native league: the route refuses an imported one (lib/guillotine/importedLeagueGuard.ts).
 const leaguePlatform = vi.hoisted(() => ({ value: 'allfantasy' as string | null }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: async () => ({ platform: leaguePlatform.value }) } } }))

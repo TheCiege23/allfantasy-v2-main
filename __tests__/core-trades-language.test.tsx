@@ -69,3 +69,18 @@ describe('Trades Spanish view', () => {
       .toContain('en la fecha del traspaso (5 sep)')
   })
 })
+
+describe('second person mid-sentence (2026-11-23)', () => {
+  it('reads a lowercase "you" as second person in Spanish, exactly as it read "Tú"', () => {
+    // The English now says "…and you got him" / "— you got 7,200…" instead of a capital "You" mid-sentence.
+    expect(tradeUiCopy('The most valuable asset was Bijan Robinson, and you got him.', 'es')).toBe(
+      'El activo más valioso fue Bijan Robinson y lo recibiste tú.',
+    )
+    expect(tradeUiCopy('Gridiron Vultures got the better end — you got 7,200 in league value for 9,000.', 'es'))
+      .toContain('tú recibiste 7,200 por 9,000')
+    // A third party is unchanged.
+    expect(tradeUiCopy('The most valuable asset was Bijan Robinson, and Rivales got him.', 'es')).toBe(
+      'El activo más valioso fue Bijan Robinson y lo recibió Rivales.',
+    )
+  })
+})

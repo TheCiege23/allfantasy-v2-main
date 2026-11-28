@@ -13,12 +13,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  today: [] as unknown[],
+  today: [] as ReturnType<typeof fantasyCalcPlayerFromSnapshot>[],
   captures: new Map<string, unknown[]>(),
   kickerOnTodaysBoard: true,
   table: [] as Array<{ leagueId: string; sleeperUsername: string; snapshotType: string; contextKey: string | null; payloadJson: unknown; createdAt: Date }>,
 }))
 
+vi.mock('@/lib/trade-value-console/afLeaguePlayerPrice', () => ({
+  loadAfNflMarketQuote: async ({ sleeperId }: { sleeperId: string }) => {
+    const row = h.today.find(entry => entry.player.sleeperId === sleeperId)
+    return row ? { marketValue: row.value, position: row.player.position, generatedAt: new Date('2026-10-03T09:00:00.000Z') } : null
+  },
+}))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -290,6 +296,7 @@ describe('graded within a day of the trade — the league’s own live chart', (
     const now = hoursAfter(23)
     const live = await gradeAtTradeTime(g, DEAL, at(LIVE_TRADE_AT), {}, now)
     expect(live).toMatchObject({ pricedAsOf: now.toISOString(), grade: { letter: 'A', giveValue: 5000, getValue: 7000 } })
+    expect(live!.grade.lines.map(line => line.valueSource)).toEqual(['af_completed_trades', 'af_completed_trades', 'fantasycalc_pick'])
     expect(live!.grade.lines.every((l) => l.valueAsOf === '2026-10-03T09:00:00.000Z')).toBe(true)
   })
 
@@ -383,6 +390,21 @@ describe('the frozen original (v2)', () => {
     expect(toFreeze).toEqual([expect.objectContaining({ v: 2, basis: 'trade_date', pricedAsOf: '2026-09-24' })])
     expect(await saveFrozenCompletedGrades(league, toFreeze)).toBe(true)
     expect(h.table[0]).toMatchObject({ snapshotType: V2 })
+  })
+
+  it('/core trades card (2026-11-22): the preloaded path shows exactly what the per-trade path shows, and hands back today’s grade', async () => {
+    // The card now preloads originals per league instead of reading one per trade. Nothing on screen may move.
+    const single = await oneGradeForCompletedTrade(`L-${++n}`, ledgerTrade(), 2026, { now: NOW })
+    const freezes: Array<{ row: FrozenCompletedGrade; current: unknown }> = []
+    const batched = await oneGradeForCompletedTrade(`L-${++n}`, ledgerTrade(), 2026, {
+      now: NOW, frozen: new Map(), onFreeze: (row, current) => freezes.push({ row, current }),
+    })
+    expect(batched).toEqual(single)
+    expect(freezes).toHaveLength(1)
+    // Today's grade, so a card whose save fails shows it — never an original the table did not receive.
+    if (!single.graded || !single.current) throw new Error('expected a graded trade with today’s line')
+    expect(freezes[0]!.current).toMatchObject({ graded: true, ...single.current })
+    expect(freezes[0]!.current).not.toHaveProperty('frozenBasis')
   })
 
   it('/core Trades rows (`gradeArchivedTradeRows`): the transaction id dates the trade', async () => {

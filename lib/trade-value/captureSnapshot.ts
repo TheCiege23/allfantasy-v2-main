@@ -5,6 +5,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import type { TradeIdSpace } from '@/lib/decision-os/trade/enrichmentPort'
 import { buildTradeValueSnapshot, type EnrichedTradeAsset } from './snapshot'
 import { buildTeamProfile } from './teamProfile'
 import type { TeamProfile, TradeValueContext, TradeValueSnapshot } from './types'
@@ -137,6 +139,8 @@ export async function computeRedraftTradeValueSnapshot(
    * 'redraft' for "unknown" is what created this bug the first time.
    */
   let formatLeagueType: string | null = null
+  /** The id space the asset ids are in. Only a known native non-NFL league changes it. */
+  let idSpace: TradeIdSpace = 'sleeper'
   let formatAliasTags: string[] | null = null
   let formatIsDynasty: boolean | null = null
   let formatKeeperCount: number | null = null
@@ -145,10 +149,12 @@ export async function computeRedraftTradeValueSnapshot(
       where: { id: input.leagueId },
       select: {
         starters: true, settings: true, rosterSize: true, irSlots: true, taxiSlots: true,
-        leagueType: true, isDynasty: true, keeperCount: true,
+        leagueType: true, isDynasty: true, keeperCount: true, platform: true, sport: true,
       },
     })
     if (league) {
+      // A native league outside the NFL keys its rosters by Rolling Insights number (see `TradeIdSpace`).
+      if (isNativePlatform(league.platform) && String(league.sport ?? input.sport).toUpperCase() !== 'NFL') idSpace = 'rolling_insights'
       formatLeagueType = resolveLeagueConcept(league.settings, league.leagueType)
       formatAliasTags = readConceptAliasTags(league.settings)
       formatIsDynasty = leagueVariantFor(league.settings, league.leagueType).dynasty ||
@@ -209,6 +215,7 @@ export async function computeRedraftTradeValueSnapshot(
          * read off the league's real `roster_positions`, which cannot be misspelled the way a
          * scoring string can.
          */
+        idSpace,
         valueFormat: {
           format: 'REDRAFT',
           qbFormat: (scoring?.shape?.superflexSlots ?? 0) > 0 ? 'SUPERFLEX' : 'ONE_QB',
@@ -237,7 +244,8 @@ export async function computeRedraftTradeValueSnapshot(
    * used to be present.
    */
   const adpByPlayer = new Map<string, number>()
-  if (playerIds.length) {
+  // `adp_data` is Sleeper-keyed: a Rolling Insights number would find somebody else's ADP.
+  if (playerIds.length && idSpace === 'sleeper') {
     const rows = await prisma.adpDataRecord.findMany({
       where: { playerId: { in: playerIds }, sport: input.sport },
       orderBy: { createdAt: 'desc' },
@@ -257,7 +265,11 @@ export async function computeRedraftTradeValueSnapshot(
       toRosterId: a.toRosterId,
       playerId: a.playerId ?? null,
       playerName: a.playerName ?? null,
-      position: typeof md.position === 'string' ? md.position : null,
+      position: typeof md.position === 'string'
+        ? md.position
+        // Outside the Sleeper space the caller rarely knows the position; the resolver read it from the
+        // rows that speak the space. The Sleeper path is left exactly as it was.
+        : idSpace === 'rolling_insights' && a.playerId ? enrich.positionByPlayerId?.[a.playerId] ?? null : null,
       team: typeof md.team === 'string' ? md.team : null,
       pickSeason: a.pickSeason ?? null,
       pickRound: a.pickRound ?? null,

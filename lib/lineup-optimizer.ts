@@ -139,23 +139,6 @@ export function computeLineupDelta(
   }
 }
 
-export function computeLineupFairness(
-  deltaYou: LineupDelta,
-  deltaThem: LineupDelta,
-  scale: number = 800,
-  scale2: number = 400
-): number {
-  const impactDiff = deltaYou.impactDelta - deltaThem.impactDelta
-  const vorpDiff = deltaYou.vorpDelta - deltaThem.vorpDelta
-
-  const fairnessScore =
-    50 +
-    35 * Math.tanh(impactDiff / scale) +
-    15 * Math.tanh(vorpDiff / scale2)
-
-  return Math.round(Math.max(0, Math.min(100, fairnessScore)))
-}
-
 export function computeValueFairness(
   youGetComposite: number,
   youGiveComposite: number

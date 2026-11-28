@@ -49,18 +49,26 @@ export async function GET(
   const rights = await prisma.devyRights.findMany({
     where,
     include: {
-      roster: { select: { id: true, platformUserId: true } },
+      roster: { select: { id: true, platformUserId: true, managerUserId: true } },
     },
   })
 
-  const devyPlayerIds = [...new Set(rights.map((r) => r.devyPlayerId))]
+  // Who may promote what (2026-11-23): the POST already refuses anyone but the rights holder or the commissioner, so a
+  // manager is shown only their own team's players, each marked promotable. The panel used to list every team's
+  // eligible players with a Promote button that could only fail.
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
+  const coOwned = await acceptedCoOwnerRosterId(leagueId, userId)
+  const isMine = (r: (typeof rights)[number]) => isRosterManagedBy(r.roster, userId) || coOwned === r.rosterId
+  const visible = commissioner ? rights : rights.filter(isMine)
+
+  const devyPlayerIds = [...new Set(visible.map((r) => r.devyPlayerId))]
   const devyPlayers = await prisma.devyPlayer.findMany({
     where: { id: { in: devyPlayerIds } },
     select: { id: true, name: true, position: true, school: true, draftEligibleYear: true },
   })
   const devyMap = new Map(devyPlayers.map((p) => [p.id, p]))
 
-  const list = rights.map((r) => {
+  const list = visible.map((r) => {
     const devy = devyMap.get(r.devyPlayerId)
     return {
       rightsId: r.id,
@@ -72,6 +80,8 @@ export async function GET(
         : null,
       promotedProPlayerId: r.promotedProPlayerId,
       seasonYear: r.seasonYear,
+      mine: isMine(r),
+      canPromote: commissioner || isMine(r),
     }
   })
 

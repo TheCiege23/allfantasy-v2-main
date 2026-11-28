@@ -52,7 +52,7 @@ export async function runWeeklyAutomationRecaps(opts?: { now?: Date; limit?: num
     result.leagues += 1
     try {
       const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, name: true, platform: true, settings: true } })
-      if (!league?.userId || resolveWriteAuthority(league.platform) !== 'NATIVE') continue
+      if (!league?.userId || resolveWriteAuthority(league) !== 'NATIVE') continue
       const sourceKey = `automation-recap:${leagueId}:${key}`
       const sent = await prisma.platformNotification.findUnique({ where: { sourceKey: `${sourceKey}:${league.userId}` }, select: { id: true } })
       if (sent) {

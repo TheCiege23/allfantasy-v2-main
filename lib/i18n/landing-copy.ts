@@ -77,6 +77,8 @@ type LandingCopy = {
     demo: string
     pricing: string
     forCommissioners: string
+    /** The community board, /clubhouse. A name, so it stays "Clubhouse" in every language. */
+    clubhouse: string
     signIn: string
     /** Primary CTA when the reader is already signed in. */
     goToDashboard: string
@@ -100,8 +102,8 @@ type LandingCopy = {
     ctaPrimary: string
     /** Opens the public, anonymized demo league (/demo). No account needed. */
     ctaDemo: string
-    /** "Already have an account?" — followed by the Sign in link. */
-    haveAccount: string
+    /** The App Store / Google Play badges under the hero buttons. Store names stay in English. */
+    stores: { label: string; appStoreAlt: string; playAlt: string }
     cardTitle: string
     cardWeek: string
     /** Precedes the example uplift figure, e.g. "Two fixes worth " + "+13.0". */
@@ -206,6 +208,8 @@ type LandingCopy = {
     privacyChoices: string
     builtByLabel: string
     compliance: string
+    /** Credit lines Apple and Google require wherever their store badges appear (once per site). */
+    storeTrademarks: string
   }
 }
 
@@ -226,6 +230,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       demo: 'Demo',
       pricing: 'Pricing',
       forCommissioners: 'For commissioners',
+      clubhouse: 'Clubhouse',
       signIn: 'Sign in',
       goToDashboard: 'Go to dashboard',
       partners: 'Partners',
@@ -243,7 +248,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       sub: `Bring in your leagues from ${platforms}, or create a new one. Free for every league.`,
       ctaPrimary: 'Sign up free',
       ctaDemo: 'Try the demo',
-      haveAccount: 'Already have an account?',
+      stores: { label: 'Get the app', appStoreAlt: 'Download on the App Store', playAlt: 'Get it on Google Play' },
       cardTitle: 'Your leagues',
       cardWeek: 'Week 12 · example',
       cardFootBefore: 'Two fixes worth ',
@@ -407,6 +412,8 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       builtByLabel: 'Built by',
       compliance:
         'Not available in WA. Paid leagues restricted in HI, ID, MT, NV. 100% fantasy sports — no gambling, no DFS.',
+      storeTrademarks:
+        'Apple and the Apple logo are trademarks of Apple Inc., registered in the U.S. and other countries. App Store is a service mark of Apple Inc. Google Play and the Google Play logo are trademarks of Google LLC.',
     },
   }
 }
@@ -443,6 +450,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       demo: 'Demo',
       pricing: 'Precios',
       forCommissioners: 'Para comisionados',
+      clubhouse: 'Clubhouse',
       signIn: 'Iniciar sesión',
       goToDashboard: 'Ir al panel',
       partners: 'Socios',
@@ -459,7 +467,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       sub: `Trae tus ligas de ${platforms}, o crea una nueva. Gratis para todas tus ligas.`,
       ctaPrimary: 'Regístrate gratis',
       ctaDemo: 'Prueba la demo',
-      haveAccount: '¿Ya tienes cuenta?',
+      stores: { label: 'Descarga la app', appStoreAlt: 'Descárgalo en el App Store', playAlt: 'Descargar en Google Play' },
       cardTitle: 'Tus ligas',
       cardWeek: 'Semana 12 · ejemplo',
       cardFootBefore: 'Dos ajustes que valen ',
@@ -622,6 +630,8 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       builtByLabel: 'Hecho por',
       compliance:
         'No disponible en WA. Ligas de pago restringidas en HI, ID, MT y NV. 100% fantasy de temporada — sin apuestas, sin DFS.',
+      storeTrademarks:
+        'Apple y el logotipo de Apple son marcas comerciales de Apple Inc., registradas en EE. UU. y otros países. App Store es una marca de servicio de Apple Inc. Google Play y el logotipo de Google Play son marcas comerciales de Google LLC.',
     },
   }
 }

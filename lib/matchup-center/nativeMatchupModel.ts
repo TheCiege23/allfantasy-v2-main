@@ -103,11 +103,48 @@ export type NativeBoardGame = {
   kind: NativeWeekGame['kind']
   label: string | null
   status: NativeGameStatus
-  home: { rosterId: string; teamName: string; totalPoints: number | null }
+  home: NativeBoardSide
   /** Null on a bye. */
-  away: { rosterId: string; teamName: string; totalPoints: number | null } | null
+  away: NativeBoardSide | null
   /** True when the viewer plays in it. */
   mine: boolean
+  /** The home side's chance to win from the two AF projections, 0–1. Null when either is incomplete. */
+  homeWinProbability?: number | null
+}
+
+export type NativeBoardSide = {
+  rosterId: string
+  teamName: string
+  totalPoints: number | null
+  /** The team's AF projection for its starters this week, in this league's scoring. Null when unknown. */
+  projectedPoints?: number | null
+}
+
+/** One team's AF projection: the sum over starters, and whether every starter had one. */
+export type NativeTeamProjection = { total: number; complete: boolean }
+
+/**
+ * Adds each team's projection, and each game's win chance, to the board. A side with no projection keeps
+ * `null`; the win chance is drawn only when both sides are fully projected — a partial total would
+ * understate a team and turn a guess into a confident percentage.
+ */
+export function withBoardProjections(
+  board: readonly NativeBoardGame[],
+  projections: ReadonlyMap<string, NativeTeamProjection>,
+): NativeBoardGame[] {
+  const sideWith = (s: NativeBoardSide): NativeBoardSide => {
+    const p = projections.get(s.rosterId)
+    return { ...s, projectedPoints: p ? Math.round(p.total * 10) / 10 : null }
+  }
+  return board.map((g) => {
+    const hp = projections.get(g.home.rosterId)
+    const ap = g.away ? projections.get(g.away.rosterId) : undefined
+    let homeWinProbability: number | null = null
+    if (hp?.complete && ap?.complete && hp.total >= 0 && ap.total >= 0 && hp.total + ap.total > 0) {
+      homeWinProbability = Math.max(0.05, Math.min(0.95, hp.total / (hp.total + ap.total)))
+    }
+    return { ...g, home: sideWith(g.home), away: g.away ? sideWith(g.away) : null, homeWinProbability }
+  })
 }
 
 /**
@@ -158,7 +195,7 @@ export type NativeMatchupExtras = {
 }
 
 type PlayerLike = { playerId: string; playerName: string; position: string; team: string | null; slotType: string }
-type ScoreRow = { playerId: string; points: number; isStarter: boolean }
+type ScoreRow = { playerId: string; points: number; isStarter: boolean; isFinalized?: boolean }
 
 export type NativeStarter = { playerId: string; name: string; position: string; team: string | null; points: number | null }
 
@@ -176,9 +213,17 @@ const positionRank = (position: string) => {
 /**
  * The lineup to draw for one team's week.
  *
- * When the week has been scored, the lineup is the players the scoring counted as starters, with the
- * points it counted — not who sits in the lineup today, which a manager may have changed since. When
- * it has not, it is the team's current starters with no points (a dash, never 0.0).
+ * FINISHED week (every score row finalized): the players the scoring counted as starters, with the
+ * points it counted — not who sits in the lineup today, which a manager may have changed since.
+ *
+ * LIVE or UNSCORED week: every current starter, each with the points counted so far, or a dash
+ * (never 0.0) while his game has produced nothing. Plus any player the scoring already counted as a
+ * starter who has since left the lineup: those points are in the team's total.
+ *
+ * 🛑 THE BUG THIS CLOSES (owner report, 2026-11-22, Zombie Chimmy Test week 11): the first branch ran
+ * as soon as ANY starter had a score row, so mid-week the matchup listed only the starters whose games
+ * had started — four of eight on one side, three on the other, a TE slot shown "Empty" — while the
+ * roster page showed all eight. Every sport's hosted matchup reads this.
  */
 export function buildNativeStarters(args: {
   /** The team's players, dropped ones included, so a scored player who has since left still has a name. */
@@ -190,8 +235,10 @@ export function buildNativeStarters(args: {
 }): NativeStarter[] {
   const byId = new Map(args.players.map((p) => [p.playerId, p]))
   const rows: NativeStarter[] = []
-  if (args.scores && args.scores.some((s) => s.isStarter)) {
-    for (const s of args.scores) {
+  const counted = (args.scores ?? []).filter((s) => s.isStarter)
+  const finished = counted.length > 0 && (args.scores ?? []).every((s) => s.isFinalized === true)
+  if (finished) {
+    for (const s of counted) {
       if (!s.isStarter) continue
       const p = byId.get(s.playerId)
       rows.push({
@@ -203,10 +250,29 @@ export function buildNativeStarters(args: {
       })
     }
   } else {
+    const pointsOf = new Map(counted.map((s) => [s.playerId, s.points]))
     for (const p of args.players) {
       if (!args.currentStarterIds.has(p.playerId)) continue
       if (rows.some((r) => r.playerId === p.playerId)) continue
-      rows.push({ playerId: p.playerId, name: p.playerName, position: (p.position ?? '').toUpperCase() || 'FLEX', team: p.team ?? null, points: null })
+      rows.push({
+        playerId: p.playerId,
+        name: p.playerName,
+        position: (p.position ?? '').toUpperCase() || 'FLEX',
+        team: p.team ?? null,
+        points: pointsOf.get(p.playerId) ?? null,
+      })
+    }
+    // Counted as a starter, then moved out of the lineup: his points stay in the total, so he stays here.
+    for (const s of counted) {
+      if (rows.some((r) => r.playerId === s.playerId)) continue
+      const p = byId.get(s.playerId)
+      rows.push({
+        playerId: s.playerId,
+        name: p?.playerName ?? 'Player',
+        position: (p?.position ?? '').toUpperCase() || 'FLEX',
+        team: p?.team ?? null,
+        points: s.points,
+      })
     }
   }
   return rows

@@ -87,3 +87,25 @@ describe('applying the missed-deadline rule at lock', () => {
     expect(db.prisma.keeperRecord.create).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('missed-deadline keepers stack undrafted pickups like a manager’s save', () => {
+  it('two pickups (labelled "not drafted") are kept at the last round and the round before', async () => {
+    db.state.eligibility = [
+      { rosterId: 'silent', playerId: 'p1', isEligible: true, projectedCostRound: 15, projectedCost: 'Round 15 (not drafted)' },
+      { rosterId: 'silent', playerId: 'p3', isEligible: true, projectedCostRound: 15, projectedCost: 'Round 15 (not drafted)' },
+    ]
+    const out = await applyMissedDeadlineRule('L', 'S')
+    expect(out.applied[0].keepers.map((k) => k.playerId)).toEqual(['p1', 'p3'])
+    expect(db.prisma.keeperRecord.create.mock.calls.map((c) => [c[0].data.playerId, c[0].data.costRound])).toEqual([['p1', 15], ['p3', 14]])
+  })
+
+  it('keeper_waiver_stack: false leaves both at the last round, so the refusing rule keeps one', async () => {
+    db.state.league.settings = { keeper_waiver_stack: false }
+    db.state.eligibility = [
+      { rosterId: 'silent', playerId: 'p1', isEligible: true, projectedCostRound: 15, projectedCost: 'Round 15 (not drafted)' },
+      { rosterId: 'silent', playerId: 'p3', isEligible: true, projectedCostRound: 15, projectedCost: 'Round 15 (not drafted)' },
+    ]
+    await applyMissedDeadlineRule('L', 'S')
+    expect(db.prisma.keeperRecord.create.mock.calls.map((c) => [c[0].data.playerId, c[0].data.costRound])).toEqual([['p1', 15]])
+  })
+})

@@ -228,8 +228,10 @@ export async function updateClaim(
     excludeClaimId: claimId,
   })
 
-  const updated = await (prisma as any).waiverClaim.update({
-    where: { id: claimId },
+  // 🛑 Guarded on `pending` IN THE WRITE (2026-11-26): an edit that lands after a run settled the claim
+  // used to rewrite a processed claim. Zero rows means the run won; the caller sees "not found".
+  const written = await (prisma as any).waiverClaim.updateMany({
+    where: { id: claimId, leagueId, rosterId, status: "pending" },
     data: {
       ...(input.addPlayerId != null && { addPlayerId: input.addPlayerId }),
       ...(input.dropPlayerId !== undefined && { dropPlayerId: input.dropPlayerId }),
@@ -237,7 +239,8 @@ export async function updateClaim(
       ...(input.priorityOrder !== undefined && { priorityOrder: input.priorityOrder }),
     },
   })
-  return updated
+  if (!written || written.count !== 1) return null
+  return (prisma as any).waiverClaim.findUnique({ where: { id: claimId } })
 }
 
 export async function cancelClaim(claimId: string, leagueId: string, rosterId: string) {
@@ -249,11 +252,13 @@ export async function cancelClaim(claimId: string, leagueId: string, rosterId: s
   if (leagueLock?.processingLocked) {
     throw new Error("Waiver adds and edits are locked until the commissioner unlocks processing.")
   }
-  await (prisma as any).waiverClaim.update({
-    where: { id: claimId },
+  // 🛑 Guarded on `pending` IN THE WRITE: a cancel racing the run used to turn an awarded claim into
+  // "cancelled" while the player stayed on the roster. Zero rows means the run settled it first.
+  const written = await (prisma as any).waiverClaim.updateMany({
+    where: { id: claimId, leagueId, rosterId, status: "pending" },
     data: { status: "cancelled" },
   })
-  return true
+  return Boolean(written && written.count === 1)
 }
 
 export async function getProcessedClaimsAndTransactions(leagueId: string, limit: number) {

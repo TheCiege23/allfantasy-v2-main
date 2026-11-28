@@ -7,12 +7,18 @@ import type { UserLeague } from '@/app/dashboard/types'
 import type { MatchupCenterPayload, MatchupPlayerSlot } from '@/lib/matchup-center/types'
 import { maxWeekForSport } from '@/components/matchup-center/MatchupTabContainer'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
+import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlayerName, type ScoreboardRow } from '@/lib/league/native/nativeScreenModels'
-import type { NativeBoardGame } from '@/lib/matchup-center/nativeMatchupModel'
+import type { NativeBoardGame, NativeBoardSide } from '@/lib/matchup-center/nativeMatchupModel'
+import { formatWinProbabilityPercents } from '@/lib/matchup-center/winProbability'
+import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
+import { GuillotineMatchupScreen } from './NativeGuillotineScreens'
 import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
-import { Card, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip } from './NativeScreenParts'
+import { MessageManagerButton, useLeagueManagerContacts } from './MessageManagerButton'
+import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, PlayerNameButton, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
 import { slotGameState } from '@/lib/league-media/redraftScreens'
+import { buildSurvivorMatchupView, type SurvivorMatchupInput } from '@/lib/survivor/survivorMatchupModel'
 import { RedraftScoreBug, RedraftScreen, useRedraftScreen, useRedraftScreenContext } from './RedraftScreenParts'
 
 /**
@@ -46,21 +52,26 @@ function sideLine(rec: MatchupCenterPayload['left']['record'], remaining: number
 function slotGameLine(p: MatchupPlayerSlot): string {
   const label = p.gameLabel || (p.gameStatus === 'final' ? 'Final' : '—')
   if (String(p.opponent ?? '').toUpperCase() === 'BYE') return 'Bye week'
-  if (!p.opponent) return label
+  // A daily sport: a club with no game in the week says so, and one with several says how many.
+  if (!p.opponent) return p.outlook?.gamesThisWeek === 0 ? 'No games this week' : label
+  const games = p.outlook?.gamesThisWeek != null && p.outlook.gamesThisWeek > 1 ? ` · ${p.outlook.gamesThisWeek} games` : ''
   const vs = `${p.outlook?.homeAway === 'away' ? '@' : 'vs'} ${p.opponent}`
-  if (p.gameStatus !== 'upcoming') return `${vs} · ${label}`
+  if (p.gameStatus !== 'upcoming') return `${vs} · ${label}${games}`
   const k = p.outlook?.kickoffTimeIso ? new Date(p.outlook.kickoffTimeIso) : null
-  return k && Number.isFinite(k.getTime()) ? `${vs} · ${k.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : vs
+  return k && Number.isFinite(k.getTime()) ? `${vs} · ${k.toLocaleString(undefined, { weekday: 'short', month: games ? 'numeric' : undefined, day: games ? 'numeric' : undefined, hour: 'numeric', minute: '2-digit' })}${games}` : `${vs}${games}`
 }
 
-function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'right' }) {
+function SlotCell({ p, side, sport }: { p: MatchupPlayerSlot | null; side: 'left' | 'right'; sport: string | null | undefined }) {
+  const openCard = useNativePlayerCard(sport)
   // Redraft: a live / final dot from the feed's own game state (none for an unknown state).
   const rd = useRedraftScreenContext()
   if (!p) return <div className="nls-player" data-side={side}><strong className="nls-muted">Empty</strong></div>
   const status = slotGameLine(p)
   const team = p.team ? <span data-long>{p.team} · </span> : null
   const o = p.outlook ?? null
-  const media = Boolean(p.headshotUrl || o?.teamLogoUrl)
+  // Every sport: the crest comes from the outlook (NFL / NBA) or the team registry, with the
+  // abbreviation as the corner chip when neither has an image; initials stand in for a missing photo.
+  const media = Boolean(p.headshotUrl || o?.teamLogoUrl || p.team || p.name)
   const meta = o && p.gameStatus !== 'final' && (o.opponentRank || o.weather) ? (
     <span className="nls-pl-meta">
       <OpponentRankChip id={p.playerId} opponent={p.opponent} rank={o.opponentRank} testIdPrefix="matchup" />
@@ -70,11 +81,18 @@ function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'ri
   return (
     <div className="nls-player" data-side={side}>
       <span className="nls-pl" data-media={media || undefined}>
-        {media ? <span className="nls-mavatar"><PlayerAvatar name={p.name} headshotUrl={p.headshotUrl} teamLogoUrl={o?.teamLogoUrl} /></span> : null}
+        {media ? <span className="nls-mavatar"><PlayerAvatar name={p.name} headshotUrl={p.headshotUrl} teamLogoUrl={o?.teamLogoUrl} team={p.team} sport={sport} /></span> : null}
         <span className="nls-pl-text">
           <strong title={p.name}>
-            <span className="nls-long">{p.name}</span>
-            <span className="nls-short">{shortPlayerName(p.name)}</span>
+            <PlayerNameButton
+              name={p.name}
+              refAttrs={openCard.refAttrs({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl })}
+              onOpen={(el) => openCard({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl }, el)}
+            >
+              <span className="nls-long">{p.name}</span>
+              <span className="nls-short">{shortPlayerName(p.name)}</span>
+            </PlayerNameButton>
+            <InjuryFlag status={p.injuryStatus} />
           </strong>
           <small data-live={p.gameStatus === 'live' || undefined} data-game={rd ? slotGameState(p.gameStatus) ?? undefined : undefined}>
             {side === 'left' ? <>{team}{status}</> : <>{status}{p.team ? <span data-long> · {p.team}</span> : null}</>}
@@ -113,14 +131,147 @@ export function NativeMatchupScreen(props: ScreenProps) {
   const state = String(props.league.lifecycleState ?? props.league.status ?? '').toLowerCase()
   if (['setup', 'pre_draft', 'drafting', 'in_progress'].includes(state)) {
     return <RedraftScreen identity={rd}><div className="nls" data-testid="native-matchup-screen">
-      <ScreenHead eyebrow={`${props.league.name} · Matchup`} title="Your season starts with the draft" />
+      <ScreenHead eyebrow="Matchup" title="Your season starts with the draft" />
       <Card label="Matchups are coming" tone="accent">
         <p>Finish the draft to fill your roster and get ready for weekly matchups.</p>
         <div className="nls-actions"><button type="button" className="nls-btn" data-variant="primary" onClick={() => props.onSelectTab('draft')}>Open Draft HQ</button></div>
       </Card>
     </div></RedraftScreen>
   }
+  // Survivor has no opponent either: the week is the tribe race, then individual immunity after the merge.
+  if (isSurvivorMatchupLeague(props.league)) return <RedraftScreen identity={rd}><SurvivorMatchupScreen {...props} /></RedraftScreen>
+  // Guillotine has no opponent: the tab is the week's scores against the chop line.
+  if (isNativeGuillotineLeague(props.league)) return <RedraftScreen identity={rd}><GuillotineMatchupScreen {...props} /></RedraftScreen>
   return <RedraftScreen identity={rd}>{isRotisserieLeagueSettings(props.league.settings) ? <RotisserieMatchupScreen {...props} /> : <HeadToHeadMatchupScreen {...props} />}</RedraftScreen>
+}
+
+function isSurvivorMatchupLeague(league: UserLeague): boolean {
+  const v = String(league.leagueVariant ?? league.leagueType ?? '').toLowerCase()
+  return v === 'survivor'
+}
+
+/**
+ * The Matchup tab of a Survivor league (lib/survivor/survivorMatchupModel.ts): where the viewer's tribe
+ * stands in the week's race (or the viewer against the island after the merge), every castaway's week
+ * score, who holds immunity, and the viewer's starters with their games. The week's scores are the
+ * Survivor summary's — the same numbers the Island tab shows.
+ */
+function SurvivorMatchupScreen({ league, onSelectTab }: ScreenProps) {
+  const rd = useRedraftScreenContext()
+  const maxWeek = maxWeekForSport(String(league.sport ?? 'NFL'))
+  const [pickedWeek, setPickedWeek] = useState<number | null>(null)
+  const [summary, setSummary] = useState<SurvivorMatchupInput | null>(null)
+  const [mine, setMine] = useState<MatchupPlayerSlot[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const season = Number(league.season) > 0 ? Number(league.season) : new Date().getFullYear()
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    const weekQuery = pickedWeek != null ? `week=${pickedWeek}` : ''
+    void Promise.all([
+      fetch(`/api/leagues/${encodeURIComponent(league.id)}/survivor/summary${weekQuery ? `?${weekQuery}` : ''}`, { credentials: 'include', cache: 'no-store' }),
+      fetch(`/api/leagues/${encodeURIComponent(league.id)}/matchup-center?season=${season}${weekQuery ? `&${weekQuery}` : ''}`, { credentials: 'include', cache: 'no-store' }),
+    ])
+      .then(async ([s, m]) => {
+        if (cancelled) return
+        if (!s.ok) throw new Error('summary')
+        setSummary((await s.json()) as SurvivorMatchupInput)
+        const body = m.ok ? ((await m.json().catch(() => null)) as { payload?: MatchupCenterPayload } | null) : null
+        setMine(body?.payload?.left?.starters ?? [])
+      })
+      .catch(() => { if (!cancelled) setError('The island scores could not be loaded. Try again in a moment.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [league.id, pickedWeek, season])
+
+  const view = summary ? buildSurvivorMatchupView(summary) : null
+  const week = pickedWeek ?? view?.week ?? Math.max(1, league.currentWeek ?? 1)
+  const goToWeek = (n: number) => setPickedWeek(Math.min(maxWeek, Math.max(1, n)))
+  const fmtScore = (n: number | null) => (n == null ? '—' : fmt1(n))
+
+  return (
+    <div className="nls" data-testid="native-matchup-screen" data-survivor-matchup="true" data-rd-screen={rd ? 'matchup' : undefined}>
+      <ScreenHead
+        eyebrow={view?.merged ? 'Survivor · Individual immunity' : 'Survivor · Tribe race'}
+        title={`Week ${week}`}
+      >
+          <>
+            <button type="button" className="nls-iconbtn" aria-label="Previous week" disabled={week <= 1 || loading} onClick={() => goToWeek(week - 1)}>
+              <ChevronLeft size={18} aria-hidden />
+            </button>
+            <select className="nls-weeksel" aria-label="Choose a week" data-testid="matchup-week-select" value={week} disabled={loading} onChange={(e) => goToWeek(Number(e.target.value))}>
+              {Array.from({ length: maxWeek }, (_, i) => i + 1).map((w) => (
+                <option key={w} value={w}>{`Week ${w}${league.currentWeek != null && w === league.currentWeek ? ' (now)' : ''}`}</option>
+              ))}
+            </select>
+            <button type="button" className="nls-iconbtn" aria-label="Next week" disabled={week >= maxWeek || loading} onClick={() => goToWeek(week + 1)}>
+              <ChevronRight size={18} aria-hidden />
+            </button>
+          </>
+      </ScreenHead>
+      {error ? <Card label="Island scores" tone="warn"><p>{error}</p></Card> : null}
+      {view ? (
+        <>
+          <Card label="Your week" tone="accent">
+            <div className="nls-board-line" data-lead="true" data-testid="survivor-my-score">
+              <span>Your score{view.myImmune ? ' · Immune' : ''}</span>
+              <span>{fmtScore(view.myScore)}</span>
+            </div>
+            {view.myRank ? (
+              <div className="nls-board-line">
+                <span>{view.merged ? 'Your place on the island' : 'Your tribe’s place'}</span>
+                <span>{`${view.myRank.rank} of ${view.myRank.of}`}</span>
+              </div>
+            ) : null}
+            <p data-testid="survivor-status">{view.status}</p>
+            <p className="nls-muted">{view.final ? 'Final scores.' : 'Provisional: scores update as games finish.'}</p>
+          </Card>
+          <Card label={view.merged ? 'The island' : 'Tribe race'}>
+            <div data-testid="survivor-tribe-race">
+              {view.tribes.map((t) => (
+                <div key={t.id} className="nls-survivor-tribe" data-mine={t.mine || undefined} data-attending={t.attending || undefined}>
+                  <div className="nls-board-line" data-lead={t.rank === 1}>
+                    <span>{view.merged ? t.name : `${t.rank}. ${t.name}`}{t.attending ? ' · Elimination Council' : ''}</span>
+                    <span>{fmtScore(t.score)}</span>
+                  </div>
+                  <ul className="nls-survivor-members">
+                    {t.members.map((m) => (
+                      <li key={m.rosterId} data-mine={m.mine || undefined}>
+                        <span>{m.name}{m.mine ? ' (you)' : ''}{m.immune ? ' · Immune' : ''}</span>
+                        <span>{fmtScore(m.score)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </Card>
+          {mine.length > 0 ? (
+            <Card label="Your starters" right={<button type="button" className="nls-btn" data-size="sm" onClick={() => onSelectTab('roster')}>Edit my lineup</button>}>
+              <div className="nls-survivor-starters">
+                {mine.map((p) => (
+                  <div key={p.playerId} className="nls-survivor-starter">
+                    <SlotCell p={p} side="left" sport={league.sport} />
+                    <span className="nls-survivor-pts" data-testid="survivor-starter-points" data-state={p.gameStatus}>
+                      {/* Survivor's own points for him this week: final once counted, live as his games land. */}
+                      <strong>{p.gameStatus === 'upcoming' ? '—' : fmt1(p.currentPoints)}</strong>
+                      <small className="nls-muted">
+                        {p.gameStatus === 'final' ? 'Final' : p.gameStatus === 'live' ? 'Live' : ''}
+                        {p.afProjectedPoints != null ? `${p.gameStatus === 'upcoming' ? '' : ' · '}Proj ${fmt1(p.afProjectedPoints)}` : ''}
+                      </small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : null}
+        </>
+      ) : loading ? <p className="nls-muted">Loading the island…</p> : null}
+    </div>
+  )
 }
 
 /**
@@ -128,11 +279,11 @@ export function NativeMatchupScreen(props: ScreenProps) {
  * pins both scores to 0 (`lib/redraft/scoringEngine.ts`) — so the head-to-head screen would show a
  * 0.0 vs 0.0 "matchup" and a win probability for a game nobody plays. Point at the standings instead.
  */
-function RotisserieMatchupScreen({ league, onSelectTab }: ScreenProps) {
+function RotisserieMatchupScreen({ onSelectTab }: ScreenProps) {
   const rd = useRedraftScreenContext()
   return (
     <div className="nls" data-testid="native-matchup-screen" data-rd-screen={rd ? 'matchup' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · Rotisserie`} title="No weekly matchup" />
+      <ScreenHead eyebrow="Rotisserie" title="No weekly matchup" />
       <Card label="How this league is decided" tone="accent">
         <p>
           This is a rotisserie league. Every week&apos;s stats add to your season totals, and teams are ranked in each
@@ -143,6 +294,34 @@ function RotisserieMatchupScreen({ league, onSelectTab }: ScreenProps) {
           <button type="button" className="nls-btn" onClick={() => onSelectTab('roster')}>Edit my lineup</button>
         </div>
       </Card>
+    </div>
+  )
+}
+
+/**
+ * One team in a scoreboard game, Sleeper-style: name and score on top, its AF projection and win chance
+ * beneath. A game not started shows a dash for the score, never 0.0, and leads with the projection.
+ */
+function BoardSide({ side, other, winPct, categories }: { side: NativeBoardSide; other: NativeBoardSide | null; winPct: number | null; categories: boolean }) {
+  const pts = side.totalPoints
+  const theirs = other?.totalPoints ?? null
+  const lead = pts != null && theirs != null && pts > theirs
+  const proj = side.projectedPoints
+  return (
+    <div className="nls-board-side" data-lead={lead || undefined}>
+      <div className="nls-board-line" data-lead={lead}>
+        <span>{side.teamName}</span>
+        <span className="nls-board-score">{pts == null ? '—' : categories ? String(Math.round(pts)) : fmt1(pts)}</span>
+      </div>
+      {proj != null || winPct != null ? (
+        <div className="nls-board-sub">
+          <span>
+            {proj != null ? <span data-testid="native-scoreboard-proj">Proj {fmt1(proj)}</span> : null}
+            {proj != null && winPct != null ? ' · ' : null}
+            {winPct != null ? <span data-win={winPct >= 50 || undefined}>{winPct}% win</span> : null}
+          </span>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -221,7 +400,13 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
     const ms = payload?.refreshIntervalMs
     if (!ms || !Number.isFinite(ms) || ms <= 0) return
     const t = window.setInterval(() => void load(true), ms)
-    return () => window.clearInterval(t)
+    // While this screen polls its own scores, the league page's 30-second server re-render stands
+    // down (LeagueShell, routeRefreshClaim): the two used to run side by side on every tick.
+    const release = claimRouteRefresh()
+    return () => {
+      window.clearInterval(t)
+      release()
+    }
   }, [payload?.refreshIntervalMs, load])
 
   const rows = useMemo(() => {
@@ -245,6 +430,9 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
   const prob = payload?.winProbabilityLeft
   const left = payload?.left
   const right = payload?.right
+  // Your opponent's manager, to message from the matchup. Your own team is never in the contacts.
+  const contactFor = useLeagueManagerContacts(league.id)
+  const opponentContact = left && right ? contactFor(right.rosterId) ?? contactFor(left.rosterId) : null
   const leftLeads = left && right ? left.totalPoints >= right.totalPoints : true
   const insight = payload ? (payload.insights.startSit || payload.insights.matchupEdge || '').trim() : ''
 
@@ -254,6 +442,21 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
       <button type="button" className="nls-iconbtn" aria-label="Previous week" disabled={week <= 1 || loading} onClick={() => goToWeek(week - 1)}>
         <ChevronLeft size={18} aria-hidden />
       </button>
+      {/* Any week at once: past weeks to review, later weeks for their projections. */}
+      <select
+        className="nls-weeksel"
+        aria-label="Choose a week"
+        data-testid="matchup-week-select"
+        value={week}
+        disabled={loading}
+        onChange={(e) => goToWeek(Number(e.target.value))}
+      >
+        {Array.from({ length: maxWeek }, (_, i) => i + 1).map((w) => (
+          <option key={w} value={w}>
+            {`Week ${w}${league.currentWeek != null && w === league.currentWeek ? ' (now)' : ''}`}
+          </option>
+        ))}
+      </select>
       <button type="button" className="nls-iconbtn" aria-label="Next week" disabled={week >= maxWeek || loading} onClick={() => goToWeek(week + 1)}>
         <ChevronRight size={18} aria-hidden />
       </button>
@@ -271,6 +474,20 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
    * that plays five games a week has 90 games, which pushed the page to nine screens (seen on a real
    * league, 2026-11-19). It shows the first few, the viewer's own first, and a way to the full list.
    */
+  // Two teams meeting more than once in a week (a league that plays several games a week) look like
+  // the same line repeated; numbering them says why.
+  const gameOrdinals = useMemo(() => {
+    const out = new Map<string, { n: number; of: number }>()
+    if (!games) return out
+    const byPair = new Map<string, string[]>()
+    for (const g of games) {
+      if (!g.away) continue
+      const key = [g.home.rosterId, g.away.rosterId].sort().join('|')
+      byPair.set(key, [...(byPair.get(key) ?? []), g.id])
+    }
+    for (const ids of byPair.values()) if (ids.length > 1) ids.forEach((id, i) => out.set(id, { n: i + 1, of: ids.length }))
+    return out
+  }, [games])
   const boardCard = (limit: number | null) => {
     const shown = games && limit != null && games.length > limit ? games.slice(0, limit) : games
     return (
@@ -279,15 +496,24 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
         games.length ? (
           // One line per game, from the league's own schedule and bracket.
           <>
-          <ul className="nls-board" data-testid="native-scoreboard">
+          <ul className="nls-board" data-testid="native-scoreboard" data-cards="true">
             {shown.map((g) => {
               const hp = g.home.totalPoints
               const ap = g.away?.totalPoints ?? null
+              const repeat = gameOrdinals.get(g.id)
+              const label = [g.label, repeat ? `Game ${repeat.n} of ${repeat.of}` : null].filter(Boolean).join(' · ')
+              const wp = formatWinProbabilityPercents(g.homeWinProbability ?? null)
               return (
                 <li key={g.id} data-mine={g.mine || undefined} data-state={g.status}>
-                  {g.label ? <div className="nls-board-line"><span className="nls-muted">{g.label}</span><span /></div> : null}
-                  {boardLine(g.home.teamName, hp, hp != null && ap != null && hp > ap)}
-                  {g.away ? boardLine(g.away.teamName, ap, hp != null && ap != null && ap > hp) : <div className="nls-board-line"><span className="nls-muted">Bye</span><span /></div>}
+                  {label ? <div className="nls-board-label nls-muted">{label}{g.status === 'live' ? <span className="nls-board-live">Live</span> : null}</div> : g.status === 'live' ? <div className="nls-board-label"><span className="nls-board-live">Live</span></div> : null}
+                  <BoardSide side={g.home} other={g.away} winPct={wp?.leftPct ?? null} categories={categories} />
+                  {wp && g.status !== 'final' ? (
+                    <div className="nls-board-wp" role="img" aria-label={`Win chance ${wp.leftPct}% to ${wp.rightPct}%`} data-testid="native-scoreboard-winprob">
+                      <span style={{ width: `${wp.leftPct}%` }} data-lead={wp.leftPct >= wp.rightPct || undefined} />
+                      <span style={{ width: `${wp.rightPct}%` }} data-lead={wp.rightPct > wp.leftPct || undefined} />
+                    </div>
+                  ) : null}
+                  {g.away ? <BoardSide side={g.away} other={g.home} winPct={wp?.rightPct ?? null} categories={categories} /> : <div className="nls-board-line"><span className="nls-muted">Bye</span><span /></div>}
                 </li>
               )
             })}
@@ -347,7 +573,7 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
 
   return (
     <div className="nls" data-testid="native-matchup-screen" data-rd-screen={rd ? 'matchup' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · Matchup`} title={`Week ${week}`}>
+      <ScreenHead eyebrow="Matchup" title={`Week ${week}`}>
         {weekControls}
       </ScreenHead>
 
@@ -364,6 +590,11 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
 
       {/* Redraft: the broadcast score bug (same payload, same numbers). Every other format: the score card. */}
       {payload && left && right && rd && !noGame ? <RedraftScoreBug payload={payload} week={week} /> : null}
+      {payload && left && right && !noGame && opponentContact ? (
+        <div className="nls-msg-row" data-testid="matchup-message-opponent">
+          <MessageManagerButton contact={opponentContact} variant="label" />
+        </div>
+      ) : null}
       {payload && left && right && !rd && !noGame ? (
         <section className="nls-card nls-card-flush" aria-label="Score">
           {payload.conceptOverlay ? <p className="nls-overlay">{payload.conceptOverlay}</p> : null}
@@ -422,11 +653,11 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
                   {rows.map((row, i) => {
                     return (
                       <li key={`${row.pos}-${i}`} className="nls-mrow">
-                        <SlotCell p={row.l} side="left" />
+                        <SlotCell p={row.l} side="left" sport={league.sport} />
                         <SlotPoints p={row.l} other={row.r} side="left" show={showPlayerPoints} />
                         <PosPill label={row.pos} />
                         <SlotPoints p={row.r} other={row.l} side="right" show={showPlayerPoints} />
-                        <SlotCell p={row.r} side="right" />
+                        <SlotCell p={row.r} side="right" sport={league.sport} />
                       </li>
                     )
                   })}
@@ -448,7 +679,8 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
               <button type="button" className="nls-btn" data-variant="primary" data-block="true" onClick={() => onSelectTab('roster')}>Review lineup</button>
             </Card>
             {otherGames}
-            {view === 'mine' ? scoreboardGlance : null}
+            {/* The glance is for a wide screen's side column; on a phone "League scoreboard" is a tab at the top (2026-11-24). */}
+            {view === 'mine' ? <div className="nls-glance">{scoreboardGlance}</div> : null}
           </aside>
         </div>
       ) : null}

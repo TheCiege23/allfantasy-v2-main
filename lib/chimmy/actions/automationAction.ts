@@ -96,10 +96,10 @@ export async function proposeAutomationChange(args: {
       title = 'Stop handing over quiet teams'
     } else {
       const asked = args.handoverTo === 'autopilot' || args.handoverTo === 'lineups' ? (args.handoverTo as AutoHandoverTarget) : null
-      if (asked === 'autopilot' && !read.facts.commissionerPlan) {
-        return { ok: false, text: "Handing teams to Chimmy autopilot needs the league owner's AF Commissioner plan, which this league does not have. Nothing was prepared. Offer lineup management instead (free): handover_to 'lineups'." }
+      if (asked === 'autopilot' && !read.facts.autopilotPlan) {
+        return { ok: false, text: "Handing teams to Chimmy autopilot needs the league owner's AF Pro or AF Supreme plan, which this league does not have. Nothing was prepared. Offer lineup management instead (free): handover_to 'lineups'." }
       }
-      const to: AutoHandoverTarget = asked ?? (read.facts.commissionerPlan ? 'autopilot' : 'lineups')
+      const to: AutoHandoverTarget = asked ?? (read.facts.autopilotPlan ? 'autopilot' : 'lineups')
       if (current && current.days === days && current.to === to) {
         return { ok: false, text: `That rule is already on (after ${days} days, ${TARGET_WORDS[to]}), so there is nothing to change.` }
       }

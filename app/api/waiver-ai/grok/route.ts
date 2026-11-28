@@ -2,6 +2,7 @@ import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { assertLeagueMember } from '@/lib/league-access';
@@ -251,11 +252,27 @@ export async function POST(req: NextRequest) {
      * do any work an unauthenticated caller controls the size of, and resolving the
      * session is what decides which bucket applies.
      */
-    const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
+    const session = (await getServerSession(authOptions as any)) as { user?: { id?: string; email?: string | null } } | null;
     const userId = session?.user?.id;
 
     /*
-     * ⚠ THIS ROUTE IS DELIBERATELY REACHABLE SIGNED-OUT, AND THAT IS NOT AN OVERSIGHT.
+     * 🛑 SIGN-IN + AF PRO (`ai_waivers`), the same gate as every other waiver AI route (owner's decision
+     * 2026-11-27; gating audit H4). The guest-trial reasoning below was written before the paywall: it
+     * kept a Grok call open to anonymous visitors and to every free account, which made this the one
+     * waiver AI anyone could run for free. The anonymous/member rate buckets stay as a second line.
+     */
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Sign in to use Waiver Chimmy.', code: 'sign_in_required', message: 'Sign in to use Waiver Chimmy.' },
+        { status: 401 },
+      );
+    }
+    const plan = await requireFeatureEntitlement({ userId, userEmail: session?.user?.email ?? null, featureId: 'ai_waivers' });
+    if (!plan.ok) return plan.response;
+
+    /*
+     * ⚠ RETIRED 2026-11-27 — see the gate above. Kept as the record of why it was open:
+     * THIS ROUTE WAS DELIBERATELY REACHABLE SIGNED-OUT.
      *
      * The `leagueId` branch below is gated (401 + assertLeagueMember). The manual-roster
      * branch is the guest trial: <WaiverAI> (app/components/WaiverAI.tsx) is mounted on

@@ -155,8 +155,9 @@ function pushPickAtTradeTime(out: GradeInputs, season: string | number | null, r
 }
 
 /*
- * The only evidence a trade-date grade may stand on: that day's FantasyCalc rows (players, below-chart
- * floor at 0, pick rows) and the league's own FAAB formula, which has no date. Anything else on a line
+ * Historical captures contain that day's FantasyCalc rows (players, below-chart
+ * floor at 0, pick rows) and the league's own FAAB formula, which has no date. The live league chart
+ * can also supply an AF player quote when its recorded snapshot is fresh at grading. Anything else on a line
  * — a defender's league board, a devy option, a sports-db row, the historical file, a curve — is a
  * second source, and one is enough to send the whole trade back to its first-graded original.
  */
@@ -228,7 +229,7 @@ export async function gradeAtTradeTime(
       const view = await gradeDeal(grader, { give: inputs.give, get: inputs.get, viewerSide: false })
       if (!view.graded || view.lines.length !== assets.length) return null
       for (const line of view.lines) {
-        if (!line.valueSource || !TRADE_DATE_SOURCES.has(line.valueSource)) return null
+        if (!line.valueSource || (line.valueSource !== 'af_completed_trades' && !TRADE_DATE_SOURCES.has(line.valueSource))) return null
         if (line.valueSource === 'faab_formula') continue
         // The chart's own sync time must itself sit within the tolerance of the trade.
         const synced = line.valueAsOf ? Date.parse(line.valueAsOf) : NaN
@@ -314,7 +315,10 @@ export async function completedOriginal(args: {
   deps?: TradeTimeDeps
 }): Promise<{ view: TradeGradeView; toFreeze: FrozenCompletedGrade | null }> {
   // Pricing on the trade date costs a capture read; a frozen original never needs one.
-  const dated = args.frozen ? null : await gradeAtTradeTime(args.grader, args.tradeTimeInputs, args.tradeAt, args.deps, args.now)
+  // A failed price falls back to the first-graded original, as `frozenOriginalFor` does — never a lost grade.
+  const dated = args.frozen
+    ? null
+    : await gradeAtTradeTime(args.grader, args.tradeTimeInputs, args.tradeAt, args.deps, args.now).catch(() => null)
   return withFrozenOriginal({
     tradeId: args.tradeId,
     inputs: args.inputs,
@@ -388,8 +392,12 @@ export async function oneGradeForCompletedTrade(
     graderFor?: (leagueId: string) => Promise<LeagueTradeGrader | null>
     /** Preloaded originals (`loadFrozenCompletedGrades`), so a history of sixty trades is one read. */
     frozen?: ReadonlyMap<string, FrozenCompletedGrade>
-    /** With `frozen`: collects the originals to write, so the caller saves them in one insert. */
-    onFreeze?: (f: FrozenCompletedGrade) => void
+    /**
+     * With `frozen`: collects the originals to write, so the caller saves them in one insert. `current` is today's
+     * grade, so a caller whose save fails can show that rather than an original the table never received — the
+     * rule `frozenOriginalFor` applies.
+     */
+    onFreeze?: (f: FrozenCompletedGrade, current: TradeGradeView) => void
     now?: Date
     tradeTime?: TradeTimeDeps
   } = {},
@@ -418,7 +426,7 @@ export async function oneGradeForCompletedTrade(
       frozen: deps.frozen.get(sleeperTradeKey(trade.id)), now: deps.now ?? new Date(), deps: deps.tradeTime,
     })
     if (toFreeze) {
-      if (deps.onFreeze) deps.onFreeze(toFreeze)
+      if (deps.onFreeze) deps.onFreeze(toFreeze, current)
       else await saveFrozenCompletedGrades(leagueId, [toFreeze])
     }
     return view

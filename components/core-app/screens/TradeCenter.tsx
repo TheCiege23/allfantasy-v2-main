@@ -1,8 +1,10 @@
 'use client'
 
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { summarizeTrades, tradesChips, tradesHeadline, type TradesChip } from '@/lib/core-app/tradesGuide'
 import { tradesGuideMessages } from '@/lib/core-app/messages/tradesGuide'
 import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
@@ -13,6 +15,7 @@ import '@/components/core-app/trades/af-trades-league-guide.css'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { holdUnsavedWork } from '@/lib/core-app/unsavedWork'
 import { decodeTradeDraft, tradeDeviceDraftKey } from './tradeDeviceDraft'
 import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
@@ -65,6 +68,7 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvidencePanel } from './TradeEvidencePanel'
+import { TradeMarketEvidence } from './TradeMarketEvidence'
 import { TradeDecisionSummary } from './TradeDecisionSummary'
 import { TradePackageCost } from './TradePackageCost'
 import { counterDecision } from '@/lib/decision-os/trade/decisionSummary'
@@ -100,6 +104,7 @@ import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineC
 import type { PickTradeDeadlineView } from '@/lib/trade-deadline/pickTradeDeadline'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { initialsFor } from '@/lib/draft-room/classify-avatar-source'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { DynastyPickCapitalPanel, pickDealKey } from './DynastyPickCapitalPanel'
@@ -568,7 +573,7 @@ function AllLeaguesTradeHub(props: {
           subClassName="af-hg-intro"
           eyebrow={guide.eyebrow(props.leagues.length)}
           title={<span id="af-tg-h1">{title}</span>}
-          sub={guide.intro}
+          /* No intro sentence (2026-11-24, the simplify pass): the headline and the chips say what this week holds. */
         />
         {chips.length > 0 ? (
           <ul className="af-hg-chips">
@@ -583,25 +588,23 @@ function AllLeaguesTradeHub(props: {
 
       <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} waitingOnly />
 
+      {/*
+        Closed until tapped (2026-11-24, the simplify pass): the full trade builder was ~950px open on a phone
+        on every visit, ahead of the trades in your leagues. Its title and sub-line are the summary; the
+        builder and its lesson are inside, unchanged.
+      */}
       <section className="af-tc-hub-evaluator af-tg-check" aria-labelledby="af-tg-check-h">
-        <div className="af-tg-sec-head">
-          <h2 id="af-tg-check-h">{guide.checkTitle}</h2>
-          <p>{guide.checkSub}</p>
-        </div>
-        <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} offerHint />
-        <p className="af-tg-teach">
-          <b>{guide.why}</b> {guide.checkTeach}
-        </p>
+        <details className="af-tg-checkfold" data-testid="trades-check-fold">
+          <summary className="af-tg-sec-head">
+            <h2 id="af-tg-check-h">{guide.checkTitle}</h2>
+            <p>{guide.checkSub}</p>
+          </summary>
+          <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} offerHint />
+          <WhyFold label={guide.why}>{guide.checkTeach}</WhyFold>
+        </details>
       </section>
 
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
-
-      <section className="af-tg-market" aria-label={guide.marketTitle}>
-        <TradeMarketMovers limit={5} heading={guide.marketTitle} testId="trade-hub-market" />
-        <p className="af-tg-teach">
-          <b>{guide.why}</b> {guide.marketTeach}
-        </p>
-      </section>
 
       {props.valueActions.length > 0 ? (
         <section className="af-tc-hub-actions">
@@ -615,7 +618,7 @@ function AllLeaguesTradeHub(props: {
           <div className="af-tc-value-action-list">
             {props.valueActions.slice(0, 6).map((player) => (
               <article key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
-                {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{initialsFor(player.name)}</span>} /> : <span className="af-tc-glyph">{initialsFor(player.name)}</span>}
                 <div>
                   <strong>{player.name}</strong>
                   <span>{player.position ?? copy('Player')}{copy(" · ")}{copy(player.stock === 'up' ? 'up' : 'down')} {money(Math.abs(player.stockDelta ?? 0))} {copy('over 30 days')}</span>
@@ -633,11 +636,21 @@ function AllLeaguesTradeHub(props: {
       ) : null}
 
       {/* Your leagues were listed three times (the offer tiles, the builder's picker and this grid); the grid folds. */}
-      <details className="af-tc-hub-leagues af-tg-all">
-        <summary>
-          <b>{guide.allLeagues(props.leagues.length)}</b>
-          <span>{guide.allLeaguesSub}</span>
-        </summary>
+      {/*
+        2026-11-20 — that fold is now the page's one "More detail" (MoreDetail.tsx), same class, its old
+        summary as the `note`. The market board ("Who's rising and falling") is about every player, not
+        your teams, so it moved in here unchanged; the offers board, the evaluator and your value moves
+        stay on screen.
+      */}
+      <MoreDetail
+        className="af-tc-hub-leagues af-tg-all"
+        note={<><b>{guide.allLeagues(props.leagues.length)}</b> · {guide.allLeaguesSub}</>}
+        testId="trades-hub-more"
+      >
+        <section className="af-tg-market" aria-label={guide.marketTitle}>
+          <TradeMarketMovers limit={5} heading={guide.marketTitle} testId="trade-hub-market" />
+          <WhyFold label={guide.why}>{guide.marketTeach}</WhyFold>
+        </section>
         <label className="af-tc-hub-search">
           <span className="af-sr-only">{copy('Search leagues')}</span>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy('Search league or platform')} />
@@ -652,7 +665,7 @@ function AllLeaguesTradeHub(props: {
           ))}
         </div>
         {visibleLeagues.length === 0 ? <p className="af-tc-timeline-empty">{copy('No connected league matches that search.')}</p> : null}
-      </details>
+      </MoreDetail>
     </div>
   )
 }
@@ -851,6 +864,9 @@ export function TradeCenter(props: {
   // this form and discard an unsaved proposal or its in-flight analysis.
   const editingProposal = busy || picking !== null || giveAssets.length > 0 || getAssets.length > 0
   useEffect(() => editingProposal ? claimRouteRefresh() : undefined, [editingProposal])
+  // And no deploy reload while building: after a deploy the page reloads when it goes into the
+  // background, which threw a half-built trade away the moment a manager checked another app.
+  useEffect(() => editingProposal ? holdUnsavedWork() : undefined, [editingProposal])
   const [draftNote, setDraftNote] = useState<string | null>(null)
   const [recoverableDraft, setRecoverableDraft] = useState<ReturnType<typeof decodeTradeDraft>>(null)
   const [draftTouched, setDraftTouched] = useState(false)
@@ -2020,6 +2036,12 @@ export function TradeCenter(props: {
             ⚠ THE SAME PRICED-ONLY TOTALS AS THE VALUE RAIL, AND THE SAME EM DASH. A side with
             nothing priced reads "—", never "0", for the reason every other total here gives.
           */}
+          {/*
+            No totals until there is something to total (2026-11-23, "crowded"): an empty deal read
+            "Get — Send —" above a builder saying "Nothing added yet". The button stays — on an empty
+            deal it opens the picker, which is the point of the bar.
+          */}
+          {giveAssets.length > 0 || getAssets.length > 0 ? (
           <span className="af-tc-stepbar-totals af-num" aria-live="polite">
             <span>{copy('Get')} <b>{balance?.get != null ? balance.get.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
             <span>{copy('Send')} <b>{balance?.give != null ? balance.give.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
@@ -2030,6 +2052,7 @@ export function TradeCenter(props: {
               </span>
             ) : null}
           </span>
+          ) : null}
           <button
             type="button"
             className="af-btn af-tc-stepbar-primary"
@@ -2616,8 +2639,8 @@ export function TradeCenter(props: {
             control sits in this page's header (CoreLeagueContextBar, `#league-type`).
           */}
           {serverGrade ? <TradeDecisionSummary grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} visual={result.visualImpact} /> : null}
-          {serverGrade?.graded ? <TradeEvidencePanel grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} /> : null}
-          {serverGrade ? <TradeValueChart grade={serverGrade} /> : null}
+          {serverGrade?.graded && !depthLocked ? <TradeEvidencePanel grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} /> : null}
+          {serverGrade && !depthLocked ? <TradeValueChart grade={serverGrade} /> : null}
           {result.visualImpact ? <><LineupImpactChart impact={result.visualImpact.impact} /><p className="af-tc-row-sub">{copy(result.visualImpact.reason??'')} {result.visualImpact.rostersStale ? copy('Roster data may be stale; sync before acting.') : ''} {copy('Picks and FAAB are outside the weekly lineup simulation.')}</p></> : null}
           <TradeReactionSettings />
           <TradePackageCost cost={result.visualImpact?.packageCost} />
@@ -2630,6 +2653,8 @@ export function TradeCenter(props: {
               <span>{copy(serverGrade.letterBasis === 'your_team' ? 'Their grade, on the market' : 'Their grade')} {serverGrade.partnerLetter} <TradeReaction letter={serverGrade.partnerLetter} /></span>
             </div>
           ) : null}
+          {/* Why the values moved, measured from completed trades — verbatim from the grade, as Chimmy cites it. */}
+          {!depthLocked ? <TradeMarketEvidence grade={serverGrade} copy={copy} /> : null}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
@@ -2640,7 +2665,7 @@ export function TradeCenter(props: {
           ) : null}
           {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved grade')}</Link>{copy(" · ")}{copy('Values saved')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p>
             : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('We couldn’t save this grade. Take a screenshot if you want to keep it.')}</p> : null}
-          {serverGrade?.graded && serverGrade.rosterFit ? (
+          {serverGrade?.graded && serverGrade.rosterFit && !depthLocked ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
               <div className="af-label">{copy(serverGrade.letterBasis === 'your_team' ? 'How it fits your roster · used for your grade' : 'How it fits your roster')} <TopicTip topic="tradeRosterFit" /></div>
               <p>{copy('Value to your team:')} {money(serverGrade.rosterFit.giveValue)} {copy('sent,')} {money(serverGrade.rosterFit.getValue)} {copy('received.')}
@@ -3059,31 +3084,6 @@ export function TradeCenter(props: {
       )}
 
       {/*
-        The rebuild plan (lib/trade-intel/rebuildAdvisor.ts) — the healthy alternative to tanking, for a
-        team out of the race or rebuilding by choice in a dynasty or keeper league. Open by default for a
-        team that is out: that is the moment it matters. AF Pro, behind the same lock as the trade ideas.
-      */}
-      {(rosterData?.rebuildPlan || rosterData?.rebuildPlanLocked) && !props.embedded ? (
-        /* Folded by default (2026-11-14): open, it pushed your offers and the trade history a screen down. */
-        <details className="af-tc-fold af-tc-rebuild-fold">
-          <summary>
-            <span>{copy('Rebuild plan')}</span>
-            <span className="af-tc-fold-note">{copy('What to sell, what to keep, who to target')}</span>
-          </summary>
-          {rosterData?.rebuildPlanLocked && depthAccess ? (
-            <CoreDepthLock access={depthAccess} what={lockSubjectText('Your rebuild plan', language)} lang={language} />
-          ) : (
-            <RebuildPlanCard
-              plan={rosterData?.rebuildPlan ?? null}
-              onStartWith={(pkg) =>
-                startSuggestedDeal({ rosterId: pkg.rosterId, ownerName: pkg.ownerName, suggestion: { give: pkg.give, get: pkg.get, percentApart: pkg.percentApart } })
-              }
-            />
-          )}
-        </details>
-      ) : null}
-
-      {/*
         ── EVERYTHING ELSE, IN ONE FOLD (2026-11-13) ───────────────────────────────────────────────
         Trade ideas, offers and drafts, the trade finder, value alerts and the propose flow each used to
         be its own block between the builder and its Analyze button. They are one fold now, under the
@@ -3091,24 +3091,50 @@ export function TradeCenter(props: {
         `?trade=` link (offersOpen) or a `#trade-finder` link opens it. Children stay mounted while
         closed, so the inbox still loads and still reports its count.
       */}
+      {/*
+        2026-11-20 — that fold is now the page's one "More detail" (MoreDetail.tsx), same class, same open
+        rule; its old summary line ("Trade ideas, offers and drafts…", or the offers-waiting count) is the
+        `note`. The Rebuild plan, which sat just above it as a second page-level fold, moved inside
+        unchanged. The trade center panel, the history and the league activity below stay on screen.
+        Its `onToggle` keeps the same open-state sync the bare <details> had.
+      */}
       {props.embedded ? null : (
-        <details
+        <MoreDetail
+          id="af-tc-more"
           className="af-tc-fold af-tlg-more"
           open={moreOpen || offersOpen}
-          onToggle={(e) => {
-            const open = e.currentTarget.open
+          onToggle={(open) => {
             setMoreOpen(open)
             if (!open) setOffersOpen(false)
           }}
+          note={needsYou ? <span className="af-tc-fold-badge af-num">{lg.moreWaiting(needsYou)}</span> : lg.moreNote}
+          testId="trades-more"
         >
-          <summary>
-            <span>{lg.more}</span>
-            {needsYou ? (
-              <span className="af-tc-fold-badge af-num">{lg.moreWaiting(needsYou)}</span>
+        {/*
+          The rebuild plan (lib/trade-intel/rebuildAdvisor.ts) — the healthy alternative to tanking, for a
+          team out of the race or rebuilding by choice in a dynasty or keeper league. Open by default for a
+          team that is out: that is the moment it matters. AF Pro, behind the same lock as the trade ideas.
+        */}
+        {(rosterData?.rebuildPlan || rosterData?.rebuildPlanLocked) && !props.embedded ? (
+          /* Folded by default (2026-11-14): open, it pushed your offers and the trade history a screen down. */
+          <details className="af-tc-fold af-tc-rebuild-fold">
+            <summary>
+              <span>{copy('Rebuild plan')}</span>
+              <span className="af-tc-fold-note">{copy('What to sell, what to keep, who to target')}</span>
+            </summary>
+            {rosterData?.rebuildPlanLocked && depthAccess ? (
+              <CoreDepthLock access={depthAccess} what={lockSubjectText('Your rebuild plan', language)} lang={language} />
             ) : (
-              <span className="af-tc-fold-note">{lg.moreNote}</span>
+              <RebuildPlanCard
+                plan={rosterData?.rebuildPlan ?? null}
+                onStartWith={(pkg) =>
+                  startSuggestedDeal({ rosterId: pkg.rosterId, ownerName: pkg.ownerName, suggestion: { give: pkg.give, get: pkg.get, percentApart: pkg.percentApart } })
+                }
+              />
             )}
-          </summary>
+          </details>
+        ) : null}
+
         {otherRosters.length > 0 && !props.embedded ? (
           <details className="af-tc-fold af-tc-ideas">
             <summary>
@@ -3246,7 +3272,7 @@ export function TradeCenter(props: {
             <div className="af-tc-value-action-list">
               {valueActions.map((player) => (
                 <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
-                  {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                  {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{initialsFor(player.name)}</span>} /> : <span className="af-tc-glyph">{initialsFor(player.name)}</span>}
                   <div>
                     <strong>{player.name}</strong>
                     <span>{player.position ?? 'Player'}{copy(" · ")}{player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`}{copy(" over 30 days")}</span>
@@ -3265,7 +3291,7 @@ export function TradeCenter(props: {
         {props.league?.id && !props.embedded ? (
           <ProposeTradeLaunch rosterData={rosterData} onOpen={() => setProposeOpen(true)} />
         ) : null}
-        </details>
+        </MoreDetail>
       )}
       {proposeOpen && !props.embedded && props.league?.id && rosterData?.viewerRosterId ? (
         <ProposeTradeFlow

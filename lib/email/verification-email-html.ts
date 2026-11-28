@@ -73,12 +73,36 @@ export function buildVerificationEmailHtml(opts: {
   verifyUrl: string
   /** Small footer note, e.g. "If you didn't create this account…" */
   footerNote: string
+  /** The button's text. Defaults to "Verify email". */
+  buttonLabel?: string
+  /** Optional label/value rows shown in a box under the greeting (e.g. the account's username). */
+  details?: ReadonlyArray<{ label: string; value: string }>
+  /** Optional second, plain link under the button. */
+  secondaryLink?: { label: string; url: string }
 }): string {
   const safeTitle    = escapeHtml(opts.title)
   const safeGreeting = escapeHtml(opts.greeting)
   const safeFooter   = escapeHtml(opts.footerNote)
   // URL: escape & → &amp; for HTML attributes; token remains URL-encoded
   const safeUrl      = escapeHtml(opts.verifyUrl)
+  const safeButton   = escapeHtml(opts.buttonLabel?.trim() || 'Verify email')
+  const detailsHtml  = (opts.details ?? []).length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 26px;background-color:#f4f6fb;border-radius:10px;">
+                ${(opts.details ?? [])
+                  .map(
+                    (row) => `<tr>
+                  <td style="padding:10px 16px;font-size:13px;color:#5b6485;width:40%;">${escapeHtml(row.label)}</td>
+                  <td style="padding:10px 16px;font-size:15px;font-weight:700;color:#0b1020;word-break:break-all;">${escapeHtml(row.value)}</td>
+                </tr>`,
+                  )
+                  .join('')}
+              </table>`
+    : ''
+  const secondaryHtml = opts.secondaryLink
+    ? `<p style="margin:18px 0 0;font-size:14px;color:#41496b;">
+                <a href="${escapeHtml(opts.secondaryLink.url)}" style="color:#0e7f9b;text-decoration:underline;font-weight:600;">${escapeHtml(opts.secondaryLink.label)}</a>
+              </p>`
+    : ''
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -115,6 +139,7 @@ export function buildVerificationEmailHtml(opts: {
             <td style="padding:12px 32px 28px;">
               <h1 style="margin:0 0 14px;font-size:26px;font-weight:800;color:#0b1020;line-height:1.25;">${safeTitle}</h1>
               <p style="margin:0 0 26px;font-size:15px;line-height:1.6;color:#41496b;">${safeGreeting}</p>
+              ${detailsHtml}
 
               <!-- CTA button
                    background-color on <td>  = renders in Outlook (Word engine)
@@ -125,13 +150,14 @@ export function buildVerificationEmailHtml(opts: {
                   <td style="background-color:#0e7f9b;border-radius:9px;">
                     <a href="${safeUrl}"
                        style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:9px;background-color:#0e7f9b;">
-                      Verify email
+                      ${safeButton}
                     </a>
                   </td>
                 </tr>
               </table>
 
               <p style="margin:22px 0 0;font-size:13px;color:#5b6485;">This link works for ${EMAIL_VERIFY_LINK_LIFETIME}.</p>
+              ${secondaryHtml}
 
               <!-- Plain-text fallback — the SAME destination as the button, shown
                    when the button is clipped or images/styles are blocked. -->

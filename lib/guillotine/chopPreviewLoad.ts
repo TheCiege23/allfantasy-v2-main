@@ -1,4 +1,5 @@
 import 'server-only'
+import { effectiveReleaseTiming, readFreeAgencyFromWeek } from './freeAgencyFromWeek'
 
 /**
  * Server half of ./chopPreview.ts: gathers this week's inputs the way the native week runner does
@@ -14,7 +15,8 @@ import { getDraftSlotByRoster } from './GuillotineWeekEvaluator'
 import { resolveGuillotineEndgame } from './endgameRules'
 import { readAdvanced } from './chopSchedule'
 import { periodEndWeek, previousPeriodEnd, readPeriodWeeks, weeksInPeriod } from './eliminationPeriods'
-import { readFaabOnChop } from './faabOnChop'
+import { readFaabOnChop, readFaabOnChopPercent } from './faabOnChop'
+import { paidInTurnSoFar } from './faabOnChopApply'
 import { rosterIdForOwner } from './finishGuillotineSeason'
 import { resolveRosterDisplayNames } from './rosterDisplayNames'
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
@@ -48,7 +50,7 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
 
   const [active, rosters, choppedStates] = await Promise.all([
     prisma.redraftRoster.findMany({ where: { seasonId: season.id, isEliminated: false }, select: { id: true, ownerId: true, teamName: true } }),
-    prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, redraftRosterId: true, faabRemaining: true } }),
+    prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, redraftRosterId: true, faabRemaining: true, waiverPriority: true } }),
     prisma.guillotineRosterState.findMany({ where: { leagueId, choppedAt: { not: null } }, select: { rosterId: true } }),
   ])
   const chopped = new Set(choppedStates.map((c) => c.rosterId))
@@ -81,6 +83,10 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
   }
   const countByRedraft = new Map(playerCounts.map((c) => [c.rosterId, c._count._all]))
   const faabByRoster = new Map(rosters.map((r) => [r.id, r.faabRemaining]))
+  // `waiver_order` pays the next team in line: the line is read the way the chop reads it (./faabOnChopApply.ts).
+  const priorityByRoster = new Map(rosters.map((r) => [r.id, r.waiverPriority ?? null]))
+  const faabPolicy = readFaabOnChop(league.settings)
+  const paidInTurn = faabPolicy === 'waiver_order' ? await paidInTurnSoFar(prisma, leagueId).catch(() => new Map<string, number>()) : new Map<string, number>()
 
   // Scored the same way the chop scores them. A week not started yet reads as 0 for everyone.
   const teams: ChopPreviewTeam[] = []
@@ -101,6 +107,8 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
       ...(benchPoints !== null ? { benchPoints } : {}),
       ...(lastWeek.has(p.rosterId) ? { previousPeriodPoints: lastWeek.get(p.rosterId) } : {}),
       faab: faabByRoster.get(p.rosterId) ?? null,
+      waiverPriority: priorityByRoster.get(p.rosterId) ?? null,
+      faabReceived: paidInTurn.get(p.rosterId) ?? 0,
       playerCount: countByRedraft.get(p.redraftId) ?? 0,
     })
   }
@@ -117,8 +125,9 @@ export async function loadChopPreview(leagueId: string): Promise<ChopPreview | {
     endgame: { format: endgame.format, threshold: endgame.threshold },
     tiebreakerOrder: config.tiebreakerOrder,
     dangerMarginPoints: config.dangerMarginPoints ?? 10,
-    faabOnChop: readFaabOnChop(league.settings),
-    rosterReleaseTiming: config.rosterReleaseTiming,
+    faabOnChop: faabPolicy,
+    faabOnChopPercent: readFaabOnChopPercent(league.settings),
+    rosterReleaseTiming: effectiveReleaseTiming(config.rosterReleaseTiming, readFreeAgencyFromWeek(league.settings), week),
     teams,
     previousWeek: [...lastWeek].map(([rosterId, periodPoints]) => ({ rosterId, periodPoints })),
     draftSlotByRoster,

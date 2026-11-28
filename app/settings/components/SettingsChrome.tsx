@@ -402,7 +402,10 @@ function SettingsHub({
         <h1 className="ns-hubg-title" data-testid="settings-guide-headline">
           {headline}
         </h1>
-        <p className="ns-hubg-intro">{g.intro}</p>
+        {/*
+          No intro sentence (2026-11-24, the simplify pass): "Change your profile, sign-in, what you see and
+          what reaches you. Search, or pick a section below." restated the search box and the list under it.
+        */}
         {issues.length > 0 ? (
           <div className="ns-hubg-chips">
             {issues.map((issue) => (

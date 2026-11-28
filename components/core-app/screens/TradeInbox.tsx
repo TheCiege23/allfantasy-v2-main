@@ -21,6 +21,7 @@ import { TradeReaction, TradeReactionSettings, AcceptedTradeReaction } from './T
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { FilterChips } from '@/components/core-app/primitives/FilterChips'
+import { TradeMarketEvidence } from './TradeMarketEvidence'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -77,8 +78,12 @@ type OfferAsset = {
 }
 
 type Offer = {
-  provider?: 'sleeper' | 'yahoo'
+  provider?: 'sleeper' | 'yahoo' | 'espn'
   transactionId: string
+  /** ESPN conditional drop, already worded: "and they drop Marvin Harrison Jr." */
+  dropNote?: string | null
+  /** When ESPN says the offer lapses. */
+  expiresAt?: string | null
   direction: 'incoming' | 'outgoing'
   partnerName: string
   proposedAt: string | null
@@ -515,8 +520,10 @@ export function TradeInbox(props: {
 
   const loadOffer = useCallback(
     (o: Offer) => {
-      const g = toPickedAssets(o.give, o.provider)
-      const k = toPickedAssets(o.get, o.provider)
+      // ESPN ids are not a provider identity the builder resolves; ESPN offers reload by name.
+      const provider = o.provider === 'espn' ? undefined : o.provider
+      const g = toPickedAssets(o.give, provider)
+      const k = toPickedAssets(o.get, provider)
       const dropped = [...g.dropped, ...k.dropped]
       onLoad(
         g.picked,
@@ -691,6 +698,7 @@ export function TradeInbox(props: {
                 )}
               </div>
             </div>
+            {o.dropNote ? <p className="af-tc-row-sub af-tc-offer-drop">{copy(o.dropNote)}</p> : null}
 
             <div className="af-tc-offer-actions">
               <button type="button" className="af-btn af-btn--ghost" onClick={() => loadOffer(o)}>
@@ -707,7 +715,7 @@ export function TradeInbox(props: {
                   target="_blank"
                   rel="noreferrer noopener"
                 >
-                  {copy('Act on it in Sleeper')}
+                  {copy(o.provider === 'espn' ? 'Act on it in ESPN' : o.provider === 'yahoo' ? 'Act on it in Yahoo' : 'Act on it in Sleeper')}
                 </a>
               ) : null}
             </div>
@@ -954,6 +962,8 @@ export function TradeInbox(props: {
                       </ul>
                     ) : null}
                     {withheld ? <p className="af-tc-timeline-gap">{copy('Not graded:')} {copy(withheld)}</p> : null}
+                    {/* Why the values moved, measured from completed trades — open offers and settled trades alike. */}
+                    <TradeMarketEvidence grade={graded} copy={copy} />
                     {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
                     {trade.realizedGrade ? <p className="af-tc-timeline-advice">{copy('Realized outcome:')} {trade.realizedGrade}. {trade.realizedNote}</p> : null}
                     {isCompleted && trade.status !== 'reversed' && leagueId && trade.impactRef ? <ImpactNowReview leagueId={leagueId} trade={trade.impactRef} original={grade} /> : null}

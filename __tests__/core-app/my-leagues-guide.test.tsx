@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
@@ -156,7 +158,21 @@ describe('<MyLeaguesV4 /> — the guide', () => {
     expect(container.querySelector('.af-mlg-title')?.textContent).toBe('1 league needs a lineup fix')
     const chips = [...container.querySelectorAll('.af-mlg-chip')].map((c) => c.textContent)
     expect(chips).toEqual(['1 more with a questionable starter', '1 waiting on a draft'])
-    expect(screen.getByTestId('my-leagues-why').textContent).toContain('scores zero')
+    // 2026-11-24 (the simplify pass): "Why it matters" is one closed row, and there is no intro sentence.
+    const why = screen.getByTestId('my-leagues-why') as HTMLDetailsElement
+    expect(why.tagName).toBe('DETAILS')
+    expect(why.open).toBe(false)
+    expect(why.querySelector('summary')?.textContent).toBe('Why it matters')
+    expect(why.textContent).toContain('scores zero')
+    expect(container.querySelector('.af-mlg-intro')).toBeNull()
+    expect(container.textContent).not.toContain('Every league you play')
+  })
+
+  it('a phone card puts its one button beside the reason, not on a row of its own', () => {
+    const css = readFileSync(join(process.cwd(), 'components/core-app/af-my-leagues-guide.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    const phone = css.slice(css.indexOf('@media (max-width: 720px)'))
+    expect(phone).toMatch(/\.af-ml-card\[data-view='grid'\]\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/)
+    expect(phone).toMatch(/> \.af-ml-card-actions\s*\{[^}]*grid-column:\s*2/)
   })
 
   it('groups honestly: needs you, in season (bench injuries), before the draft', () => {
@@ -197,7 +213,9 @@ describe('<MyLeaguesV4 /> — the guide', () => {
     expect(filters.querySelector('select[aria-label="Filter by platform"]')).not.toBeNull()
     const foot = screen.getByTestId('my-leagues-foot')
     expect(foot.hasAttribute('open')).toBe(false)
-    expect(foot.querySelector('summary')?.textContent).toBe("Past seasons (12) and what we can't see yet")
+    // 2026-11-20: the foot is the shared "More detail" fold; its old summary is the note.
+    expect(foot.querySelector('.af-md-label')?.textContent).toBe('More detail')
+    expect(foot.querySelector('.af-md-note')?.textContent).toBe("Past seasons (12) and what we can't see yet")
     expect(foot.textContent).toContain('Records and standings')
   })
 

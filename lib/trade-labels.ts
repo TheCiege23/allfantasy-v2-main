@@ -1,3 +1,5 @@
+import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
+
 type TradeLabel = {
   id: string
   name: string
@@ -87,9 +89,15 @@ export interface TradeAsset {
 interface TradeLabelsInput {
   givenAssets: TradeAsset[]
   receivedAssets: TradeAsset[]
-  fairnessScore: number
-  givenValue: number
-  receivedValue: number
+  /**
+   * The ONE grade's league-value letter for the side whose labels these are (the `give` side), or
+   * null when the grade was withheld. Labels that judge value (theft, overpay, "false fairness"…) read
+   * this letter's bands and nothing else; with null they are not emitted at all. Until 2026-11-26 they
+   * read a composite `fairnessScore` of the caller's own (50 + tanh) — a second verdict beside the
+   * letter. Structural labels (pick burn, positional arbitrage, RB value trap) never needed a value
+   * judgement and are unchanged.
+   */
+  gradeLetter: GradeLetter | null
 }
 
 function getHighestTier(assets: TradeAsset[]): string | null {
@@ -138,7 +146,11 @@ function hasPosition(assets: TradeAsset[], pos: string): boolean {
 
 export function detectTradeLabels(input: TradeLabelsInput): TradeLabel[] {
   const labels: TradeLabel[] = []
-  const { givenAssets, receivedAssets, fairnessScore } = input
+  const { givenAssets, receivedAssets, gradeLetter } = input
+  const strongWin = gradeLetter === 'A'
+  const notLosing = gradeLetter === 'A' || gradeLetter === 'B' || gradeLetter === 'C'
+  const losing = gradeLetter === 'D' || gradeLetter === 'F'
+  const even = gradeLetter === 'C'
   
   const receivedHighestTier = getHighestTier(receivedAssets)
   const tierJump = hasTierJump(givenAssets, receivedAssets)
@@ -146,11 +158,11 @@ export function detectTradeLabels(input: TradeLabelsInput): TradeLabel[] {
   const givenAvgAge = getAverageAge(givenAssets)
   const receivedAvgAge = getAverageAge(receivedAssets)
   
-  if (receivedHighestTier === 'Elite' && fairnessScore >= 70) {
+  if (receivedHighestTier === 'Elite' && strongWin) {
     labels.push(TRADE_LABELS.ELITE_ASSET_THEFT)
   }
   
-  if (tierJump && fairnessScore >= 52) {
+  if (tierJump && notLosing) {
     labels.push(TRADE_LABELS.TIER_JUMP_WIN)
   }
   
@@ -163,11 +175,11 @@ export function detectTradeLabels(input: TradeLabelsInput): TradeLabel[] {
   
   const playersGiven = givenAssets.filter(a => !a.isPick).length + givenAssets.filter(a => a.isPick).length
   const playersReceived = receivedAssets.filter(a => !a.isPick).length + receivedAssets.filter(a => a.isPick).length
-  if (playersGiven >= 3 && playersReceived === 1 && fairnessScore >= 50) {
+  if (playersGiven >= 3 && playersReceived === 1 && notLosing) {
     labels.push(TRADE_LABELS.SMART_CONSOLIDATION)
   }
   
-  if (included1st && fairnessScore < 45) {
+  if (included1st && losing) {
     labels.push(TRADE_LABELS.OVERPAY_RISK)
   }
   
@@ -181,7 +193,7 @@ export function detectTradeLabels(input: TradeLabelsInput): TradeLabel[] {
   }
   
   const ageLoss = receivedAvgAge - givenAvgAge
-  if (fairnessScore >= 45 && fairnessScore <= 55 && ageLoss >= 3) {
+  if (even && ageLoss >= 3) {
     labels.push(TRADE_LABELS.FALSE_FAIRNESS)
   }
   

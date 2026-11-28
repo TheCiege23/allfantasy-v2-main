@@ -6,6 +6,7 @@ import { buildDevyValueBoard } from '@/lib/devy/devyValueBoard'
 import { DEVY_FIRST_PICK_VALUE } from '@/lib/trade-intel/devyTradeValue'
 import { computeAllDevyIntelMetrics, computeDevyFinalScore, computeAvailabilityPctV2 } from '@/lib/devy-intel'
 import { prisma } from '@/lib/prisma'
+import { requireLegacyPlan } from '@/lib/legacy/legacyPlanGate'
 
 const openai = getOpenAIRouteClient()
 
@@ -149,6 +150,13 @@ function computeSecondaryNeed(rosterPositions: string[], isSF: boolean, isTEP: b
 }
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/devy-board", tool: "LegacyDevyBoard" })(async (req: NextRequest) => {
+  /*
+   * 🛑 SIGN-IN + AF LEGACY (owner's decision 2026-11-27; gating audit H2). The board ran up to two gpt-4o
+   * calls for anyone. `war_room_devy_rankings` is the AF Legacy "Devy Rankings" key the War Room card
+   * already advertises — until now nothing enforced it. Refused before the body, the DB and the model.
+   */
+  const gate = await requireLegacyPlan('war_room_devy_rankings', 'the devy board')
+  if (!gate.ok) return gate.response
   try {
     const body: DevyBoardRequest = await req.json()
     const { league_id, league_settings, roster, team_record } = body

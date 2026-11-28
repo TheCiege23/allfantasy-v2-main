@@ -7,6 +7,7 @@ import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { checkNewBestBallLeaguePool } from '@/lib/bestball/poolCapacity'
+import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
 import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
@@ -15,7 +16,7 @@ import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 import { z } from 'zod'
 import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
-import { TE_PREMIUM_POINT_OPTIONS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
+import { TE_PREMIUM_MAX_POINTS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import type { LeagueSport } from '@prisma/client'
 import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { isImportedTeamCountAllowed } from '@/lib/league-creation/importedTeamCount'
@@ -293,7 +294,7 @@ export function validateCreatePayload(
       errors: [
         {
           path: 'draftType',
-          message: 'Choose snake, linear, auction, mock_draft, offline, or auto. Use a longer pick clock for a slow draft.',
+          message: 'Choose snake, linear, auction, offline, or auto. Use a longer pick clock for a slow draft.',
         },
       ],
     }
@@ -371,6 +372,25 @@ export function validateCreatePayload(
     }
   }
 
+  /*
+   * A pro-sport Redraft or Dynasty league must fit the sport's players (lib/league-creation/
+   * playerSupply.ts): the form offers 250 teams in every sport and a 250-team NFL draft runs dry.
+   * Checked before the size list, so the answer is the reason and not a list of 73 numbers.
+   * College leagues are not checked. A league carried over from an import keeps the size it has.
+   */
+  // C2C as well: a college C2C league's pro side must fit the pro sport (owner's decision, 2026-11-22).
+  if ((formatId === 'redraft' || formatId === 'dynasty' || formatId === 'c2c') && !(options.importedTeamCount != null && options.importedTeamCount === data.teamCount)) {
+    const supply = checkNewLeaguePlayerSupply({ sport, leagueType: idpRequested ? 'idp' : formatId, teamCount: data.teamCount })
+    if (!supply.ok && supply.message) {
+      return {
+        ok: false,
+        status: 400,
+        error: supply.message,
+        errors: [{ path: 'teamCount', message: supply.message, code: 'PLAYER_SUPPLY_EXHAUSTED' }],
+      }
+    }
+  }
+
   const teamOpts = getTeamCountOptions(sport as SupportedSport, formatId as LeagueTypeId, data.soccerPipeline ?? null)
 
   const importedCountAccepted =
@@ -397,7 +417,7 @@ export function validateCreatePayload(
     if (sport !== 'NFL' || !isValidTePremiumPoints(tePremiumPoints)) {
       const message = sport !== 'NFL'
         ? 'TE premium is available for NFL leagues'
-        : `Choose a TE premium of ${TE_PREMIUM_POINT_OPTIONS.join(', ')} points per catch`
+        : `TE premium must be more than 0 and at most ${TE_PREMIUM_MAX_POINTS} points per catch, to two decimals`
       return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.tePremiumPoints', message }] }
     }
   }
@@ -489,14 +509,14 @@ export function validateCreatePayload(
     }
   }
 
-  // Two-week Guilly elimination periods (lib/guillotine/eliminationPeriods.ts): MLB only. Refused rather
+  // Two-week Guilly elimination periods (lib/guillotine/eliminationPeriods.ts): Guilly only. Refused rather
   // than dropped, so a league is never created on a period length it did not ask for.
   if (schedule.guillotinePeriodWeeks !== undefined && schedule.guillotinePeriodWeeks !== 1) {
     const message =
       schedule.guillotinePeriodWeeks !== 2
         ? 'An elimination period is one week or two.'
         : formatId !== 'guillotine' || !supportsTwoWeekPeriods(sport)
-          ? 'Two-week elimination periods are for MLB Guilly leagues.'
+          ? 'Two-week elimination periods are for Guilly leagues.'
           : null
     if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.guillotinePeriodWeeks', message }] }
   }

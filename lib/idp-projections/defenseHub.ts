@@ -307,7 +307,9 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
    */
   const rows = await args.prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: myIds } },
+      // NFL by construction: IDP is an NFL scoring format. Held to NFL because Sleeper reuses ids
+      // across sports (NBA 1466 is JaVale McGee, NFL 1466 Travis Kelce).
+      where: { sport: 'NFL', sleeperId: { in: myIds } },
       select: { sleeperId: true, name: true, team: true, position: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
     })
@@ -417,9 +419,10 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
        */
       reason:
         projection == null
-          ? 'no projection history yet — no scored game on file for this player'
+          ? // Plain words (2026-11-23); the distinction above is kept: "yet" versus "can't".
+            'No projection yet: he hasn’t played a scored game.'
           : v == null
-            ? 'ranked, but replacement level at his position could not be established'
+            ? 'Projected, but there aren’t enough comparable players at his position to price him.'
             : null,
       lastWeek: actualMap.get(d.sleeperId) ?? null,
     }

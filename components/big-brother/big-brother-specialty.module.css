@@ -1,23 +1,23 @@
 /* Big Brother specialty home + eviction night. Layered on components/league/specialty/specialty.module.css. */
 .ph { display: flex; align-items: flex-start; gap: 0; margin: 4px 0 0; padding: 0; list-style: none; }
 .ph>li { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; min-width: 0; }
-.ph>li::before { content: ''; position: absolute; top: 15px; left: -50%; right: 50%; height: 3px; background: #22305a; }
+.ph>li::before { content: ''; position: absolute; top: 15px; left: -50%; right: 50%; height: 3px; background: var(--sp-track, #22305a); }
 .ph>li:first-child::before { display: none; }
 .ph>li>i {
   position: relative; z-index: 1; width: 32px; height: 32px; border-radius: 99px; display: grid; place-items: center;
-  font: 700 12px 'JetBrains Mono', monospace; font-style: normal; background: #10131c; border: 2px solid #22305a; color: #7d84a3;
+  font: 700 12px 'JetBrains Mono', monospace; font-style: normal; background: var(--sp-card2, #10131c); border: 2px solid var(--sp-line-strong, #22305a); color: var(--sp-t3, #7d84a3);
 }
-.ph>li>span { font: 600 11.5px 'Archivo', sans-serif; color: #7d84a3; text-align: center; }
+.ph>li>span { font: 600 11.5px 'Archivo', sans-serif; color: var(--sp-t3, #7d84a3); text-align: center; }
 .ph>li.done>i { background: #1d4ed8; border-color: #3b82f6; color: #fff; }
 .ph>li.done::before { background: #3b82f6; }
 .ph>li.on>i { background: #ff5ec8; border-color: #ff9ad8; color: #fff; box-shadow: 0 0 0 5px rgba(255, 94, 200, .18); }
-.ph>li.on>span { color: #ffb3e3; }
+.ph>li.on>span { color: var(--sp-pink, #ffb3e3); }
 .ph>li.on::before { background: #3b82f6; }
 
 .spots { display: flex; flex-wrap: wrap; gap: 16px; }
 .spot {
   flex: 1 1 200px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; border-radius: 14px;
-  background: #10131c; border: 1px solid rgba(255, 255, 255, .07); text-align: center; min-width: 0;
+  background: var(--sp-card2, #10131c); border: 1px solid var(--sp-line, rgba(255, 255, 255, .07)); text-align: center; min-width: 0;
 }
 .spotWide { flex: 2 1 320px; }
 .spotIcon { width: 52px; height: 52px; }
@@ -30,12 +30,20 @@
 .nom { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
 
 .hgGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
-.hg { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255, 255, 255, .06); text-align: center; min-width: 0; }
+.hg { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px; background: var(--sp-card2, #10131c); border: 1px solid var(--sp-line, rgba(255, 255, 255, .06)); text-align: center; min-width: 0; }
 .hgOut { opacity: .55; }
 .hgOut .grey { filter: grayscale(1); }
 .hgName { font-size: 12.5px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hgMe { border-color: rgba(59, 130, 246, .55); background: #111a2e; }
+.hgMe { border-color: rgba(59, 130, 246, .55); background: var(--sp-row, #111a2e); }
 
+/* The rail (Your week, rules, Latest) wrapped under the houseguest grid at 1440 and sat in a narrow column with half the
+   width empty (2026-11-23): spread its cards across the width when it wraps (Devy's railWide). */
+.railWide.railWide { flex: 1 1 380px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: start; gap: 16px; }
+/* Phone: the HOH / block / Veto spots as one compact card (the phone layout had dropped them). */
+.phoneSpots { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; padding: 14px 16px; margin: 0; font-size: 13px; }
+.phoneSpots>dt { color: var(--sp-t3, #7d84a3); font-weight: 600; }
+.phoneSpots>dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.phoneSpots>dd:has(a) { grid-column: 1 / -1; }
 .desktopOnly { display: contents; }
 .phoneOnly { display: none; }
 @container (max-width: 640px) {
@@ -51,28 +59,53 @@
 .phoneHeadText { position: relative; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .phoneTitle { margin: 0; font: 800 28px/1.05 'Archivo', sans-serif; color: #fff; }
 .pick { width: 100%; text-align: left; cursor: pointer; color: inherit; font: inherit; min-height: 56px; }
-.pick[aria-pressed='true'] { border-color: #ff5ec8; background: #1d1020; }
+.pick[aria-pressed='true'] { border-color: #ff5ec8; background: var(--sp-pink-soft, #1d1020); }
 .pick:disabled { opacity: .45; cursor: not-allowed; }
 .pick:focus-visible { outline: 2px solid var(--acc2); outline-offset: 2px; }
-.lockBar { position: sticky; bottom: 0; padding: 12px 0 4px; background: linear-gradient(180deg, transparent, #07080d 30%); }
+.lockBar { position: sticky; bottom: 0; padding: 12px 0 4px; background: linear-gradient(180deg, transparent, var(--sp-bg, #07080d) 30%); }
 .lockBar>button { width: 100%; min-height: 52px; }
 
 /* ---------- eviction night ---------- */
 .evictStage { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
 .evictCard {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 26px 16px;
-  border-radius: 16px; background: #10131c; border: 1px solid rgba(255, 94, 200, .35); text-align: center; min-width: 0;
+  border-radius: 16px; background: var(--sp-card2, #10131c); border: 1px solid rgba(255, 94, 200, .35); text-align: center; min-width: 0;
   transition: background .3s, opacity .3s;
 }
-.evictCount { font: 800 64px/1 'Archivo', sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
-.evictOut { background: #0a0b10; }
+.evictCount { font: 800 64px/1 'Archivo', sans-serif; color: var(--sp-text-strong, #fff); font-variant-numeric: tabular-nums; }
+.evictOut { background: var(--sp-card, #0a0b10); }
 .evictOut .fade { opacity: .35; filter: grayscale(1); }
 .door { position: absolute; top: 90px; left: 50%; width: 76px; margin-left: -38px; z-index: 2; animation: bbPop .5s ease-out both; }
-.evictedWord { font: 800 30px 'Archivo', sans-serif; letter-spacing: .14em; color: #ff8fc8; animation: bbPop .5s ease-out .15s both; }
-.result { margin: 0; text-align: center; font-size: 15px; font-weight: 600; color: #ffd0ec; }
+.evictedWord { font: 800 30px 'Archivo', sans-serif; letter-spacing: .14em; color: var(--sp-pink, #ff8fc8); animation: bbPop .5s ease-out .15s both; }
+.result { margin: 0; text-align: center; font-size: 15px; font-weight: 600; color: var(--sp-pink, #ffd0ec); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 @keyframes bbPop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.06); opacity: 1; } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
   .door, .evictedWord { animation: none; }
   .evictCard { transition: none; }
+}
+
+/*
+ * Phone (2026-11-24, the simplify pass). The houseguest wall is two across in compact rows (avatar beside name
+ * and tag): twelve 130px tiles were ~770px. The two nominees stand side by side, at a size that fits, instead of
+ * two ~300px cards one above the other. The Avatar sets its size inline, so the override is !important, scoped
+ * to these two places only.
+ */
+@media (max-width: 560px) {
+  .hgGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .hg { display: grid; grid-template-columns: 30px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; row-gap: 2px; align-items: center; justify-items: start; padding: 8px 10px; text-align: left; }
+  .hg > :first-child { grid-row: 1 / span 2; width: 30px !important; height: 30px !important; font-size: 11px; }
+  .hgName { justify-self: stretch; }
+  .evictStage { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .evictCard { gap: 6px; padding: 16px 8px; }
+  .evictCard > :first-child { width: 56px !important; height: 56px !important; }
+  .evictCard .spotName { font-size: 16px !important; }
+  .evictCount { font-size: 44px; }
+  .door { top: 56px; width: 52px; margin-left: -26px; }
+  .evictedWord { font-size: 20px; }
+}
+
+/* Room for the rail beside the grid: back to the shared single column. */
+@container (min-width: 1048px) {
+  .railWide.railWide { flex: 0 1 380px; display: flex; flex-direction: column; align-items: stretch; }
 }

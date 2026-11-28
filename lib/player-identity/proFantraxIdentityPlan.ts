@@ -1,5 +1,6 @@
 import type { FantraxPlayerRef } from '@/lib/league-import/fantrax/fantraxApi'
 import { fantraxSoccerScoringPosition } from '@/lib/league-import/fantrax/fantraxScoring'
+import { givenNameNicknameOf } from '@/lib/player-match/verifiedNameMatch'
 
 /**
  * Fantrax player id -> our `PlayerIdentityMap` row, for the pro sports a Fantrax dynasty league lives in.
@@ -68,16 +69,17 @@ const NHL_TEAMS: Record<string, string[]> = {
 
 /** Fantrax club abbreviations paired with Rolling Insights team IDs from its EPL schedule. */
 const EPL_TEAMS: Record<string, string[]> = {
-  ARS: ['1', 'Arsenal'], BOU: ['2', 'AFC Bournemouth'], BHA: ['3', 'Brighton & Hove Albion'],
+  ARS: ['1', 'Arsenal'], BOU: ['2', 'AFC Bournemouth', 'Bournemouth'], BHA: ['3', 'Brighton & Hove Albion', 'Brighton and Hove Albion'],
   CHE: ['6', 'Chelsea'], CRY: ['7', 'Crystal Palace'], EVE: ['8', 'Everton'], FUL: ['9', 'Fulham'],
-  LIV: ['12', 'Liverpool'], MCI: ['13', 'Manchester City'], MUN: ['14', 'Manchester United'],
-  NEW: ['15', 'Newcastle United'], TOT: ['17', 'Tottenham Hotspur'], AVL: ['21', 'Aston Villa'],
+  LIV: ['12', 'Liverpool', 'Liverpool FC'], MCI: ['13', 'Manchester City', 'MNC'], MUN: ['14', 'Manchester United', 'MAN'],
+  NEW: ['15', 'Newcastle United', 'Newcastle'], TOT: ['17', 'Tottenham Hotspur'], AVL: ['21', 'Aston Villa'],
   WHU: ['19', 'West Ham United', 'West Ham'],
-  BRF: ['24', 'Brentford'], NOT: ['25', 'Nottingham Forest'], IPS: ['26', 'Ipswich Town'],
-  LEE: ['67', 'Leeds United'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
+  BRF: ['24', 'Brentford', 'BRE'], NOT: ['25', 'Nottingham Forest', 'NFO'], IPS: ['26', 'Ipswich Town'],
+  LEE: ['67', 'Leeds United', 'LUFC'], SUN: ['68', 'Sunderland'], COV: ['78', 'Coventry City'], HUL: ['79', 'Hull City'],
 }
 
-const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']
+// IF: the registry's generic infielder label (Danny Serretti, Taitn Gray: 2B/1B on Fantrax, IF here).
+const MLB_HITTER = ['C', '1B', '2B', '3B', 'SS', 'IF', 'OF', 'LF', 'CF', 'RF', 'DH', 'UT', 'UTIL']
 const NBA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'GF', 'FC', 'UT', 'UTIL']
 const NHL_SKATER = ['C', 'LW', 'RW', 'W', 'F', 'D', 'LD', 'RD']
 
@@ -124,28 +126,151 @@ const TEAM_ALIASES = Object.fromEntries(
   ]),
 ) as Record<ProFantraxSport, Map<string, string>>
 
+/**
+ * Generational suffixes, dropped on BOTH sides. Fantrax writes "Jackson, Jaren" where the registry
+ * holds "Jaren Jackson Jr." — measured 2026-11-19, 11 of 24 unlinked rostered NBA ids in production
+ * were exactly this (Jaren Jackson, Michael Porter, Trey Murphy, Dereck Lively, GG Jackson…). A father
+ * and son both active on one team stays safe: the ambiguity count refuses two candidates.
+ */
+const SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v'])
+
+/** "First Last" words with accents, punctuation and a trailing suffix removed. Fantrax writes "Last, First". */
+function nameWords(value: string): string[] {
+  const parts = value.split(',')
+  const ordered = parts.length === 2 ? `${parts[1]} ${parts[0]}` : value
+  const words = ordered.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '').split(/[\s-]+/).filter(Boolean)
+  while (words.length > 2 && SUFFIXES.has(words[words.length - 1]!)) words.pop()
+  return words
+}
+
 /** Fantrax writes "Last, First"; our registry writes "First Last". */
-function nameKey(value: string) { const parts = value.split(','); return compact(parts.length === 2 ? `${parts[1]} ${parts[0]}` : value) }
+function nameKey(value: string) { return nameWords(value).join('') }
+
+/** Surname key and given name, for the nickname pass. */
+function nameSplit(value: string): { first: string; last: string } | null {
+  const words = nameWords(value)
+  return words.length >= 2 ? { first: words[0]!, last: words.slice(1).join('') } : null
+}
+
+/** "Mitch" for "Mitchell" — the rule lives in verifiedNameMatch.ts. Used only in a second pass, after the
+ * exact name found nothing, and still bound by team, role and one candidate. */
+const nicknameOf = givenNameNicknameOf
+
+/**
+ * Hockey's second split, used ONLY to break a tie between candidates that already agree on name, team
+ * and skater/goalie: two Elias Petterssons play for Vancouver, a C and a D. Never used to refuse a
+ * single candidate — sources disagree on forward labels, and the odd player converts between F and D.
+ */
+function nhlLine(position: string | null): 'forward' | 'defense' | null {
+  const parts = tokens(position)
+  const d = parts.some(p => ['D', 'LD', 'RD'].includes(p))
+  const f = parts.some(p => ['C', 'LW', 'RW', 'W', 'F'].includes(p))
+  return d === f ? null : d ? 'defense' : 'forward'
+}
 
 /** The canonical team code for a sport, or undefined when the label is not a team we recognise. */
+export function proRolesAgree(sport: ProFantraxSport, slot: string | null, position: string | null): boolean {
+  const requested = RULES[sport].roles(slot)
+  return !requested.length || RULES[sport].roles(position).some(role => requested.includes(role))
+}
+
 export function proTeamCode(sport: ProFantraxSport, label: string | null | undefined): string | undefined {
   return TEAM_ALIASES[sport].get(compact(label ?? ''))
 }
 
 /** Exact normalized name + recognized current team + compatible role; never a name-only guess. */
-export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: FantraxPlayerRef[], identities: ProIdentityRow[]) {
+/**
+ * `fullDirectory`: the caller passes Fantrax's WHOLE player directory for the sport (only the scheduled
+ * ingest does). The unattached, team-surname-initial and changed-club rules rest on "Fantrax lists this name
+ * once", which a partial list cannot prove — the ESPN MLB matcher and the points grader's one-league roster
+ * claims both reuse this planner with partial lists, and keep the strict rules only.
+ */
+export function planProFantraxIdentityLinks(sport: ProFantraxSport, refs: FantraxPlayerRef[], identities: ProIdentityRow[], opts: { fullDirectory?: boolean } = {}) {
+  const full = opts.fullDirectory === true
   const rules = RULES[sport]
   const teamAliases = TEAM_ALIASES[sport]
   const byName = new Map<string, ProIdentityRow[]>()
-  for (const row of identities) { const key = nameKey(row.canonicalName); byName.set(key, [...(byName.get(key) ?? []), row]) }
+  const bySurname = new Map<string, ProIdentityRow[]>()
+  for (const row of identities) {
+    const key = nameKey(row.canonicalName); byName.set(key, [...(byName.get(key) ?? []), row])
+    const split = nameSplit(row.canonicalName)
+    if (split) bySurname.set(split.last, [...(bySurname.get(split.last) ?? []), row])
+  }
   const proposed: Array<{ id: string; fantraxId: string; rollingInsightsId: string }> = []
   const existingSourceIds = new Set(identities.map(row => row.fantraxId).filter(Boolean))
+  // Source side of uniqueness: how often Fantrax lists a name anywhere, and a surname on one team.
+  const refNames = new Map<string, number>()
+  const refSurnameTeam = new Map<string, number>()
+  for (const ref of refs) {
+    const key = nameKey(ref.name); refNames.set(key, (refNames.get(key) ?? 0) + 1)
+    const team = teamAliases.get(compact(ref.team ?? '')), split = nameSplit(ref.name)
+    if (team && split) refSurnameTeam.set(`${split.last}|${team}`, (refSurnameTeam.get(`${split.last}|${team}`) ?? 0) + 1)
+  }
   let unmatched = 0, ambiguous = 0, unchanged = 0, conflicts = 0
   for (const ref of refs) {
     const sourceTeam = teamAliases.get(compact(ref.team ?? ''))
     const sourceRoles = rules.roles(ref.position)
+    const key = nameKey(ref.name)
+    /*
+     * An UNATTACHED player — Fantrax's "(N/A)" team: released, unsigned, between clubs. Measured
+     * 2026-11-19: 4 of 6 still-unlinked rostered NBA ids (Kelly Olynyk, Kevin Porter Jr., Killian Hayes,
+     * Darryl Morsell). There is no team to compare, so the name has to carry it alone: held by exactly ONE
+     * identity in the sport (already-linked ones counted) and listed exactly once by Fantrax.
+     * NBA and NHL only: MLB's directory carries 7,000+ unattached minor leaguers and unsigned players, and
+     * `tests/mlb-fantrax-identity.test.ts` pins its "(N/A) never links" decision deliberately.
+     */
+    if (full && (sport === 'NBA' || sport === 'NHL') && ref.fantraxId && !sourceTeam && compact(ref.team ?? '') === 'na' && sourceRoles.length) {
+      const named = byName.get(key) ?? []
+      const only = named.length === 1 && refNames.get(key) === 1 ? named.filter(row => row.rollingInsightsId && rules.roles(row.position).some(role => sourceRoles.includes(role))) : []
+      if (only.length !== 1) { unmatched++; continue }
+      const row = only[0]!
+      if (row.fantraxId === ref.fantraxId) { unchanged++; continue }
+      if (row.fantraxId || existingSourceIds.has(ref.fantraxId)) { conflicts++; continue }
+      proposed.push({ id: row.id, fantraxId: ref.fantraxId, rollingInsightsId: row.rollingInsightsId! })
+      continue
+    }
     if (!ref.fantraxId || !sourceTeam || !sourceRoles.length) { unmatched++; continue }
-    const candidates = (byName.get(nameKey(ref.name)) ?? []).filter(row => row.rollingInsightsId && teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam && rules.roles(row.position).some(role => sourceRoles.includes(role)))
+    const fits = (row: ProIdentityRow) => Boolean(row.rollingInsightsId) && teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam && rules.roles(row.position).some(role => sourceRoles.includes(role))
+    let candidates = (byName.get(key) ?? []).filter(fits)
+    if (!candidates.length) {
+      const split = nameSplit(ref.name)
+      candidates = split ? (bySurname.get(split.last) ?? []).filter(row => {
+        const other = nameSplit(row.canonicalName)
+        return other !== null && nicknameOf(split.first, other.first) && fits(row)
+      }) : []
+    }
+    /*
+     * Last: a spelling the two sides never share (Mo / Mohamed Bamba, Arseny / Arseni Gritsyuk). Same team,
+     * same surname, same first initial, compatible role — and the ONLY player of that surname on that team
+     * on both sides (every identity counted). Bub / Carlton Carrington stays unlinked: no letter in common.
+     * NBA and NHL only. The first dry run paired Juan with Jorge Lopez (Giants) and Cristian with Carlos
+     * Alvarado in MLB, and Keith with Kai Andrews in soccer: Fantrax lists whole organisations under one
+     * club code there, so "the only Lopez on the team" is not true on its side. All 28 NBA/NHL pairs held.
+     */
+    if (full && (sport === 'NBA' || sport === 'NHL') && !candidates.length && !(byName.get(key) ?? []).length) {
+      const split = nameSplit(ref.name)
+      const onTeam = split ? (bySurname.get(split.last) ?? []).filter(row => teamAliases.get(compact(row.currentTeam ?? '')) === sourceTeam) : []
+      const other = onTeam.length === 1 ? nameSplit(onTeam[0]!.canonicalName) : null
+      if (split && other && other.first[0] === split.first[0] && refSurnameTeam.get(`${split.last}|${sourceTeam}`) === 1 && fits(onTeam[0]!)) candidates = onTeam
+    }
+    /*
+     * A player who CHANGED CLUB since our record was written: offseason trades and loans (2026-11-19: 492
+     * MLB and 17 Premier League players on a club — Dillon Tate TOR→LAA, Vince Velasquez CHC→KC, Harvey
+     * Elliott). Only when the name is held by exactly ONE identity in the sport (linked ones counted) and
+     * listed exactly once in Fantrax's whole directory, minor leaguers and "(N/A)" included — so a common
+     * name never moves — and only for a compatible role. MLB and soccer only: NBA/NHL keep the pinned
+     * "never crosses a team" decision (`tests/fantrax-nba-nhl-import.test.ts`), and had no such case left.
+     */
+    if (full && !candidates.length && (sport === 'MLB' || sport === 'SOCCER')) {
+      const named = byName.get(key) ?? []
+      if (named.length === 1 && refNames.get(key) === 1 && named[0]!.rollingInsightsId && rules.roles(named[0]!.position).some(role => sourceRoles.includes(role))) candidates = named
+    }
+    if (candidates.length > 1 && sport === 'NHL') {
+      const line = nhlLine(ref.position)
+      const sameLine = line ? candidates.filter(row => nhlLine(row.position) === line) : []
+      if (sameLine.length === 1) candidates = sameLine
+    }
     if (!candidates.length) { unmatched++; continue }
     if (candidates.length !== 1) { ambiguous++; continue }
     const row = candidates[0]!

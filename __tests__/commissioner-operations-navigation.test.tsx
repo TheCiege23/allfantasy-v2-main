@@ -30,7 +30,17 @@ describe('Commissioner Hub navigation', () => {
     expect(onOpenSettings).toHaveBeenCalledWith('trade')
     fireEvent.click(screen.getByTestId('commissioner-operation-waiver-operations'))
     expect(onOpenTab).toHaveBeenCalledWith('waivers')
-    expect(screen.getByTestId('commissioner-operation-advance-week')).toBeDisabled()
+    // A tool that cannot be used is not listed (2026-11-24): "Advance / Finalize Week" was a disabled card saying so.
+    expect(screen.queryByTestId('commissioner-operation-advance-week')).toBeNull()
+  })
+  it('lists each destination once, in plain words, as one row per tool (2026-11-24)', () => {
+    workspace()
+    // "League Messages" opened the same league chat as "Announcements & Chat".
+    expect(screen.queryByTestId('commissioner-operation-league-messages')).toBeNull()
+    expect(screen.getByTestId('commissioner-operation-announcements')).toBeTruthy()
+    const text = document.body.textContent ?? ''
+    expect(text).not.toMatch(/canonical|authoritative|Decision OS|\bexisting\b/i)
+    expect(screen.getByTestId('commissioner-operation-schedule').className).not.toMatch(/flex-col|min-h-\[132px\]/)
   })
   it('does not expose commissioner navigation to a manager', () => {
     workspace(false)

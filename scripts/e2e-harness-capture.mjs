@@ -32,7 +32,7 @@ const require = createRequire(import.meta.url)
 const { chromium } = require('playwright')
 
 const HTML_MODE = { light: 'light', dark: 'dark', af: 'legacy' }
-const WIDTHS = { phone: { width: 390, height: 844 }, desktop: { width: 1440, height: 1000 } }
+const WIDTHS = { phone: { width: 390, height: 844 }, tablet: { width: 820, height: 1024 }, desktop: { width: 1440, height: 1000 } }
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`)
@@ -54,9 +54,10 @@ if (host === 'allfantasy.ai' || host.endsWith('.allfantasy.ai')) {
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const tsx = path.join(root, 'node_modules', '.bin', 'tsx')
+// tsx's own CLI through node: node_modules/.bin/tsx is a .cmd shim on Windows, which execFileSync cannot spawn (ENOENT).
+const tsxCli = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs')
 /** { [harness]: { routes: [{ path, query?, body }], frames: [{ name, path }] } } */
-const HARNESSES = JSON.parse(execFileSync(tsx, [path.join(root, 'scripts', 'e2e-harness-api.ts')], { cwd: root, maxBuffer: 1 << 26 }).toString())
+const HARNESSES = JSON.parse(execFileSync(process.execPath, [tsxCli, path.join(root, 'scripts', 'e2e-harness-api.ts')], { cwd: root, maxBuffer: 1 << 26 }).toString())
 
 const harnesses = list(arg('harnesses'), Object.keys(HARNESSES))
 const frameFilter = arg('frames') ? new Set(list(arg('frames'), [])) : null

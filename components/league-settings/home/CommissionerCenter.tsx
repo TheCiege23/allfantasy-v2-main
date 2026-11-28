@@ -63,8 +63,7 @@ const NAV_GROUPS: ReadonlyArray<{ key: 'league' | 'rules' | 'ops'; items: Readon
       { id: 'trades', key: 'trades' },
       { id: 'playoffs', key: 'playoffs' },
       { id: 'af-options', key: 'afOptions' },
-      { id: 'guillotine-first-chop', key: 'firstChop' },
-      { id: 'guillotine-chop-rules', key: 'chopRules' },
+      // One Guilly rules page (GuillotineRulesPage); it was three entries.
       { id: 'guillotine-rules', key: 'guillotineRules' },
       // Listed here for the category picker; the sidebar pins it above the groups instead.
       { id: 'pirate-rules', key: 'pirateRules' },
@@ -79,6 +78,8 @@ const NAV_GROUPS: ReadonlyArray<{ key: 'league' | 'rules' | 'ops'; items: Readon
       { id: 'score-adjustments', key: 'scoreAdjustments' },
       { id: 'survivor-tribes', key: 'survivorTribes' },
       { id: 'ai', key: 'ai' },
+      // Last on purpose: the one destructive entry sits at the end of the list, where people look for it.
+      { id: 'delete-league', key: 'deleteLeague' },
     ],
   },
 ]
@@ -147,6 +148,7 @@ export function CommissionerCenter({
   header,
   redraft = null,
   exitTo = 'home',
+  footer = null,
 }: {
   leagueId?: string
   leagueName?: string | null
@@ -165,6 +167,8 @@ export function CommissionerCenter({
   header?: (openSection: (id: SettingsSubPageId) => void) => ReactNode
   /** Native redraft leagues only (lib/league-media/redraftSettings.ts); null renders the default layout. */
   redraft?: RedraftSettingsView | null
+  /** Drawn below everything else (the "Export league" card). */
+  footer?: ReactNode
 }) {
   const { t, tInterpolate } = useOptionalLanguage()
   const allowed = editableSubPages(sections)
@@ -302,6 +306,7 @@ export function CommissionerCenter({
           {managers.inviteUrl ? <CopyInvite url={managers.inviteUrl} /> : <p className="lsh-help">{t('lsh.cc.managers.noInvite')}</p>}
         </section>
       </div>
+      {footer}
     </div>
   )
 }

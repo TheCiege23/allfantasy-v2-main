@@ -39,7 +39,8 @@ import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForSport } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
-import { sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
+import { espnSportOf, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
+import { declaredAvailability } from '@/lib/core-app/declaredAvailability'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeTeamNeeds, type TeamNeedsMap } from '@/lib/waiver-engine/team-needs'
@@ -102,6 +103,11 @@ export interface WaiverPool {
    */
   teamNeeds: TeamNeedsMap | null
   /**
+   * What the trade market says a hole at each position costs (`learnedInGrades.tradeNeedEvidence`), for the league's
+   * own book — only with `TRADE_LEARNED_NEED=on`, NFL only. Evidence for the "fills a need" line; moves no score.
+   */
+  tradeNeedEvidence?: Readonly<Record<string, string>>
+  /**
    * True when the pool is a bounded slice rather than the whole wire.
    *
    * ⚠ REPORTED, NOT HIDDEN. `runWaiverClaimDecision` takes `poolIncomplete` and the decision's
@@ -119,6 +125,12 @@ export interface WaiverPool {
    * refuse when it is non-zero.
    */
   untranslatedRostered: { ids: number; excludedFromWire: number; unnamed: number } | null
+  /**
+   * A pasted Yahoo league only (declaredAvailability.ts): rostered players no Sleeper-id read can see.
+   * `verified: false` means the league is below the coverage bar and `availablePlayers` is EMPTY — not
+   * because the wire is bare, but because nobody can be called available. A caller must say so.
+   */
+  declaredRostered?: { verified: boolean; unmatched: number } | null
 }
 
 /** Matches the assistant's `deep` mode. A larger slice costs one query, not one per player. */
@@ -128,6 +140,20 @@ const POOL_LIMIT = 300
 const SLEEPER_ID = /^\d+$/
 
 type RosterRow = { id: string; platformUserId: string; playerData: unknown }
+
+/**
+ * The trade market's sentence per position for a hole there, for this league's book — or nothing. NFL only (the need
+ * learner reads NFL trades), and only with `TRADE_LEARNED_NEED=on`, the same switch that lets the measured premium into
+ * the trade grade. Evidence for the pickup's "fills a need" line; it moves no score and no bid.
+ */
+async function loadTradeNeedEvidence(sport: string, traits: { isSF: boolean; isDynasty: boolean }): Promise<Record<string, string> | undefined> {
+  if (String(sport).trim().toUpperCase() !== 'NFL') return undefined
+  const { learnedNeedOn, loadLearnedTables, tradeNeedEvidence } = await import('@/lib/trade-market/learnedInGrades')
+  if (!learnedNeedOn()) return undefined
+  const { bookKey } = await import('@/lib/trade-market/formatMarkets')
+  const book = bookKey({ format: traits.isDynasty ? 'DYNASTY' : 'REDRAFT', qbFormat: traits.isSF ? 'SUPERFLEX' : 'ONE_QB' })
+  return tradeNeedEvidence(await loadLearnedTables(prisma), book)
+}
 
 /** The slots `Roster.playerData` distinguishes, in the vocabulary the scorer reads. */
 function slotsOf(playerData: unknown): Map<string, WaiverRosterPlayer['slot']> {
@@ -173,6 +199,9 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
   const { rosters: leagueRosters, untranslatedEspnIds } = await sleeperReadableRostersWithGaps(
     rosterRows as RosterRow[],
     league?.platform,
+    // An ESPN league of another sport is stripped, never put through the NFL crosswalk; a native one
+    // keeps its catalog ids for this sport's pool, as before.
+    espnSportOf(league?.platform, sport),
   )
 
   /*
@@ -211,10 +240,17 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
    * `excludeUntranslatedEspn` takes them off the wire by the ESPN identity row's own name.
    */
   const untranslated = await excludeUntranslatedEspn(untranslatedEspnIds, sport)
+  /*
+   * 🛑 A PASTED YAHOO LEAGUE'S UNMATCHED PLAYERS ARE ROSTERED TOO. The read above keeps its declared
+   * `sleeper:` ids and drops the rest, so below the coverage bar nobody is offered, and above it each
+   * unmatched player's own wire row is hidden by the name his paste id carries.
+   */
+  const declared = declaredAvailability(league?.platform, (rosterRows as RosterRow[]).map((r) => r.playerData))
 
-  const available = pool.filter((p) => {
+  const available = declared && !declared.verified ? [] : pool.filter((p) => {
     const ids = [p.player_id, p.external_source_id].filter(Boolean) as string[]
     if (ids.some((id) => rosteredIds.has(id))) return false
+    if (declared?.hides({ name: p.full_name, position: p.position, team: p.team_abbreviation })) return false
     return !untranslated.hides(p)
   })
 
@@ -384,12 +420,15 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
     isDynasty: Boolean(priced.variant?.dynasty || priced.variant?.keeper),
   }
 
+  const tradeNeedEvidence = await loadTradeNeedEvidence(sport, leagueTraits).catch(() => undefined)
+
   return {
     availablePlayers,
     myRoster,
     leagueRosters: allRosters,
     rosterPositions,
     leagueTraits,
+    ...(tradeNeedEvidence && Object.keys(tradeNeedEvidence).length ? { tradeNeedEvidence } : {}),
     currentWeek: projectionWeek?.week ?? null,
     byeWeekByClub,
     teamNeeds,
@@ -401,6 +440,7 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
     poolIncomplete: pool.length >= POOL_LIMIT,
     leagueRosterCount: leagueRosters.length,
     untranslatedRostered: untranslated.summary(),
+    declaredRostered: declared ? { verified: declared.verified, unmatched: declared.unmatched } : null,
     pricing: {
       priced: availablePlayers.filter((p) => p.value > 0).length,
       total: availablePlayers.length,

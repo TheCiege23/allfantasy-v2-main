@@ -56,7 +56,7 @@ describe('buildTradeBreakdown — the verdict line', () => {
       receiverLabel: 'You',
       partnerLabel: 'Mike',
     })
-    expect(verdict).toBe('A near-even deal — 52% to You, 48% to Mike.')
+    expect(verdict).toBe('A near-even deal — 52% to you, 48% to Mike.')
   })
 })
 
@@ -75,7 +75,7 @@ describe('buildTradeBreakdown — the best asset', () => {
       receiverLabel: 'You',
       partnerLabel: 'Mike',
     })
-    expect(out[1]).toBe('The most valuable asset was Puka Nacua, and You got him.')
+    expect(out[1]).toBe('The most valuable asset was Puka Nacua, and you got him.')
   })
 
   it('calls a pick "it" and a player "him"', () => {
@@ -87,7 +87,7 @@ describe('buildTradeBreakdown — the best asset', () => {
       receiverLabel: 'You',
       partnerLabel: 'Mike',
     })
-    expect(out[1]).toBe('The most valuable asset was 2027 1st, and You got it.')
+    expect(out[1]).toBe('The most valuable asset was 2027 1st, and you got it.')
   })
 
   /*

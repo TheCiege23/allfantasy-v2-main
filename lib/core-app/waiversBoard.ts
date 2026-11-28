@@ -20,8 +20,7 @@ import type { WaiverSchedule } from './waiverRunClock'
 import { loadSleeperWaiverSchedules, type SleeperWaiverSchedule } from '@/lib/waivers/sleeperWaiverSchedule'
 import { buildWaiverSportSections } from './waiversBoardSports'
 import { projectionWeekKickoffs } from './waiverClaimWeek'
-import { futureWeekProjectionsReady, futureWeekStoreReader } from '@/lib/projections/futureWeekProjectionStore'
-import { FUTURE_WEEK_SOURCE } from '@/lib/projections/futureWeekIngest'
+import { loadAfNflWeek } from '@/lib/af-projections/nflLeagueWeek'
 import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type SwapRosterPlayer } from './waiverSwap'
 import { valueBookFor, valueBookKey, type ValueBook } from './valueBook'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
@@ -279,7 +278,7 @@ const EMPTY: WaiversBoardData = {
 }
 
 /** How many free-agent candidates to consider. The wire below this is noise. */
-const CANDIDATE_POOL = 900
+
 
 /**
  * How many leagues the board carries. The renderer shows the top ten and lets the reader sort,
@@ -439,21 +438,9 @@ async function nflWaiversBoard(
    * played" disclosure. Same rescoring either way: the future line is the same Sleeper component
    * line the current feed nests under `stats.stats`, stored flat.
    */
-  const nextLines =
-    requestedWeek != null && requestedWeek === current.week + 1 && (await futureWeekProjectionsReady().catch(() => false))
-      ? await futureWeekStoreReader
-          .readTopLines({
-            sport: 'NFL',
-            season: current.season,
-            source: FUTURE_WEEK_SOURCE,
-            afterWeek: current.week,
-            week: requestedWeek,
-            limit: CANDIDATE_POOL,
-          })
-          .catch(() => null)
-      : null
-  const onNext = nextLines != null && nextLines.length > 0
-  const at = onNext ? { season: current.season, week: requestedWeek as number } : current
+  const nextPool = requestedWeek === current.week + 1 ? await loadAfNflWeek({ season: current.season, week: requestedWeek }) : null
+  const onNext = Boolean(nextPool?.size)
+  const at = onNext ? { season: current.season, week: requestedWeek! } : current
 
   type RosterRow = {
     leagueId: string
@@ -462,6 +449,8 @@ async function nflWaiversBoard(
     faabRemaining: number | null
   }
 
+  // Owner ruling 2026-11-24: these two DIRECT reads (faabRemaining, leagueWaiverSettings) are Waiver Kernel n/a by design —
+  // Waiver OS holds FAAB 5 min and a reload right after a claim must show the live budget; decision paths read through Waiver OS.
   const [rosters, waiverSettings, topProjections, market] = await Promise.all([
     prisma.roster
       .findMany({
@@ -486,16 +475,7 @@ async function nflWaiversBoard(
      * Postgres to an OOM. The pool is ordered by the generic figure purely to
      * bound the set; every number the board PRINTS is re-scored per league below.
      */
-    onNext
-      ? Promise.resolve([] as Array<{ playerId: string; projectedPoints: number; stats: unknown }>)
-      : prisma.fantasyProjection
-      .findMany({
-        where: { season: at.season, week: at.week, source: { not: 'allfantasy' } },
-        orderBy: { projectedPoints: 'desc' },
-        take: CANDIDATE_POOL,
-        select: { playerId: true, projectedPoints: true, stats: true },
-      })
-      .catch(() => []),
+    onNext ? nextPool! : loadAfNflWeek(at),
     getRosteredMarket({ sport: 'NFL' }),
   ])
 
@@ -518,15 +498,7 @@ async function nflWaiversBoard(
 
   /* Component lines, for the per-league re-scoring. */
   type Proj = { playerId: string; generic: number; components: Record<string, unknown> | null }
-  const asLine = (v: unknown): Record<string, unknown> | null =>
-    v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
-  const pool: Proj[] = onNext
-    ? nextLines!.map((l) => ({ playerId: l.playerId, generic: Number(l.projectedPoints), components: asLine(l.stats) }))
-    : topProjections.map((r) => ({
-        playerId: r.playerId,
-        generic: Number(r.projectedPoints),
-        components: asLine(((r.stats ?? {}) as { stats?: unknown }).stats),
-      }))
+  const pool: Proj[] = [...topProjections.values()].map((p) => ({ playerId: p.playerId, generic: p.projectedPoints, components: p.componentStats }))
   const poolById = new Map(pool.map((p) => [p.playerId, p]))
 
   /*
@@ -906,7 +878,6 @@ async function nflWaiversBoard(
   /* AllFantasy's own engine beside the provider figures, for the players actually shown. A failed
      read costs the AF figures and nothing else. */
   /* The AF engine projects the week being played only; on next week's board there is nothing to set beside it. */
-  if (!onNext) await attachAfEngine(shown, at, (id) => poolById.get(id)?.generic ?? null).catch(() => undefined)
 
   return {
     rows: shown,

@@ -9,32 +9,37 @@ import { buildDevAdminEntitlementSnapshot } from '@/lib/dev-admin/access'
 
 afterEach(() => vi.unstubAllGlobals())
 
+// Owner decision 2026-11-27: AF Supreme includes AF Legacy (SUPREME_INCLUDED_PLAN_IDS = pro, commissioner,
+// war_room). Each case below was "Legacy stays separate" until then; it now asserts the bundle.
 describe('Supreme advertised bundle', () => {
-  it('includes Pro and Commissioner features while Legacy remains explicit', () => {
+  it('includes Pro, Commissioner and Legacy features', () => {
     const entries = listPremiumFeatureMonetizationMatrix()
       .filter(e => ['pro', 'commissioner', 'war_room'].includes(e.requiredPlanId))
     expect(entries.some(e => e.requiredPlanId === 'war_room')).toBe(true)
     for (const entry of entries) {
       expect(hasFeatureAccessForPlans(['supreme'], 'active', entry.key), entry.key)
-        .toBe(entry.requiredPlanId !== 'war_room')
+        .toBe(true)
       expect(hasFeatureAccessForPlans(['supreme', 'war_room'], 'active', entry.key), entry.key).toBe(true)
     }
   })
 
-  it('does not grant catalog-only Legacy features through an explicit Supreme entry', () => {
+  it('grants the catalog-only Legacy (War Room) features through Supreme', () => {
     const entries = Object.values(ENTITLEMENTS).filter(e => e.key.startsWith('war_room_'))
     expect(entries).toHaveLength(4)
     for (const entry of entries) {
       expect(entry.requiredPlan, entry.key).toEqual(['af_war_room'])
-      expect(hasFeatureAccessForPlans(['supreme'], 'active', entry.key), entry.key).toBe(false)
+      expect(hasFeatureAccessForPlans(['supreme'], 'active', entry.key), entry.key).toBe(true)
+      expect(hasFeatureAccessForPlans(['pro', 'commissioner'], 'active', entry.key), entry.key).toBe(false)
       expect(hasFeatureAccessForPlans(['war_room'], 'active', entry.key), entry.key).toBe(true)
     }
   })
 
-  it('keeps Legacy subscription eligibility separate in token pricing', () => {
+  it('counts Supreme as Legacy-eligible in token pricing, and Pro alone as not', () => {
     const entitlement = { plans: ['supreme' as const], status: 'active' as const,
       currentPeriodEnd: null, gracePeriodEnd: null }
     expect(resolveTokenChargeDecisionForEntitlement({ entitlement,
+      ruleCode: 'ai_war_room_multi_step_planning', baseTokenCost: 200 }).subscriptionEligible).toBe(true)
+    expect(resolveTokenChargeDecisionForEntitlement({ entitlement: { ...entitlement, plans: ['pro'] },
       ruleCode: 'ai_war_room_multi_step_planning', baseTokenCost: 200 }).subscriptionEligible).toBe(false)
     expect(resolveTokenChargeDecisionForEntitlement({ entitlement: { ...entitlement, plans: ['supreme', 'war_room'] },
       ruleCode: 'ai_war_room_multi_step_planning', baseTokenCost: 200 }).subscriptionEligible).toBe(true)
@@ -47,7 +52,7 @@ describe('Supreme advertised bundle', () => {
     expect(snapshot.plans).toContain('war_room')
   })
 
-  it.each([false, true])('client Legacy flag follows the explicit plan (present=%s)', async (legacy) => {
+  it.each([false, true])('client Legacy flag is on for Supreme with or without an explicit Legacy plan (present=%s)', async (legacy) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ entitlement: {
       plans: legacy ? ['supreme', 'war_room'] : ['supreme'], status: 'active',
       currentPeriodEnd: null, gracePeriodEnd: null,
@@ -56,7 +61,7 @@ describe('Supreme advertised bundle', () => {
     await waitFor(() => expect(hook.result.current.loading).toBe(false))
     expect(hook.result.current.hasPro).toBe(true)
     expect(hook.result.current.hasCommissioner).toBe(true)
-    expect(hook.result.current.hasWarRoom).toBe(legacy)
+    expect(hook.result.current.hasWarRoom).toBe(true)
     hook.unmount()
   })
 })

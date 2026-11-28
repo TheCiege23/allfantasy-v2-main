@@ -68,7 +68,16 @@ type QueuePanelProps = {
   leftAtPick?: { overall: number; label: string } | null
   /** Sleeper-mirrored room: Sleeper's public API has no queue endpoint, so nothing can sync from it. */
   mirroredFromSleeper?: boolean
+  /**
+   * Auto draft: the server makes every pick, taking the queue first. The "auto-pick from queue" and
+   * "away" switches are meaningless there (both are always true), so one line says how the queue
+   * is used and they are not shown.
+   */
+  autoDraft?: boolean
 }
+
+/** Search, sort and the position filter only earn their rows once the queue is longer than this. */
+export const QUEUE_FILTERS_MIN_PLAYERS = 6
 
 export function QueuePanel({
   queue,
@@ -96,12 +105,20 @@ export function QueuePanel({
   presentationVariant = 'default',
   leftAtPick = null,
   mirroredFromSleeper = false,
+  autoDraft = false,
 }: QueuePanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [positionFilter, setPositionFilter] = useState('ALL')
   const [sortMode, setSortMode] = useState<QueueSortMode>('queue')
+  /*
+   * The list is the point of this tab. With search, sort, positions and three 44px switches stacked
+   * above it, a short dock showed the controls and no players (reported 2026-11-25). The filters now
+   * appear only for a queue long enough to need them, or while one is narrowing the list.
+   */
+  const showFilters =
+    queue.length >= QUEUE_FILTERS_MIN_PLAYERS || searchQuery.trim() !== '' || positionFilter !== 'ALL' || sortMode !== 'queue'
 
   const resolveMeta = (entry: QueueEntry) => {
     const fromMap =
@@ -189,8 +206,10 @@ export function QueuePanel({
           <ListOrdered className="h-3.5 w-3.5 text-[#8b91a7]" />
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/92">Queue</span>
         </div>
-        {autopickSlot ? null : (
-        <label className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/75">
+        {autopickSlot || autoDraft ? null : (
+        /* The label is the tap target (a 12px checkbox is not): 44px tall, the pill inside keeps its size. */
+        <label className="inline-flex min-h-[44px] cursor-pointer items-center" data-testid="draft-queue-autopick-toggle-target">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/75">
           <input
             type="checkbox"
             checked={autoPickFromQueue}
@@ -208,12 +227,20 @@ export function QueuePanel({
             className="h-3 w-3 rounded border-white/20"
           />
           Auto-pick
+          </span>
         </label>
         )}
       </div>
-      {autopickSlot ? <div data-testid="draft-queue-autopick-slot">{autopickSlot}</div> : null}
+      {autoDraft ? (
+        <p className="border-b border-white/[0.06] px-2.5 py-1.5 text-[11px] leading-snug text-cyan-100/85" data-testid="draft-queue-auto-draft-note">
+          Auto draft: your queue is drafted first, top to bottom.
+        </p>
+      ) : autopickSlot ? (
+        <div data-testid="draft-queue-autopick-slot">{autopickSlot}</div>
+      ) : null}
       {/* Size for the dock's width: search and sort share a row, with positions below. */}
-      <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] p-1">
+      {showFilters ? (
+      <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] p-1" data-testid="draft-queue-filters">
         <input
           type="search"
           value={searchQuery}
@@ -264,7 +291,8 @@ export function QueuePanel({
           <option value="name">Sort: Name</option>
         </select>
       </div>
-      {rs ? (
+      ) : null}
+      {(
         <details className="group border-b border-white/[0.06]" data-testid="draft-queue-ai-options">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/85 [&::-webkit-details-marker]:hidden">
             <span>Queue &amp; Chimmy options</span>
@@ -316,7 +344,7 @@ export function QueuePanel({
                 </button>
               </>
             )}
-            {autopickSlot ? null : (
+            {autopickSlot || autoDraft ? null : (
             <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
               <input
                 type="checkbox"
@@ -337,6 +365,7 @@ export function QueuePanel({
               Auto-pick from queue
             </label>
             )}
+            {autoDraft ? null : (
             <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
               <input
                 type="checkbox"
@@ -357,96 +386,11 @@ export function QueuePanel({
               <UserMinus className="h-3.5 w-3.5" />
               Away mode
             </label>
+            )}
           </div>
         </details>
-      ) : (
-        <div className="flex flex-wrap gap-2 border-b border-white/8 p-2.5">
-          {onAiReorder && (
-            <>
-              {onAiReorderEnabledChange && (
-                <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/85 touch-manipulation">
-                  <input
-                    type="checkbox"
-                    checked={aiReorderEnabled}
-                    onChange={(e) => {
-                      if (analyticsLeagueId) {
-                        sendProductAnalyticsBeacon(DRAFT_ROOM.AI_REORDER_EXPLAIN_TOGGLE, {
-                          leagueId: analyticsLeagueId,
-                          enabled: e.target.checked,
-                        })
-                      }
-                      onAiReorderEnabledChange(e.target.checked)
-                    }}
-                    data-testid="draft-queue-ai-reorder-toggle"
-                    className="rounded border-white/[0.06] w-4 h-4"
-                  />
-                  Chimmy explanation for reorder
-                </label>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  if (analyticsLeagueId) {
-                    sendProductAnalyticsBeacon(DRAFT_ROOM.AI_QUEUE_REORDER, {
-                      leagueId: analyticsLeagueId,
-                      queueLen: queue.length,
-                    })
-                  }
-                  onAiReorder()
-                }}
-                disabled={aiReorderLoading || !aiReorderEnabled || queue.length < 2}
-                data-testid="draft-queue-ai-reorder"
-                className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-[#1d2236] px-3 py-2.5 text-xs text-white/85 hover:bg-[#2a2f45] disabled:opacity-50 touch-manipulation"
-              >
-                <Zap className="h-3.5 w-3.5" />
-                {aiReorderLoading ? 'Reordering…' : 'Auto reorder'}
-              </button>
-            </>
-          )}
-          {autopickSlot ? null : (
-          <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
-            <input
-              type="checkbox"
-              checked={autoPickFromQueue}
-              onChange={(e) => {
-                if (analyticsLeagueId) {
-                  sendProductAnalyticsBeacon(DRAFT_ROOM.AUTOPICK_QUEUE, {
-                    leagueId: analyticsLeagueId,
-                    enabled: e.target.checked,
-                  })
-                }
-                onAutoPickFromQueueChange(e.target.checked)
-              }}
-              disabled={!autoPickEnabled}
-              data-testid="draft-queue-autopick-toggle"
-              className="rounded border-white/20 w-4 h-4"
-            />
-            Auto-pick from queue
-          </label>
-          )}
-          <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
-            <input
-              type="checkbox"
-              checked={awayMode}
-              onChange={(e) => {
-                if (analyticsLeagueId) {
-                  sendProductAnalyticsBeacon(DRAFT_ROOM.AWAY_MODE, {
-                    leagueId: analyticsLeagueId,
-                    enabled: e.target.checked,
-                  })
-                }
-                onAwayModeChange(e.target.checked)
-              }}
-              disabled={!autoPickEnabled}
-              data-testid="draft-queue-away-toggle"
-              className="rounded border-white/20 w-4 h-4"
-            />
-            <UserMinus className="h-3.5 w-3.5" />
-            Away mode
-          </label>
-        </div>
       )}
-      {!autoPickEnabled && (
+      {!autoPickEnabled && !autoDraft && (
         <p
           className={`border-b border-white/8 px-2 py-1 leading-snug ${
             rs ? 'text-[11px] text-amber-200/75' : 'text-[11px] text-amber-200/90'

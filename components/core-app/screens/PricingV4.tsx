@@ -15,6 +15,8 @@ import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
 import { useLaunchOffer } from '@/components/launch/LaunchOfferContext'
 import { BrandShield } from '@/components/brand/BrandShield'
 import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
+import { HolidaySaleStrip, useHolidaySale } from '@/components/launch/HolidaySaleStrip'
+import { getHolidaySale, holidaySalePriceUsd } from '@/lib/monetization/holidaySale'
 // af-core.css carries the .af-core token layer (--surface, --line, --chip, --text2 …)
 // that every rule in af-pricing.css reads. AfCoreShell imports it for screens inside
 // the shell; this one renders standalone at /pricing, so without this line the whole
@@ -386,7 +388,8 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
   const { nativeApp, prices: nativePrices, needsUpdate, playApp, error: playError } = useNativeIapPrices()
   // The AF Pro free trial — web only: a store build never asks, and never shows it (App Store 3.1.1 / 3.1.3).
   const trialOffer = useTrialOffer(!nativeApp && !playApp)
-  const [interval, setInterval] = useState<Interval>('month')
+  // During the Black Friday sale the yearly view opens first: half a year's price is the headline deal.
+  const [interval, setInterval] = useState<Interval>(() => (getHolidaySale() ? 'year' : 'month'))
   const [pendingSku, setPendingSku] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -397,6 +400,13 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
   })
   // Countdown + founding-member offer, from app/pricing/layout.tsx. Null outside that layout.
   const launchOffer = useLaunchOffer()
+  /*
+   * Black Friday → Cyber Monday (lib/monetization/holidaySale.ts): 50% off the first year, applied by
+   * Stripe checkout. Web only — a store build sells at the store's price, so it shows nothing there.
+   */
+  const holidaySale = useHolidaySale()
+  const saleOn = Boolean(holidaySale) && !nativeApp && !playApp
+  const salePrice = (usd: number) => (holidaySale ? holidaySalePriceUsd(usd, holidaySale.percentOff) : usd)
 
   /*
    * app/pricing/page.tsx is a server component, so the view event has to live
@@ -553,7 +563,7 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
           {headline.kind === 'plan'
             ? g.headPlan(headline.planName)
             : headline.fromMonthly != null && !nativeApp
-              ? g.headFree(money(headline.fromMonthly))
+              ? g.headFree(money(saleOn ? salePrice(headline.fromMonthly) : headline.fromMonthly))
               : g.headFreeNoPrice}
         </h1>
         <p className="af-pr-sub" data-testid="pricing-intro">
@@ -614,7 +624,8 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
         a visitor who can still become one — that the founding discount is applied at checkout.
         Renders nothing after launch for anyone without a founding offer.
       */}
-      <LaunchOfferStrip offer={launchOffer} surface="pricing" />
+      {/* During the sale its banner replaces this strip: its 50% outranks the founding discount at checkout. */}
+      {saleOn ? <HolidaySaleStrip surface="pricing" /> : <LaunchOfferStrip offer={launchOffer} surface="pricing" />}
 
       <div className="af-pr-grid">
         {/* ── Free ─────────────────────────────────────────────── */}
@@ -661,6 +672,14 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
               ? (interval === 'month' ? g.supremeMonth : g.supremeYear)(money(value.supreme), money(value.separately))
               : plan.description
           const status = pricingCardStatus(plan.planFamily, account)
+          /*
+           * The exact plan + interval the viewer already pays for (any store). It used to keep its
+           * "Choose AF Pro" button — so right after an App Store purchase the page reloaded looking as if
+           * nothing had happened. It now says so. The SAME plan on the other interval is still a real
+           * purchase (monthly → yearly), so that card keeps a button, worded as the switch it is.
+           */
+          const currentSku = Boolean(sku && account?.heldSkus?.includes(sku))
+          const switchInterval = status === 'yours' && !currentSku
           const kickerKey = KICKER_KEY[plan.planFamily as keyof typeof KICKER_KEY]
           const supremeName = ordered.find((p) => p.planFamily === 'af_supreme')?.name ?? 'AF Supreme'
 
@@ -679,7 +698,10 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
                 {price == null ? (
                   <span className="af-pr-amount af-pr-amount--none">—</span>
                 ) : (
-                  <span className="af-pr-amount">{nativeApp ? (sku ? nativePrices[sku] ?? 'Loading store price…' : '—') : money(price)}</span>
+                  <span className="af-pr-amount" data-testid={saleOn && sku ? `pricing-sale-price-${sku}` : undefined}>
+                    {nativeApp ? (sku ? nativePrices[sku] ?? 'Loading store price…' : '—') : money(saleOn ? salePrice(price) : price)}
+                    {saleOn ? <s className="af-hs-was" aria-label={`was ${money(price)}`}>{money(price)}</s> : null}
+                  </span>
                 )}
               </div>
               <p className="af-pr-per">
@@ -696,7 +718,13 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
                 because .99 pricing makes "2 months free" a fudge in one direction
                 or the other.
               */}
-              {!nativeApp && interval === 'year' && plan.savings ? (
+              {saleOn && price != null ? (
+                <p className="af-hs-note">
+                  {interval === 'year'
+                    ? `50% off your first year, then ${money(price)}/yr`
+                    : `${money(salePrice(price))}/mo for 12 months, then ${money(price)}`}
+                </p>
+              ) : !nativeApp && interval === 'year' && plan.savings ? (
                 <p className="af-pr-save">
                   {money(plan.savings.effectiveMonthly)}/mo · save {money(plan.savings.savedUsd)} (
                   {plan.savings.savedPct}%)
@@ -725,6 +753,10 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
                 <p className="af-pr-cta af-prg-included" data-testid={`pricing-included-${plan.planFamily}`}>
                   {g.inYourPlan}
                 </p>
+              ) : currentSku ? (
+                <p className="af-pr-cta af-prg-included" data-testid={`pricing-current-${sku}`}>
+                  ✓ Current plan
+                </p>
               ) : (
                 <>
                   <button
@@ -738,13 +770,15 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
                       ? 'Opening checkout…'
                       : !nativeApp && trialOffer.eligible === true && trialAppliesTo(trialOffer, sku)
                         ? g.trialCta(trialOffer.days)
-                        : `Choose ${plan.name}`}
+                        : switchInterval
+                          ? `Switch to ${interval === 'month' ? 'monthly' : 'yearly'}`
+                          : `Choose ${plan.name}`}
                   </button>
                   {/* The trial's terms, said before the click. Web only; marked for the iOS hide rule too. */}
                   {!nativeApp && price != null && trialAppliesTo(trialOffer, sku) ? (
                     <p className="af-pr-trial" data-testid={`pricing-trial-${sku}`} data-ios-purchase>
                       {trialOffer.eligible === true
-                        ? g.trialTerms(trialOffer.days, money(price), g.trialPer(interval))
+                        ? g.trialTerms(trialOffer.days, money(saleOn ? salePrice(price) : price), g.trialPer(interval))
                         : g.trialNewMembers(trialOffer.days)}
                     </p>
                   ) : null}

@@ -311,9 +311,21 @@ async function topStarterFor(
     select: { leagueId: true, playerId: true, points: true },
   })
   if (!top) return null
+  /*
+   * 🛑 IN THE TOP SCORER'S OWN LEAGUE'S SPORT. Sleeper reuses ids across sports — NFL 1466 Travis
+   * Kelce, NBA 1466 JaVale McGee — so the bare id alone names whichever row is fresher.
+   */
+  const topLeague = mine.find((l) => l.platformLeagueId === top.leagueId)
+  const topSport = topLeague
+    ? await prisma.league
+        .findUnique({ where: { id: topLeague.id }, select: { sport: true } })
+        .then((l) => (l?.sport ? String(l.sport).toUpperCase() : null))
+        .catch(() => null)
+    : null
+  if (!topSport) return null
   const who = composePlayerIdentities(
     await prisma.sportsPlayer.findMany({
-      where: { sleeperId: top.playerId },
+      where: { sport: topSport, sleeperId: top.playerId },
       select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
     }),
   ).get(top.playerId)

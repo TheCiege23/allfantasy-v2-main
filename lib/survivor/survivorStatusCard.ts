@@ -56,9 +56,14 @@ export function buildSurvivorStatusCard(input: SurvivorStatusInput): SurvivorSta
   const tribe = merged ? null : (season.tribes ?? []).find(t => t.id === me.tribeId) ?? null
   const council = season.activeCouncil
   const councilOpen = council?.status === 'voting_open'
-  const voteBy = councilOpen ? parse(council?.voteDeadlineAt ?? council?.votingDeadline) : null
-  const challenge = season.currentChallenge?.status === 'open' ? season.currentChallenge : null
-  const challengeBy = challenge ? parse(challenge.locksAt ?? challenge.lockAt) : null
+  const voteDeadline = councilOpen ? parse(council?.voteDeadlineAt ?? council?.votingDeadline) : null
+  // ⚠ A council the host has not read yet still says `voting_open` after its deadline. The clock decides.
+  const votesIn = Boolean(voteDeadline && voteDeadline.getTime() <= now)
+  const voteBy = votesIn ? null : voteDeadline
+  const openChallenge = season.currentChallenge?.status === 'open' ? season.currentChallenge : null
+  const challengeLock = openChallenge ? parse(openChallenge.locksAt ?? openChallenge.lockAt) : null
+  const challenge = challengeLock && challengeLock.getTime() <= now ? null : openChallenge
+  const challengeBy = challenge ? challengeLock : null
   const idols = Array.isArray(me.idolIds) ? me.idolIds.length : 0
   const tokens = typeof me.tokenBalance === 'number' ? me.tokenBalance : null
 
@@ -68,6 +73,9 @@ export function buildSurvivorStatusCard(input: SurvivorStatusInput): SurvivorSta
   if (['active', 'immune'].includes(me.playerState)) facts.push({ label: 'Idols', value: idols ? `You hold ${idols}` : 'None' })
   if (me.playerState === 'exile' || (tokens != null && tokens > 0)) facts.push({ label: 'Tokens', value: String(tokens ?? 0) })
   if (voteBy) facts.push({ label: 'Votes close', value: when(voteBy) })
+  // After the deadline, only for a player whose tribe is NOT at council: the council's own card already says
+  // "Voting has closed", and the tile made it three times on one screen (2026-11-24 audit).
+  else if (votesIn && voteDeadline && council?.attendingTribeId && council.attendingTribeId !== me.tribeId) facts.push({ label: 'Votes closed', value: format(voteDeadline) })
   else if (challengeBy) facts.push({ label: 'Challenge locks', value: when(challengeBy) })
 
   const challengeAction = challenge && input.canSubmitChallenge ? [{ label: 'Make your challenge pick', href: `${base}/challenges` }] : []
@@ -91,17 +99,19 @@ export function buildSurvivorStatusCard(input: SurvivorStatusInput): SurvivorSta
 
   if (councilOpen) {
     const myCouncil = !council?.attendingTribeId || council.attendingTribeId === me.tribeId
+    if (myCouncil && votesIn) {
+      // The banner above already says "The votes are in"; this card says what it means for you.
+      return { tone: 'risk', headline: merged ? 'You are at Tribal Council' : 'Your tribe is at Tribal Council', detail: 'Voting has closed. Someone goes home when the votes are read.', facts, actions: [] }
+    }
     if (myCouncil) {
-      const actions = [
-        ...(input.canVote ? [{ label: 'Vote now', href: `${base}/tribal` }] : []),
-        ...(idols ? [{ label: 'Play an idol', href: `${base}/tribal` }] : []),
-      ]
+      // The vote button lives in the banner above this card; repeating it here put two on one screen.
+      // The deadline is a fact below, so the sentence does not say it again.
       return {
         tone: 'risk',
         headline: merged ? 'Tribal Council is open' : 'Your tribe is at Tribal Council',
-        detail: voteBy ? `Someone goes home. Vote privately before ${format(voteBy)}.` : 'Someone goes home. Vote privately before the deadline.',
+        detail: merged ? 'Someone goes home this week.' : 'Someone from your tribe goes home this week.',
         facts,
-        actions,
+        actions: idols ? [{ label: 'Play an idol', href: `${base}/tribal` }] : [],
       }
     }
     return { tone: 'safe', headline: 'Your tribe is safe this week', detail: 'Another tribe is at Tribal Council. Watch the read in league chat.', facts, actions: challengeAction }

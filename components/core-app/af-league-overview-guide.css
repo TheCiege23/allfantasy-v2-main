@@ -53,40 +53,15 @@
   color: var(--text);
 }
 
-/* ── More about this league ─────────────────────────────────────────────────────────────────────── */
+/* ── More detail (the shared MoreDetail fold, 2026-11-20) ───────────────────────────────────────────
+   Its summary look comes from more-detail.css; only this page's spacing stays here. */
 .af-core .af-lho-more {
   margin: 16px 0 0;
-}
-.af-core .af-lho-more > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  list-style: none;
-}
-.af-core .af-lho-more > summary::-webkit-details-marker {
-  display: none;
-}
-.af-core .af-lho-more > summary::after {
-  content: '▾';
-  margin-left: auto;
-  color: var(--muted);
-}
-.af-core .af-lho-more:not([open]) > summary::after {
-  transform: rotate(-90deg);
 }
 .af-core .af-lho-more-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-top: 14px;
 }
 
 @media (max-width: 720px) {
@@ -117,8 +92,13 @@
 }
 .af-core .af-lho-week:hover { border-color: var(--accent); }
 .af-core .af-lh-week-summary-grid[data-cells='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* 2026-11-24 (the simplify pass): the two cells stay side by side on a phone too; stacked, a card of two
+   short sentences was ~270px tall. Tighter padding keeps "Review your starters" to two lines at 390px. */
 @media (max-width: 800px) {
-  .af-core .af-lh-week-summary-grid[data-cells='2'] { grid-template-columns: minmax(0, 1fr); }
+  .af-core .af-lh-week-summary-grid[data-cells='2'] { gap: 8px; }
+  .af-core .af-lh-week-summary-grid[data-cells='2'] > a,
+  .af-core .af-lh-week-summary-grid[data-cells='2'] > .af-lh-week-summary-moves { padding: 11px; gap: 5px; }
+  .af-core .af-lh-week-summary-grid[data-cells='2'] strong { font-size: 15px; }
 }
 .af-core .af-lh-grid:not(:has(> .af-lh-side)) { grid-template-columns: minmax(0, 1fr); }
 .af-core .af-lh-standings-all {

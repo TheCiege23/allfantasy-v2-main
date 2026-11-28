@@ -1,5 +1,6 @@
 /**
- * Guilly elimination periods: one week (every sport, the default) or two weeks (MLB only).
+ * Guilly elimination periods: one week (the default) or two weeks, in every sport (MLB only until the owner's
+ * list of 2026-11-25: "two-week chops for every sport").
  *
  * An MLB season is ~26 weeks. One chop a week finishes a 10-team league by week 9 and leaves the rest of
  * the season unplayed; a two-week period scores both weeks together and chops once at the end of each pair,
@@ -15,8 +16,10 @@
  * Periods are counted from the league's first chop week (`eliminationStartWeek`). That week only moves
  * before the first chop (./draftWeekFloor.ts), so the pairing never shifts under a running season.
  *
- * Stored as `League.settings.guillotine_period_weeks` = 2; absent means one week. Written only for MLB
- * (creation and the League rules page refuse it elsewhere) and fixed once the first chop has happened.
+ * Stored as `League.settings.guillotine_period_weeks` = 2; absent means one week. Fixed once the first chop has
+ * happened. Each week of a period is scored on its own and the two are added (./nativeGuillotineWeek.ts), which is
+ * the same for a week-keyed sport (NFL, NCAAF) as for a date-windowed one; the season still has to fit, which the
+ * calendar check refuses or plans around (./calendarFit.ts): a 12-team NFL league needs two chops a period.
  *
  * Pure.
  */
@@ -25,9 +28,17 @@ export const PERIOD_WEEKS_KEY = 'guillotine_period_weeks'
 
 type PeriodWeeks = 1 | 2
 
-/** Sports whose Guilly leagues may use two-week elimination periods. */
-export function supportsTwoWeekPeriods(sport: string | null | undefined): boolean {
-  return String(sport ?? '').toUpperCase() === 'MLB'
+/** Sports whose Guilly leagues may use two-week elimination periods: every one (owner, 2026-11-25). */
+export function supportsTwoWeekPeriods(_sport?: string | null): boolean {
+  return true
+}
+
+/**
+ * The last week the "later draft slot is chopped" tiebreak applies: week 1, where nothing else tells two teams
+ * apart. A two-week league that starts in week 1 first chops in week 2, so for it the first period's last week.
+ */
+export function draftSlotTiebreakLastWeek(startWeek: number, periodWeeks: number): number {
+  return periodWeeks > 1 && startWeek <= 1 ? periodEndWeek(1, 1, periodWeeks) : 1
 }
 
 /** The league's period length. Anything but an explicit 2 reads as one week, so every existing league is unchanged. */

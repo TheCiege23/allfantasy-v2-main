@@ -49,6 +49,16 @@ describe('mock draft room — the live room\'s shell and tray (room v2 phase 5)'
     expect(tray().getAttribute('data-snap')).toBe('peek')
   })
 
+  it('the tray panel\'s Close is a 44×44 touch target (was 36px tall)', async () => {
+    render(<MockDraftSleeperRoomClient viewerId="viewer" />)
+    await screen.findByTestId('mock-draft-resume')
+    fireEvent.click(screen.getByTestId('draft-mobile-tab-roster'))
+    const close = screen.getByRole('button', { name: 'Close', exact: true })
+    expect(close.className).toMatch(/\bmin-h-\[44px\]/)
+    expect(close.className).toMatch(/\bmin-w-\[44px\]/)
+    expect(close.className).not.toMatch(/\bmin-h-\[36px\]/)
+  })
+
   it('dragging the handle back up reopens the last panel', async () => {
     render(<MockDraftSleeperRoomClient viewerId="viewer" />)
     await screen.findByTestId('mock-draft-resume')

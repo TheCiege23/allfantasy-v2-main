@@ -1,3 +1,16 @@
+/**
+ * POST: Draft-day trade IDEAS after a mock draft — pairs of the user's picks with nearby picks of teams
+ * whose positional need is high, plus an AI one-line reason for each.
+ *
+ * ⚠ DELIBERATELY NOT ON THE CANONICAL TRADE GRADER (checked 2026-11-26), and it must not grow a grade of
+ * its own. It returns no letter, no accept/decline verdict and no value numbers — only the need scores it
+ * ranks ideas by, which describe positions drafted, not what a pick is worth. A mock draft is a startup /
+ * redraft draft with no league chart behind its picks, where a pick is worth the PLAYER taken there; the
+ * canonical grader withholds exactly that case (`NOT_A_ROOKIE_DRAFT_REASON`), and the no-league path
+ * (`/api/trade-evaluator`) prices picks only from market rows, so it would withhold too. If this ever
+ * shows a fairness grade, it must come from `/api/trade-evaluator` (or `gradeDeal`) and say "not graded"
+ * when that withholds.
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'

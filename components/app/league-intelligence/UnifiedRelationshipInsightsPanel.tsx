@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { BrainCircuit, Link2, RefreshCw } from 'lucide-react'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
+import { StoryAiLockNotice, type StoryAiLock } from '@/components/league-story-ai/StoryAiLockNotice'
 
 type StorylineRow = {
   id: string
@@ -28,7 +29,6 @@ type InsightsPayload = {
     centralManagers: unknown[]
   }
   rivalries: Array<{ id: string }>
-  profiles: Array<{ id: string }>
   drama: Array<{ id: string }>
   storylines: StorylineRow[]
 }
@@ -52,6 +52,9 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
   const [payload, setPayload] = useState<InsightsPayload | null>(null)
   const [explainByRow, setExplainByRow] = useState<Record<string, string>>({})
   const [explainLoadingId, setExplainLoadingId] = useState<string | null>(null)
+  // Why Chimmy did not write it (commissioner lacks AF Commissioner, or today's cap is used): the fact-built
+  // explanation is still shown, with this notice under it.
+  const [explainLockByRow, setExplainLockByRow] = useState<Record<string, StoryAiLock>>({})
 
   const load = useCallback(async () => {
     if (!leagueId) return
@@ -94,7 +97,6 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
           rebuildGraph: true,
           runRivalry: true,
           runDrama: true,
-          runProfiles: false,
           syncGraphRivalryEdges: true,
         }),
       })
@@ -140,6 +142,7 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
           ...prev,
           [row.id]: data?.narrative ?? 'No relationship explanation available.',
         }))
+        setExplainLockByRow((prev) => ({ ...prev, [row.id]: data?.aiLocked ?? null }))
       } catch {
         setExplainByRow((prev) => ({
           ...prev,
@@ -208,14 +211,10 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
 
       {!loading && payload && (
         <>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <div className="rounded-lg border border-white/10 bg-black/20 p-2">
               <p className="text-[11px] text-white/50">Rivalries</p>
               <p className="text-sm text-white/90">{payload.rivalries.length}</p>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-              <p className="text-[11px] text-white/50">Behavior profiles</p>
-              <p className="text-sm text-white/90">{payload.profiles.length}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-2">
               <p className="text-[11px] text-white/50">Drama events</p>
@@ -325,6 +324,13 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
                   <p className="mt-2 border-t border-white/10 pt-2 text-xs text-white/80">
                     {explainByRow[row.id]}
                   </p>
+                )}
+                {explainByRow[row.id] && (
+                  <StoryAiLockNotice
+                    lock={explainLockByRow[row.id]}
+                    featureName="Chimmy relationship explainers"
+                    className="mt-2"
+                  />
                 )}
               </article>
             ))}

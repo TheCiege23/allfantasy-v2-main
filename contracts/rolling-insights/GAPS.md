@@ -50,6 +50,7 @@
 | `N-16` | `schedule-season/2026/NCAABB` returns 304 | OPEN — do not probe; the daily sync reports it | NCAAB week finalizing for 2026-27 | 304 twice on `RSC_TOKEN2` (the entitled account) on 2026-09-24, while 2025 returned 6,027 games — most likely the 2026-27 schedule is not published yet (N-02: a 304 can mean not-yet-started). `lib/sports-data/riSeasonSchedule.ts` writes NOTHING on a 304 and records it in the multi-sport run's `metadata.schedule`; read that rather than re-probing. Until it returns 200, NCAAB weeks cannot seal (the finalizer refuses an unsynced schedule). |
 | `N-17` | 🛑 **What player `status: ACT` means DIFFERS BY SPORT** — measured on our stored rows 2026-10-01, no probe | MEASURED | anything that reads `ACT` as "current roster" | **NCAAFB: it IS the current roster.** Median 106 `ACT` per school (p90 119; Navy/Army ~190 are genuinely large squads). Of RI rows whose name + school match a player now in the NFL, 3,611 are `INACT` vs 211 `ACT`, and many of those 211 are namesakes/sons (Antonio Cromartie Jr., FSU). Summer 2026 transfers are `ACT` at the NEW school and `INACT` at the old (Raiola→Oregon, Lagway→Baylor, Leavitt→LSU, Mateer→Oklahoma); 2026 draftees are `INACT` (Klubnik, Tate, Allar, Nussmeier). It is MORE current than our CFBD `SportsPlayer` pool (fetched 2026-06-26, still has Raiola at Nebraska). Stale `ACT` rows survive at some FCS schools (Dartmouth, Wagner, William & Mary). **NCAABB: it is NOT** — Duke has 38 `ACT` rows, 33 absent from ESPN's 2026-27 roster, including players gone for years, and 2026-27 newcomers are missing entirely (`contracts/espn/GAPS.md` M-01/M-02) — consistent with N-16, the 2026-27 NCAABB season not being published yet. Re-measure NCAABB once N-16 returns 200. |
 | `N-18` | 🛑 **NFL `/play-by-play` `players[]` stopped carrying `id` (and `teamAbbr`) — measured on our cached feed 2026-10-11, no probe** | OPEN — ask vendor | play-by-play identity joins (headshots, position, club, player card, "your starter" matching) | A read-only look at `sports_data_cache` `pbp:feed:NFL`: of the 20 newest plays, **19 carry the parser's `name:` fallback** (every play detected from ~22:25Z on 2026-10-11; the last with an id was 22:21Z), and every play's team is null. Our parser (`rollingInsightsPlayByPlay.ts`) had not changed since before 10-09, so the payload changed — but we cannot tell from stored data whether `id` is now null, absent, or a non-integer (the parser read only JSON numbers; it now also accepts a numeric string). Names also arrive as short forms ("A.St", "S.La"). Mitigation in our code: plays with no id are matched by FULL name to exactly one NFL `PlayerIdentityMap` row (11 of 12 distinct names on that feed; 0 ambiguous). **Ask the vendor** whether `players[].id`/`teamAbbr` are guaranteed on NFL plays; re-measure on the next NFL slate. |
+| `N-23` | NFL `/player-stats` `regular_season.defense_fumble_recoveries` is sometimes the player's GAMES PLAYED — measured on our stored copy 2026-11-20, no probe | OPEN — ask vendor; mitigated in our code | team DEF FR column, IDP fumble-recovery scoring | `defense_fumble_recoveries` is documented as a TEAM stat (`live_team.defense`) but also appears on player season rows beside the documented player field `fumbles_recoveries`. Read-only on `player_season_stats`: when both are present they agree on most rows (2025: 92 agree, 20 differ), so adding them double-counts. On **52 rows (2024) and 61 (2025)** the value equals `games_played`, always with `snap_count_defense` 0 and no `fumbles_recoveries` (one DE: 16 in a 16-game season); summed by team, MIA showed 28. 2026 rows carry `defense_fumble_recoveries` only (no echoes yet). Our rule, `lib/providers/rollingInsightsFumbleRecoveries.ts`: prefer `fumbles_recoveries`; else take `defense_fumble_recoveries` unless it equals games played with zero defensive snaps; never add the two. Every 2025 team then totals 4–12. **Ask the vendor** what the player-row field means and why it echoes games played. |
 
 ---
 
@@ -173,7 +174,7 @@ with a shootout game, committed as a fixture.
 | `G-04` | Field names in `/live` for **SOCCER** (all 3 leagues) | PARTIAL 2026-09-28 — no fixture | Soccer scoring | Still no `/live` fixture. What the ingest STORES was read off production `player_game_stats` instead (4,159 rows, EPL + La Liga + Serie A): groups `fielders` / `goalkeepers`, and the fields listed in `lib/scoring-runtime/soccerStatNormalization.ts`. That is the ingest's output, not the vendor payload — capture `probe.sh live SOCCER EPL <matchday>` to close this. |
 | `G-05` | `game_id` format for NHL / NCAAFB / NCAABB / SOCCER | SOCCER resolved 2026-09-28 | Per-game polling | SOCCER: `YYYYMMDD-<home>-<away>`, the date being the kickoff's US Eastern day (all 1,140 live rows of `fixtures/schedule-season.SOCCER.*.json`). |
 | `G-06` | **`/injuries` field list** for NFL beyond the 5 known keys | PARTIAL | Injury detail | Known: `player`, `player_id`, `injury`, `date_injured`, `returns`. Probe for more. |
-| `G-07` | `/depth-charts` field list — **all sports** | UNVERIFIED | Depth-chart features | Probe NFL first |
+| `G-07` | `/depth-charts` field list — **all sports** | UNVERIFIED | Depth-chart features | Probe NFL first. ⚠ 2026-11-26: `data.NBA` came back as an OBJECT (30 entries), not a list, and `probe.sh`'s field listing crashed on it (`KeyError: 0`) BEFORE writing the fixture, so a depth-chart capture cannot be saved until the probe handles an object envelope. |
 
 ## Non-blocking but worth resolving
 
@@ -195,6 +196,7 @@ with a shootout game, committed as a fixture.
 |---|---|
 | Play-by-play for NHL, NCAAFB, NCAABB, SOCCER, DARTS, PGA | Support matrix, 4 independent statements in skill repo |
 | Injuries / depth charts for NCAAFB, NCAABB, SOCCER, DARTS, PGA | Support matrix |
+| **Depth charts for NCAAFB — MEASURED absent, 2026-11-26** | `FORCE=1 ./probe.sh depth-charts NCAAFB` with `ROLLING_INSIGHTS_RSC_TOKEN2` (the account that holds college football) → **HTTP 404**, on both the contract base URL and `ROLLING_INSIGHTS_REST_BASE_URL` (same host). Positive control, same token and URL: `depth-charts NBA` → **200, 30 teams**. So the 404 is the feed, not the token. AllFantasy derives a usage order from CFBD box scores instead (`lib/college/usageDepth.ts`); CFBD has no depth-chart endpoint either. No fixture: a 404 is refused by the probe. |
 | Player season stats for SOCCER | Support matrix |
 | Team info / team stats for DARTS, PGA | Support matrix |
 | Odds endpoints — any sport | Vendor FAQ: "Do you have Odds data? No" |
@@ -629,3 +631,22 @@ the meantime. When the fix email arrives: (1) re-run the 2025 NHL season sync
 should be ~1,280, shutouts ~115–150); (3) only then consider letting goalies back into the
 prior-season blend (`lib/projections/dailySportSeasonTotals.ts`) and mapping `so_g`. The
 derivations take max(vendor, derived), so a vendor fix can never double-count.
+
+## 📌 2026-11-28 — No CONFIRMED starting goalie in any contract; projected from our own box scores
+
+**What exists.** Nothing in `contracts/` documents a confirmed (or "probable") NHL starting goalie:
+`/live` NHL lists a game's goalies only once the game has a box (`fixtures/live.NHL.json` — the
+`goalies` group, starter and dressed backup, the backup at `0:00`), and no other contract has a
+pre-game lineup. `lib/core-app/weeklyScheduleForecast.ts` already records the gap as
+`confirmed-goalie-starts`.
+
+**What ships meanwhile.** `lib/nhl/goalieStarts.ts` PROJECTS each team's next starter from its own
+recent `:goalies` lines in `player_game_stats` (most starts in the last 10; the backup on the second
+night of a back-to-back) and says "in net" only once the game's box exists. Every surface labels it
+"Projected" with its reason, and never "confirmed". Read path: `/api/nhl/goalie-starts`, DB-only.
+
+**Open — a vendor decision, not a probe.** Confirmed starters come from services that gather
+morning-skate and beat-reporter news. Whether to buy one (and which) is the owner's call; until
+then do not probe any provider for a "starters" endpoint. If a feed is added, its fixture is
+committed in the same change, and `goalieStarts.ts` should take it as `status: 'confirmed'` ahead of
+the projection, never mixed into it.

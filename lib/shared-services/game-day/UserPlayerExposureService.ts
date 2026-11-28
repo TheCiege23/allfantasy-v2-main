@@ -22,7 +22,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
-import { rosterIdSpaceOf, type RosterIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { espnSportOf, rosterIdSpaceOf, type RosterIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { exposureKey } from './exposureKey'
 import type { ExposureSlotKind, UserPlayerExposure } from './types'
 
@@ -156,7 +156,8 @@ export async function computeUserPlayerExposure(input: ComputeUserPlayerExposure
   for (const roster of rosters) {
     const platform = roster.league?.platform ?? null
     const sport = String(roster.league?.sport ?? 'NFL').toUpperCase()
-    const idSpace = rosterIdSpaceOf(platform)
+    // An ESPN league of another sport is not 'espn' (NFL-crosswalk) space; native leagues as before.
+    const idSpace = rosterIdSpaceOf(platform, espnSportOf(platform, sport))
     const sections = resolveExposureSections(roster.playerData)
     for (const [sectionKey, slotKind] of Object.entries(SECTION_TO_SLOT_KIND) as Array<[string, ExposureSlotKind]>) {
       const rows = sections[sectionKey as keyof typeof sections] ?? []

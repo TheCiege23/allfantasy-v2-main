@@ -117,6 +117,8 @@ export function allowanceFor(gapMs, probe = {}) {
  * stayed invisible.
  */
 export const PROBES = {
+  // The aggregate heartbeat fails if either the NFL or NBA ingestion fails.
+  '/api/cron/survivor-guillotine-ingest': { heartbeat: 'cron-survivor-guillotine-provider' },
   // The operational overlay is outside cron-schedule.json. Probe its unique job heartbeat,
   // then audit every connected NFL league's certified active-lane success below.
   '/api/cron/fantasy-os-active-sync': { heartbeat: 'cron-fantasy-os-active-sync' },
@@ -210,6 +212,12 @@ export const PROBES = {
    * and needs its own identity rather than a differently-scoped table probe.
    */
   '/api/cron/import-player-game-stats?multiSport=1&days=2': { heartbeat: 'cron-import-player-game-stats-multisport' },
+  /*
+   * The game-day refresh: re-imports the NFL week that has a game in play, every 15 minutes. A
+   * heartbeat because it writes the same player_game_stats.updatedAt as the daily NFL mode above, and
+   * because outside a game window a correct fire writes nothing at all.
+   */
+  '/api/cron/import-player-game-stats?gameDay=1': { heartbeat: 'cron-import-player-game-stats-game-day' },
   '/api/cron/import-stat-lines': { table: 'fantasy_stat_lines', column: 'fetched_at' },
   '/api/cron/import-depth-charts': { table: 'depth_charts', column: 'fetchedAt' },
   /* ⚠ KEY MATCHES THE FULL PATH INCLUDING QUERY, so adding `&limit=500` to the cron orphaned
@@ -238,9 +246,9 @@ export const PROBES = {
    * wastes the most time — a false alarm on a healthy job. Append-only is still not enough when a
    * unique key makes most runs insert nothing: see `adp_data` under adp-refresh below.
    */
-  // One fire recomputes NFL, MLB, NBA and NHL (cron ceiling — see the route). The table probe stays
-  // the output check; the route's multisport heartbeat carries per-sport errors for diagnosis.
-  '/api/cron/recompute-allfantasy-adp?sport=NFL,MLB,NBA,NHL': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
+  // One fire recomputes NFL, MLB, NBA, NHL and (since 2026-11-22) NCAAF, NCAAB and soccer (cron ceiling — see the
+  // route). The table probe stays the output check; the route's multisport heartbeat carries per-sport errors.
+  '/api/cron/recompute-allfantasy-adp?sport=NFL,MLB,NBA,NHL,NCAAF,NCAAB,SOCCER': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
   /*
    * ⚠ HEARTBEAT, NOT `adp_data.created_at`. That table is append-only, but it is unique per
    * calendar WEEK, so only the first run of each week inserts and every later run writes zero rows
@@ -253,7 +261,14 @@ export const PROBES = {
    */
   '/api/cron/adp-refresh': { heartbeat: 'cron-adp-refresh' },
   '/api/weather/refresh-cron': { table: 'WeatherCache', column: 'fetchedAt' },
-  '/api/cron/decision-os-activity-ingest?discover=1': { table: 'decision_os_imported_activity', column: 'updatedAt' },
+  /*
+   * ⚠ HEARTBEAT, NOT `decision_os_imported_activity.updatedAt`, since 2026-11-23. The writer now skips
+   * rows whose content is unchanged instead of re-saving every row each visit, so `updatedAt` only
+   * moves when a league has a NEW move — a healthy fire across quiet leagues (the offseason, a bye-week
+   * Tuesday) would read STALE. The same trap as `adp_data` above. The route records
+   * `cron-decision-os-activity-ingest` once per fire, `partial` when a few leagues time out.
+   */
+  '/api/cron/decision-os-activity-ingest?discover=1': { heartbeat: 'cron-decision-os-activity-ingest' },
   '/api/cron/decision-os-snapshot-capture?discover=1': { table: 'intelligence_league_snapshot', column: 'updatedAt' },
 
   // The `*/10` job whose 37-hour gap is how the whole scheduler outage was found in the first
@@ -583,6 +598,7 @@ export const PROBES = {
    * { table: 'AFProjectionSnapshot', column: 'computedAt', seasonal: { sport: 'NFL' } } -- which
    * keeps the strong claim in season and self-suppresses out of it.
    */
+  '/api/cron/college-weekly-projections': { heartbeat: 'cron-college-weekly-projections' },
   '/api/cron/compute-projections': { heartbeat: 'cron-compute-projections' },
 
   /*

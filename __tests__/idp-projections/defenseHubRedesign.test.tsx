@@ -72,7 +72,7 @@ describe('Defense Hub header', () => {
     await waitFor(() => expect(screen.getByTestId('defense-hub-headline').textContent).toContain('leads'))
     expect(screen.getByTestId('defense-hub-headline').textContent).toBe('Defender 1 leads your 3 defenders: 9.4 projected for week 9')
     // Built from the games through the week BEFORE the projection's target.
-    expect(screen.getByTestId('defense-hub-basis').textContent).toBe('Projected under this league’s scoring from games through 2026 week 8.')
+    expect(screen.getByTestId('defense-hub-basis').textContent).toBe('Built from games through week 8 of 2026, scored the way this league scores.')
     expect(document.querySelector('.af-dfh-stats')).toBeNull()
     expect(screen.queryByRole('note')).toBeNull()
     expect(screen.getByRole('heading', { name: 'Your defenders' })).toBeInTheDocument()

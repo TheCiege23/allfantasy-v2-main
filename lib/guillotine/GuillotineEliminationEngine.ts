@@ -15,6 +15,7 @@ import { evaluateWeek, getDraftSlotByRoster } from './GuillotineWeekEvaluator'
 import { releaseChoppedRosters } from './GuillotineRosterReleaseEngine'
 import { IMPORTED_CHOP_REASON, isImportedLeague } from './importedLeagueGuard'
 import { appendEvent } from './GuillotineEventLog'
+import { applyFaabAfterChop } from './faabAfterChop'
 import { postChopToLeagueChat } from './guillotineChat'
 import { postAutomaticGuillotineRecap } from './weeklyRecap'
 import { resolveRedraftRosterId, resolveRedraftRosterIds } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
@@ -23,8 +24,10 @@ import { resolveRosterDisplayNames } from './rosterDisplayNames'
 import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
 import { applyImmunity, immuneRosterIds, readAdvanced, scheduledChops } from './chopSchedule'
-import { previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
-import { readFaabOnChop } from './faabOnChop'
+import { applyTopScorerBonus } from './faabBonus'
+import { effectiveReleaseTiming, readFreeAgencyFromWeek } from './freeAgencyFromWeek'
+import { draftSlotTiebreakLastWeek, previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
+import { describeFaabPayout, movesChoppedFaab, readFaabOnChop, readFaabOnChopPercent } from './faabOnChop'
 import { redistributeChoppedFaab } from './faabOnChopApply'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { readCommissionerTiebreak, tiebreakKey, tiebreakState } from './commissionerTiebreak'
@@ -139,6 +142,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   const seasonId = await findGuillotineSeasonId(input.leagueId, input.season)
   if (seasonId && await isPeriodAlreadyRecorded(seasonId, input.weekOrPeriod)) {
     if (!input.skipRosterRelease) await resumeAuditedRosterRelease(input.leagueId, seasonId, input.weekOrPeriod)
+    // A chop whose FAAB step failed is finished here; the step is idempotent, so a done week no-ops.
+    await settleFaabAfterChop(input.leagueId, seasonId, input.season, input.weekOrPeriod)
     return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already processed' }
   }
   // A failure after state writes but before the audit must fail closed on retry too.
@@ -148,7 +153,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   const endgame = resolveGuillotineEndgame(endgameLeague ?? {})
   // AF Commissioner chop schedule (lib/guillotine/chopSchedule.ts): steps, double-chop and no-chop weeks.
   const advanced = readAdvanced(endgameLeague?.settings)
-  const weekChops = scheduledChops(advanced, input.weekOrPeriod, teamsPerChop)
+  // How many this week calls for, given the teams alive going into it (a "when N teams remain" rule needs it).
+  const chopsFor = (aliveBefore: number) => scheduledChops(advanced, input.weekOrPeriod, teamsPerChop, aliveBefore)
   const started = await prisma.guillotineRosterState.findMany({
     where: {
       leagueId: input.leagueId, choppedInPeriod: input.weekOrPeriod,
@@ -159,7 +165,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   let recoveryScores: PeriodScoreRow[] | null = null
   if (started.length > 0) {
     const saved = await prisma.guillotinePeriodScore.findMany({ where: { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, ...(input.season != null ? { season: input.season } : {}) }, select: { rosterId: true, periodPoints: true, seasonPointsCumul: true } })
-    const expected = Math.min(weekChops, saved.length - endgame.threshold)
+    // A saved score is a team that was alive going into the week.
+    const expected = Math.min(chopsFor(saved.length), saved.length - endgame.threshold)
     if (seasonId && expected > 0 && started.length === expected && started.every(row => saved.some(score => score.rosterId === row.rosterId))) recoveryScores = saved
     else return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'period already started; audit recovery required' }
   }
@@ -216,6 +223,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
    * points read them) and the season's scoring period moves past it — the native driver picks its next
    * week from max(last chop, current period) + 1, so without this it would offer the same week forever.
    */
+  const weekChops = chopsFor(evalResult.activeRosterIds.length)
   if (weekChops === 0 && !recoveryScores) {
     await savePeriodScores({ leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, season: input.season ?? null, scores: evalResult.scores })
     if (seasonId) {
@@ -244,6 +252,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     teamsPerChop: chopCount,
     weekOrPeriod: input.weekOrPeriod,
     draftSlotByRoster,
+    draftSlotLastWeek: draftSlotTiebreakLastWeek(config.eliminationStartWeek, readPeriodWeeks(endgameLeague?.settings)),
     commissionerChoppedRosterIds: input.commissionerChoppedRosterIds?.length
       ? input.commissionerChoppedRosterIds
       : undefined,
@@ -493,30 +502,46 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   })
 
   /*
-   * The chopped team's unspent FAAB, when the commissioner chose to split it (lib/guillotine/faabOnChop.ts).
-   * Idempotent on its own — the chopped balance is zeroed in the same transaction that pays it out — and
-   * best-effort: the chop is recorded, so a failure here is logged, never turned into a failed chop.
+   * The chopped team's unspent FAAB, when the commissioner chose to pass it on (lib/guillotine/faabOnChop.ts): split
+   * evenly, to the week's highest or lowest surviving scorer, or to the next team in waiver order, all of it or a
+   * share. Made once per chop — the payout writes its own `faab_split` marker in the transaction that moves the
+   * balances (./faabOnChopApply.ts) — and best-effort: the chop is recorded, so a failure here is logged, never
+   * turned into a failed chop.
    */
-  if (readFaabOnChop(endgameLeague?.settings) === 'split') {
+  const faabPolicy = readFaabOnChop(endgameLeague?.settings)
+  if (movesChoppedFaab(faabPolicy)) {
     try {
       const split = await redistributeChoppedFaab({
         choppedRosterIds,
         survivorRosterIds: evalResult.activeRosterIds.filter((id) => !chopSet.has(id)),
+        policy: faabPolicy,
+        percent: readFaabOnChopPercent(endgameLeague?.settings),
+        // The scores the chop itself ranked on, so "highest scorer" is the chop's own top score.
+        weekPoints: new Map(evalResult.scores.map((row) => [row.rosterId, row.periodPoints])),
+        record: { leagueId: input.leagueId, key: `${seasonId ?? `season:${input.season ?? 'unknown'}`}:${input.weekOrPeriod}`, weekOrPeriod: input.weekOrPeriod },
       })
       if (split) {
-        await appendEvent(input.leagueId, 'faab_split', {
-          weekOrPeriod: input.weekOrPeriod,
-          choppedRosterIds,
-          pool: split.pool,
-          shares: Object.fromEntries(split.shares),
-          taken: Object.fromEntries(split.taken),
-        })
+        const applied = split.applied ?? 'split'
+        // The payout records itself when it can; this is the older path (no marker written).
+        if (!split.recorded) {
+          await appendEvent(input.leagueId, 'faab_split', {
+            weekOrPeriod: input.weekOrPeriod,
+            choppedRosterIds,
+            pool: split.pool,
+            shares: Object.fromEntries(split.shares),
+            taken: Object.fromEntries(split.taken),
+            policy: faabPolicy,
+            applied,
+          })
+        }
         if (!input.skipChat && input.systemUserId) {
-          const whose = choppedRosterIds.length === 1 ? "The chopped team's" : "The chopped teams'"
+          const paid = [...split.shares].filter(([, amount]) => amount > 0).map(([rosterId]) => rosterId)
+          // An even split names nobody; the other rules name who was paid.
+          const names = applied === 'split' ? {} : await getDisplayNamesForRosters(input.leagueId, paid).catch(() => ({}) as Record<string, string>)
           await createLeagueChatMessage(
             input.leagueId,
             input.systemUserId,
-            `💰 ${whose} $${split.pool} of unspent FAAB was split among the ${split.survivors} teams still alive: about $${split.perTeam} each.`,
+            `💰 ${describeFaabPayout({ applied, pool: split.pool, recipients: paid.map((id) => names[id] ?? 'a surviving team'), survivors: split.survivors, choppedCount: choppedRosterIds.length })}`,
             {
               idempotencyKey: `guillotine-faab-split:${input.leagueId}:${input.season ?? 'na'}:w${input.weekOrPeriod}`,
               type: 'host_announcement',
@@ -527,7 +552,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
       }
     } catch (e) {
       console.warn(
-        '[guillotine] FAAB split after chop failed; the chop itself stands',
+        '[guillotine] FAAB payout after chop failed; the chop itself stands',
         JSON.stringify({ leagueId: input.leagueId, week: input.weekOrPeriod, error: e instanceof Error ? e.message : String(e) }),
       )
     }
@@ -540,6 +565,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
       releaseTiming: config.rosterReleaseTiming,
     })
   }
+
+  await settleFaabAfterChop(input.leagueId, seasonId, input.season, input.weekOrPeriod)
 
   if (!input.skipChat && input.systemUserId) {
     // Best-effort. The chop is already recorded; an announcement that fails must not turn a completed
@@ -586,7 +613,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
       choppedRosterIds,
       aliveRosterIds: evalResult.scores.map((s) => s.rosterId),
       displayNames: await getDisplayNamesForRosters(input.leagueId, choppedRosterIds),
-      rosterReleaseTiming: config.rosterReleaseTiming,
+      // From week N on, chopped players are free agents at once (./freeAgencyFromWeek.ts): the alert says so.
+      rosterReleaseTiming: effectiveReleaseTiming(config.rosterReleaseTiming, readFreeAgencyFromWeek(endgameLeague?.settings), input.weekOrPeriod),
       periodWeeks: readPeriodWeeks(endgameLeague?.settings),
     })
   } catch (e) {
@@ -606,6 +634,35 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     reason,
     eliminationFlagged: flagged,
     audit,
+  }
+}
+
+/**
+ * The commissioner's "FAAB after a chop" rule (./faabAfterChop). Best-effort, like the announcement:
+ * the chop is already recorded, and a retry of this week reaches the recovery branch, which runs it
+ * again — once, because the step keeps its own marker.
+ */
+async function settleFaabAfterChop(leagueId: string, seasonId: string | null, season: number | null | undefined, weekOrPeriod: number): Promise<void> {
+  const seasonKey = seasonId ?? `season:${season ?? 'unknown'}`
+  try {
+    await applyFaabAfterChop({ leagueId, seasonKey, weekOrPeriod })
+  } catch (e) {
+    console.warn('[guillotine] FAAB after chop not applied yet', JSON.stringify({ leagueId, weekOrPeriod, error: e instanceof Error ? e.message : String(e) }))
+  }
+  // After the reset, so a "resets to $X" rule cannot wipe the bonus out (./faabBonus.ts). Idempotent like it, and
+  // finished by the "period already processed" branch when this pass fails.
+  try {
+    await applyTopScorerBonus({ leagueId, seasonKey, season, weekOrPeriod })
+  } catch (e) {
+    console.warn('[guillotine] top scorer FAAB bonus not applied yet', JSON.stringify({ leagueId, weekOrPeriod, error: e instanceof Error ? e.message : String(e) }))
+  }
+  // Trades (./guillotineTrades.ts): the chopped teams' offers are cancelled, and trades close once few enough
+  // teams are left. Idempotent, and finished by the same "period already processed" branch.
+  try {
+    const { settleTradesAfterChop } = await import('./guillotineTrades')
+    await settleTradesAfterChop(leagueId, weekOrPeriod)
+  } catch (e) {
+    console.warn('[guillotine] trades after chop not settled yet', JSON.stringify({ leagueId, weekOrPeriod, error: e instanceof Error ? e.message : String(e) }))
   }
 }
 

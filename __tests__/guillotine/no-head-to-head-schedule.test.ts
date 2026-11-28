@@ -10,6 +10,9 @@ const db = vi.hoisted(() => ({
   league: { findUnique: vi.fn() },
   redraftMatchup: { count: vi.fn(), createMany: vi.fn() },
   redraftRoster: { findMany: vi.fn() },
+  // The schedule insert runs under a per-season advisory lock (lib/redraft/scheduleWriteLock.ts).
+  $executeRaw: vi.fn(async () => 0),
+  $transaction: vi.fn(async (fn: (tx: unknown) => unknown): Promise<unknown> => fn(db)),
 }))
 const m = vi.hoisted(() => ({ isGuillotineLeague: vi.fn(), generateSchedule: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))

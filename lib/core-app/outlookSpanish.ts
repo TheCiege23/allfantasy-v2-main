@@ -135,6 +135,8 @@ const PATTERNS: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   ],
   // ── Refusal with a pricing detail; the detail goes through the shared dictionary ──
   [/^Roster changes cannot be priced here: (.+)\.$/, (m) => `Aquí no se pueden valorar cambios de plantilla: ${coreUiCopy(m[1], 'es')}.`],
+  // A pasted Yahoo league's unmatched players (foreignIdSpaceCopy.ts) — the shared dictionary has it.
+  [/^\d+ players? on rosters in this league couldn't be matched to ours\.$/, (m) => coreUiCopy(m[0], 'es')],
   // ── What-if result lines and problems (outlookScenario) ──
   [
     /^The trade includes (.+), who has no projection this week, so it was not priced\.$/,

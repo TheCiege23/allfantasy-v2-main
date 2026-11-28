@@ -5,6 +5,7 @@ import { Bell, BellOff, Lock, MoreHorizontal, Search, Users } from 'lucide-react
 import type { ReportReason } from '@/lib/moderation/shared'
 import { TypingNote } from './TypingNote'
 import { ThreadListRow, formatLastActive, type ThreadRowContext } from './ThreadListRow'
+import { splitThreadsByRecency } from './threadSections'
 import { HuddleMembersSheet, HuddleOptionsSheet, type HuddleMember } from './HuddleSheets'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
@@ -116,9 +117,18 @@ export function ThreadPanel({
   kind,
   privacy,
   onAskChimmy,
+  startDmWith = null,
+  onStartDmHandled,
 }: {
   kind: 'dm' | 'group'
   privacy: string
+  /**
+   * DMs only: a username to open a conversation with as soon as the panel is up ("Message" on a
+   * league screen). Runs the picker's own start, so an existing thread is reopened, not duplicated.
+   */
+  startDmWith?: string | null
+  /** Called once `startDmWith` has been acted on, so the drawer can stop asking. */
+  onStartDmHandled?: () => void
   /**
    * The league page's Messages tab offers "Ask Chimmy about this chat", seeded with the
    * conversation. Absent in the drawer, whose Chimmy tab is one tap away already.
@@ -581,6 +591,26 @@ export function ThreadPanel({
     },
     [busy, loadThreads, open],
   )
+  /*
+   * The request this panel already started, so it runs ONCE however the parent clears it: the effect
+   * is re-checked when `busy` clears (a tap during another start is not lost), which would otherwise
+   * start the same conversation a second time. Reset when the request goes away, so tapping the same
+   * manager's Message again later does start again.
+   */
+  const startedDmFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (kind !== 'dm') return
+    if (!startDmWith) {
+      startedDmFor.current = null
+      return
+    }
+    if (busy || startedDmFor.current === startDmWith) return
+    startedDmFor.current = startDmWith
+    onStartDmHandled?.()
+    void startConversation('/api/shared/chat/dm/start', { username: startDmWith })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, startDmWith, busy])
+
 
   /*
    * ── Report and Block, from the message actions sheet ──────────────────────────────
@@ -956,6 +986,7 @@ export function ThreadPanel({
           dropZoneRef={panelRef}
           onTypingChange={signalTyping}
           mentionMembers={mentionMembers}
+          toolsLayout="menu"
         />
 
         {kind === 'group' && huddleSheet === 'members' ? (
@@ -1007,6 +1038,25 @@ export function ThreadPanel({
                 : 'A huddle is a group thread. Add a few AllFantasy usernames above to start one.'}
             </p>
           </div>
+        ) : kind === 'group' ? (
+          /*
+           * "This week" and "Earlier" (2026-11-05): a weekly matchup huddle is added every week, and a
+           * season of finished ones buried the room that matters now. Headings only when both exist.
+           */
+          (() => {
+            const { recent, earlier } = splitThreadsByRecency(threads, now)
+            const rows = (list: typeof threads) =>
+              list.map((t) => <ThreadListRow key={t.id} thread={t} now={now} onOpen={() => open(t)} />)
+            if (recent.length === 0 || earlier.length === 0) return rows(threads)
+            return (
+              <>
+                <h3 className="af-cm-section-label">This week</h3>
+                {rows(recent)}
+                <h3 className="af-cm-section-label">Earlier</h3>
+                {rows(earlier)}
+              </>
+            )
+          })()
         ) : (
           threads.map((t) => <ThreadListRow key={t.id} thread={t} now={now} onOpen={() => open(t)} />)
         )}

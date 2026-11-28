@@ -106,6 +106,11 @@ export interface ImportReview {
     /** redraft | keeper | dynasty | best_ball | … (AF vocabulary) */
     leagueType: string
     leagueTypeLabel: string
+    /**
+     * This season's draft as the PLATFORM reports it; null when it does not say (everything but
+     * Sleeper), which is when the confirm screen asks. Optional: an older server omits it.
+     */
+    rookieDraftFromPlatform?: 'done' | 'not_done' | null
     declaredTeamCount: number
     importedTeamCount: number
     rosterSize: number | null
@@ -149,6 +154,8 @@ export interface ImportReviewFacts {
   failedRosterTeamIds?: string[]
   tradedPickCount?: number
   standingsCount?: number
+  /** The platform's league status (`normalized.league.status`): Sleeper's says whether the draft is done. */
+  providerStatus?: string | null
 }
 
 /** The subset of the preview payload the review is built from. */

@@ -269,15 +269,6 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
         </div>
       )}
 
-      {/* Below md the games come first: this tool (~380px) used to fill a phone's first screen, the first game at
-          y=897 on an 844px screen. The root is a flex column, so `order` moves it without touching desktop. */}
-      <div className="rdt-line border-b px-4 py-3 max-md:order-last max-md:border-b-0 max-md:border-t md:px-5">
-        <div className="rdt-card rdt-bridge p-3">
-          <p className="rdt-eyebrow mb-2">Start A vs B</p>
-          <StartVsComparisonLauncher leagueId={league.id} sport={resolved} weekOrPeriod={`Week ${week}`} showNameInputs />
-        </div>
-      </div>
-
       <div className="grid min-h-0 flex-1 md:grid-cols-[200px_minmax(0,1fr)] md:gap-0">
         {/* Sidebar */}
         <aside className="rdt-line rdt-side border-b md:border-b-0 md:border-r">
@@ -361,6 +352,21 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
           ) : null}
         </main>
       </div>
+
+      {/*
+        Start A vs B sits under the games, folded (2026-11-05). It used to sit between the header and the
+        scoreboard as two empty name fields, so on a phone the first score started below the fold of a tab
+        called Live scores. One tap opens it; the launcher itself is unchanged.
+      */}
+      <details className="rdt-compare rdt-line border-t px-4 py-3 md:px-5" data-testid="scores-compare">
+        <summary className="rdt-compare-summary">
+          <span className="rdt-eyebrow">Start A vs B</span>
+          <span className="rdt-compare-hint">Compare two players for Week {week}</span>
+        </summary>
+        <div className="rdt-card rdt-bridge mt-3 p-3">
+          <StartVsComparisonLauncher leagueId={league.id} sport={resolved} weekOrPeriod={`Week ${week}`} showNameInputs />
+        </div>
+      </details>
     </div>
   )
 }

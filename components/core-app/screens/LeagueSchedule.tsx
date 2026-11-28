@@ -93,12 +93,19 @@ export default function LeagueSchedule({
   const nextWk = at >= 0 && at < weeks.length - 1 ? weeks[at + 1] : null
 
   return (
-    <div className="af-tw af-sg">
+    /*
+      `af-sched`, not `af-sg` (2026-11-24): `af-sg` is the screen-guide strip's class (screen-guide.css), and
+      on this root it drew the strip's border and background around the page's whole top.
+    */
+    <div className="af-tw af-sched">
+      {/*
+        No intro sentence under the headline (2026-11-24, the simplify pass): the headline already says
+        who is next and when, and the sections below are titled.
+      */}
       <PageHeader
         className="af-tw-heading"
         eyebrow={m.eyebrow(data.league.name)}
         title={title}
-        sub={m.intro}
         actions={<Link href={`/core/my-team?league=${leagueId}`}>Plan your roster</Link>}
       />
       <TeamDeadlineAlertTarget leagueId={data.league.id} events={data.calendar ?? []} query={params?.toString() ?? ''} />

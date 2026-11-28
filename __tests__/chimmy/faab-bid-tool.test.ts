@@ -26,10 +26,28 @@ vi.mock('@/lib/prisma', () => ({
     weeklyMatchup: { findFirst: h.weekly, findMany: vi.fn(async () => []) },
   },
 }))
+/*
+ * 2026-11-26: the values are THE grader's league chart (`createLeagueTradeGrader(...).chart`), read
+ * through `marketValuesFromLeagueChart`. `h.values` still holds the fixture payload; the grader mock
+ * serves it as that chart's `fcPlayers`. `getMarketValues` throws, so a tool that reached for the old
+ * market service would fail here rather than quietly price on it.
+ */
 vi.mock('@/lib/trade-intel/marketValueService', async () => {
   const actual = await vi.importActual<typeof import('@/lib/trade-intel/marketValueService')>('@/lib/trade-intel/marketValueService')
-  return { ...actual, getMarketValues: h.values }
+  return { ...actual, getMarketValues: () => { throw new Error('the FAAB tool must price on the grader chart') } }
 })
+vi.mock('@/lib/decision-os/trade/leagueTradeGrader', () => ({
+  createLeagueTradeGrader: vi.fn(async () => {
+    const v = (await h.values()) as { bySleeperId: Record<string, { name: string; sleeperId: string; position: string; value: number }>; fetchedAt: string; mode: string; numQbs: number; numTeams: number; ppr: number } | null
+    if (!v) return null
+    return {
+      chart: {
+        fcPlayers: Object.values(v.bySleeperId).map((e) => ({ player: { name: e.name, sleeperId: e.sleeperId, position: e.position }, value: e.value, overallRank: NaN, trend30Day: NaN })),
+        fcSyncedAt: v.fetchedAt, chartIsDynasty: v.mode === 'dynasty', isSuperFlex: v.numQbs === 2, leagueSize: v.numTeams, pprNfl: v.ppr,
+      },
+    }
+  }),
+}))
 
 import { buildFaabBidContext, computeFaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
 import { executeChimmyTool, type ChimmyToolContext } from '@/lib/chimmy/tools/chimmyTools'
@@ -66,6 +84,17 @@ beforeEach(() => {
 })
 
 describe('get_faab_bid_plan', () => {
+  it('prices on THE grader’s league chart, for this league and viewer (2026-11-26)', async () => {
+    const { createLeagueTradeGrader } = await import('@/lib/decision-os/trade/leagueTradeGrader')
+    await buildFaabBidContext('L1', 'me')
+    expect(createLeagueTradeGrader).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'me' })
+    // Move ONE price on the grader's chart and the plan moves with it: the Free TE stops being an upgrade.
+    h.values.mockResolvedValue({ ...VALUES, bySleeperId: { ...VALUES.bySleeperId, 'fa-te': { ...VALUES.bySleeperId['fa-te']!, value: 500 } } })
+    const text = await buildFaabBidContext('L1', 'me')
+    expect(text).not.toContain('- Free TE (TE): bid up to')
+    expect(text).toContain("values from this league’s AllFantasy trade chart")
+  })
+
   it('in a Guilly league, splits the remaining budget across the real upgrades only', async () => {
     const text = await buildFaabBidContext('L1', 'me')
     expect(text).toContain('The user has $400 FAAB left of a $1000 season budget.')
@@ -254,5 +283,60 @@ describe('the bid plan reaches the chat as data', () => {
     const plan = await computeFaabBidPlan('L1', 'me')
     expect(faabCardFromPlan(plan, 'L1')).toBeNull()
     expect(faabPlanVerdict(plan)).toBeNull()
+  })
+})
+
+/*
+ * A PASTED Yahoo league (lib/core-app/declaredAvailability.ts): resolved players stored `sleeper:<id>`,
+ * the unmatched as `yahoo-paste:<name>|<pos>|<team>`. Above the 80% coverage bar the plan is priced on
+ * the declared ids, with each unmatched player's own row kept out of the pool and the count said; below
+ * it, the tool refuses the way its other refusals read.
+ */
+describe('get_faab_bid_plan — a pasted Yahoo league', () => {
+  const YAHOO = { ...LEAGUE, platform: 'yahoo', sport: 'NFL' }
+  const mine = { ...MY_ROSTER, playerData: { ...MY_ROSTER.playerData, players: MY_ROSTER.playerData.players.map((id) => `sleeper:${id}`), starters: MY_ROSTER.playerData.starters.map((id) => `sleeper:${id}`) } }
+
+  it('above the bar: prices the plan, counts the unmatched player, and keeps him out of the bids', async () => {
+    h.league.mockResolvedValue(YAHOO)
+    // 7 declared of 8 distinct ids: 87.5%.
+    h.rosters.mockResolvedValue([
+      { ...mine, league: { platform: 'yahoo', sport: 'NFL' } },
+      { ...OTHER_ROSTER, league: { platform: 'yahoo', sport: 'NFL' }, playerData: { players: ['sleeper:qb2', 'yahoo-paste:free qb|QB|KC'] } },
+    ])
+    const plan = await computeFaabBidPlan('L1', 'me')
+    expect(plan.status).toBe('ok')
+    const text = await buildFaabBidContext('L1', 'me')
+    expect(text).toContain("1 player on this league's rosters couldn't be matched to ours")
+    expect(text).toContain('- Free TE (TE): bid up to')
+  })
+
+  it('🛑 the unmatched pasted player is never bid on as a free agent', async () => {
+    h.league.mockResolvedValue(YAHOO)
+    h.rosters.mockResolvedValue([
+      { ...mine, league: { platform: 'yahoo', sport: 'NFL' } },
+      { ...OTHER_ROSTER, league: { platform: 'yahoo', sport: 'NFL' }, playerData: { players: ['sleeper:qb2', 'yahoo-paste:free qb|QB|KC'] } },
+    ])
+    const text = await buildFaabBidContext('L1', 'me')
+    expect(text).not.toContain('Free QB')
+  })
+
+  it('below the bar: refuses, with the count, in the words its other refusals use', async () => {
+    h.league.mockResolvedValue(YAHOO)
+    h.rosters.mockResolvedValue([
+      { ...mine, league: { platform: 'yahoo', sport: 'NFL' } },
+      { ...OTHER_ROSTER, league: { platform: 'yahoo', sport: 'NFL' }, playerData: { players: ['yahoo-paste:a|QB|KC', 'yahoo-paste:b|RB|KC', 'yahoo-paste:free qb|QB|KC'] } },
+    ])
+    const plan = await computeFaabBidPlan('L1', 'me')
+    expect(plan).toEqual({
+      status: 'refused',
+      line: "FAAB BID PLAN: 3 players on this league's rosters couldn't be matched to ours, so who is available cannot be verified. Say so; do not estimate bids or name anyone as available.",
+    })
+  })
+
+  it('CONTROL: a Yahoo league with no declared id keeps the platform refusal', async () => {
+    h.league.mockResolvedValue(YAHOO)
+    h.rosters.mockResolvedValue([MY_ROSTER, OTHER_ROSTER])
+    const plan = await computeFaabBidPlan('L1', 'me')
+    expect(plan.status === 'refused' && plan.line).toContain("this platform's player ids are not readable here")
   })
 })

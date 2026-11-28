@@ -1,7 +1,8 @@
 import 'server-only'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
-import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { resolveWriteAuthority, type LeagueAuthoritySource } from '@/lib/league/write-authority'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { logAction } from '@/server/services/auditService'
 import { loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
@@ -37,8 +38,8 @@ export const TANKING_FAAB_ACTION = 'integrity.tanking_faab_taken'
  * on the source platform: a confirmed tanking flag there is a finding for the commissioner, never a
  * forfeited AllFantasy pick row or a warning that promises one (lib/integrity/scanImportedTanking.ts).
  */
-function penaltiesApply(platform: string | null): boolean {
-  return resolveWriteAuthority(platform) === 'NATIVE'
+function penaltiesApply(league: LeagueAuthoritySource): boolean {
+  return resolveWriteAuthority(league) === 'NATIVE'
 }
 
 export type TankingTeam = {
@@ -75,7 +76,7 @@ export async function resolveTankingTeam(leagueId: string, flagRosterId: string)
 
 /** The person in a seat — never an abandoned team's `orphan-…` seat or an AI manager. */
 async function personAt(seat: string): Promise<string | null> {
-  if (!seat || seat.startsWith('orphan-') || seat.startsWith('ai-manager-')) return null
+  if (!seat || isSeatPlaceholderUserId(seat)) return null
   const user = await prisma.appUser.findUnique({ where: { id: seat }, select: { id: true } }).catch(() => null)
   return user?.id ?? null
 }
@@ -113,7 +114,7 @@ export async function onTankingFlagOpened(flagId: string): Promise<void> {
     select: { leagueId: true, flagType: true, affectedRosterIds: true, league: { select: { settings: true, platform: true } } },
   })
   if (!flag || flag.flagType !== 'tanking') return
-  if (!penaltiesApply(flag.league.platform)) return
+  if (!penaltiesApply(flag.league)) return
   const policy = readTankingPenaltyPolicy(flag.league.settings)
   if (!policy.enabled) return
   for (const rosterId of flag.affectedRosterIds) {
@@ -167,7 +168,7 @@ export async function onTankingFlagConfirmed(flagId: string, commissionerUserId:
     select: { leagueId: true, flagType: true, status: true, affectedRosterIds: true, league: { select: { settings: true, platform: true } } },
   })
   if (!flag || flag.flagType !== 'tanking' || flag.status !== 'escalated') return []
-  if (!penaltiesApply(flag.league.platform)) return []
+  if (!penaltiesApply(flag.league)) return []
   const policy = readTankingPenaltyPolicy(flag.league.settings)
   const out: TankingConfirmationResult[] = []
   for (const rosterId of flag.affectedRosterIds) {

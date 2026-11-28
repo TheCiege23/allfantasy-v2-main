@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Crown, LayoutGrid, MessageSquare, Settings, Shield, Trophy, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { leagueTabSportEmoji } from '@/app/league/[leagueId]/LeagueTabs'
-import { KingBuffaloPresentedBy } from '@/components/tournament/KingBuffaloPresentedBy'
+import { KingBuffaloPresentedBy, isKingBuffaloTournament } from '@/components/tournament/KingBuffaloPresentedBy'
 import type { BigBrotherSummary } from '@/components/big-brother/types'
 
 export type TournamentHeroContext = {
@@ -17,6 +17,10 @@ export type TournamentHeroContext = {
   roundIndex: number
   phase: string
   roundRules?: { benchSpots: number; faabReset: boolean; faabBudget: number }
+  /** The tournament's hub, when it is not the older `/tournament/<id>` (a shell: lib/tournament/shellHeroContext.ts). */
+  hubHref?: string
+  /** The commissioner's ops page; null when this tournament has none at the older path. */
+  controlHref?: string | null
   theme?: {
     bannerUrl: string | null
     themePack: string
@@ -329,11 +333,13 @@ export function SpecialtyLeagueHomeHero({
       )}
 
       <div className="relative flex h-full min-h-[inherit] flex-col px-4 py-4 md:px-6 md:py-6">
-        <div className="pointer-events-none absolute right-3 top-3 md:right-5 md:top-4">
-          <div className="pointer-events-auto scale-90 md:scale-100">
-            <KingBuffaloPresentedBy variant="compact" />
+        {isKingBuffaloTournament(tournamentContext?.tournamentName) ? (
+          <div className="pointer-events-none absolute right-3 top-3 md:right-5 md:top-4">
+            <div className="pointer-events-auto scale-90 md:scale-100">
+              <KingBuffaloPresentedBy tournamentName={tournamentContext?.tournamentName} variant="compact" />
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="flex flex-1 flex-col gap-4 pr-0 pt-10 md:flex-row md:items-stretch md:gap-6 md:pt-2 md:pr-44">
           {/* Left column */}
@@ -411,7 +417,7 @@ export function SpecialtyLeagueHomeHero({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[11px] font-bold uppercase tracking-wide text-[#ffb8d1]/90">Hub</span>
                     <Link
-                      href={`/tournament/${tournamentContext.tournamentId}`}
+                      href={tournamentContext.hubHref ?? `/tournament/${tournamentContext.tournamentId}`}
                       className="text-[11px] font-semibold text-[#ff9ec0] underline-offset-2 hover:text-[#ffb8d1] hover:underline"
                       data-testid="specialty-hero-tournament-hub"
                     >
@@ -553,10 +559,10 @@ export function SpecialtyLeagueHomeHero({
                   Commish
                 </HeroQuickButton>
               ) : null}
-              {isHeadCommissioner && variant === 'tournament' && tournamentContext ? (
+              {isHeadCommissioner && variant === 'tournament' && tournamentContext && tournamentContext.controlHref !== null ? (
                 <HeroQuickButton
                   icon={Wrench}
-                  href={`/tournament/${tournamentContext.tournamentId}/control`}
+                  href={tournamentContext.controlHref ?? `/tournament/${tournamentContext.tournamentId}/control`}
                 >
                   Ops
                 </HeroQuickButton>

@@ -36,9 +36,9 @@ export const summary: TournamentCommissionerSummary = {
     participants: 31, waitlisted: 3, activeParticipants: 31, eliminated: 0,
   },
   rounds: [
-    { roundIndex: 1, phase: 'qualification', name: 'Opening Round', startWeek: 1, endWeek: 8, status: 'active' },
-    { roundIndex: 2, phase: 'elimination', name: 'Elite Eight', startWeek: 9, endWeek: 13, status: 'upcoming' },
-    { roundIndex: 3, phase: 'finals', name: null, startWeek: 14, endWeek: 17, status: 'upcoming' },
+    { roundIndex: 0, phase: 'qualification', name: 'Opening Round', startWeek: 1, endWeek: 8, status: 'active' },
+    { roundIndex: 1, phase: 'elimination', name: 'Elite Eight', startWeek: 9, endWeek: 13, status: 'upcoming' },
+    { roundIndex: 2, phase: 'finals', name: null, startWeek: 14, endWeek: 17, status: 'upcoming' },
   ],
   scheduleHints: { qualificationWeeks: 8, redraftWeeks: [9, 14] },
   hub: {
@@ -79,7 +79,7 @@ export const control: ControlData = {
   tournamentId: TOURNAMENT_ID,
   tournamentName: 'AllFantasy Open 2026',
   leagues: FEEDERS.map(([leagueName, conferenceName, inviteCode], i) => ({
-    tournamentLeagueId: `tl-${i + 1}`, leagueId: `lg-${i + 1}`, leagueName, conferenceName, roundIndex: 1, phase: 'qualification',
+    tournamentLeagueId: `tl-${i + 1}`, leagueId: `lg-${i + 1}`, leagueName, conferenceName, roundIndex: 0, phase: 'qualification',
     inviteCode, joinUrl: `https://allfantasy.ai/join/${inviteCode}`, leagueSize: 8, rosterCount: i === 1 ? 7 : 8,
     fillStatus: i === 1 ? 'partial' : 'full',
   })),

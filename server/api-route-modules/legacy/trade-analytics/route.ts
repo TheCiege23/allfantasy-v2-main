@@ -1,32 +1,88 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { computeDualModeTradeDelta, UserTrade, ValuationMode } from '@/lib/hybrid-valuation'
-import { computeReportCard } from '@/lib/trade-engine/report-card-engine'
 import { isUserParty } from '@/lib/user-matching'
 import { logUserEventByUsername } from '@/lib/user-events'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+import { legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
+import { gradeLegacyCompletedTrades, type LegacyCompletedTrade } from '@/lib/legacy/legacyCompletedTradeGrades'
+import type { TradeGradeLine, TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
+
+/*
+ * 🛑 THE AF LEGACY TRADE REPORT GRADES EVERY TRADE THROUGH THE ONE TRADE GRADE (2026-11-26).
+ *
+ * Until then every number this report printed came from a second engine: `computeDualModeTradeDelta`
+ * (`lib/hybrid-valuation.ts`) priced each trade "at the time" and "with hindsight", a trade was a win
+ * when that delta passed +300, the overall grade averaged the letters the CLIENT sent (another model's,
+ * on another scale), the "trading journey" was `(gradeValue − 60) × 100`, and
+ * `lib/trade-engine/report-card-engine.ts` turned the same deltas into a three-lens report card on its
+ * own 13-step letter scale. The /core Trades history graded the same Sleeper trades with a different
+ * letter.
+ *
+ * Now each trade is graded by `oneGradeForCompletedTrade` on the viewer's own AF league row
+ * (`lib/legacy/legacyCompletedTradeGrades.ts`), from the viewer's side:
+ *   - `atTimeGrade` / `atTimeDelta` are the trade's ORIGINAL grade (priced at the time of the trade when
+ *     a market capture covers it), `hindsightGrade` / `hindsightDelta` today's re-grade beside it;
+ *   - a WIN is a B or better, a LOSS a D or worse, EVEN a C — the grade's own bands, not a value cutoff;
+ *   - every value is the league value the letter was taken on (received − sent);
+ *   - the overall grade card, partners, best/worst trade and awards are aggregates of THOSE numbers.
+ * A trade the grade withholds says why (`gradeWithheld`) and counts in no total. Nothing is filled in
+ * from another model: no PPG proxy (`lineupImpact` and the Starter Builder award are null), no
+ * confidence, and no report card — the report card's letters were the second engine's, and there is
+ * no honest version of them to print.
+ */
 
 interface TradeAnalyticsRequest {
   league_id: string
   sleeper_username: string
   sleeper_user_id?: string
-  mode?: ValuationMode
-  trades: Array<{
-    transactionId: string
-    timestamp: number
-    week: number
-    parties: Array<{
-      userId: string
-      teamName?: string
-      playersReceived: Array<{ name: string; position?: string }>
-      picksReceived: Array<{ round: number; season: string; slot?: string }>
-    }>
-    grade?: string
-    verdict?: string
-  }>
+  mode?: 'atTime' | 'hindsight'
+  trades: Array<LegacyCompletedTrade & { grade?: string; verdict?: string }>
   managers?: Record<string, string>
   league?: { qb_format?: string }
 }
+
+type Outcome = 'win' | 'loss' | 'even'
+
+/** The grade's own reading of a letter: B or better wins, D or worse loses. */
+export function outcomeOf(letter: GradeLetter): Outcome {
+  return letter === 'A' || letter === 'B' ? 'win' : letter === 'D' || letter === 'F' ? 'loss' : 'even'
+}
+
+const LETTER_POINTS: Record<GradeLetter, number> = { A: 4, B: 3, C: 2, D: 1, F: 0 }
+const LETTERS: GradeLetter[] = ['F', 'D', 'C', 'B', 'A']
+
+/** The mean of several one-grade letters, on the same A–F scale. Null when there are none. */
+export function meanLetter(letters: readonly GradeLetter[]): { letter: GradeLetter; score: number } | null {
+  if (letters.length === 0) return null
+  const avg = letters.reduce((s, l) => s + LETTER_POINTS[l], 0) / letters.length
+  return { letter: LETTERS[Math.round(avg)]!, score: Math.round((avg / 4) * 100) }
+}
+
+const TRADER_LABEL: Record<GradeLetter, string> = {
+  A: 'Elite Trader',
+  B: 'Above Average Trader',
+  C: 'Average Trader',
+  D: 'Below Average Trader',
+  F: 'Struggling Trader',
+}
+
+type Moment = { letter: GradeLetter; net: number; received: number; gave: number }
+
+/** The original ("at the time") and today's ("now") readings of one graded view. */
+export function momentsOf(view: TradeGradeView): { atTime: Moment; now: Moment } | null {
+  if (!view.graded) return null
+  const atTime: Moment = { letter: view.letter, net: view.getValue - view.giveValue, received: view.getValue, gave: view.giveValue }
+  const c = view.current
+  const now: Moment = c ? { letter: c.letter, net: c.getValue - c.giveValue, received: c.getValue, gave: c.giveValue } : atTime
+  return { atTime, now }
+}
+
+const round = (n: number) => Math.round(n)
+
+const withheldReason = (view: TradeGradeView): string | null => (view.graded ? null : view.reason)
+const firstWithheldReason = (views: readonly TradeGradeView[]): string | null =>
+  views.map(withheldReason).find((r): r is string => r != null) ?? null
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool: "LegacyTradeAnalytics" })(async (req: NextRequest) => {
   try {
@@ -48,688 +104,361 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool
       logUserEventByUsername(sleeper_username, 'trade_analysis_started', { league_id, trade_count: trades.length })
     }
 
-    const userTrades = trades.filter(t => 
-      t.parties?.some(p => isUserParty(p, sleeper_username, sleeper_user_id))
-    )
-    
-    console.log(`[trade-analytics] Filtering trades for user: username=${sleeper_username}, user_id=${sleeper_user_id}`)
-    console.log(`[trade-analytics] Found ${userTrades.length} user trades out of ${trades.length} total`)
+    const isMe = (p: { userId?: string; teamName?: string; displayName?: string }) => isUserParty(p, sleeper_username, sleeper_user_id)
+    const userTrades = trades.filter(t => t.parties?.some(isMe))
+    const mode = body.mode === 'hindsight' ? 'hindsight' : 'atTime'
 
-    let wins = 0, losses = 0, even = 0
-    let totalValueGained = 0
-    
-    const multiStats = {
-      atTime: { wins: 0, losses: 0, even: 0, netValue: 0, avgPerTrade: 0, winRate: 0 },
-      hindsight: { wins: 0, losses: 0, even: 0, netValue: 0, avgPerTrade: 0, winRate: 0 },
-      lineupImpact: { wins: 0, losses: 0, even: 0, netValue: 0, avgPerTrade: 0, winRate: 0 },
-    }
-    let partnerStats: Record<string, {
-      name: string
-      trades: number
-      netValue: number
-      grades: string[]
-      positionsReceived: Record<string, number>
-      positionsGiven: Record<string, number>
-      picksReceived: number
-      picksGiven: number
-      tradeShapes: string[]
-      tradeValues: number[]
-    }> = {}
-    let bestTrade: any = null
-    let worstTrade: any = null
-    let bestTradeValue = -Infinity
-    let worstTradeValue = Infinity
-    
-    const gradeValues: Record<string, number> = {
-      'A+': 95, 'A': 90, 'A-': 85,
-      'B+': 80, 'B': 75, 'B-': 70,
-      'C+': 65, 'C': 60, 'C-': 55,
-      'D+': 50, 'D': 45, 'D-': 40,
-      'F': 30
-    }
+    // THE grade of every trade, from your side. One league load, frozen originals read once.
+    const views = await gradeLegacyCompletedTrades({
+      suppliedLeagueId: league_id,
+      userId: await legacySessionUserId(),
+      trades: userTrades,
+      isViewer: isMe,
+    })
 
-    const gradeToValue = (grade: string): number => {
-      const baseGrade = grade?.toUpperCase() || 'C'
-      return gradeValues[baseGrade] || 60
-    }
+    const scored = userTrades.map((trade, i) => {
+      const view = views[i]!
+      const moments = momentsOf(view)
+      const primary = moments ? (mode === 'hindsight' ? moments.now : moments.atTime) : null
+      return { trade, view, moments, primary }
+    })
+    const graded = scored.filter((s): s is typeof s & { moments: NonNullable<typeof s.moments>; primary: Moment } => s.primary != null)
 
-    const valueToGrade = (value: number): string => {
-      if (value >= 93) return 'A+'
-      if (value >= 88) return 'A'
-      if (value >= 83) return 'A-'
-      if (value >= 78) return 'B+'
-      if (value >= 73) return 'B'
-      if (value >= 68) return 'B-'
-      if (value >= 63) return 'C+'
-      if (value >= 58) return 'C'
-      if (value >= 53) return 'C-'
-      if (value >= 48) return 'D+'
-      if (value >= 43) return 'D'
-      if (value >= 38) return 'D-'
-      return 'F'
-    }
+    const partnerOf = (t: LegacyCompletedTrade) => t.parties?.find(p => !isMe(p))
+    const meOf = (t: LegacyCompletedTrade) => t.parties?.find(isMe)
+    const nameOf = (p: ReturnType<typeof partnerOf>) =>
+      p?.teamName || p?.displayName || managers?.[p?.userId || ''] || p?.userId || 'Unknown'
 
-    const getTraderLabel = (grade: string): string => {
-      if (['A+', 'A'].includes(grade)) return 'Elite Trader'
-      if (['A-', 'B+'].includes(grade)) return 'Great Trader'
-      if (['B', 'B-'].includes(grade)) return 'Above Average Trader'
-      if (['C+', 'C'].includes(grade)) return 'Average Trader'
-      if (['C-', 'D+'].includes(grade)) return 'Below Average Trader'
-      if (['D', 'D-'].includes(grade)) return 'Poor Trader'
-      return 'Struggling Trader'
+    // ── Headline stats, on the grade's own outcome ─────────────────────────────────────────────
+    const tally = (pick: (m: NonNullable<(typeof scored)[number]['moments']>) => Moment) => {
+      const s = { wins: 0, losses: 0, even: 0, netValue: 0, avgPerTrade: 0, winRate: 0 }
+      for (const g of graded) {
+        const m = pick(g.moments)
+        s[outcomeOf(m.letter) === 'win' ? 'wins' : outcomeOf(m.letter) === 'loss' ? 'losses' : 'even']++
+        s.netValue += round(m.net)
+      }
+      s.avgPerTrade = graded.length > 0 ? Math.round((s.netValue / graded.length) * 10) / 10 : 0
+      s.winRate = graded.length > 0 ? Math.round((s.wins / graded.length) * 100) : 0
+      return s
     }
+    const atTimeStats = tally((m) => m.atTime)
+    const hindsightStats = tally((m) => m.now)
+    const primaryStats = mode === 'hindsight' ? hindsightStats : atTimeStats
+    const totalValueGained = graded.reduce((s, g) => s + round(g.primary.net), 0)
+    const valueReceived = graded.reduce((s, g) => s + round(g.primary.received), 0)
+    const valueGiven = graded.reduce((s, g) => s + round(g.primary.gave), 0)
 
-    const isSF = body.league?.qb_format === 'sf'
-    const mode: ValuationMode = body.mode || 'atTime'
-    
-    const scoredTrades = await Promise.all(
-      userTrades.map(async (trade) => {
-        let realValue = 0
-        let dualResult: Awaited<ReturnType<typeof computeDualModeTradeDelta>> | null = null
-        
-        const userTrade: UserTrade = {
-          transactionId: trade.transactionId,
-          timestamp: trade.timestamp,
-          week: trade.week,
-          parties: trade.parties.map(p => ({
-            userId: p.userId,
-            teamName: p.teamName,
-            playersReceived: p.playersReceived || [],
-            picksReceived: p.picksReceived || [],
-          })),
-          grade: trade.grade,
-          verdict: trade.verdict,
-        }
-        
-        try {
-          dualResult = await computeDualModeTradeDelta(userTrade, sleeper_username, isSF, sleeper_user_id)
-          const selectedMode = mode === 'hindsight' ? dualResult.withHindsight : dualResult.atTheTime
-          realValue = selectedMode?.deltaValue || 0
-        } catch (e) {
-          console.error('Failed to compute dual mode delta:', e)
-          const gradeValue = gradeToValue(trade.grade || 'C')
-          realValue = (gradeValue - 60) * 100
-        }
-        
-        return {
-          ...trade,
-          value: Math.round(realValue),
-          _analytics: dualResult ? {
-            atTheTime: dualResult.atTheTime,
-            withHindsight: dualResult.withHindsight,
-            comparison: dualResult.comparison,
-          } : null,
-        }
+    const overall = meanLetter(graded.map((g) => g.primary.letter))
+    const withheldCount = scored.length - graded.length
+
+    // ── Partners ───────────────────────────────────────────────────────────────────────────────
+    type PartnerStats = {
+      name: string; trades: number; netValue: number; letters: GradeLetter[]; wins: number; losses: number
+      positionsReceived: Record<string, number>; positionsGiven: Record<string, number>
+      picksReceived: number; picksGiven: number; tradeShapes: string[]
+    }
+    const partnerStats: Record<string, PartnerStats> = {}
+    for (const g of graded) {
+      const partner = partnerOf(g.trade)
+      if (!partner) continue
+      const id = partner.userId || partner.teamName || 'Unknown'
+      const ps = (partnerStats[id] ??= {
+        name: nameOf(partner), trades: 0, netValue: 0, letters: [], wins: 0, losses: 0,
+        positionsReceived: {}, positionsGiven: {}, picksReceived: 0, picksGiven: 0, tradeShapes: [],
       })
-    )
-    
-    const WIN_THRESHOLD = 300
-    const PPG_PROXY_DIVISOR = 250
-    
-    for (const trade of scoredTrades) {
-      const estimatedValue = trade.value
-      
-      if (estimatedValue > WIN_THRESHOLD) {
-        wins++
-        totalValueGained += estimatedValue
-      } else if (estimatedValue < -WIN_THRESHOLD) {
-        losses++
-        totalValueGained += estimatedValue
-      } else {
-        even++
-        totalValueGained += estimatedValue
-      }
-
-      const atTimeDelta = trade._analytics?.atTheTime?.deltaValue ?? 0
-      if (atTimeDelta > WIN_THRESHOLD) multiStats.atTime.wins++
-      else if (atTimeDelta < -WIN_THRESHOLD) multiStats.atTime.losses++
-      else multiStats.atTime.even++
-      multiStats.atTime.netValue += Math.round(atTimeDelta)
-
-      const hindsightDelta = trade._analytics?.withHindsight?.deltaValue ?? 0
-      if (hindsightDelta > WIN_THRESHOLD) multiStats.hindsight.wins++
-      else if (hindsightDelta < -WIN_THRESHOLD) multiStats.hindsight.losses++
-      else multiStats.hindsight.even++
-      multiStats.hindsight.netValue += Math.round(hindsightDelta)
-
-      const ppgDelta = (trade._analytics?.withHindsight?.deltaValue ?? trade._analytics?.atTheTime?.deltaValue ?? 0) / PPG_PROXY_DIVISOR
-      if (ppgDelta > 0.5) multiStats.lineupImpact.wins++
-      else if (ppgDelta < -0.5) multiStats.lineupImpact.losses++
-      else multiStats.lineupImpact.even++
-      multiStats.lineupImpact.netValue += Math.round(ppgDelta * 10) / 10
-
-      if (estimatedValue > bestTradeValue) {
-        bestTradeValue = estimatedValue
-        bestTrade = trade
-      }
-      if (estimatedValue < worstTradeValue) {
-        worstTradeValue = estimatedValue
-        worstTrade = trade
-      }
-
-      const partner = trade.parties?.find(p => !isUserParty(p, sleeper_username, sleeper_user_id))
-      
-      if (partner) {
-        const partnerId = partner.userId || partner.teamName || 'Unknown'
-        const partnerName = partner.teamName || (partner as any).displayName || managers?.[partner.userId] || partner.userId || 'Unknown'
-        
-        if (!partnerStats[partnerId]) {
-          partnerStats[partnerId] = {
-            name: partnerName, trades: 0, netValue: 0, grades: [],
-            positionsReceived: {}, positionsGiven: {},
-            picksReceived: 0, picksGiven: 0,
-            tradeShapes: [], tradeValues: [],
-          }
-        }
-        const ps = partnerStats[partnerId]
-        ps.trades++
-        ps.netValue += estimatedValue
-        ps.grades.push(trade.grade || 'C')
-        ps.tradeValues.push(estimatedValue)
-
-        const userParty = trade.parties?.find((p: any) => isUserParty(p, sleeper_username, sleeper_user_id))
-
-        if (userParty) {
-          for (const pl of (userParty.playersReceived || [])) {
-            const pos = pl.position || 'Unknown'
-            ps.positionsReceived[pos] = (ps.positionsReceived[pos] || 0) + 1
-          }
-          ps.picksReceived += (userParty as any).picksReceived?.length || 0
-        }
-
-        for (const pl of (partner.playersReceived || [])) {
-          const pos = (pl as any).position || 'Unknown'
-          ps.positionsGiven[pos] = (ps.positionsGiven[pos] || 0) + 1
-        }
-        ps.picksGiven += (partner as any).picksReceived?.length || 0
-
-        const userPieces = ((userParty as any)?.playersReceived?.length || 0) + ((userParty as any)?.picksReceived?.length || 0)
-        const partnerPieces = (partner.playersReceived?.length || 0) + ((partner as any).picksReceived?.length || 0)
-        if (userPieces < partnerPieces) ps.tradeShapes.push('consolidation')
-        else if (userPieces > partnerPieces) ps.tradeShapes.push('dispersion')
-        else ps.tradeShapes.push('swap')
-      }
+      ps.trades++
+      ps.netValue += round(g.primary.net)
+      ps.letters.push(g.primary.letter)
+      const o = outcomeOf(g.primary.letter)
+      if (o === 'win') ps.wins++
+      if (o === 'loss') ps.losses++
+      const me = meOf(g.trade)
+      for (const pl of me?.playersReceived ?? []) ps.positionsReceived[pl.position || 'Unknown'] = (ps.positionsReceived[pl.position || 'Unknown'] || 0) + 1
+      for (const pl of partner.playersReceived ?? []) ps.positionsGiven[pl.position || 'Unknown'] = (ps.positionsGiven[pl.position || 'Unknown'] || 0) + 1
+      ps.picksReceived += me?.picksReceived?.length || 0
+      ps.picksGiven += partner.picksReceived?.length || 0
+      const mine = (me?.playersReceived?.length || 0) + (me?.picksReceived?.length || 0)
+      const theirs = (partner.playersReceived?.length || 0) + (partner.picksReceived?.length || 0)
+      ps.tradeShapes.push(mine < theirs ? 'consolidation' : mine > theirs ? 'dispersion' : 'swap')
     }
 
-    function computeStyleMatch(ps: typeof partnerStats[string]): {
-      score: number
-      label: string
-      insights: string[]
-      drivers: string[]
-      dealShapes: string[]
-    } {
+    // Descriptive: what this partner trades and how. The win/lose line reads the one grade's outcomes.
+    function styleMatch(ps: PartnerStats) {
       const insights: string[] = []
       const drivers: string[] = []
-
-      const topPosGiven = Object.entries(ps.positionsGiven).sort(([,a],[,b]) => b - a)
-      const topPosReceived = Object.entries(ps.positionsReceived).sort(([,a],[,b]) => b - a)
-      const totalGiven = topPosGiven.reduce((s,[,v]) => s + v, 0)
-      const totalReceived = topPosReceived.reduce((s,[,v]) => s + v, 0)
-
-      if (topPosGiven[0] && totalGiven > 0) {
-        const pct = Math.round((topPosGiven[0][1] / totalGiven) * 100)
-        if (pct >= 40) {
-          insights.push(`They give away ${topPosGiven[0][0]}s frequently (${pct}% of assets sent to you)`)
-          drivers.push(`${topPosGiven[0][0]} seller`)
-        }
+      const topGiven = Object.entries(ps.positionsGiven).sort(([, a], [, b]) => b - a)
+      const topReceived = Object.entries(ps.positionsReceived).sort(([, a], [, b]) => b - a)
+      const totalGiven = topGiven.reduce((s, [, v]) => s + v, 0)
+      const totalReceived = topReceived.reduce((s, [, v]) => s + v, 0)
+      if (topGiven[0] && totalGiven > 0 && topGiven[0][1] / totalGiven >= 0.4) {
+        insights.push(`They give away ${topGiven[0][0]}s frequently (${Math.round((topGiven[0][1] / totalGiven) * 100)}% of assets sent to you)`)
+        drivers.push(`${topGiven[0][0]} seller`)
       }
-      if (topPosReceived[0] && totalReceived > 0) {
-        const pct = Math.round((topPosReceived[0][1] / totalReceived) * 100)
-        if (pct >= 40) {
-          insights.push(`They acquire ${topPosReceived[0][0]}s heavily (${pct}% of what you send them)`)
-          drivers.push(`${topPosReceived[0][0]} buyer`)
-        }
+      if (topReceived[0] && totalReceived > 0 && topReceived[0][1] / totalReceived >= 0.4) {
+        insights.push(`They acquire ${topReceived[0][0]}s heavily (${Math.round((topReceived[0][1] / totalReceived) * 100)}% of what you send them)`)
+        drivers.push(`${topReceived[0][0]} buyer`)
       }
-
-      if (ps.picksGiven > ps.picksReceived + 1) {
-        insights.push('Willing to include picks to sweeten deals')
-        drivers.push('Pick seller')
-      } else if (ps.picksReceived > ps.picksGiven + 1) {
-        insights.push('Prefers acquiring picks — likely rebuilding')
-        drivers.push('Pick hoarder')
-      }
-
-      const avgDelta = ps.netValue / (ps.trades || 1)
-      if (avgDelta > 400) {
-        insights.push('You consistently win trades against this partner')
-        drivers.push('Overpays in your deals')
-      } else if (avgDelta < -400) {
-        insights.push('This partner tends to get the better end of deals')
-        drivers.push('Hard negotiator')
-      } else {
-        insights.push('Trades with this partner tend to be fair and balanced')
-        drivers.push('Fair trader')
-      }
-
-      const variance = ps.tradeValues.length > 1
-        ? Math.sqrt(ps.tradeValues.reduce((s, v) => s + Math.pow(v - avgDelta, 2), 0) / ps.tradeValues.length)
-        : 0
-      if (variance > 1000) {
-        drivers.push('Volatile — big swings')
-      } else if (variance < 300 && ps.trades >= 3) {
-        drivers.push('Predictable outcomes')
-      }
-
-      const consolidationPct = ps.tradeShapes.filter(s => s === 'consolidation').length / (ps.trades || 1)
-      const dispersionPct = ps.tradeShapes.filter(s => s === 'dispersion').length / (ps.trades || 1)
-
-      const shapeCounts: Record<string, number> = {}
-      for (const s of ps.tradeShapes) shapeCounts[s] = (shapeCounts[s] || 0) + 1
-
-      const suggestedDeals: string[] = []
-      if (consolidationPct >= 0.5) {
-        suggestedDeals.push('Package 2-3 pieces for their stud — they prefer consolidation trades')
-      }
-      if (dispersionPct >= 0.5) {
-        suggestedDeals.push('Offer a star for multiple assets — they like spreading value')
-      }
-      if (topPosGiven[0] && topPosGiven[0][1] >= 2) {
-        suggestedDeals.push(`Target their ${topPosGiven[0][0]}s — they are willing to move that position`)
-      }
-      if (ps.picksGiven > ps.picksReceived) {
-        suggestedDeals.push('Ask for pick sweeteners — they have included picks before')
-      }
-      if (suggestedDeals.length === 0) {
-        suggestedDeals.push('Start with a fair 1-for-1 swap at a position of need')
-        suggestedDeals.push('Consider including a mid-round pick to close value gaps')
-      }
-
-      const sampleWeight = Math.min(1, ps.trades / 5)
-      const styleScore = Math.round(
-        (Math.min(insights.length, 4) / 4) * 100 * sampleWeight
-      )
-
+      if (ps.picksGiven > ps.picksReceived + 1) { insights.push('Willing to include picks to sweeten deals'); drivers.push('Pick seller') }
+      else if (ps.picksReceived > ps.picksGiven + 1) { insights.push('Prefers acquiring picks — likely rebuilding'); drivers.push('Pick hoarder') }
+      if (ps.wins > ps.losses && ps.wins >= ps.trades / 2) { insights.push('You usually get the better grade against this partner'); drivers.push('Overpays in your deals') }
+      else if (ps.losses > ps.wins && ps.losses >= ps.trades / 2) { insights.push('This partner usually gets the better grade'); drivers.push('Hard negotiator') }
+      else { insights.push('Trades with this partner tend to grade even'); drivers.push('Fair trader') }
+      const shareOf = (shape: string) => ps.tradeShapes.filter(s => s === shape).length / (ps.trades || 1)
+      const dealShapes: string[] = []
+      if (shareOf('consolidation') >= 0.5) dealShapes.push('Package 2-3 pieces for their stud — they prefer consolidation trades')
+      if (shareOf('dispersion') >= 0.5) dealShapes.push('Offer a star for multiple assets — they like spreading value')
+      if (topGiven[0] && topGiven[0][1] >= 2) dealShapes.push(`Target their ${topGiven[0][0]}s — they are willing to move that position`)
+      if (ps.picksGiven > ps.picksReceived) dealShapes.push('Ask for pick sweeteners — they have included picks before')
+      if (dealShapes.length === 0) dealShapes.push('Start with a fair 1-for-1 swap at a position of need', 'Consider including a mid-round pick to close value gaps')
+      const styleScore = Math.round((Math.min(insights.length, 4) / 4) * 100 * Math.min(1, ps.trades / 5))
       return {
         score: Math.min(100, Math.max(10, styleScore)),
         label: styleScore >= 70 ? 'Strong Read' : styleScore >= 40 ? 'Partial Read' : 'Limited Data',
         insights,
         drivers,
-        dealShapes: suggestedDeals.slice(0, 2),
+        dealShapes: dealShapes.slice(0, 2),
       }
     }
 
-    function computeWeightedScore(ps: typeof partnerStats[string]): number {
-      const sampleFactor = Math.min(1, ps.trades / 5)
-      return ps.netValue * sampleFactor
-    }
-
-    const enrichedPartners = Object.values(partnerStats)
-      .map(p => ({
-        ...p,
-        weightedScore: computeWeightedScore(p),
-        styleMatch: computeStyleMatch(p),
-        avgGrade: valueToGrade(p.grades.reduce((sum, g) => sum + gradeToValue(g), 0) / p.grades.length),
-        avgPerTrade: p.trades > 0 ? Math.round(p.netValue / p.trades) : 0,
-        topShape: (() => {
-          const sc: Record<string, number> = {}
-          for (const s of p.tradeShapes) sc[s] = (sc[s] || 0) + 1
-          const sorted = Object.entries(sc).sort(([,a],[,b]) => b - a)
-          return sorted[0]?.[0] || 'swap'
-        })(),
-      }))
-
-    const partners = enrichedPartners
+    const partners = Object.values(partnerStats)
+      .map(p => {
+        const topShape = Object.entries(
+          p.tradeShapes.reduce<Record<string, number>>((acc, s) => ((acc[s] = (acc[s] || 0) + 1), acc), {}),
+        ).sort(([, a], [, b]) => b - a)[0]?.[0] || 'swap'
+        return {
+          name: p.name,
+          trades: p.trades,
+          netValue: p.netValue,
+          avgGrade: meanLetter(p.letters)?.letter ?? null,
+          avgPerTrade: p.trades > 0 ? Math.round(p.netValue / p.trades) : 0,
+          weightedScore: p.netValue * Math.min(1, p.trades / 5),
+          styleMatch: styleMatch(p),
+          topShape,
+        }
+      })
       .sort((a, b) => b.weightedScore - a.weightedScore)
       .map((p, idx) => ({ ...p, rank: idx + 1 }))
-
     const bestMark = partners[0]
     const nemesis = partners[partners.length - 1]
 
-    const totalTradeCount = userTrades.length
-    const winRate = totalTradeCount > 0 ? Math.round((wins / totalTradeCount) * 100) : 0
-    
-    for (const key of ['atTime', 'hindsight', 'lineupImpact'] as const) {
-      const s = multiStats[key]
-      s.avgPerTrade = totalTradeCount > 0 ? Math.round((s.netValue / totalTradeCount) * 10) / 10 : 0
-      s.winRate = totalTradeCount > 0 ? Math.round((s.wins / totalTradeCount) * 100) : 0
-    }
-    
-    const avgGradeValue = userTrades.reduce((sum, t) => sum + gradeToValue(t.grade || 'C'), 0) / (totalTradeCount || 1)
-    const overallGrade = valueToGrade(avgGradeValue)
-    const overallScore = Math.round(avgGradeValue)
-    const traderLabel = getTraderLabel(overallGrade)
-
+    // ── League-wide counts (who trades with whom). Counts only, no grade. ──────────────────────
     const managerTradeCount: Record<string, number> = {}
     const pairTradeCount: Record<string, { team1: string; team2: string; count: number }> = {}
-    
     trades.forEach(trade => {
       trade.parties?.forEach(p => {
         const name = p.teamName || managers?.[p.userId] || p.userId || 'Unknown'
         managerTradeCount[name] = (managerTradeCount[name] || 0) + 1
       })
-      
       if (trade.parties?.length === 2) {
         const t1 = trade.parties[0].teamName || managers?.[trade.parties[0].userId] || 'Team1'
         const t2 = trade.parties[1].teamName || managers?.[trade.parties[1].userId] || 'Team2'
-        const pairKey = [t1, t2].sort().join('|')
-        if (!pairTradeCount[pairKey]) {
-          pairTradeCount[pairKey] = { team1: t1, team2: t2, count: 0 }
-        }
-        pairTradeCount[pairKey].count++
+        const key = [t1, t2].sort().join('|')
+        ;(pairTradeCount[key] ??= { team1: t1, team2: t2, count: 0 }).count++
       }
     })
-
     const sortedManagers = Object.entries(managerTradeCount).sort(([, a], [, b]) => b - a)
     const theAddict = sortedManagers[0]
     const areTheyAlive = sortedManagers[sortedManagers.length - 1]
-    
-    const sortedPairs = Object.values(pairTradeCount).sort((a, b) => b.count - a.count)
-    const colluders = sortedPairs[0]
-    
-    const allPossiblePairs = new Set<string>()
-    const tradedPairs = new Set(Object.keys(pairTradeCount))
+    const colluders = Object.values(pairTradeCount).sort((a, b) => b.count - a.count)[0]
     const allManagers = Object.keys(managerTradeCount)
-    for (let i = 0; i < allManagers.length; i++) {
+    const tradedPairs = new Set(Object.keys(pairTradeCount))
+    let frenemies: string[] | null = null
+    for (let i = 0; i < allManagers.length && !frenemies; i++) {
       for (let j = i + 1; j < allManagers.length; j++) {
-        allPossiblePairs.add([allManagers[i], allManagers[j]].sort().join('|'))
+        const key = [allManagers[i], allManagers[j]].sort().join('|')
+        if (!tradedPairs.has(key)) { frenemies = key.split('|'); break }
       }
     }
-    const untradedPairs = [...allPossiblePairs].filter(p => !tradedPairs.has(p))
-    const frenemies = untradedPairs.length > 0 ? untradedPairs[0].split('|') : null
 
-    // DATA-DRIVEN LEAGUE AWARDS
-    // Computed from user's scored trades (which have accurate directional analytics)
-    // These are user-perspective awards using real dual-mode valuation data
-    const userScoredCount = scoredTrades.length
-
-    // Build per-trade metrics from user's scored trades
-    const userTradeMetrics = scoredTrades.map(trade => {
-      const atTimeDelta = trade._analytics?.atTheTime?.deltaValue ?? trade.value
-      const hindsightDelta = trade._analytics?.withHindsight?.deltaValue ?? trade.value
-      const gradeVal = gradeToValue(trade.grade || 'C')
-      const isHighConf = gradeVal >= 78 || gradeVal <= 45
-      const marketShift = hindsightDelta - atTimeDelta
-      const ppgDelta = trade.value / PPG_PROXY_DIVISOR
-      const opponent = trade.parties?.find((p: any) => !isUserParty(p, sleeper_username, sleeper_user_id))
-      const opponentName = opponent?.teamName || (opponent as any)?.displayName || managers?.[opponent?.userId || ''] || opponent?.userId || 'Unknown'
-      return {
-        value: trade.value,
-        atTimeDelta,
-        hindsightDelta,
-        marketShift,
-        ppgDelta,
-        gradeVal,
-        isHighConf,
-        isWin: trade.value > WIN_THRESHOLD,
-        opponentName,
+    // ── Awards, from the graded trades' own values and letters ─────────────────────────────────
+    const metrics = graded.map(g => ({
+      value: g.primary.net,
+      marketShift: g.moments.now.net - g.moments.atTime.net,
+      letter: g.primary.letter,
+      isWin: outcomeOf(g.primary.letter) === 'win',
+      opponentName: nameOf(partnerOf(g.trade)),
+    }))
+    const n = metrics.length
+    const bestNegotiator = n >= 2 ? (() => {
+      const byOpp: Record<string, { name: string; trades: number; wins: number; total: number }> = {}
+      for (const m of metrics) {
+        const o = (byOpp[m.opponentName] ??= { name: m.opponentName, trades: 0, wins: 0, total: 0 })
+        o.trades++; o.total += m.value; if (m.isWin) o.wins++
       }
-    })
-
-    // Per-opponent breakdown for Best Negotiator
-    const opponentStats: Record<string, { name: string; trades: number; wins: number; totalDelta: number }> = {}
-    for (const t of userTradeMetrics) {
-      if (!opponentStats[t.opponentName]) {
-        opponentStats[t.opponentName] = { name: t.opponentName, trades: 0, wins: 0, totalDelta: 0 }
+      const rows = Object.values(byOpp).filter(o => o.trades >= 2)
+      const score = (trades: number, wins: number, total: number) => {
+        const winRate = wins / trades
+        const avgOverpay = Math.max(0, -(total / trades))
+        return { winRate: Math.round(winRate * 100), avgOverpay: Math.round(avgOverpay), score: Math.round(winRate * (1 / (1 + avgOverpay / 500)) * 100) }
       }
-      const os = opponentStats[t.opponentName]
-      os.trades++
-      os.totalDelta += t.value
-      if (t.isWin) os.wins++
-    }
-
-    // 1. Best Negotiator: highest win rate at lowest overpay
-    // Computed per-opponent to find who you negotiate best against (min 2 trades)
-    const bestNegotiator = userScoredCount >= 2 ? (() => {
-      const opponents = Object.values(opponentStats).filter(o => o.trades >= 2)
-      if (opponents.length === 0) {
-        const globalWinRate = userTradeMetrics.filter(t => t.isWin).length / userScoredCount
-        const avgDelta = userTradeMetrics.reduce((s, t) => s + t.value, 0) / userScoredCount
-        const avgOverpay = Math.max(0, -avgDelta)
-        const efficiency = 1 / (1 + avgOverpay / 500)
-        return {
-          name: sleeper_username,
-          trades: userScoredCount,
-          winRate: Math.round(globalWinRate * 100),
-          avgOverpay: Math.round(avgOverpay),
-          score: Math.round(globalWinRate * efficiency * 100),
-        }
+      if (rows.length === 0) {
+        return { name: sleeper_username, trades: n, ...score(n, metrics.filter(m => m.isWin).length, metrics.reduce((s, m) => s + m.value, 0)) }
       }
-      const scored = opponents.map(o => {
-        const winRate = o.wins / o.trades
-        const avgOverpay = Math.max(0, -(o.totalDelta / o.trades))
-        const efficiency = 1 / (1 + avgOverpay / 500)
-        return { name: o.name, trades: o.trades, winRate: Math.round(winRate * 100), avgOverpay: Math.round(avgOverpay), score: Math.round(winRate * efficiency * 100) }
-      }).sort((a, b) => b.score - a.score)
-      return scored[0]
+      return rows.map(o => ({ name: o.name, trades: o.trades, ...score(o.trades, o.wins, o.total) })).sort((a, b) => b.score - a.score)[0]!
     })() : null
-
-    // 2. Market Sniper: best timing — trades that gained value over time
-    const marketSniper = userScoredCount >= 2 ? (() => {
-      const shifts = userTradeMetrics.map(t => t.marketShift)
-      const avgShift = shifts.reduce((a, b) => a + b, 0) / shifts.length
-      const bestTrade = userTradeMetrics.reduce((best, t) => t.marketShift > best.marketShift ? t : best, userTradeMetrics[0])
+    const marketSniper = n >= 2 ? (() => {
+      const best = metrics.reduce((b, m) => (m.marketShift > b.marketShift ? m : b), metrics[0]!)
       return {
-        name: sleeper_username,
-        trades: userScoredCount,
-        avgShift: Math.round(avgShift),
-        bestShift: Math.round(bestTrade.marketShift),
-        bestShiftOpponent: bestTrade.opponentName,
+        name: sleeper_username, trades: n,
+        avgShift: Math.round(metrics.reduce((s, m) => s + m.marketShift, 0) / n),
+        bestShift: Math.round(best.marketShift), bestShiftOpponent: best.opponentName,
       }
     })() : null
-
-    // 3. Starter Builder: most net starting PPG gained
-    const starterBuilder = userScoredCount >= 2 ? (() => {
-      const netPPG = userTradeMetrics.reduce((s, t) => s + t.ppgDelta, 0)
-      return {
-        name: sleeper_username,
-        trades: userScoredCount,
-        netPPG: Math.round(netPPG * 10) / 10,
-        ppgPerTrade: Math.round((netPPG / userScoredCount) * 10) / 10,
-      }
-    })() : null
-
-    // 4. Risk King: highest volatility WITH long-term profit
     const riskKing = (() => {
-      if (userScoredCount < 2) return null
-      const totalDelta = userTradeMetrics.reduce((s, t) => s + t.value, 0)
-      if (totalDelta <= 0) return null
-      const mean = totalDelta / userScoredCount
-      const variance = userTradeMetrics.reduce((s, t) => s + Math.pow(t.value - mean, 2), 0) / userScoredCount
-      const stdDev = Math.sqrt(variance)
-      if (stdDev < 100) return null
-      return {
-        name: sleeper_username,
-        trades: userScoredCount,
-        volatility: Math.round(stdDev),
-        netProfit: Math.round(totalDelta),
-      }
+      if (n < 2) return null
+      const total = metrics.reduce((s, m) => s + m.value, 0)
+      if (total <= 0) return null
+      const mean = total / n
+      const sd = Math.sqrt(metrics.reduce((s, m) => s + (m.value - mean) ** 2, 0) / n)
+      return sd < 100 ? null : { name: sleeper_username, trades: n, volatility: Math.round(sd), netProfit: Math.round(total) }
     })()
+    // "High confidence" read as the grade's strong band: an A or an F.
+    const strong = metrics.filter(m => m.letter === 'A' || m.letter === 'F')
+    const theFleecer = strong.length >= 2
+      ? { name: sleeper_username, trades: n, avgFairnessDelta: Math.round(strong.reduce((s, m) => s + m.value, 0) / strong.length), highConfCount: strong.length }
+      : null
 
-    // 5. The Fleecer: highest avg fairness delta with high-confidence trades only
-    const theFleecer = (() => {
-      const highConf = userTradeMetrics.filter(t => t.isHighConf)
-      if (highConf.length < 2) return null
-      const avgDelta = highConf.reduce((s, t) => s + t.value, 0) / highConf.length
-      return {
-        name: sleeper_username,
-        trades: userScoredCount,
-        avgFairnessDelta: Math.round(avgDelta),
-        highConfCount: highConf.length,
-      }
-    })()
-
-    const cumulativeJourney = userTrades
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .reduce((acc: Array<{ date: string; value: number; grade: string }>, trade, idx) => {
-        const prev = acc[idx - 1]?.value || 0
-        const tradeValue = (gradeToValue(trade.grade || 'C') - 60) * 100
+    // ── Journey: cumulative league value received − sent, graded trades only ───────────────────
+    const tradingJourney = [...graded]
+      .sort((a, b) => a.trade.timestamp - b.trade.timestamp)
+      .reduce((acc: Array<{ date: string; value: number; grade: string }>, g) => {
+        const prev = acc[acc.length - 1]?.value ?? 0
         acc.push({
-          date: new Date(trade.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
-          value: prev + tradeValue,
-          grade: trade.grade || 'C'
+          date: new Date(g.trade.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
+          value: prev + round(g.primary.net),
+          grade: g.primary.letter,
         })
         return acc
       }, [])
+
+    const tradeSummary = (g: (typeof graded)[number], value: number) => ({
+      value,
+      opponent: nameOf(partnerOf(g.trade)),
+      date: new Date(g.trade.timestamp).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+      gave: partnerOf(g.trade)?.playersReceived?.map(pl => pl.name) || [],
+      received: meOf(g.trade)?.playersReceived?.map(pl => pl.name) || [],
+    })
+    const byNet = [...graded].sort((a, b) => b.primary.net - a.primary.net)
+    const best = byNet[0]
+    const worst = byNet[byNet.length - 1]
+
+    const driverRows = (lines: readonly TradeGradeLine[], side: 'give' | 'get') =>
+      lines.filter(l => l.side === side).map(l => ({
+        name: l.name,
+        type: l.assetKind ?? null,
+        position: null,
+        value: l.leagueValue,
+        market: l.marketValue,
+        // The league value is the impact the letter was taken on. No VORP or volatility exists on it.
+        impact: l.leagueValue,
+        vorp: null,
+        volatility: null,
+        source: l.valueSource ?? l.source ?? null,
+      }))
+
+    const allTrades = scored.map(({ trade, view, moments, primary }) => {
+      const op = partnerOf(trade)
+      const me = meOf(trade)
+      const picks = (pks: LegacyCompletedTrade['parties'][number]['picksReceived'] | undefined) =>
+        (pks ?? []).map(pk => ({ round: pk.round, season: pk.season, label: `${pk.season} Round ${pk.round}${pk.slot ? ` (${pk.slot})` : ''}` }))
+      const players = (ps: LegacyCompletedTrade['parties'][number]['playersReceived'] | undefined) =>
+        (ps ?? []).map(p => ({ id: p.id ?? null, name: p.name, position: p.position || null }))
+      const receivedPlayers = players(me?.playersReceived)
+      const gavePlayers = players(op?.playersReceived)
+      const receivedPicks = picks(me?.picksReceived)
+      const gavePicks = picks(op?.picksReceived)
+      const marketShift = moments ? round(moments.now.net - moments.atTime.net) : null
+      return {
+        id: trade.transactionId,
+        /** THE grade (the original, or today's in hindsight mode) — 'N/A' when withheld, as a failed grade always read. */
+        grade: primary?.letter ?? 'N/A',
+        result: primary ? outcomeOf(primary.letter) : 'withheld',
+        gradeWithheld: view.graded ? null : view.reason,
+        opponent: nameOf(op),
+        date: new Date(trade.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
+        timestamp: trade.timestamp,
+        playersOut: gavePlayers.length + gavePicks.length,
+        playersIn: receivedPlayers.length + receivedPicks.length,
+        receivedPlayers,
+        gavePlayers,
+        receivedPicks,
+        gavePicks,
+        netValue: primary ? round(primary.net) : null,
+        verdict: view.graded ? view.recommendation : `Not graded: ${view.reason}`,
+        marketShift,
+        controversyScore: marketShift != null ? Math.abs(marketShift) : 0,
+        atTimeDelta: moments ? round(moments.atTime.net) : null,
+        hindsightDelta: moments ? round(moments.now.net) : null,
+        atTimeGrade: moments?.atTime.letter ?? 'N/A',
+        hindsightGrade: moments?.now.letter ?? 'N/A',
+        confidence: null,
+        comparison: moments
+          ? moments.now.letter === moments.atTime.letter
+            ? `Graded ${moments.atTime.letter} originally and ${moments.now.letter} on today's values.`
+            : `Graded ${moments.atTime.letter} originally; ${moments.now.letter} on today's values.`
+          : `Not graded: ${withheldReason(view)}`,
+        drivers: view.graded
+          ? {
+              received: driverRows(view.lines, 'get'),
+              gave: driverRows(view.lines, 'give'),
+              receivedTotal: round(view.getValue),
+              gaveTotal: round(view.giveValue),
+            }
+          : { received: [], gave: [], receivedTotal: null, gaveTotal: null },
+      }
+    }).sort((a, b) => b.timestamp - a.timestamp)
 
     const response = {
       leagueId: league_id,
       username: sleeper_username,
       updatedAt: new Date().toISOString(),
-      
-      gradeCard: {
-        grade: overallGrade,
-        score: overallScore,
-        label: traderLabel,
-      },
-      
+      gradeSource: 'one_trade_engine' as const,
+      gradedTrades: graded.length,
+      withheldTrades: withheldCount,
+      gradeCard: overall
+        ? { grade: overall.letter, score: overall.score, label: TRADER_LABEL[overall.letter], gradeWithheld: null }
+        : {
+            grade: null,
+            score: null,
+            label: 'Not graded',
+            gradeWithheld: firstWithheldReason(scored.map((s) => s.view)) ?? 'No trades of yours to grade in this league.',
+          },
       tradingStats: {
         netValueGained: totalValueGained,
-        wins,
-        losses,
-        even,
-        winRate,
-        avgPerTrade: totalTradeCount > 0 ? Math.round(totalValueGained / totalTradeCount) : 0,
-        valueGiven: Math.abs(Math.min(0, totalValueGained)) + Math.round(totalTradeCount * 1000),
-        valueReceived: Math.max(0, totalValueGained) + Math.round(totalTradeCount * 1000),
-        multiDimensional: multiStats,
+        wins: primaryStats.wins,
+        losses: primaryStats.losses,
+        even: primaryStats.even,
+        winRate: primaryStats.winRate,
+        avgPerTrade: graded.length > 0 ? Math.round(totalValueGained / graded.length) : 0,
+        valueGiven,
+        valueReceived,
+        multiDimensional: {
+          atTime: atTimeStats,
+          hindsight: hindsightStats,
+          // No lineup measurement exists for a completed trade on the one grade. Not a value/250 proxy.
+          lineupImpact: null,
+        },
       },
-      
-      tradingJourney: cumulativeJourney,
-      
+      tradingJourney,
       tradingPartners: {
-        bestMark: bestMark ? {
-          name: bestMark.name, trades: bestMark.trades, netValue: bestMark.netValue,
-          avgGrade: bestMark.avgGrade, avgPerTrade: bestMark.avgPerTrade,
-          weightedScore: bestMark.weightedScore, styleMatch: bestMark.styleMatch,
-          topShape: bestMark.topShape,
-        } : null,
-        nemesis: nemesis ? {
-          name: nemesis.name, trades: nemesis.trades, netValue: nemesis.netValue,
-          avgGrade: nemesis.avgGrade, avgPerTrade: nemesis.avgPerTrade,
-          weightedScore: nemesis.weightedScore, styleMatch: nemesis.styleMatch,
-          topShape: nemesis.topShape,
-        } : null,
-        all: partners.map(p => ({
-          rank: p.rank, name: p.name, trades: p.trades, netValue: p.netValue,
-          avgGrade: p.avgGrade, avgPerTrade: p.avgPerTrade,
-          weightedScore: p.weightedScore, styleMatch: p.styleMatch,
-          topShape: p.topShape,
-        })),
+        bestMark: bestMark ?? null,
+        nemesis: nemesis ?? null,
+        all: partners,
       },
-      
-      bestTrade: bestTrade ? {
-        value: bestTradeValue,
-        opponent: (() => { const op = bestTrade.parties?.find((p: any) => !isUserParty(p, sleeper_username, sleeper_user_id)); return op?.teamName || op?.displayName || 'Unknown' })(),
-        date: new Date(bestTrade.timestamp).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-        gave: bestTrade.parties?.find((p: any) => isUserParty(p, sleeper_username, sleeper_user_id))?.playersReceived?.map((pl: any) => pl.name) || [],
-        received: bestTrade.parties?.find((p: any) => !isUserParty(p, sleeper_username, sleeper_user_id))?.playersReceived?.map((pl: any) => pl.name) || [],
-      } : null,
-      
-      worstTrade: worstTrade && worstTradeValue < 0 ? {
-        value: Math.abs(worstTradeValue),
-        opponent: (() => { const op = worstTrade.parties?.find((p: any) => !isUserParty(p, sleeper_username, sleeper_user_id)); return op?.teamName || op?.displayName || 'Unknown' })(),
-        date: new Date(worstTrade.timestamp).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-        gave: worstTrade.parties?.find((p: any) => isUserParty(p, sleeper_username, sleeper_user_id))?.playersReceived?.map((pl: any) => pl.name) || [],
-        received: worstTrade.parties?.find((p: any) => !isUserParty(p, sleeper_username, sleeper_user_id))?.playersReceived?.map((pl: any) => pl.name) || [],
-      } : null,
-      
+      bestTrade: best ? tradeSummary(best, round(best.primary.net)) : null,
+      worstTrade: worst && worst.primary.net < 0 ? tradeSummary(worst, Math.abs(round(worst.primary.net))) : null,
       leagueAwards: {
         theAddict: theAddict ? { name: theAddict[0], trades: theAddict[1] } : null,
         areTheyAlive: areTheyAlive ? { name: areTheyAlive[0], trades: areTheyAlive[1] } : null,
         colluders: colluders ? { team1: colluders.team1, team2: colluders.team2, trades: colluders.count } : null,
         frenemies: frenemies ? { team1: frenemies[0], team2: frenemies[1] } : null,
-        bestNegotiator: bestNegotiator ? {
-          name: bestNegotiator.name, trades: bestNegotiator.trades,
-          winRate: bestNegotiator.winRate, avgOverpay: bestNegotiator.avgOverpay,
-          score: bestNegotiator.score,
-          method: 'Win rate × efficiency (1/(1 + avgOverpay/500))',
-        } : null,
-        marketSniper: marketSniper ? {
-          name: marketSniper.name, trades: marketSniper.trades,
-          avgShift: marketSniper.avgShift, bestShift: marketSniper.bestShift,
-          method: 'Avg (hindsight value − at-time value) per trade',
-        } : null,
-        starterBuilder: starterBuilder ? {
-          name: starterBuilder.name, trades: starterBuilder.trades,
-          netPPG: starterBuilder.netPPG, ppgPerTrade: starterBuilder.ppgPerTrade,
-          method: 'Net starting PPG gained via trades (value ÷ 250)',
-        } : null,
-        riskKing: riskKing ? {
-          name: riskKing.name, trades: riskKing.trades,
-          volatility: riskKing.volatility, netProfit: riskKing.netProfit,
-          method: 'Highest trade volatility with net positive outcome',
-        } : null,
-        theFleecer: theFleecer ? {
-          name: theFleecer.name, trades: theFleecer.trades,
-          avgFairnessDelta: theFleecer.avgFairnessDelta, highConfCount: theFleecer.highConfCount,
-          method: 'Highest avg fairness delta on high-confidence trades only (B+ or D and below)',
-        } : null,
+        bestNegotiator: bestNegotiator ? { ...bestNegotiator, method: 'AllFantasy grade win rate × efficiency (1/(1 + avgOverpay/500))' } : null,
+        marketSniper: marketSniper ? { ...marketSniper, method: 'Avg (today’s league value gap − original gap) per graded trade' } : null,
+        starterBuilder: null,
+        riskKing: riskKing ? { ...riskKing, method: 'Highest spread of graded league-value gaps with a net positive total' } : null,
+        theFleecer: theFleecer ? { ...theFleecer, method: 'Avg league-value gap on trades graded A or F' } : null,
       },
-      
-      allTrades: scoredTrades.map(t => {
-        const atTime = t._analytics?.atTheTime
-        const hindsight = t._analytics?.withHindsight
-        const marketShift = (hindsight?.deltaValue ?? 0) - (atTime?.deltaValue ?? 0)
-        const atTimeAbs = Math.abs(atTime?.deltaValue ?? t.value)
-        const controversyScore = Math.abs(marketShift) > 200
-          ? Math.round(Math.abs(marketShift) * (Math.abs(atTime?.percentDiff ?? 0) < 15 ? 1.3 : 1))
-          : Math.round(Math.abs(atTime?.percentDiff ?? 0) < 10 ? atTimeAbs * 0.8 : 0)
-
-        const mapAssets = (assets: any[]) => assets?.map((a: any) => ({
-          name: a.name,
-          type: a.type,
-          position: a.position || null,
-          value: a.value,
-          market: a.assetValue?.marketValue ?? 0,
-          impact: a.assetValue?.impactValue ?? 0,
-          vorp: a.assetValue?.vorpValue ?? 0,
-          volatility: a.assetValue?.volatility ?? 0,
-          source: a.source,
-        })) || []
-
-        const opParty = t.parties?.find(p => !isUserParty(p, sleeper_username, sleeper_user_id))
-        const meParty = t.parties?.find(p => isUserParty(p, sleeper_username, sleeper_user_id))
-
-        const receivedPlayers = meParty?.playersReceived?.map((p: any) => ({ name: p.name, position: p.position || null })) || []
-        const gavePlayers = opParty?.playersReceived?.map((p: any) => ({ name: p.name, position: p.position || null })) || []
-        const receivedPicks = meParty?.picksReceived?.map((pk: any) => ({
-          round: pk.round,
-          season: pk.season,
-          label: `${pk.season} Round ${pk.round}${pk.slot ? ` (${pk.slot})` : ''}`
-        })) || []
-        const gavePicks = opParty?.picksReceived?.map((pk: any) => ({
-          round: pk.round,
-          season: pk.season,
-          label: `${pk.season} Round ${pk.round}${pk.slot ? ` (${pk.slot})` : ''}`
-        })) || []
-
-        return {
-          id: t.transactionId,
-          grade: t.grade || 'C',
-          opponent: opParty?.teamName || (opParty as any)?.displayName || managers?.[opParty?.userId || ''] || 'Unknown',
-          date: new Date(t.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }),
-          timestamp: t.timestamp,
-          playersOut: gavePlayers.length + gavePicks.length,
-          playersIn: receivedPlayers.length + receivedPicks.length,
-          receivedPlayers,
-          gavePlayers,
-          receivedPicks,
-          gavePicks,
-          netValue: t.value,
-          verdict: t.verdict,
-          marketShift: Math.round(marketShift),
-          controversyScore: controversyScore,
-          atTimeDelta: Math.round(atTime?.deltaValue ?? t.value),
-          hindsightDelta: Math.round(hindsight?.deltaValue ?? t.value),
-          atTimeGrade: atTime?.grade || t.grade || 'C',
-          hindsightGrade: hindsight?.grade || t.grade || 'C',
-          confidence: atTime?.confidence ?? 0,
-          comparison: t._analytics?.comparison || null,
-          drivers: {
-            received: mapAssets(atTime?.receivedAssets ?? []),
-            gave: mapAssets(atTime?.gaveAssets ?? []),
-            receivedTotal: Math.round(atTime?.userReceivedValue ?? 0),
-            gaveTotal: Math.round(atTime?.userGaveValue ?? 0),
-          },
-        }
-      }).sort((a, b) => b.timestamp - a.timestamp),
-    }
-
-    let reportCard = null
-    try {
-      reportCard = computeReportCard(scoredTrades, sleeper_username, sleeper_user_id)
-    } catch (e) {
-      console.error('Report card computation error:', e)
+      allTrades,
     }
 
     if (sleeper_username) {
@@ -740,7 +469,8 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool
       })
     }
 
-    return NextResponse.json({ ...response, reportCard })
+    // `reportCard` stays on the shape, null: its three lenses were the second engine's letters.
+    return NextResponse.json({ ...response, reportCard: null })
   } catch (error) {
     console.error('Trade analytics error:', error)
     return NextResponse.json({ error: 'Failed to generate trade analytics' }, { status: 500 })

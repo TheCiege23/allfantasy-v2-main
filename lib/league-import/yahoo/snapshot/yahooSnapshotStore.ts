@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma'
 import { YahooImportLeagueNotFoundError } from '@/lib/league-import/yahoo/YahooLeagueFetchService'
 import type { YahooImportPayload } from '@/lib/league-import/adapters/yahoo/types'
 import { buildYahooSnapshotPayload, parseYahooSnapshotSourceId } from './yahooSnapshotModel'
+import { resolveYahooSnapshotPlayerIds } from './yahooSnapshotPlayerIdResolver'
 import { emptyYahooSnapshot, type YahooLeagueSnapshot } from './yahooSnapshotTypes'
 
 const TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -70,5 +71,10 @@ export async function loadYahooSnapshotPayload(userId: string, sourceId: string)
       'That pasted Yahoo league was not found — it may have expired. Paste your league pages again.',
     )
   }
-  return buildYahooSnapshotPayload(snapshot)
+  /*
+   * Pasted players are resolved to our own ids HERE, so preview and commit both see them and the
+   * league is stored with ids every screen reads. A re-import ("Update my existing league") of a
+   * league stored before this existed rewrites its rosters with the resolved ids.
+   */
+  return (await resolveYahooSnapshotPlayerIds(buildYahooSnapshotPayload(snapshot))).payload
 }

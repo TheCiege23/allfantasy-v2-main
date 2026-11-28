@@ -51,6 +51,19 @@ async function handle(req: NextRequest) {
     }
   })()
 
+  // The AllFantasy Discord server's support channel (lib/support/discordSupport.ts): members' messages
+  // become support-inbox conversations, which alert the owner by email and phone. Off until
+  // DISCORD_SUPPORT_CHANNEL_ID is set; never throws; its own short budget.
+  const supportPromise = dryRun ? Promise.resolve(null) : (async () => {
+    try {
+      const { runDiscordSupportPass } = await import('@/lib/support/discordSupport')
+      return await runDiscordSupportPass({ budgetMs: 8_000 })
+    } catch {
+      console.warn('[cron/discord-support] pass failed')
+      return null
+    }
+  })()
+
   try {
     // Share the existing minute scheduler slot; a sports feed failure cannot stop retries.
     const engagementPromise = dryRun ? Promise.resolve(null) : runSportsEngagement().catch(e => ({
@@ -90,7 +103,7 @@ async function handle(req: NextRequest) {
           status: r.failed > 0 ? ("partial" as const) : ("success" as const),
         }))
 
-    const [result, engagement, discordInbound, playerNewsDigest] = await Promise.all([relayPromise, engagementPromise, discordPromise, digestPromise])
+    const [result, engagement, discordInbound, playerNewsDigest, discordSupport] = await Promise.all([relayPromise, engagementPromise, discordPromise, digestPromise, supportPromise])
 
     return NextResponse.json({
       ok: true,
@@ -99,6 +112,7 @@ async function handle(req: NextRequest) {
       playerNewsDigest,
       ...result,
       discordInbound,
+      discordSupport,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     })
@@ -106,7 +120,7 @@ async function handle(req: NextRequest) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[cron/notification-outbox-relay] failed:", message)
     return NextResponse.json(
-      { ok: false, error: message.slice(0, 240), discordInbound: await discordPromise, durationMs: Date.now() - startedAt },
+      { ok: false, error: message.slice(0, 240), discordInbound: await discordPromise, discordSupport: await supportPromise, durationMs: Date.now() - startedAt },
       { status: 500 },
     )
   }

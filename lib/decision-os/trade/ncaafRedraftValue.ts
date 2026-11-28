@@ -39,7 +39,7 @@ export type NcaafRosteredPlayer = {
 }
 
 /** Per-game points under this league's rules, for one player. */
-export type NcaafPerGame = { perGame: number; position: string | null }
+export type NcaafPerGame = { perGame: number; position: string | null; tradeMarket?: { percent: number; trades: number } }
 
 /** The best free agent at one position: who, and his per-game points under this league's rules. */
 export type NcaafReplacement = { name: string; perGame: number }
@@ -57,6 +57,12 @@ export type NcaafRedraftContext = {
 
 export const NCAAF_REDRAFT_PICKS_REASON =
   'Draft picks are not part of a college redraft league — there is no next season for them to be used in — so a deal carrying one is not graded.'
+/** A college concept on the rest-of-season basis that is not redraft by name (best ball, Guilly, survivor, …). */
+export const NCAAF_SEASON_ONLY_PICKS_REASON =
+  'Draft picks have no value in this college league — it is graded on this season only, and its rosters do not carry into another — so a deal carrying one is not graded.'
+/** A college Campus-to-Canton league: only the Campus side has a college price. */
+export const NCAAF_C2C_PICK_REASON =
+  'Only Campus picks have a college price. Mark each pick as a Campus pick — a Canton or Combined pick is an NFL rookie pick — or this deal is not graded.'
 export const NCAAF_PICKS_UNPRICED_REASON =
   'College draft picks have no price yet, so a deal carrying one is not graded.'
 export const NCAAF_FAAB_REASON =
@@ -122,7 +128,7 @@ function priceSide(
     }
     // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
     const overPerGame = Math.max(0, line.perGame - replacement.perGame)
-    priced.push({ name: player.name, value: overPerGame * ctx.window.weeks })
+    priced.push({ name: player.name, value: overPerGame * ctx.window.weeks * (1 + (line.tradeMarket?.percent ?? 0) / 100) })
   }
   return { priced }
 }

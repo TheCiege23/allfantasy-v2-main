@@ -1,25 +1,29 @@
 'use client';
 
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal';
 import { useState } from 'react';
 
+// Every letter and number here is THE one completed-trade grade (see /api/legacy/trade-alternatives).
 interface AlternativeOption {
   label: string;
   totalValue: number;
   deltaImprovement: number;
   type: 'player_swap' | 'pick_package' | 'mixed';
+  grade?: string;
 }
 
 interface AlternativesResult {
-  originalDelta: number;
-  originalGrade: string;
+  originalDelta: number | null;
+  originalGrade: string | null;
   alternatives: AlternativeOption[];
   bestAlternative: AlternativeOption | null;
+  gradeWithheld?: string | null;
 }
 
 interface AlternativeExplanation {
   recommended: string;
   reasoning: string[];
-  confidence: 'High' | 'Medium' | 'Low';
+  confidence: 'High' | 'Medium' | 'Low' | null;
   alternatives: AlternativesResult;
 }
 
@@ -38,13 +42,16 @@ interface TradeData {
 interface TradeAlternativesProps {
   trade: TradeData;
   userId: string;
+  /** The league the trade is graded on. Without it the grade (and so the comparison) is withheld. */
+  leagueId?: string | null;
   isSuperFlex?: boolean;
 }
 
-export default function TradeAlternatives({ trade, userId, isSuperFlex = false }: TradeAlternativesProps) {
+export default function TradeAlternatives({ trade, userId, leagueId = null, isSuperFlex = false }: TradeAlternativesProps) {
   const [data, setData] = useState<AlternativeExplanation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locked, setLocked] = useState<PlanRefusal | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   const fetchAlternatives = async () => {
@@ -60,10 +67,17 @@ export default function TradeAlternatives({ trade, userId, isSuperFlex = false }
       const response = await fetch('/api/legacy/trade-alternatives', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trade, userId, isSuperFlex })
+        body: JSON.stringify({ trade, userId, leagueId, isSuperFlex })
       });
 
       if (!response.ok) {
+        // Sign-in + AF Legacy since 2026-11-27 (`legacy_trade_lookback`): show the way forward, not a failure.
+        const body = await response.json().catch(() => null);
+        const refusal = readPlanRefusal(response.status, body, { returnTo: currentPathForReturn() });
+        if (refusal) {
+          setLocked(refusal);
+          return;
+        }
         throw new Error('Failed to generate alternatives');
       }
 
@@ -112,10 +126,23 @@ export default function TradeAlternatives({ trade, userId, isSuperFlex = false }
         <p className="text-red-400 text-sm mt-2">{error}</p>
       )}
 
+      {locked && (
+        <p className="text-sm mt-2 text-white/70" data-testid="trade-alternatives-locked">
+          {locked.message}{' '}
+          {locked.actionHref && locked.actionLabel ? (
+            <a href={locked.actionHref} className="text-blue-400 hover:text-blue-300 underline">{locked.actionLabel}</a>
+          ) : null}
+        </p>
+      )}
+
       {expanded && data && (
         <div className="mt-3 bg-gray-800/50 border border-gray-700 rounded-lg p-4 space-y-3">
-          {data.alternatives.alternatives.length === 0 ? (
-            <p className="text-gray-400 text-sm">No significantly better alternatives were available at the time. Your trade was reasonably valued.</p>
+          {data.alternatives.gradeWithheld ? (
+            <p className="text-gray-400 text-sm">Not graded: {data.alternatives.gradeWithheld}</p>
+          ) : data.alternatives.alternatives.length === 0 ? (
+            <p className="text-gray-400 text-sm">
+              None of the alternatives we compared grades better than your {data.alternatives.originalGrade ?? 'trade'}.
+            </p>
           ) : (
             <>
               <div className="flex items-start gap-3">
@@ -127,11 +154,18 @@ export default function TradeAlternatives({ trade, userId, isSuperFlex = false }
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-white font-medium text-sm">Recommended Alternative</span>
-                    <span className={`text-xs px-2 py-0.5 rounded border ${confidenceColors[data.confidence]}`}>
-                      {data.confidence} Confidence
-                    </span>
+                    {data.confidence && (
+                      <span className={`text-xs px-2 py-0.5 rounded border ${confidenceColors[data.confidence]}`}>
+                        {data.confidence} Confidence
+                      </span>
+                    )}
                   </div>
                   <p className="text-green-400 text-sm font-medium">{data.recommended}</p>
+                  {data.alternatives.bestAlternative?.grade && (
+                    <p className="text-gray-400 text-xs mt-0.5">
+                      Grades {data.alternatives.bestAlternative.grade} from your side · your trade graded {data.alternatives.originalGrade}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -154,7 +188,7 @@ export default function TradeAlternatives({ trade, userId, isSuperFlex = false }
                     {data.alternatives.alternatives.slice(1, 4).map((alt, i) => (
                       <div key={i} className="flex items-center justify-between text-sm">
                         <span className="text-gray-300">{alt.label}</span>
-                        <span className="text-green-400 font-medium">+{alt.deltaImprovement.toFixed(0)}</span>
+                        <span className="text-green-400 font-medium">{alt.grade ? `${alt.grade} · ` : ''}+{alt.deltaImprovement.toFixed(0)}</span>
                       </div>
                     ))}
                   </div>

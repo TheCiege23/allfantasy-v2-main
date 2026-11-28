@@ -1,0 +1,60 @@
+/*
+ * The shared "More detail" fold (MoreDetail.tsx). Theme tokens only. Selectors carry `.af-more-detail`
+ * twice where a page's own fold class (kept for spacing) set a summary style, so the shared look wins
+ * without !important.
+ */
+.af-more-detail {
+  margin: 18px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-more-detail[open] { border-color: var(--line2); }
+/* A page's own card class (Waivers' `af-card`) pads the box; the summary and body carry the padding here. */
+.af-more-detail.af-more-detail { padding: 0; }
+.af-more-detail.af-more-detail > summary.af-md-summary {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  list-style: none;
+}
+.af-more-detail.af-more-detail > summary.af-md-summary::-webkit-details-marker { display: none; }
+.af-more-detail.af-more-detail > summary.af-md-summary::after { content: none; }
+.af-more-detail > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-md-label { flex: 0 0 auto; font: 800 14px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif; }
+.af-md-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-md-chevron {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  transition: transform .15s ease;
+}
+.af-more-detail:not([open]) .af-md-chevron { transform: rotate(-90deg); }
+.af-md-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 16px 16px;
+}
+@media (max-width: 720px) {
+  .af-md-note { white-space: normal; }
+  .af-md-body { padding: 4px 12px 12px; }
+}

@@ -9,7 +9,7 @@
  *  - The preview showed no per-bucket coverage; it now lists each one, state in words.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 const discoverProviderLeagues = vi.fn()
 const submitImportCreation = vi.fn()
@@ -225,5 +225,54 @@ describe('🛑 a Sleeper handle linked to a different AllFantasy login', () => {
 
     await screen.findByText('Main Event')
     expect(screen.queryByTestId('import-sleeper-linked-elsewhere')).toBeNull()
+  })
+})
+
+describe('search on a long "Which team is yours?" list', () => {
+  const BIG_PREVIEW = {
+    ...FLEA_PREVIEW,
+    managers: Array.from({ length: 12 }, (_, i) => ({
+      rosterId: String(2000 + i),
+      teamName: i === 7 ? 'Road Warriors' : `Team ${i + 1}`,
+      displayName: i === 7 ? 'Guap' : `Manager ${i + 1}`,
+    })),
+  }
+
+  async function openBigPreview() {
+    fetchImportPreview.mockResolvedValue({ ok: true, data: BIG_PREVIEW })
+    render(<ImportV4 defaultProvider="fleaflicker" initialLeagueSourceId="206154" />)
+    const pick = await screen.findByTestId('import-preview-team-pick')
+    // ImportV4 clears the team search in an effect each time a preview arrives. `findByTestId` can
+    // resolve as soon as the list is in the DOM, before that effect has run; typing then queues the
+    // search text FIRST and the pending clear second, and the list never narrows. Seen once on a loaded
+    // CI runner (2026-11-25, "expected … to have a length of 1 but got 12"). Let the effect run.
+    await act(async () => {})
+    return pick
+  }
+
+  it('a short list has no search box', async () => {
+    await openFleaPreview()
+    expect(screen.queryByTestId('import-preview-team-search')).toBeNull()
+  })
+
+  it('typing a manager name narrows twelve teams to one, and clearing brings them back', async () => {
+    await openBigPreview()
+    const search = screen.getByTestId('import-preview-team-search')
+    expect(screen.getAllByText('This is my team')).toHaveLength(12)
+
+    fireEvent.change(search, { target: { value: 'guap' } })
+    expect(screen.getAllByText('This is my team')).toHaveLength(1)
+    expect(screen.getByTestId('import-preview-team-2007')).toBeTruthy()
+
+    fireEvent.change(search, { target: { value: '' } })
+    expect(screen.getAllByText('This is my team')).toHaveLength(12)
+  })
+
+  it('says so when nothing matches, and keeps the picked team on screen', async () => {
+    await openBigPreview()
+    fireEvent.click(screen.getByTestId('import-preview-team-2007'))
+    fireEvent.change(screen.getByTestId('import-preview-team-search'), { target: { value: 'zzzz' } })
+    expect(screen.getByTestId('import-preview-team-search-empty')).toBeTruthy()
+    expect(screen.getByTestId('import-preview-team-2007').textContent).toContain('Your team')
   })
 })

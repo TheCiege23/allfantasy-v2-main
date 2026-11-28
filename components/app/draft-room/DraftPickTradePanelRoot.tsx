@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { DraftPickTradeGradeLine } from './DraftPickTradeGradeLine'
 import {
   ArrowLeftRight,
@@ -59,32 +59,6 @@ function verdictChipClass(verdict: string): string {
   if (v === 'reject') return 'border-rose-400/45 bg-rose-500/14 text-rose-100'
   if (v === 'counter') return 'border-amber-400/45 bg-amber-500/14 text-amber-100'
   return 'border-cyan-400/35 bg-cyan-500/12 text-cyan-100'
-}
-
-function structuredFairnessLabel(label: StructuredTradeAnalysis['fairnessLabel']): string {
-  switch (label) {
-    case 'strong_value':
-      return 'Strong value'
-    case 'slight_edge_you':
-      return 'Slight edge · you'
-    case 'slight_edge_them':
-      return 'Slight edge · them'
-    case 'overpay':
-      return 'Likely overpay'
-    default:
-      return 'Balanced'
-  }
-}
-
-function structuredGuidanceTone(tone: StructuredTradeAnalysis['guidanceTone']): string {
-  switch (tone) {
-    case 'good_move':
-      return 'Solid move'
-    case 'risky_move':
-      return 'Risky'
-    default:
-      return 'Okay'
-  }
 }
 
 function PickSummaryChip({
@@ -172,6 +146,8 @@ type DraftPickTradePanelRootProps = {
   tradeAiPremium: boolean
   /** League rule for the timer when an on-clock pick changes hands. Surfaces a small banner in the composer. */
   onClockTradeTimerBehavior?: 'inherit_remaining' | 'reset_timer'
+  /** Drawn at the top of the composer — the "Trade for this pick" offers card when opened from a board tile. */
+  offerHeader?: ReactNode
 }
 
 export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
@@ -232,6 +208,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
     suggestionMeta,
     tradeAiPremium,
     onClockTradeTimerBehavior = 'inherit_remaining',
+    offerHeader = null,
   } = props
 
   const rs = presentationVariant === 'redraft_snake'
@@ -436,6 +413,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
 
               {showOfferForm ? (
                 <>
+                  {offerHeader}
                   <section
                     className={`rounded-3xl border p-6 sm:p-8 ${
                       rs ? 'border-white/[0.1] bg-black/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]' : 'border-white/[0.08] bg-black/32'
@@ -713,11 +691,11 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                           </span>
                         </div>
                         <p className="mt-2 text-[13px] leading-relaxed text-white/48">
-                          Ranked swaps validated against live ownership; AF Pro adds Chimmy ranking and rationale. Choose a partner first.
+                          Swaps validated against live ownership, ordered by the league grade when the league's values price them; AF Pro adds Chimmy rationale. Choose a partner first.
                         </p>
                         {!tradeAiPremium ? (
                           <p className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2 text-[12px] leading-snug text-amber-100/90">
-                            AF Pro unlocks Chimmy-ranked rationales for suggestions. You still get valid deterministic swaps.
+                            AF Pro unlocks Chimmy rationales for suggestions. You still get every valid swap and its league grade.
                           </p>
                         ) : null}
                         <div className="mt-4 flex flex-wrap gap-2">
@@ -789,7 +767,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                         ) : null}
                         {suggestionMeta ? (
                           <p className="mt-2 text-[11px] text-white/38">
-                            {suggestionMeta.aiUsed ? 'Chimmy-ranked' : 'Deterministic'}{' '}
+                            {suggestionMeta.source?.startsWith('league_grade') ? 'League-grade order' : suggestionMeta.aiUsed ? 'Chimmy-ranked' : 'Board order'}{' '}
                             {suggestionMeta.source ? `· ${suggestionMeta.source}` : ''}
                             {suggestionMeta.reasonCode ? ` · ${suggestionMeta.reasonCode}` : ''}
                           </p>
@@ -857,12 +835,11 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                           <h3 className="text-base font-bold text-white">Chimmy Trade Analyzer</h3>
                         </div>
                         <p className="mt-2 text-[13px] leading-relaxed text-white/48">
-                          Deterministic capital bands plus AF Pro Chimmy summary when entitled—grounded in live picks on the board.
+                          The league grade for this swap plus an AF Pro Chimmy summary when entitled—grounded in live picks on the board.
                         </p>
                         {!tradeAiPremium ? (
                           <p className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2 text-[12px] leading-snug text-amber-100/90">
-                            Upgrade to AF Pro for Chimmy narrative on this analyzer. Structured fairness chips below still run for
-                            everyone.
+                            Upgrade to AF Pro for Chimmy narrative on this analyzer. The league grade below still runs for everyone.
                           </p>
                         ) : null}
                           <button
@@ -886,14 +863,14 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                               <ChevronDown className={`h-4 w-4 shrink-0 transition ${analyzerDetailOpen ? 'rotate-180' : ''}`} />
                             </button>
                             {/*
-                              🛑 THE GRADE LEADS (2026-09-28). When the league's chart graded this swap
-                              (rookie drafts), the accept/reject/counter chip, the fairness chip and the
-                              good/risky-move chip are NOT shown: each is a private scale that could
-                              disagree with the letter. The draft-position delta stays — it is a fact.
+                              🛑 THE GRADE IS THE VERDICT (2026-11-26). The chip below is the grade's own
+                              action (accept / counter / reject / even), and it is not drawn when the swap
+                              is not graded — the line above says why. The draft-position delta stays: it
+                              is a fact. The old fairness and good/risky-move chips are gone: private scales.
                             */}
                             <DraftPickTradeGradeLine grade={builderAnalysis.tradeGrade} partnerName={selectedPartner?.displayName ?? null} />
                             <div className="flex flex-wrap items-center gap-2">
-                              {builderAnalysis.tradeGrade?.graded ? null : (
+                              {builderAnalysis.verdict === 'not_graded' ? null : (
                                 <span
                                   className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${verdictChipClass(builderAnalysis.verdict)}`}
                                 >
@@ -904,24 +881,12 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                                 <span className="text-[11px] text-white/45">{builderAnalysis.executionMode}</span>
                               ) : null}
                               {builderAnalysis.structuredAnalysis ? (
-                                <>
-                                  {builderAnalysis.tradeGrade?.graded ? null : (
-                                    <>
-                                      <span className="rounded-full border border-white/14 bg-white/[0.06] px-3 py-1 text-[11px] font-semibold text-white/80">
-                                        {structuredFairnessLabel(builderAnalysis.structuredAnalysis.fairnessLabel)}
-                                      </span>
-                                      <span className="rounded-full border border-cyan-400/25 bg-cyan-500/12 px-3 py-1 text-[11px] font-semibold text-cyan-50/95">
-                                        {structuredGuidanceTone(builderAnalysis.structuredAnalysis.guidanceTone)}
-                                      </span>
-                                    </>
-                                  )}
-                                  <span className="text-[11px] text-white/45">
-                                    Δ overall{' '}
-                                    {builderAnalysis.structuredAnalysis.overallDelta != null
-                                      ? builderAnalysis.structuredAnalysis.overallDelta
-                                      : '—'}
-                                  </span>
-                                </>
+                                <span className="text-[11px] text-white/45">
+                                  Δ overall{' '}
+                                  {builderAnalysis.structuredAnalysis.overallDelta != null
+                                    ? builderAnalysis.structuredAnalysis.overallDelta
+                                    : '—'}
+                                </span>
                               ) : null}
                               {builderAnalysis.aiConfidence != null ? (
                                 <span className="text-[11px] text-white/45">
@@ -1248,23 +1213,18 @@ function OfferCard(props: {
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/40">Private review</p>
           {aiReview ? (
             <div className="mt-4 rounded-2xl border border-white/[0.1] bg-black/45 p-5">
+              <DraftPickTradeGradeLine grade={aiReview.tradeGrade} partnerName={p.proposerName ?? null} />
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`inline-block rounded-full border px-3 py-1 text-[11px] font-bold uppercase ${verdictChipClass(aiReview.verdict)}`}>
-                  {aiReview.verdict}
-                </span>
+                {aiReview.verdict === 'not_graded' ? null : (
+                  <span className={`inline-block rounded-full border px-3 py-1 text-[11px] font-bold uppercase ${verdictChipClass(aiReview.verdict)}`}>
+                    {aiReview.verdict}
+                  </span>
+                )}
                 {aiReview.structuredAnalysis ? (
-                  <>
-                    <span className="rounded-full border border-white/14 bg-white/[0.06] px-3 py-1 text-[11px] font-semibold text-white/80">
-                      {structuredFairnessLabel(aiReview.structuredAnalysis.fairnessLabel)}
-                    </span>
-                    <span className="rounded-full border border-cyan-400/25 bg-cyan-500/12 px-3 py-1 text-[11px] font-semibold text-cyan-50/95">
-                      {structuredGuidanceTone(aiReview.structuredAnalysis.guidanceTone)}
-                    </span>
-                    <span className="text-[11px] text-white/45">
-                      Δ overall{' '}
-                      {aiReview.structuredAnalysis.overallDelta != null ? aiReview.structuredAnalysis.overallDelta : '—'}
-                    </span>
-                  </>
+                  <span className="text-[11px] text-white/45">
+                    Δ overall{' '}
+                    {aiReview.structuredAnalysis.overallDelta != null ? aiReview.structuredAnalysis.overallDelta : '—'}
+                  </span>
                 ) : null}
                 {aiReview.aiConfidence != null ? (
                   <span className="text-[11px] text-white/45">Confidence {(aiReview.aiConfidence * 100).toFixed(0)}%</span>

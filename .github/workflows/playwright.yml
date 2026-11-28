@@ -127,10 +127,14 @@ jobs:
         # required checks down with it and blocks every PR. It is valid YAML either
         # way, so a local parse will not catch it -- a branch push is the only test.
         #
-        # `mobile-smoke` runs on BOTH paths, deliberately: it is the only lane
-        # that sees a phone, it takes minutes rather than hours, and a mobile
-        # regression that only surfaces on the nightly push run is a regression
-        # somebody has already merged.
+        # `mobile-smoke` and `zombie-rehearsal` are nightly and on demand only, as of
+        # 2026-11-25 (owner's call). Neither is a required check, and together they held
+        # about 2.9 of the account's 20 concurrent runner slots on a busy afternoon
+        # (mobile-smoke 2.1, the longest PR job at a 21.7-minute median; zombie 0.8),
+        # while required checks queued up to 72 minutes behind them. The cost is the one
+        # this note used to warn about: a phone or zombie regression surfaces on the
+        # nightly run, after it has merged. When a change needs them before merge, run
+        # this workflow by hand on the branch (workflow_dispatch runs the full nightly set).
         #
         # `mobile-auth` is nightly and on demand only, as of 2026-10-01. It is not a
         # required check, and it was the most expensive PR lane: 14 runner-minutes per
@@ -138,7 +142,7 @@ jobs:
         # lanes queued up to 64 minutes behind it. mobile-smoke stays on PRs as the phone
         # lane; an auth-only mobile regression now surfaces on the nightly run.
         include: ${{ github.event_name == 'pull_request'
-          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"zombie-rehearsal","lane":"zombie-rehearsal","job-timeout":60}]')
+          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60}]')
           || fromJSON('[{"label":"core 1/3","lane":"core-shard-1","shard":"1/3","job-timeout":180},{"label":"core 2/3","lane":"core-shard-2","shard":"2/3","job-timeout":180},{"label":"core 3/3","lane":"core-shard-3","shard":"3/3","job-timeout":180},{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"zombie-rehearsal","lane":"zombie-rehearsal","job-timeout":60},{"label":"mobile-auth","lane":"mobile-auth","job-timeout":60}]') }}
     services:
       postgres:
@@ -185,6 +189,12 @@ jobs:
       run: bash scripts/ci/install-playwright.sh chromium
     - name: Install Playwright Chromium + WebKit
       if: startsWith(matrix.lane, 'mobile-')
+      env:
+        # 2026-11-20 (job 136336052767): on a ~57 KB/s mirror the 140 MB WebKit list ate 25 minutes of this 45-minute
+        # job and still never installed libevent, so WebKit could not start. The script now installs the libraries
+        # the browsers link against first; once both launch, this caps the wait on the rest (fonts, codecs).
+        # Safe here because no mobile spec compares screenshots — leave it off any lane that does.
+        PW_APT_OPTIONAL_WAIT_BUDGET: '120'
       run: bash scripts/ci/install-playwright.sh chromium webkit
     # Schema bootstrap — applied to both `referral-growth-db` (always
     # needed) and `core` (added in fix/ci-playwright-core-schema-bootstrap).
@@ -397,10 +407,23 @@ jobs:
           exit 1
         fi
         rc=0
+        # 🛑 ONE FRESH SERVER PER BROWSER, WITH A 12 GB HEAP, FOR THIS GROUP ONLY (2026-11-21).
+        # next dev restarts when used heap passes 80% of its limit, and this group's routes
+        # (draft room, two league previews, two zombie pages, and the API routes they call,
+        # each 8-12k modules) fill an 8 GB heap in about one pass. Both browsers shared one
+        # server, so it restarted twice in every one of 16 runs (2026-11-20), and the zombie
+        # test running at that moment failed ("Connection terminated unexpectedly",
+        # ERR_CONNECTION_REFUSED, a half-rendered page) and passed on retry. Measured locally
+        # on a 4-CPU/15 GB box: two passes on one server at 8 GB peak 89% then cross the line;
+        # at 12 GB 56% then 83%, and the heap keeps climbing. One pass per fresh server at 12 GB
+        # peaks at 56%, with 9.5 GB used on the machine (vs 10.1 GB today).
         if (( ${#draft_specs[@]} )); then
-          E2E_WARM_ROUTES=/,/e2e/draft-room,/dev/league-mobile-preview,/zombie/e2e-zombie-phone-league,/zombie/e2e-zombie-phone-league/items \
-          PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/mobile-draft \
-            npx playwright test "${draft_specs[@]}" --project="Mobile Chrome" --project="Mobile Safari" --grep-invert "@db" --reporter=line,html || rc=1
+          for project in "Mobile Chrome" "Mobile Safari"; do
+            E2E_WARM_ROUTES=/,/e2e/draft-room,/dev/league-mobile-preview,/zombie/e2e-zombie-phone-league,/zombie/e2e-zombie-phone-league/items \
+            PLAYWRIGHT_SERVER_NODE_OPTIONS=--max-old-space-size=12288 \
+            PLAYWRIGHT_HTML_OUTPUT_DIR="playwright-report/mobile-draft-$(echo "${project#Mobile }" | tr '[:upper:]' '[:lower:]')" \
+              npx playwright test "${draft_specs[@]}" --project="$project" --grep-invert "@db" --reporter=line,html || rc=1
+          done
         fi
         if (( ${#layout_specs[@]} )); then
           E2E_WARM_ROUTES=/,/login,/dev/league-mobile-preview \

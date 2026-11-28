@@ -17,10 +17,12 @@ vi.mock('@/lib/guillotine/GuillotineLeagueConfig', () => ({ isGuillotineLeague: 
 vi.mock('@/lib/guillotine/GuillotineWeeklySummaryService', () => ({ buildWeeklySummary: h.summary }))
 vi.mock('@/lib/share/guillotineEscape', () => ({ getGuillotineEscapesForUser: h.escapes }))
 vi.mock('@/lib/league-specialty/guillotineHome', () => ({ buildGuillotineHomeExtras: h.home }))
-vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurrentWeek: h.week, findViewerRosterId: h.roster }))
+vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurrentWeek: h.week, resolveGuillotineLiveWeek: h.week, resolveGuillotineCalendarWeek: vi.fn(async () => null), findViewerRosterId: h.roster }))
 vi.mock('@/lib/guillotine/chopWatchLoad', () => ({ loadChopWatch: h.watch }))
 vi.mock('@/lib/commissioner/permissions', () => ({ isCommissioner: h.commish, assertCommissioner: vi.fn() }))
 vi.mock('@/lib/guillotine/guillotineAdvancedSettings', () => ({ readGuillotineAdvanced: vi.fn(async () => null), saveGuillotineAdvanced: vi.fn() }))
+// Last words are read by the summary too (lib/guillotine/lastWordsStore.ts); not what this file tests.
+vi.mock('@/lib/guillotine/lastWordsStore', () => ({ loadLastWordsState: vi.fn(async () => null), saveLastWords: vi.fn(), removeLastWords: vi.fn() }))
 vi.mock('@/lib/guillotine/nextChopPickStore', () => ({ loadNextChopPickState: h.load, saveNextChopPick: h.save }))
 
 import { NextRequest } from 'next/server'

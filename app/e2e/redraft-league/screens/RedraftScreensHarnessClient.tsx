@@ -8,11 +8,11 @@ import { NativeLineupScreen } from '@/components/league/native/screens/NativeLin
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
 import { NativeTradesScreen } from '@/components/league/native/screens/NativeTradesScreen'
-import { NativeStandingsScreen } from '@/components/league/native/screens/NativeStandingsScreen'
+import { NativeLeaguePageScreen } from '@/components/league/native/screens/NativeLeaguePageScreen'
 import { PlayersTab } from '@/app/league/[leagueId]/tabs/PlayersTab'
 // LeagueShell loads /core's palette itself (the workspace does not), so the harness must too.
 import '@/components/core-app/af-core.css'
-import {
+import { guillotineSummaryResponse,
   MANAGERS,
   SPORTS,
   forecastResponse,
@@ -22,16 +22,23 @@ import {
   scoreboardResponse,
   seedsResponse,
   standingsResponse,
+  weekCardsResponse,
+  activityResponse,
   teamPlayers,
   tradesResponse,
+  tradeRostersResponse,
   waiverClaimsResponse,
   waiverHistoryResponse,
   waiverPlayersResponse,
   waiverSettingsResponse,
   waiverStateResponse,
+  managerContactsResponse,
+  weekPlannerResponse,
+  goalieStartsResponse,
   type HarnessSport,
   type HarnessStage,
 } from './fixtures'
+import { harnessGameLog, harnessWindowRanks } from '@/app/e2e/_shared/gameLogFixture'
 
 export type HarnessTab = 'roster' | 'matchups' | 'waivers' | 'trades' | 'standings' | 'players'
 
@@ -65,12 +72,18 @@ function installFixtureFetch(sport: HarnessSport, stage: HarnessStage) {
     const [s, st] = String(w.__rdHarnessKey).split(':') as [HarnessSport, HarnessStage]
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
     const method = String(init?.method ?? 'GET').toUpperCase()
-    if (method !== 'GET' && !url.includes('rolling-insights/batch')) return json({ error: 'Harness: writes are disabled.' }, 409)
+    if (method !== 'GET' && !url.includes('rolling-insights/batch') && !url.includes('/trades/grade-preview')) return json({ error: 'Harness: writes are disabled.' }, 409)
     const path = url.split('?')[0]
+    // The trade builder's grade preview is a read that happens to POST.
+    if (path.endsWith('/trades/grade-preview')) return json({ grade: { graded: true, letter: 'B+', partnerLetter: 'B', label: 'Fair for both', giveValue: 1200, getValue: 1300 } })
+    if (path.endsWith('/trades/rosters')) return json(tradeRostersResponse(s))
     if (path === '/api/league/roster') return json(rosterResponse(s))
+    if (path.endsWith('/guillotine/summary')) return json(guillotineSummaryResponse())
     if (path.endsWith('/matchup-center')) return json(matchupResponse(s))
     if (path.endsWith('/scoring/matchups')) return json(scoreboardResponse(s))
     if (path.endsWith('/scoring/standings')) return json(standingsResponse(s))
+    if (path.endsWith('/week-cards')) return json(weekCardsResponse(s))
+    if (path.endsWith('/chat/moves')) return json(activityResponse(s))
     if (path.endsWith('/season-forecast')) return json(forecastResponse())
     if (path.endsWith('/scoring/playoff-seeds')) return json(seedsResponse())
     if (path === '/api/redraft/playoff-runtime') return json(playoffRuntimeResponse(s, st))
@@ -90,6 +103,13 @@ function installFixtureFetch(sport: HarnessSport, stage: HarnessStage) {
       return json(map)
     }
     if (path === '/api/players/rolling-insights/batch') return json({ bySleeperId: {} })
+    // The 2026-11-27/28 additions: every one answered from the fixtures, so the screens draw them.
+    if (path.endsWith('/manager-contacts')) return json(managerContactsResponse())
+    if (path.endsWith('/week-planner')) return json(weekPlannerResponse(s, new URL(url, window.location.origin).searchParams.get('offset') === '1' ? 1 : 0))
+    if (path === '/api/nhl/goalie-starts') return json(goalieStartsResponse())
+    if (path === '/api/user/table-layout') return json({ error: 'Unauthorized' }, 401)
+    if (path === '/api/players/window-ranks') return json(harnessWindowRanks(s, { kind: 'league', leagueName: 'Sunday Night Redraft' }))
+    if (path === '/api/players/game-log') return json(harnessGameLog(s, undefined, 12, { kind: 'league', leagueName: 'Sunday Night Redraft' }))
     return json({ error: 'not in harness' }, 404)
   }
 }
@@ -147,7 +167,7 @@ export default function RedraftScreensHarnessClient(props: Props) {
   else if (activeTab === 'matchups') body = <NativeMatchupScreen league={league} onSelectTab={go} />
   else if (activeTab === 'waivers') body = <NativeWaiversScreen league={league} />
   else if (activeTab === 'trades') body = <NativeTradesScreen league={league} teams={teams} />
-  else if (activeTab === 'standings') body = <NativeStandingsScreen league={league} isCommissioner onSelectTab={go} />
+  else if (activeTab === 'standings') body = <NativeLeaguePageScreen league={league} isCommissioner onSelectTab={go} />
   else if (activeTab === 'players') body = <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6"><PlayersTab league={league} onPlayerClick={() => {}} sport={sport} /></div>
   return (
     <NativeLeagueWorkspace

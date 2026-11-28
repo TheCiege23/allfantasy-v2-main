@@ -8,7 +8,7 @@ vi.mock('@/lib/prisma', () => {
     $queryRaw: vi.fn(async () => []),
     zombieLeague: { findUnique: vi.fn(async () => ({ id: 'z', leagueId: 'L', sport: 'NFL', currentWeek: 4, status: 'active' })) },
     zombieWeeklyResolution: { findUnique: vi.fn(async () => h.state.resolution), update: vi.fn(async (a: any) => Object.assign(h.state.resolution, a.data)) },
-    zombieLeagueTeam: { findUnique: vi.fn(async (a: any) => { const team = h.state.teams.find((t: any) => t.id === a.where.id); return { ...team, items: h.state.items.filter((i: any) => i.teamStatusId === team.id) } }), updateMany: vi.fn(async (a: any) => { const team = h.state.teams.find((t: any) => t.id === a.where.id && t.status === a.where.status); if (!team) return { count: 0 }; Object.assign(team, a.data); return { count: 1 } }) },
+    zombieLeagueTeam: { findMany: vi.fn(async () => h.state.teams.map((t: any) => ({ rosterId: t.rosterId, fantasyTeamName: t.rosterId === 'a' ? 'Alpha' : 'Bravo', displayName: null }))), findUnique: vi.fn(async (a: any) => { const team = h.state.teams.find((t: any) => t.id === a.where.id); return { ...team, items: h.state.items.filter((i: any) => i.teamStatusId === team.id) } }), updateMany: vi.fn(async (a: any) => { const team = h.state.teams.find((t: any) => t.id === a.where.id && t.status === a.where.status); if (!team) return { count: 0 }; Object.assign(team, a.data); return { count: 1 } }) },
     zombieTeamItem: {
       updateMany: vi.fn(async (a: any) => {
         const ids = a.where.id.in ?? [a.where.id]
@@ -18,6 +18,8 @@ vi.mock('@/lib/prisma', () => {
       upsert: vi.fn(async (a: any) => { const old = h.state.items.find((i: any) => i.awardKey === a.where.awardKey); if (old) return old; const item = { id: `award-${h.state.items.length}`, isUsed: false, isExpired: false, activationState: 'ready', ...a.create }; h.state.items.push(item); return item }),
     },
     zombieAuditLog: { create: vi.fn(async () => ({})) },
+    roster: { findUnique: vi.fn(async () => ({ platformUserId: null })) },
+    zombieEventAnimation: { create: vi.fn(async (a: any) => { h.state.animations = [...(h.state.animations ?? []), a.data]; return a.data }) },
     $transaction: vi.fn(async (run: any) => { const before = structuredClone(h.state); try { return await run(db) } catch (e) { h.state = before; throw e } }),
   }
   h.db = db; return { prisma: db }
@@ -37,11 +39,16 @@ describe('atomic 2025 item settlement', () => {
     expect(h.state.items.find((i: any) => i.id === 'gun')).toMatchObject({ teamStatusId: 'A', userId: 'ua', activatesAtWeek: 5 })
     expect(h.state.items.filter((i: any) => i.acquiredReason === 'score_band').map((i: any) => i.itemType)).toEqual(['weapon_bow', 'weapon_knife'])
     expect(h.state.items.filter((i: any) => i.acquiredReason === 'weekly_high_score')).toHaveLength(1)
+    // The stolen gun shows on screen, in the same transaction; the looted serums do not.
+    expect(h.state.animations.map((a: any) => a.animationType)).toEqual(['weapon_stolen'])
+    expect(h.state.animations[0]).toMatchObject({ primaryUserId: 'ua', secondaryUserId: 'ub', metadata: expect.objectContaining({ clipType: 'card', detail: 'Alpha took 🔫 Gun from Bravo.' }) })
   })
   it('retries a committed settlement without new items or repeated loot', async () => {
     await settleBetaItems('z', 4); const count = h.state.items.length
+    const shown = h.state.animations.length
     await settleBetaItems('z', 4)
     expect(h.state.items).toHaveLength(count)
+    expect(h.state.animations).toHaveLength(shown)
     expect(h.db.zombieTeamItem.updateMany).toHaveBeenCalledTimes(2)
   })
   it('rolls back prior loot if a later ownership check fails', async () => {

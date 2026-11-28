@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { identityMapSleeperWhere } from '@/lib/player-identity/identityMapSleeperColumn'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 
@@ -119,21 +120,34 @@ async function generateInjuryAlerts(
 
     if (!user || user.leagues.length === 0) return
 
-    const ownedPlayerIds: Set<string> = new Set()
+    /*
+     * Owned ids BY LEAGUE SPORT. Sleeper reuses ids across sports (NFL 1466 Travis Kelce / NBA 1466
+     * JaVale McGee) and the identity map keeps each sport's in its own column, so an NBA league's ids
+     * read from `sleeperId` alerted the user about NFL players they do not own.
+     */
+    const ownedBySport = new Map<string, Set<string>>()
     for (const league of user.leagues) {
+      const sport = String(league.sport || 'nfl').toUpperCase()
       for (const roster of league.rosters) {
         const players = roster.players as string[] | null
         if (Array.isArray(players)) {
-          for (const pid of players) ownedPlayerIds.add(pid)
+          const set = ownedBySport.get(sport) ?? new Set<string>()
+          for (const pid of players) set.add(pid)
+          ownedBySport.set(sport, set)
         }
       }
     }
 
-    if (ownedPlayerIds.size === 0) return
+    if (ownedBySport.size === 0) return
 
-    const identities = await prisma.playerIdentityMap.findMany({
-      where: { sleeperId: { in: Array.from(ownedPlayerIds) } },
-    })
+    const identities = (
+      await Promise.all(
+        [...ownedBySport].map(([sport, ids]) => {
+          const where = identityMapSleeperWhere([...ids], sport)
+          return where ? prisma.playerIdentityMap.findMany({ where }) : Promise.resolve([])
+        }),
+      )
+    ).flat()
 
     if (identities.length === 0) return
 

@@ -51,6 +51,7 @@ const prismaMock = {
   $transaction: vi.fn(),
 }
 
+vi.mock('@/lib/zombie/activateDraftedZombieLeagues', () => ({ activateDraftedZombieLeagues: vi.fn(async () => ({ checked: 0, activated: 0, failures: [] })) }))
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
 }))
@@ -173,9 +174,6 @@ describe('Redraft multi-sport route parity', () => {
     const matchup = await import('../app/api/redraft/matchup/route')
 
     for (const sport of sports) {
-      prismaMock.redraftRoster.findFirst.mockResolvedValueOnce({ ownerId: 'u-1', waiverPriority: 1 })
-      prismaMock.redraftWaiverClaim.findFirst.mockResolvedValueOnce(null)
-      prismaMock.redraftWaiverClaim.create.mockResolvedValueOnce({ id: `wc-${sport}`, addPlayerId: 'p-1' })
       const postReq = createMockNextRequest('http://localhost/api/redraft/waivers', {
         method: 'POST',
         body: {
@@ -187,7 +185,10 @@ describe('Redraft multi-sport route parity', () => {
         },
       })
       const postRes = await waivers.POST(postReq as any)
-      expect(postRes.status).toBe(200)
+      // Old claim path retired 2026-11-26: every sport is pointed at the main waiver system instead.
+      expect(postRes.status).toBe(410)
+      expect((await postRes.json()).useInstead).toBe(`/api/waiver-wire/leagues/l-${sport}/claims`)
+      expect(prismaMock.redraftWaiverClaim.create).not.toHaveBeenCalled()
 
       prismaMock.redraftSeason.findFirst.mockResolvedValueOnce({ id: `s-${sport}`, leagueId: `l-${sport}`, season: 2026 })
       prismaMock.redraftMatchup.findMany.mockResolvedValueOnce([{ id: `m-${sport}`, leagueId: `l-${sport}` }])

@@ -202,7 +202,9 @@ export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpV
 
   const rows = await args.prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: ids } },
+      // NFL by construction: IDP is an NFL format. Sleeper reuses ids across sports, so the sport
+      // is part of the key (NBA 1466 McGee is not NFL 1466 Kelce).
+      where: { sport: 'NFL', sleeperId: { in: ids } },
       select: { sleeperId: true, position: true },
     })
     .catch(() => [] as Array<{ sleeperId: string | null; position: string | null }>)

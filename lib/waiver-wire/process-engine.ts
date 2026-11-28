@@ -1,3 +1,5 @@
+import { applyLegacyWaiverToCanonical, mirrorCanonicalRosters } from '@/lib/redraft/legacyWaiverBridge'
+import { claimsRunOnAllFantasy, isOfficialOnAllFantasy } from '@/lib/league/switching/switchingLeague'
 import { prisma } from '@/lib/prisma'
 import { getEffectiveLeagueWaiverSettings } from './settings-service'
 import {
@@ -14,9 +16,15 @@ import type { ProcessedClaimResult, WaiverClaimOutcomeCode } from './types'
 import { normalizeWaiverTypeForEngine } from './waiver-engine-config'
 import { isAutomatedWaiverRunBlocked, resolveEngineWaiverTypeForDate } from '@/lib/waivers/dailyWaiverSchedule'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
+import { waiverRunDropRefusal } from './transaction-eligibility'
+import { readWaiverExtras } from '@/lib/waivers/waiverExtras'
+import { loadRebuildPriorityRosterIds } from './season-phase-gate'
+
+/** A conditional claim skipped because an earlier choice in its group was won this run. */
+export const CONDITIONAL_SKIPPED_MESSAGE = 'Skipped: an earlier choice in this group was won.'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
-import { upsertLeagueWaiverStateAfterRun, getLeagueWaiverState } from './waiver-state-service'
+import { upsertLeagueWaiverStateAfterRun, getLeagueWaiverState, refreshLeagueWaiverNextRunAt } from './waiver-state-service'
 import { assertNonEmptyIdempotencyKey } from '@/lib/engine-testing/hardening/engineInvariants'
 import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invariantRuntime'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
@@ -28,6 +36,7 @@ import { redraftHolderOtherThan } from './redraftRosterHolder'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { guillotineChopPendingForWaivers } from '@/lib/guillotine/chopBeforeWaivers'
+import { recordChopReleaseClaim } from '@/lib/guillotine/choppedReleases'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
 import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHolds, maxHoldHours, type DroppedPlayerHold } from './dropped-player-waivers'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
@@ -40,7 +49,16 @@ import {
 } from './nhlProspectFreeAgency'
 
 /** Why a run settled nothing on purpose, leaving every pending claim pending (reported through `opts.onSkip`). */
-export type WaiverRunSkipReason = 'league_moves_locked' | 'run_in_progress' | 'guillotine_chop_pending'
+export type WaiverRunSkipReason =
+  | 'league_moves_locked'
+  | 'run_in_progress'
+  | 'guillotine_chop_pending'
+  /** The commissioner paused waiver processing. */
+  | 'processing_locked'
+  /** Today is a Free-agents or Locked day on the league's daily schedule. */
+  | 'not_a_waiver_day'
+  /** Every pending claim is on a player still in his drop hold, or inside a blind-auction window. */
+  | 'claims_not_due'
 
 type ClaimRow = {
   id: string
@@ -138,7 +156,10 @@ async function processWaiverClaimsForLeagueLocked(
   }
 
   const locked = await getLeagueWaiverState(leagueId).catch(() => null)
-  if (locked?.processingLocked) return []
+  if (locked?.processingLocked) {
+    opts?.onSkip?.('processing_locked')
+    return []
+  }
 
   // 🛑 The commissioner's "Lock all roster moves" (`League.lockAllMoves`), re-read when the run executes:
   // a claim filed before the lock went on must not settle while it is on. Nothing is touched — no run
@@ -154,7 +175,7 @@ async function processWaiverClaimsForLeagueLocked(
     getEffectiveLeagueWaiverSettings(leagueId),
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { id: true, rosterSize: true, leagueType: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true, platform: true, irSlots: true },
+      select: { id: true, name: true, season: true, rosterSize: true, leagueType: true, leagueVariant: true, guillotineMode: true, sport: true, settings: true, timezone: true, waiverHours: true, platform: true, irSlots: true },
     }),
     (prisma as any).waiverClaim.findMany({
       where: { leagueId, status: 'pending' },
@@ -177,12 +198,26 @@ async function processWaiverClaimsForLeagueLocked(
     (prisma as any).leagueTeam
       .findMany({
         where: { leagueId },
-        select: { externalId: true, currentRank: true },
+        select: { id: true, externalId: true, currentRank: true },
       })
       .catch(() => []),
   ])
 
   if (!league) return []
+  /*
+   * A switching league made official here (lib/league/switching): only teams that switched make their
+   * waiver moves on AllFantasy. A claim from a team still on the old platform is left pending and never
+   * settles here, since that team's roster is copied in from the platform and the next copy would undo it.
+   * Every league that is not official runs every claim, as before.
+   */
+  if (isOfficialOnAllFantasy(league.settings)) {
+    const kept = claimsRunOnAllFantasy(league.settings, leagueTeams as Array<{ id: string; externalId: string | null }>, pendingClaims)
+    pendingClaims.splice(0, pendingClaims.length, ...kept)
+  }
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const cutoff = (league.settings as { survivorGuillotine?: { waiversNotBefore?: string } } | null)?.survivorGuillotine?.waiversNotBefore
+    if (cutoff && (!Number.isFinite(Date.parse(cutoff)) || Date.now() < Date.parse(cutoff))) return []
+  }
   // 🛑 A Guilly week's chop lands BEFORE the run that follows it (lib/guillotine/chopBeforeWaivers.ts):
   // run first and the doomed team wins claims while bids on its players fail. Nothing is touched — every
   // claim stays pending for the first run after the chop. A commissioner's manual run is exempt, as from
@@ -211,7 +246,18 @@ async function processWaiverClaimsForLeagueLocked(
   }
   // Per-day schedule: an automated run on a Free-agents or Locked day processes nothing (guards stale
   // engine processing days). A commissioner's manual run is never blocked.
-  if (isAutomatedWaiverRunBlocked(league.settings, new Date(), league.timezone, opts?.runType)) return []
+  /*
+   * 🛑 A RUN THAT SETTLES NOTHING MUST SAY SO AND MOVE THE CLOCK (2026-11-26). These returns used to be
+   * silent: the job finished "completed", the idempotency key (league + UTC day of nextRunAt) was spent,
+   * nextRunAt never moved, and every later 5-minute discovery reused the spent key — so the claims were
+   * never settled. Each one now reports a skip (the job is not completed) and moves nextRunAt to the
+   * next real run.
+   */
+  if (isAutomatedWaiverRunBlocked(league.settings, new Date(), league.timezone, opts?.runType)) {
+    await refreshLeagueWaiverNextRunAt(leagueId, new Date(Date.now() + 60_000)).catch(() => null)
+    opts?.onSkip?.('not_a_waiver_day')
+    return []
+  }
   const specialtySpec = getSpecialtySpecByVariant(league.leagueVariant ?? null)
   const rosterGuard = specialtySpec?.rosterGuard
   const configuredWaiverType =
@@ -259,6 +305,8 @@ async function processWaiverClaimsForLeagueLocked(
   )
 
   if (orderedAll.length === 0) {
+    // Only a blind-auction cutoff can empty this here (pendingClaims was non-empty to be discovered).
+    if (pendingClaims.length > 0) opts?.onSkip?.('claims_not_due')
     return []
   }
 
@@ -299,6 +347,13 @@ async function processWaiverClaimsForLeagueLocked(
   })
   const deferredHeldClaimCount = orderedAll.length - ordered.length
   if (ordered.length === 0) {
+    // Every claim waits on a drop hold: the next run is the first scheduled one after the earliest hold ends.
+    const holdEnds = orderedAll
+      .map((c) => dropHolds.get(String(c.addPlayerId))?.until)
+      .filter((d): d is Date => d instanceof Date && d.getTime() > runAt.getTime())
+    const earliest = holdEnds.length ? new Date(Math.min(...holdEnds.map((d) => d.getTime()))) : null
+    await refreshLeagueWaiverNextRunAt(leagueId, runAt, earliest, { markRan: true }).catch(() => null)
+    opts?.onSkip?.('claims_not_due')
     return []
   }
 
@@ -344,7 +399,47 @@ async function processWaiverClaimsForLeagueLocked(
     metadata?: Record<string, unknown>
   }> = []
 
-  for (const claim of ordered) {
+  /*
+   * 🛑 ROLLING ORDER IS RE-READ AFTER EVERY AWARD (2026-11-26). The order used to be sorted once, so a
+   * team at priority 1 with three claims won all three before priority 2 got one — the winner's move to
+   * the back of the line changed nothing until the next run. Each team's roster object is shared across
+   * its claims (above) and refreshed after an award, so re-sorting the queue by the CURRENT priority
+   * gives every team its next claim in turn, the way rolling waivers are run by hand.
+   */
+  /*
+   * AF Commissioner waiver extras (lib/waivers/waiverExtras.ts), read once per run:
+   *  - rebuild priority: once the playoffs begin, teams out of the bracket claim first (FAAB: they win ties);
+   *  - conditional claims: "get A; if I lose A, try B" — the first claim WON in a group ends that group;
+   *  - second chance: a FAAB bid that loses by <= maxGap moves that team's next claim in the group to the front.
+   */
+  const extras = readWaiverExtras(league.settings)
+  const rebuildIds: Set<string> = extras.rebuildPriority ? await loadRebuildPriorityRosterIds(leagueId).catch(() => new Set<string>()) : new Set()
+  const rebuildFirst = (a: ClaimRow, b: ClaimRow) => Number(rebuildIds.has(b.rosterId)) - Number(rebuildIds.has(a.rosterId))
+  const groupOf = (c: ClaimRow): string | null => {
+    if (!extras.conditionalClaims) return null
+    const meta = c.metadata && typeof c.metadata === 'object' && !Array.isArray(c.metadata) ? (c.metadata as Record<string, unknown>) : null
+    const g = meta?.conditionalGroup
+    return typeof g === 'string' && g.trim() ? `${c.rosterId}:${g.trim()}` : null
+  }
+  const wonGroups = new Set<string>()
+  const winningBidByPlayer = new Map<string, number>()
+
+  const queue = [...ordered]
+  if (rebuildIds.size > 0) {
+    if (waiverType === 'faab') queue.sort((a, b) => (b.faabBid ?? 0) - (a.faabBid ?? 0) || rebuildFirst(a, b))
+    else queue.sort(rebuildFirst) // stable: the waiver order holds within each side
+  }
+  const rollingNow = (a: ClaimRow, b: ClaimRow) =>
+    rebuildFirst(a, b) ||
+    (a.roster?.waiverPriority ?? 999) - (b.roster?.waiverPriority ?? 999) ||
+    a.priorityOrder - b.priorityOrder
+  /** Second chance: indices into `queue` that must not be re-sorted away from the front this turn. */
+  let pinnedFront: ClaimRow | null = null
+  while (queue.length > 0) {
+    if (waiverType === 'rolling' && !pinnedFront) queue.sort(rollingNow)
+    pinnedFront = null
+    const claim = queue.shift()!
+    const group = groupOf(claim)
     try {
     const roster = claim.roster
     const pushFail = async (msg: string, extra?: Record<string, unknown>) => {
@@ -380,10 +475,17 @@ async function processWaiverClaimsForLeagueLocked(
         success: false,
         addPlayerId: claim.addPlayerId,
         dropPlayerId: claim.dropPlayerId ?? undefined,
+        faabBid: claim.faabBid ?? null,
         message: msg,
         waiverRunId: runId,
         outcomeCode: oc,
       })
+    }
+
+    // Conditional claims: an earlier choice in this group was already won this run.
+    if (group && wonGroups.has(group)) {
+      await pushFail(CONDITIONAL_SKIPPED_MESSAGE)
+      continue
     }
 
     if (await isCommissionerRosterLocked(leagueId, claim.rosterId)) {
@@ -426,6 +528,21 @@ async function processWaiverClaimsForLeagueLocked(
           ? 'Player no longer available (awarded to another team in this run).'
           : 'Player no longer available.'
       await pushFail(earlier, { competingRosterId: ownerRosterId })
+      // Second chance: lost a FAAB bid by no more than the commissioner's gap → this team's next claim
+      // in the same group goes to the front of the queue (it still has to be legal and available).
+      if (extras.secondChance.enabled && waiverType === 'faab' && ownerRosterId !== claim.rosterId) {
+        const winning = winningBidByPlayer.get(addId)
+        const gap = winning != null ? winning - (claim.faabBid ?? 0) : Infinity
+        const g = groupOf(claim)
+        if (g && gap >= 0 && gap <= extras.secondChance.maxGap) {
+          const nextIdx = queue.findIndex((c) => groupOf(c) === g)
+          if (nextIdx > 0) {
+            const [next] = queue.splice(nextIdx, 1)
+            queue.unshift(next!)
+            pinnedFront = next!
+          }
+        }
+      }
       continue
     }
 
@@ -479,6 +596,28 @@ async function processWaiverClaimsForLeagueLocked(
       continue
     }
 
+    // The drop rules again, now: game started, undroppable list, weekly drop limit (transaction-eligibility.ts).
+    if (dropId) {
+      const overridesOn = commissionerOverrideAllowed(
+        effectiveSettings.waiverEngineConfig ?? {},
+        effectiveSettings.commissionerOverrideRules ?? null,
+      )
+      const dropRefusal = await waiverRunDropRefusal({
+        leagueId,
+        rosterId: claim.rosterId,
+        dropPlayerId: dropId,
+        playerData: roster.playerData,
+        league,
+        engineConfig: (effectiveSettings.waiverEngineConfig ?? {}) as Record<string, unknown>,
+        maxDropsPerWeek: effectiveSettings.maxDropsPerWeek ?? null,
+        bypassWeeklyDropLimit: overridesOn && getCommissionerOverrides(claim.metadata).bypassWeeklyDropLimit === true,
+      }).catch(() => null)
+      if (dropRefusal) {
+        await pushFail(dropRefusal)
+        continue
+      }
+    }
+
     const bid = claim.faabBid ?? 0
     const faabRem = roster.faabRemaining ?? 0
     const bypassInsufficientFaab =
@@ -520,30 +659,6 @@ async function processWaiverClaimsForLeagueLocked(
       priorityAfter = newWaiverPriority
     }
 
-    const survivorGuillotineWrites: Array<Promise<unknown>> = []
-    if (league.leagueVariant === 'survivor_guillotine') {
-      const linked = await prisma.roster.findUnique({ where: { id: claim.rosterId }, select: { redraftRosterId: true } })
-      const player = await prisma.player.findUnique({ where: { id: addId }, select: {
-        name: true, position: true, team: true, sport: true } })
-      if (!player) {
-        await pushFail('Survivor Guilly claim needs a known player.')
-        continue
-      }
-      if (!linked?.redraftRosterId && await prisma.redraftSeason.count({ where: { leagueId } })) {
-        await pushFail('Survivor Guilly roster needs its redraft link reconciled before waivers.')
-        continue
-      }
-      if (linked?.redraftRosterId) {
-        if (dropId) survivorGuillotineWrites.push(prisma.redraftRosterPlayer.updateMany({ where: {
-          rosterId: linked.redraftRosterId, playerId: dropId, droppedAt: null }, data: { droppedAt: new Date() } }))
-        survivorGuillotineWrites.push(prisma.redraftRosterPlayer.create({ data: { rosterId: linked.redraftRosterId,
-          playerId: addId, playerName: player.name, position: player.position, team: player.team,
-          sport: player.sport, slotType: 'bench', acquisitionType: 'waiver' } }))
-        if (faabSpent != null) survivorGuillotineWrites.push(prisma.redraftRoster.update({ where: { id: linked.redraftRosterId },
-          data: { faabBalance: { decrement: faabSpent } } }))
-      }
-    }
-
     /*
      * Native scoring reads `RedraftRosterPlayer`, not `playerData` — without this an awarded
      * player never scores and the dropped one keeps scoring. Survivor Guillotine writes its own
@@ -561,12 +676,12 @@ async function processWaiverClaimsForLeagueLocked(
           playerDataByRoster: new Map([[claim.rosterId, newPlayerData]]),
         })
 
-    await (prisma as any).$transaction([
-      (prisma as any).waiverClaim.update({
+    const settlementWrites = (db: any) => [
+      db.waiverClaim.update({
         where: claimSnapshotWhere(claim),
         data: { status: 'processed', processedAt: new Date(), resultMessage: 'Awarded' },
       }),
-      (prisma as any).roster.update({
+      db.roster.update({
         // Compare-and-set (`isRosterSnapshotConflict`): written only if the roster is still what this run
         // read. An instant add, a FAAB trade or a Guilly chop's FAAB split in between leaves the claim
         // pending for the next run instead of being overwritten.
@@ -577,7 +692,7 @@ async function processWaiverClaimsForLeagueLocked(
           ...(newWaiverPriority != null && { waiverPriority: newWaiverPriority }),
         },
       }),
-      (prisma as any).waiverTransaction.create({
+      db.waiverTransaction.create({
         data: {
           leagueId,
           sportType: league.sport ?? null,
@@ -591,16 +706,46 @@ async function processWaiverClaimsForLeagueLocked(
           waiverPriorityAfter: priorityAfter ?? null,
         },
       }),
-      ...survivorGuillotineWrites,
-      ...redraftMoveWrites,
-    ])
+    ]
+
+
+    if (league.leagueVariant === 'survivor_guillotine') {
+      try {
+        await prisma.$transaction(async tx => {
+          const origin = (claim.metadata as { originRedraftClaimId?: string } | null)?.originRedraftClaimId
+          if (origin) {
+            const source = await tx.redraftWaiverClaim.updateMany({ where: { id: origin, status: 'pending' }, data: { status: 'approved', processedAt: new Date() } })
+            if (source.count !== 1) throw new Error('Source scoring claim changed before settlement.')
+          }
+          await applyLegacyWaiverToCanonical(tx, { leagueId, rosterId: claim.rosterId, addPlayerId: addId, dropPlayerId: dropId, faabSpent, claimId: claim.id, originRedraftClaimId: origin, priorityAfter: priorityAfter ?? undefined })
+          for (const write of settlementWrites(tx)) await write
+          const linked = await tx.roster.findFirst({ where: { id: claim.rosterId, leagueId }, select: { redraftRosterId: true } })
+          if (linked?.redraftRosterId) await mirrorCanonicalRosters(tx, [linked.redraftRosterId])
+        })
+      } catch (error) {
+        if (isClaimSnapshotConflict(error) || isRosterSnapshotConflict(error)) throw error
+        await pushFail(error instanceof Error ? error.message : 'Native waiver settlement failed; no roster changes were applied.')
+        continue
+      }
+    } else {
+      await (prisma as any).$transaction([...settlementWrites(prisma), ...redraftMoveWrites])
+    }
 
     // Survivor Guilly wrote faabBalance itself, above; every other native league copies it across.
     if (faabSpent != null && league.leagueVariant !== 'survivor_guillotine') {
       await copyGenericFaabToRedraft(prisma, [claim.rosterId])
     }
 
+    // A Guilly award on a chopped team's player: record who won him and the bid. Never fails the award.
+    if (league.guillotineMode) {
+      await recordChopReleaseClaim({ leagueId, playerId: addId, rosterId: claim.rosterId, winningBid: faabSpent }).catch((error) => {
+        console.error('[waiver-process] chop release claim not recorded', { leagueId, claimId: claim.id, error: error instanceof Error ? error.message : String(error) })
+      })
+    }
+
     rosteredByPlayer.set(addId, claim.rosterId)
+    winningBidByPlayer.set(addId, faabSpent ?? claim.faabBid ?? 0)
+    if (group) wonGroups.add(group)
     // A prospect award: every id he is known by, so a later claim in this run on any of them fails.
     for (const alias of prospectAliases) rosteredByPlayer.set(alias, claim.rosterId)
     if (dropId) rosteredByPlayer.delete(dropId)
@@ -608,6 +753,8 @@ async function processWaiverClaimsForLeagueLocked(
     if (newWaiverPriority != null) {
       const row = (allRosters as { id: string; waiverPriority: number | null }[]).find((r) => r.id === claim.rosterId)
       if (row) row.waiverPriority = newWaiverPriority
+      // The team's shared roster object: the rolling queue re-sorts on it before the next claim.
+      if (claim.roster) claim.roster.waiverPriority = newWaiverPriority
     }
 
     resultRows.push({
@@ -720,6 +867,7 @@ async function processWaiverClaimsForLeagueLocked(
       processingTimeUtc: effectiveSettings.processingTimeUtc,
       processingDays: effectiveSettings.processingDays,
     },
+    league: { settings: league.settings, timezone: league.timezone },
     priorityOrder: rostersAfter.map((x: { id: string; waiverPriority: number | null; faabRemaining: number | null }) => ({
       rosterId: x.id,
       waiverPriority: x.waiverPriority,
@@ -749,9 +897,19 @@ async function processWaiverClaimsForLeagueLocked(
  * (standings are read `orderBy currentRank asc`), so the highest rank number goes first. A team
  * with no rank yet goes after every ranked team rather than ahead of them.
  */
+/**
+ * A team's standing. `LeagueTeam.externalId` is the provider manager id in an IMPORTED league but the
+ * Roster id in a NATIVE one (createCanonicalLeagueInTransaction), so the rank is looked up under both —
+ * looking up only the manager id left every native team unranked, and reverse standings (and the FAAB
+ * reverse-standings tiebreak) silently fell back to claim order (2026-11-26).
+ */
+function standingOf(c: ClaimRow, rankByTeamKey: Map<string, number>): number | undefined {
+  return rankByTeamKey.get(c.roster?.platformUserId ?? '') ?? rankByTeamKey.get(c.rosterId)
+}
+
 function worstStandingFirst(a: ClaimRow, b: ClaimRow, rankByPlatformUserId: Map<string, number>): number {
-  const rankA = rankByPlatformUserId.get(a.roster?.platformUserId ?? '')
-  const rankB = rankByPlatformUserId.get(b.roster?.platformUserId ?? '')
+  const rankA = standingOf(a, rankByPlatformUserId)
+  const rankB = standingOf(b, rankByPlatformUserId)
   if (rankA === rankB) return 0
   if (rankA == null) return 1
   if (rankB == null) return -1

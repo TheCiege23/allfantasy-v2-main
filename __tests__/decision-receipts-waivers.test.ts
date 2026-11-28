@@ -59,14 +59,19 @@ const score = (week: number, points: number, over: Partial<Score> = {}): Score =
 /** Mocks that honour the where clauses the loader sends, so a wrong filter shows up as a wrong answer. */
 function db({ facts = [] as Fact[], scores = [] as Score[], siblings = [] as Array<{ id: string; platformLeagueId: string }> } = {}) {
   h.teamFind.mockResolvedValue([{ leagueId: ICE.id, externalId: MY_ROSTER }])
-  h.leagueFind.mockResolvedValue([{ id: ICE.id, platformLeagueId: ICE.platformLeagueId }, ...siblings])
+  h.leagueFind.mockResolvedValue([{ id: ICE.id, platformLeagueId: ICE.platformLeagueId, sport: 'NFL' }, ...siblings.map((x) => ({ sport: 'NFL', ...x }))])
   h.factFind.mockImplementation(async ({ where }: { where: { OR: Array<{ leagueId: { in: string[] }; rosterId: string; season: number }>; type: { in: string[] } } }) =>
     facts.filter((f) => where.type.in.includes(f.type) && where.OR.some((c) => c.leagueId.in.includes(f.leagueId) && c.rosterId === f.rosterId)),
   )
   h.scoreFind.mockImplementation(async ({ where }: { where: { OR: Array<{ leagueId: string; week: { gte: number } }>; playerId: { in: string[] } } }) =>
     scores.filter((s) => where.playerId.in.includes(s.playerId) && where.OR.some((c) => c.leagueId === s.leagueId && s.week >= c.week.gte)),
   )
-  h.playerFind.mockResolvedValue([{ sleeperId: '9221', name: 'Jahmyr Gibbs', position: 'RB' }])
+  // Honours the sport-scoped where (`{ OR: [{ sport, sleeperId: { in } }] }`): Sleeper reuses ids across sports.
+  h.playerFind.mockImplementation(async ({ where }: { where: { OR: Array<{ sport: string; sleeperId: { in: string[] } }> } }) =>
+    where.OR.some((c) => c.sport === 'NFL' && c.sleeperId.in.includes('9221'))
+      ? [{ sleeperId: '9221', sport: 'NFL', name: 'Jahmyr Gibbs', position: 'RB' }]
+      : [],
+  )
 }
 
 beforeEach(() => {

@@ -17,6 +17,7 @@ type Row = {
   currentTeam: string | null
   sport: string
   sleeperId: string | null
+  sleeperNbaId?: string | null
   status: string | null
 }
 
@@ -30,6 +31,9 @@ const row = (over: Partial<Row> & Pick<Row, 'id' | 'canonicalName' | 'sport'>): 
 })
 
 const TABLE: Row[] = [
+  // The real cross-sport Sleeper collision: NFL ids in `sleeperId`, NBA ids in `sleeperNbaId`.
+  row({ id: 'kelce-nfl', canonicalName: 'Travis Kelce', sport: 'NFL', position: 'TE', currentTeam: 'KC', sleeperId: '1466' }),
+  row({ id: 'mcgee-nba', canonicalName: 'JaVale McGee', sport: 'NBA', position: 'C', sleeperNbaId: '1466' }),
   row({ id: 'jj-ncaaf-wr', canonicalName: 'Justin Jefferson', sport: 'NCAAF', position: 'WR', currentTeam: 'LOUISIANA STATE UNIVERSITY' }),
   row({ id: 'jj-ncaaf-dl', canonicalName: 'Justin Jefferson', sport: 'NCAAF', position: 'DL', currentTeam: 'EASTERN MICHIGAN UNIVERSITY' }),
   row({ id: 'jj-nfl-lb', canonicalName: 'Justin Jefferson', sport: 'NFL', position: 'LB', currentTeam: 'CLE', sleeperId: '9001' }),
@@ -275,5 +279,24 @@ describe('a hyphen in the slug is tried as a separator AND as a hyphen (2026-11-
     expect((await resolve('amon-ra-st-brown', { sport: 'NFL', position: 'WR', team: 'DET' })).identity?.id).toBe('ars-nfl')
     expect(playerProfileHref({ name: 'Marvin Harrison Jr.' })).toBe('/player/marvin-harrison')
     expect(playerProfileHref({ name: '  ' })).toBeNull()
+  })
+})
+
+describe('a bare Sleeper id is read in the page’s sport, from that sport’s column', () => {
+  it('🛑 /player/1466?sport=NBA is JaVale McGee, never NFL Travis Kelce', async () => {
+    const r = await resolve('1466', { sport: 'NBA' })
+    expect(r.identity?.id).toBe('mcgee-nba')
+    expect(r.reason).toBe('sleeper_id')
+  })
+
+  it('CONTROL: /player/1466 (NFL by default) is Travis Kelce', async () => {
+    expect((await resolve('1466')).identity?.id).toBe('kelce-nfl')
+    expect((await resolve('1466', { sport: 'NFL' })).identity?.id).toBe('kelce-nfl')
+  })
+
+  it('a sport with no Sleeper column never reads the NFL one', async () => {
+    const r = await resolve('1466', { sport: 'NHL' })
+    expect(r.identity?.id).not.toBe('kelce-nfl')
+    expect(mocks.findFirst.mock.calls.some(([a]) => 'sleeperId' in (a.where ?? {}))).toBe(false)
   })
 })

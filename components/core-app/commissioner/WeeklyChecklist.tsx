@@ -16,7 +16,20 @@ const MARK: Record<ChecklistStatus, string> = { done: '✓', todo: '!', heads_up
  * Commissioner Hub. Redraft leagues only: for any other league the route answers `applies: false`
  * and this renders nothing, so the hub is unchanged there.
  */
-export function WeeklyChecklist({ leagueId, language = 'en' }: { leagueId: string; language?: string }) {
+export function WeeklyChecklist({
+  leagueId,
+  language = 'en',
+  folded = false,
+}: {
+  leagueId: string
+  language?: string
+  /**
+   * One closed row in the Commissioner Hub's fold list (2026-11-23) rather than an open card. Its "to do"
+   * items are the same ones "Needs you now" already lists above it, so open it was a second to-do list.
+   * Folded, nothing is drawn until the checklist has loaded and applies — never an empty row.
+   */
+  folded?: boolean
+}) {
   const m = messagesFor(commissionerScreensMessages, language)
   const pick = coreLang(language)
   const [view, setView] = useState<View | null>(null)
@@ -41,7 +54,7 @@ export function WeeklyChecklist({ leagueId, language = 'en' }: { leagueId: strin
   const items = view?.applies ? view.items : []
   const todo = items.filter((i) => i.status === 'todo').length
 
-  return (
+  const body = (
     <section id="ch-week" className="af-card af-ch-section af-ch-week" aria-labelledby="ch-week-h" data-testid="weekly-checklist">
       <header className="af-ch-section-head">
         <h2 id="ch-week-h" className="af-label">
@@ -73,4 +86,19 @@ export function WeeklyChecklist({ leagueId, language = 'en' }: { leagueId: strin
       )}
     </section>
   )
+
+  if (folded) {
+    if (!view?.applies) return null
+    return (
+      <details className="af-ch-fold" data-fold="ch-week" data-testid="hub-fold-ch-week">
+        <summary className="af-ch-fold-summary">
+          <span className="af-ch-fold-title">{m.checklistTitleWeek(view.week)}</span>
+          <span className="af-ch-fold-note af-num">{todo ? m.checklistToDo(todo) : m.checklistAllCaughtUp}</span>
+        </summary>
+        <div className="af-ch-fold-body">{body}</div>
+      </details>
+    )
+  }
+
+  return body
 }

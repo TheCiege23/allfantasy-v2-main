@@ -52,7 +52,7 @@ export function BigBrotherTwistsPanel({ leagueId }: { leagueId: string }) {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-violet-500/20 bg-violet-950/10 p-6 text-sm text-white/60">
+      <div className="rounded-2xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-6 text-sm text-[var(--text2)]">
         Loading twists…
       </div>
     )
@@ -60,22 +60,22 @@ export function BigBrotherTwistsPanel({ leagueId }: { leagueId: string }) {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-amber-500/25 bg-amber-950/15 p-4 text-sm text-amber-200/90">
+      <div className="rounded-2xl border border-[var(--line2)] bg-[var(--warn-soft)] p-4 text-sm text-[var(--warn)]">
         {error}
       </div>
     )
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-violet-500/25 bg-gradient-to-b from-violet-950/25 to-[#07071a]/90 p-5 shadow-[0_12px_48px_rgba(80,40,120,0.18)]">
+    <div className="space-y-4 rounded-2xl border border-[var(--accent-line)] bg-gradient-to-b from-violet-950/25 to-[#07071a]/90 p-5 shadow-[0_12px_48px_rgba(80,40,120,0.18)]">
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-200/85">Twists · coming soon</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">Twists · coming soon</h3>
         {/*
           🛑 THIS SAID "Enabled for this league. Execution is driven by the phase engine…" AND NO TWIST HAS EVER RUN.
           Nothing in lib/big-brother performs a double eviction, battle back, secret HOH, hidden power or safety pass;
           the list was the spec's defaults, written at league creation. Until a twist really runs, the panel says so.
         */}
-        <p className="mt-1 text-[13px] text-white/55">
+        <p className="mt-1 text-[13px] text-[var(--muted)]">
           Twists aren’t live yet. Every week plays as a classic week: HOH, nominations, veto and an eviction vote.
         </p>
       </div>
@@ -84,7 +84,7 @@ export function BigBrotherTwistsPanel({ leagueId }: { leagueId: string }) {
           {enabled.map((k) => (
             <li
               key={k}
-              className="rounded-full border border-white/15 bg-white/[0.04] px-3 py-1 text-[12px] font-medium text-white/55"
+              className="rounded-full border border-[var(--line)] bg-white/[0.04] px-3 py-1 text-[12px] font-medium text-[var(--muted)]"
             >
               {TWIST_LABELS[k] ?? k} · coming soon
             </li>
@@ -92,8 +92,8 @@ export function BigBrotherTwistsPanel({ leagueId }: { leagueId: string }) {
         </ul>
       ) : null}
       {weeks.length > 0 ? (
-        <p className="text-[12px] text-white/45">
-          Planned twist weeks (not active yet): <span className="text-white/70">{weeks.join(', ')}</span>
+        <p className="text-[12px] text-[var(--muted)]">
+          Planned twist weeks (not active yet): <span className="text-[var(--text2)]">{weeks.join(', ')}</span>
         </p>
       ) : null}
     </div>

@@ -54,7 +54,10 @@ interface MatchPartner {
   suggestedOffer: {
     userGives: MatchOfferAsset[]
     partnerGives: MatchOfferAsset[]
-    fairnessPct: number
+    /** THE grade's value gap from your side; null when the offer was not graded (2026-11-26). */
+    fairnessPct: number | null
+    /** THE grade on this offer, from your side (lib/trade-finder/matchmakingGrades.ts). */
+    leagueGrade?: FinderCandidateGrade | null
   } | null
   tendencyInsights: string[]
 }
@@ -403,6 +406,12 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
                   ))}
                 </div>
               </div>
+              {partner.suggestedOffer.leagueGrade ? (
+                <div className="mt-2">
+                  <LeagueGradeLine grade={partner.suggestedOffer.leagueGrade} partnerName={partner.displayName} />
+                </div>
+              ) : null}
+              {typeof partner.suggestedOffer.fairnessPct === 'number' && (
               <div className="mt-2 flex items-center justify-center">
                 <span className={cx(
                   'text-[11px] font-medium px-2 py-0.5 rounded-full',
@@ -415,6 +424,7 @@ function PartnerCard({ partner, rank }: { partner: MatchPartner; rank: number })
                   Fairness: {partner.suggestedOffer.fairnessPct > 0 ? '+' : ''}{partner.suggestedOffer.fairnessPct.toFixed(1)}%
                 </span>
               </div>
+              )}
             </div>
           )}
 
@@ -1218,7 +1228,7 @@ export default function TradeFinderV2({
             </div>
 
             {selectedLeague && (
-              <FeatureGate featureId="legacy_trade_finder" featureNameOverride="Trade Review">
+              <FeatureGate featureId="legacy_tab_trade_finder" featureNameOverride="Trade Finder">
                 <Button
                   onClick={runFinder}
                   loading={loading}
@@ -1266,7 +1276,7 @@ export default function TradeFinderV2({
             )}
 
             {selectedLeague && (
-              <FeatureGate featureId="legacy_trade_finder" featureNameOverride="Trade Review">
+              <FeatureGate featureId="legacy_tab_trade_finder" featureNameOverride="Trade Finder">
                 <Button
                   onClick={runMatchmaking}
                   loading={mmLoading}

@@ -12,6 +12,7 @@ import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { marketEvidenceOf } from './marketEvidence'
 import { gradePlayerFromRoster, type GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import {
   allRosteredIds,
@@ -410,6 +411,7 @@ export async function buildTradeScenario(
           withheld: null,
           partnerGrade: receipt.partnerGrade.graded ? receipt.partnerGrade.letter : null,
           marketGrade: grade.letterBasis === 'your_team' && grade.market ? grade.market.letter : null,
+          marketEvidence: marketEvidenceOf(grade),
         }
       : {
           given: null,
@@ -546,13 +548,28 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
      * The week and the rules are named in the line itself: this is ONE week under the league's own
      * scoring, and a model left to guess would call it a season rate.
      */
+    /*
+     * Why the values moved, measured from real completed trades. Chimmy is told to cite it — it is the evidence behind
+     * the letter — and to keep the numbers and trade counts exactly as written, so "teams like you paid +8% across 210
+     * trades" is never rounded into a different claim.
+     */
+    ...(s.value.marketEvidence?.length
+      ? [
+          '- Why values moved, measured from completed trades on AllFantasy (cite one or two of these when you explain the grade; keep every number and trade count exactly as written, and do not add facts that are not here):',
+          ...s.value.marketEvidence.map((e) => `  • ${e}`),
+        ]
+      : []),
     s.lineup
       ? `- Starting lineup, week ${s.lineupWeek ?? '(unknown)'} projections scored under this league's own rules: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}). This is one week, not the rest of the season — say so.`
       : `- Starting lineup: not computed — ${s.lineupUnavailable}`,
     s.playoffOdds.available ? `- Playoff scenario estimate: ${s.playoffOdds.before}% before, ${s.playoffOdds.after}% after. ${s.playoffOdds.reason}` : `- Playoff odds: not computed. ${s.playoffOdds.reason} Do not estimate them.`,
     ...(s.picks && !s.value.divisionImpacts && !s.value.basis?.includes('Campus')
       ? [
-          "- Draft picks are valued as the giving team's own pick at that round's average dynasty market price (FantasyCalc) — the exact slot is not known. Say so, and do not quote a slot.",
+          // A pick the AllFantasy pick market repriced is priced on what managers paid for that round and draft, not
+          // the FantasyCalc average — saying "FantasyCalc average" there would contradict the evidence line above.
+          s.value.marketEvidence?.some((e) => e.includes('AllFantasy pick market'))
+            ? "- Draft picks are valued at that round's price for that draft — on the AllFantasy pick market where shown above, the average dynasty market price (FantasyCalc) otherwise — and the exact slot is not known. Say so, and do not quote a slot."
+            : "- Draft picks are valued as the giving team's own pick at that round's average dynasty market price (FantasyCalc) — the exact slot is not known. Say so, and do not quote a slot.",
         ]
       : []),
     // The saved evaluation, so the answer is a record every surface can read back.

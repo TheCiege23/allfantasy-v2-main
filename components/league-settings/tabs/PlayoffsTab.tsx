@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { oddPlayoffFieldNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
 import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
@@ -15,6 +17,7 @@ import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { playoffSeriesSportSupported, readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import { PlayoffSeriesLengthsCard } from '@/components/league-settings/PlayoffSeriesLengthsCard'
 import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
+import { readPreLeagueWeeksCount, readPreLeagueWeeksLoaded } from '@/lib/redraft/preLeagueWeeksRules'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
 import {
@@ -30,7 +33,7 @@ import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '../TournamentLea
 import { TiebreakerOrderEditor } from '../TiebreakerOrderEditor'
 
 export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettingsTabProps) {
-  const { t } = useLanguage()
+  const { t, tInterpolate } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving, savedAt, lastError } = useLeagueSettingsSectionAutosave(leagueId, 'playoffs', { enabled: canEdit })
 
@@ -88,6 +91,13 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
     setPlayoffStartWeek(chosenStartWeek)
   }, [ctx.league.playoffTeams, chosenStartWeek])
   useEffect(() => setMedianInPlayoffs(storedMedianInPlayoffs), [storedMedianInPlayoffs])
+
+  // A league drafted mid-season: do the weeks played before the draft count? (lib/redraft/preLeagueWeeksRules.ts)
+  // Offered only once those weeks are loaded; off unless the commissioner turned it on.
+  const preLeagueWeeks = readPreLeagueWeeksLoaded(ctx.league.settings)
+  const storedPreLeagueCounts = readPreLeagueWeeksCount(ctx.league.settings)
+  const [preLeagueCounts, setPreLeagueCounts] = useState(storedPreLeagueCounts)
+  useEffect(() => setPreLeagueCounts(storedPreLeagueCounts), [storedPreLeagueCounts])
   useEffect(() => setThirdPlace(storedThirdPlace), [storedThirdPlace])
 
   const seasonWeeks = tryGetSportConfig(String(ctx.league.sport ?? 'NFL'))?.defaultSeasonWeeks ?? 52
@@ -139,11 +149,18 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
               onChange={(e) => {
                 const v = Number(e.target.value)
                 setPlayoffTeams(v)
-                if (e.target.value !== '' && e.target.validity.valid && Number.isInteger(v)) queuePatch({ playoffTeams: v })
+                const locked = !hasAfCommissionerSub && v !== ctx.league.playoffTeams && oddPlayoffFieldNeedsAfCommissioner(ctx.league.leagueType, v)
+                if (!locked && e.target.value !== '' && e.target.validity.valid && Number.isInteger(v)) queuePatch({ playoffTeams: v })
               }}
               className="w-full rounded-xl border border-white/[0.10] bg-black/25 px-3 py-2 text-sm text-white disabled:opacity-50"
             />
           </label>
+          {!hasAfCommissionerSub && playoffTeams !== ctx.league.playoffTeams && oddPlayoffFieldNeedsAfCommissioner(ctx.league.leagueType, playoffTeams) ? (
+            <p className="mt-1 text-[11px] text-amber-200" data-testid="playoff-teams-odd-locked">
+              {`A ${playoffTeams}-team playoff field is part of AF Commissioner. Not saved — choose an even number, or `}
+              <a href={upgradePathForPlan('af_commissioner')} className="font-bold underline">upgrade</a>.
+            </p>
+          ) : null}
           {fitCap < leagueCap ? (
             <p className="mt-1 text-[11px] text-white/45" data-testid="playoff-teams-fit-note">
               {fitCap >= 2
@@ -214,6 +231,30 @@ export function PlayoffsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettin
                 const v = e.target.checked
                 setMedianInPlayoffs(v)
                 queuePatch({ medianGameInPlayoffs: v })
+              }}
+            />
+          </label>
+        ) : null}
+        {preLeagueWeeks > 0 ? (
+          <label
+            className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3"
+            data-testid="pre-league-weeks-toggle"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] text-white/85">{t('lsHub.po.preLeague')}</span>
+              <span className="mt-0.5 block text-[11px] text-white/45">
+                {tInterpolate('lsHub.po.preLeagueHelp', { weeks: preLeagueWeeks })}
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-cyan-400"
+              checked={preLeagueCounts}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.checked
+                setPreLeagueCounts(v)
+                queuePatch({ preLeagueWeeksCount: v })
               }}
             />
           </label>

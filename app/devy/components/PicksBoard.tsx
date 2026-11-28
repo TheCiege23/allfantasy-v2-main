@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 export type PickRow = {
   id: string
@@ -37,14 +37,13 @@ export function PicksBoard({
     return [...r].sort((a, b) => a - b)
   }, [picks])
 
-  const [hover, setHover] = useState<string | null>(null)
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-left text-[11px] text-white/80">
+      <table className="w-full min-w-[640px] border-collapse text-left text-[11px] text-[var(--text)]">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 border border-white/[0.06] bg-[#0a1228] px-2 py-2 text-white/50">
+            <th className="sticky left-0 z-10 border border-white/[0.06] bg-[var(--surface)] px-2 py-2 text-[var(--muted)]">
               Rd
             </th>
             {rosterIdByColumn.map((rid, i) => (
@@ -61,7 +60,7 @@ export function PicksBoard({
         <tbody>
           {rounds.map((round) => (
             <tr key={round}>
-              <td className="sticky left-0 z-10 border border-white/[0.06] bg-[#080c14] px-2 py-2 font-mono text-white/60">
+              <td className="sticky left-0 z-10 border border-white/[0.06] bg-[var(--surface)] px-2 py-2 font-mono text-[var(--text2)]">
                 {round}
               </td>
               {rosterIdByColumn.map((rid) => {
@@ -72,15 +71,13 @@ export function PicksBoard({
                     key={`${round}-${rid}`}
                     className="border border-white/[0.06] px-1 py-2 text-center"
                     style={{ background: cell ? `${bg}22` : undefined }}
-                    onMouseEnter={() => cell && setHover(cell.id)}
-                    onMouseLeave={() => setHover(null)}
                   >
                     {cell ? (
-                      <span className="text-[11px] text-white/70" title={hover === cell.id ? cell.id : undefined}>
+                      <span className="text-[11px] text-[var(--text2)]">
                         {cell.isUsed ? '✓' : '○'}
                       </span>
                     ) : (
-                      <span className="text-white/25">—</span>
+                      <span className="text-[var(--faint)]">—</span>
                     )}
                   </td>
                 )
@@ -89,7 +86,7 @@ export function PicksBoard({
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-[11px] text-white/40">Hover a cell for pick id. Empty = traded away.</p>
+      <p className="mt-2 text-[12px] text-[var(--muted)]">○ still to use · ✓ used · — traded away</p>
     </div>
   )
 }

@@ -26,9 +26,11 @@
 
 import { toImageUrl } from '@/lib/media/imageUrl'
 import { prisma } from '@/lib/prisma'
+import { identityMapSleeperIdOf, identityMapSleeperWhere } from '@/lib/player-identity/identityMapSleeperColumn'
 import {
   deriveCanonicalPlayerIdentity,
   deriveCanonicalTeamIdentity,
+  legacyCanonicalTeamName,
   normalizePosition,
   normalizeSport,
   type CanonicalMatchStrategy,
@@ -298,19 +300,24 @@ export async function backfillCanonicalTeams(
     try {
       // Find-then-write rather than upsert: both unique constraints below span a nullable
       // `leagueKey`, which Prisma's compound-unique where-input cannot express as null.
-      const found = await prisma.team.findFirst({
+      // Under the folded name, or under the name a pre-2026-11-20 run stored (en dash kept) — which is then
+      // rewritten, so one school can never be created twice for its dash style.
+      const legacy = legacyCanonicalTeamName(row.name)
+      const candidates = await prisma.team.findMany({
         where: {
           sportKey: identity.sportKey,
           leagueKey: identity.leagueKey,
-          normalizedName: identity.normalizedName,
+          normalizedName: { in: [...new Set([identity.normalizedName, legacy])] },
         },
-        select: { id: true },
+        select: { id: true, normalizedName: true },
       })
+      const found = candidates.find((c) => c.normalizedName === identity.normalizedName) ?? candidates[0] ?? null
 
       const team = found
         ? await prisma.team.update({
             where: { id: found.id },
-            data: { canonicalName: row.name, shortName: row.shortName, lastSeenAt: new Date() },
+            data: { canonicalName: row.name, shortName: row.shortName, lastSeenAt: new Date(),
+              ...(found.normalizedName !== identity.normalizedName && candidates.length === 1 ? { normalizedName: identity.normalizedName } : {}) },
             select: { id: true },
           })
         : await prisma.team.create({
@@ -619,7 +626,13 @@ export async function backfillCanonicalPlayers(
   const identityKeys = new Set<string>()
   const playerRows: PlayerWriteRow[] = []
   const identityRows: IdentityWriteRow[] = []
-  const crosswalkNeeded = new Map<string, { canonicalId: string; sportKey: string; name: string }>()
+  /*
+   * 🛑 KEYED BY SPORT AND SLEEPER ID. Sleeper reuses ids across sports (NFL 1466 Travis Kelce / NBA
+   * 1466 JaVale McGee), and the identity map keeps NFL ids in `sleeperId`, NBA ids in `sleeperNbaId`.
+   * Keyed by the bare id, an NBA player's 1466 read NFL Kelce's row and was handed Kelce's ESPN,
+   * FantasyCalc and Rolling Insights ids.
+   */
+  const crosswalkNeeded = new Map<string, { sleeperId: string; canonicalId: string; sportKey: string; name: string }>()
 
   for (const [groupId, rows] of grouped) {
     /* A group folded onto a player this run does not rebuild writes only its identities, and
@@ -688,17 +701,23 @@ export async function backfillCanonicalPlayers(
       if (row.source && row.externalId) addIdentity(row.source, row.externalId, row.name)
     }
     // 3. Everything already crosswalked in PlayerIdentityMap (resolved in bulk below).
-    if (best.sleeperId) crosswalkNeeded.set(best.sleeperId, { canonicalId, sportKey, name: best.name })
+    if (best.sleeperId) crosswalkNeeded.set(`${sportKey}|${best.sleeperId}`, { sleeperId: best.sleeperId, canonicalId, sportKey, name: best.name })
 
     if (!foldTarget) canonicalPlayers++
   }
 
   if (!opts.dryRun) {
     // Resolve every PlayerIdentityMap crosswalk in chunks rather than one findUnique per player.
-    for (const keys of batches([...crosswalkNeeded.keys()], WRITE_BATCH)) {
-      const maps = await prisma.playerIdentityMap.findMany({ where: { sleeperId: { in: keys } } })
+    // One read per sport, in that sport's Sleeper column; a sport with no Sleeper column reads nothing.
+    const bySport = new Map<string, string[]>()
+    for (const t of crosswalkNeeded.values()) bySport.set(t.sportKey, [...(bySport.get(t.sportKey) ?? []), t.sleeperId])
+    for (const [sportKey, sportIds] of bySport) for (const keys of batches(sportIds, WRITE_BATCH)) {
+      const where = identityMapSleeperWhere(keys, sportKey)
+      if (!where) continue
+      const maps = await prisma.playerIdentityMap.findMany({ where })
       for (const map of maps) {
-        const target = map.sleeperId ? crosswalkNeeded.get(map.sleeperId) : undefined
+        const sid = identityMapSleeperIdOf(map, sportKey)
+        const target = sid ? crosswalkNeeded.get(`${sportKey}|${sid}`) : undefined
         if (!target) continue
         for (const [field, provider] of IDENTITY_MAP_PROVIDERS) {
           const value = (map as unknown as Record<string, string | null>)[field]

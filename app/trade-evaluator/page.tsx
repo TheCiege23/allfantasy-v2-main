@@ -54,14 +54,20 @@ type ScoringFormat =
   | "Categories"
 
 /**
- * The band the verdict moves across when the unmeasured IDP defence-vs-offence ceiling is
- * varied over a defensible range. The route emits it ONLY when that band spans 50 — i.e.
- * when the constant WE picked, not the trade, is what decides who wins.
+ * The grade at each end of a defensible range of the unmeasured IDP defence-vs-offence ceiling,
+ * on the GRADE's own scale (`idpCeilingGradeCaveat` in lib/decision-os/trade/gradeFairness.ts):
+ * value gap → N/100 → letter. The route emits it ONLY when the two ends grade differently — i.e.
+ * when the constant WE picked, not the trade, decides the letter — and only beside a real grade.
  */
 interface IdpCeilingCaveat {
+  gradeLetter: string
+  lowPercentDiff: number
+  highPercentDiff: number
   lowFairness: number
   highFairness: number
-  flipsWinner: boolean
+  lowLetter: string
+  highLetter: string
+  changesGrade: boolean
   note: string
 }
 
@@ -206,13 +212,15 @@ interface ApiTradeResponse {
       redLines?: string[]
     }
   }
+  /** Fairness and veto risk are read off `tradeGrade` server-side (gradeFairness.ts); null when it was withheld. */
   tradeInsights?: {
-    fairnessScore?: number
+    fairnessScore?: number | null
     fairnessMethod?: string
+    fairnessWithheldReason?: string
     netDeltaPct?: number
     labels?: Array<{ id: string; name: string; emoji: string; description: string }>
     warnings?: Array<{ id: string; name: string; emoji: string; description: string }>
-    veto?: boolean
+    veto?: boolean | null
     vetoReason?: string | null
     expertWarning?: string | null
     idpLineupWarning?: string | null
@@ -223,13 +231,13 @@ interface ApiTradeResponse {
       netValue?: number
       totalGiven?: number
       totalReceived?: number
-      fairnessScore?: number
+      fairnessScore?: number | null
     }
     teamB?: {
       netValue?: number
       totalGiven?: number
       totalReceived?: number
-      fairnessScore?: number
+      fairnessScore?: number | null
     }
   }
   serverConfidence?: {
@@ -537,12 +545,21 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
   /*
    * 🛑 LIVE: EVERY NUMBER IS THE RECEIPT'S (2026-09-27). The verdict badge, the totals and the
    * headline all read off the one grade; the composite fairness, value delta, confidence,
-   * acceptance drivers/bullets, positive signal chips and the IDP fairness-range caveat are hidden,
-   * because they are priced differently and could contradict the letter. The AI summary stays, as
-   * supporting text under the grade — its prompt now leads with the receipt.
+   * acceptance drivers/bullets and positive signal chips are hidden, because they are priced
+   * differently and could contradict the letter. The AI summary stays, as supporting text under the
+   * grade — its prompt now leads with the receipt.
+   *
+   * ✅ THE IDP CEILING CAVEAT IS SHOWN AGAIN (2026-11-26). It was hidden while it was a range of the
+   * old 50-is-even composite fairness. It is now on the grade's own scale — letters and N/100 from the
+   * grade's helpers, emitted only when the letter changes — so it qualifies the letter rather than
+   * contradicting it. Belt and braces: it is shown only beside a real grade whose letter is the one
+   * the caveat was computed for.
    */
   const panel = liveGradePanel(payload.tradeGrade)
   const divisionImpacts = payload.tradeGrade?.divisionImpacts ?? []
+  const caveat = payload.tradeInsights?.idpCeilingCaveat ?? null
+  const idpCeilingCaveat =
+    caveat && !panel.gradeWithheld && caveat.changesGrade && caveat.gradeLetter === panel.senderGrade ? caveat : null
   return {
     ...shared,
     live: true,
@@ -563,7 +580,7 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
     analysisBullets: (payload.evaluation?.explanation?.leagueContextNotes ?? []).filter(Boolean),
     drivers: [],
     labels: warningChips,
-    idpCeilingCaveat: null,
+    idpCeilingCaveat,
     counterOffer: buildCounterOffer(payload),
     negotiationSteps: buildNegotiationSteps(payload),
     betterAlternatives: payload.evaluation?.betterAlternatives ?? [],
@@ -1515,12 +1532,15 @@ function TradeHubInner() {
                     </div>
                     <p className="mt-2 leading-relaxed text-sky-100/80">{result.idpCeilingCaveat.note}</p>
                     <div className="mt-3 flex items-center gap-2 text-[11px] text-sky-200/70">
-                      <span className="rounded-md border border-sky-400/25 bg-sky-500/10 px-2 py-1 font-semibold tabular-nums">
-                        {Math.min(result.idpCeilingCaveat.lowFairness, result.idpCeilingCaveat.highFairness)}
-                        {" – "}
-                        {Math.max(result.idpCeilingCaveat.lowFairness, result.idpCeilingCaveat.highFairness)}
+                      <span
+                        data-testid="idp-ceiling-caveat-range"
+                        className="rounded-md border border-sky-400/25 bg-sky-500/10 px-2 py-1 font-semibold tabular-nums"
+                      >
+                        {result.idpCeilingCaveat.lowLetter} ({result.idpCeilingCaveat.lowFairness}/100)
+                        {" → "}
+                        {result.idpCeilingCaveat.highLetter} ({result.idpCeilingCaveat.highFairness}/100)
                       </span>
-                      <span>fairness range across a defensible ceiling</span>
+                      <span>grade across a defensible IDP rate</span>
                     </div>
                   </div>
                 ) : null}

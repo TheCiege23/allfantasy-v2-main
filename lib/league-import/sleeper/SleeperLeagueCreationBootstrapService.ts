@@ -10,7 +10,9 @@ import { importedRosterOwnerKey, planImportedRosterWrites } from '../importedRos
 import { changeAwareWritesEnabled } from '../changeAwareWrites'
 import { importedRosterUnchanged } from '../rosterWriteEquivalence'
 import { writeTeamPerformances, type TeamPerformanceWrite } from '../teamPerformanceWrites'
+import { isMatchupFactProvider, writeCurrentSeasonMatchupFacts } from './currentSeasonMatchupFacts'
 import { stripCommissionerFlagsFromUnprovenClaims } from '../espn/espnPublicMemberImport'
+import { loadTeamsRunOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer'
 
 interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
@@ -21,6 +23,11 @@ interface SleeperLeagueBootstrapResult {
    * league is NOT fully current and must not be reported as such.
    */
   rostersPreserved?: number
+  /**
+   * Teams left alone because AllFantasy runs them: switched teams in a league made official here
+   * (lib/league/switching). Their team row and roster are AllFantasy's, not the old platform's.
+   */
+  teamsKeptOnAllFantasy?: number
   teamPerformancesCreated: number
   /** Rows moved to their team's current owner key (an owner change, or an orphan's own key). */
   rostersRekeyed?: number
@@ -145,6 +152,7 @@ export async function bootstrapLeagueFromNormalizedImport(
   let rostersCreated = 0
   /** Teams whose roster fetch failed and whose stored roster was therefore left alone (IMP-04). */
   let rostersPreserved = 0
+  let teamsKeptOnAllFantasy = 0
 
   /*
    * 🛑 A TEAM'S ROW IS FOUND BY ITS TEAM ID, NOT ITS OWNER. Matching by owner key made every orphan
@@ -153,7 +161,7 @@ export async function bootstrapLeagueFromNormalizedImport(
    * ever add a claim, so a claim made through an invite keeps its roster key.
    */
   const provider = normalized.source.source_provider
-  const [storedRosters, storedTeams] = await Promise.all([
+  const [storedRosters, storedTeams, runOnAllFantasy] = await Promise.all([
     prisma.roster.findMany({
       where: { leagueId },
       select: { id: true, platformUserId: true, playerData: true, faabRemaining: true, waiverPriority: true },
@@ -162,6 +170,7 @@ export async function bootstrapLeagueFromNormalizedImport(
       where: { leagueId },
       select: { externalId: true, claimedByUserId: true },
     }),
+    loadTeamsRunOnAllFantasy(leagueId),
   ])
   const claimByTeam = new Map(storedTeams.map((t) => [t.externalId, t.claimedByUserId]))
 
@@ -226,6 +235,16 @@ export async function bootstrapLeagueFromNormalizedImport(
   }
 
   for (const r of normalized.rosters) {
+    /*
+     * 🛑 A SWITCHED TEAM IN AN OFFICIAL LEAGUE IS ALLFANTASY'S. Its manager makes their moves here now, so
+     * the old platform's copy of the team (name, record, roster, lineup, FAAB) is stale by definition.
+     * Writing it would silently undo every move they made on AllFantasy. Empty for every league that is
+     * not official (lib/league/switching/switchingLeague.ts, teamsRunOnAllFantasy).
+     */
+    if (runOnAllFantasy.externalIds.has(String(r.source_team_id))) {
+      teamsKeptOnAllFantasy++
+      continue
+    }
     const standing = standingsByTeam.get(r.source_team_id)
     const rank = standing?.rank ?? null
     const pointsAgainst = r.points_against ?? (standing?.points_against ?? 0)
@@ -275,12 +294,10 @@ export async function bootstrapLeagueFromNormalizedImport(
         ownerName: r.owner_name,
         teamName: r.team_name || r.owner_name,
         avatarUrl: r.avatar_url ?? null,
-        wins: r.wins,
-        losses: r.losses,
-        ties: r.ties,
-        pointsFor: r.points_for,
-        pointsAgainst,
-        currentRank: rank,
+        // Rule 3 of a switching league: once official, AllFantasy keeps every team's record.
+        ...(runOnAllFantasy.official
+          ? {}
+          : { wins: r.wins, losses: r.losses, ties: r.ties, pointsFor: r.points_for, pointsAgainst, currentRank: rank }),
         role: importedRole,
         isOrphan,
         platformUserId: r.source_manager_id || null,
@@ -509,6 +526,32 @@ export async function bootstrapLeagueFromNormalizedImport(
   teamPerformancesCreated = performances.processed
 
   /*
+   * The same schedule, as head-to-head rows in `dw_matchup_facts`. This is what keeps the season
+   * being played current there on every sync; see `currentSeasonMatchupFacts.ts`. Sleeper, ESPN and
+   * Fantrax, each in its own history service's row conventions. Yahoo and MFL are left to their
+   * history services until their conventions are checked the same way. A failure here never fails
+   * the sync.
+   */
+  const matchupFactProvider = normalized.source.source_provider
+  if (isMatchupFactProvider(matchupFactProvider)) {
+    try {
+      await writeCurrentSeasonMatchupFacts({
+        leagueId,
+        provider: matchupFactProvider,
+        sport: normalized.league.sport,
+        season: normalized.league.season,
+        schedule: normalized.schedule,
+      })
+    } catch (err) {
+      console.error('[bootstrapLeagueFromNormalizedImport] could not refresh current-season matchup facts', {
+        leagueId,
+        provider: matchupFactProvider,
+        error: err instanceof Error ? err.name : 'unknown',
+      })
+    }
+  }
+
+  /*
    * 🛑 A TEAM SOMEONE PICKED WITHOUT PROOF NEVER CARRIES THE COMMISSIONER FLAG. The upserts above copy
    * `is_commissioner` from the provider on every sync, and ~20 places grant commissioner rights from
    * that column. Claiming a flagged team without proof is refused up front; this covers the flag
@@ -528,6 +571,7 @@ export async function bootstrapLeagueFromNormalizedImport(
     rostersCreated,
     teamPerformancesCreated,
     rostersPreserved,
+    teamsKeptOnAllFantasy,
     rostersRekeyed: rekeys.length,
     rosterDuplicateRows: rosterPlan.duplicateRows,
     rosterKeyConflicts: rosterPlan.plans.filter((p) => p.keyConflict).length,

@@ -56,11 +56,14 @@ export const maxDuration = 300
  *   external-only fallback) → per-week transactions → draft picks → ingest (idempotent writer,
  *   externalSourceKey dedupe — safe to re-run daily).
  *
- * Bounds: ≤90 Sleeper leagues per fire, split between a starved (longest-since-attempted) bucket
- * and a demand (freshest-updated) bucket — see the 2026-09-07 header note below — 180s ingest
- * budget with honest skippedForTime, per-league failure isolation. Telemetry: SyncJobRun
- * `cron-decision-os-activity-ingest`. Runs 07:00 UTC — 30 min before the snapshot-capture walk,
- * so each day's snapshots see that day's ingested activity.
+ * Bounds: ≤250 Sleeper leagues queued per fire (`LEAGUE_CAP`), split between a starved
+ * (longest-since-attempted) bucket and a demand (freshest-updated) bucket — see the 2026-09-07 header
+ * note below — 180s ingest budget with honest skippedForTime, per-league failure isolation.
+ * Telemetry: SyncJobRun `cron-decision-os-activity-ingest`.
+ *
+ * Runs every 4 hours (since 2026-11-23; daily at 07:00 before). One daily fire could not lap 811
+ * leagues, and the inactive-manager ladder reads this table. The 04:00 fire still lands before the
+ * 07:30 snapshot-capture walk, so each day's snapshots see that day's activity.
  *
  * ── Aug 2026, step 1: THE HANG ────────────────────────────────────────────────────────────
  * This job stopped completing after 2026-08-17 and left six `SyncJobRun` rows stuck in `running`
@@ -204,10 +207,20 @@ const RELAY_BATCH_SIZE = 100
  * started at 239s runs to completion past the check and the response still has to return.
  */
 const RELAY_ONLY_BUDGET_MS = 240_000
-/** Was 40. See the 2026-09-07 header note — raised alongside the rotation fix, not instead of it. */
-const LEAGUE_CAP = 90
-/** Slots reserved for the starved (longest-since-attempted) bucket before demand gets any. See `mergeRotation`. */
-const STARVED_RESERVE_INGEST = 50
+/**
+ * Was 40, then 90 (2026-09-07). 250 since 2026-11-23, when the writer stopped spending ~1,000
+ * sequential queries per league re-saving unchanged rows (prismaImportedActivityStore.ts `prefetch`).
+ *
+ * MEASURED BEFORE: 811 eligible Sleeper leagues (796 in season), ~38 processed per 180s fire and 52
+ * of 90 deferred, so one lap took about three weeks — TPG Fantasy League's newest imported move was
+ * 14 days old while `dw_transaction_facts` held 52 newer ones. The cap only bounds how many are
+ * QUEUED: `INGEST_BUDGET_MS` and the per-league deadline still bound the fire exactly as before, so
+ * a cap the budget cannot reach costs nothing. Re-read `sync_job_runs` after the first fires and set
+ * it from the measured per-league time rather than this estimate.
+ */
+const LEAGUE_CAP = 250
+/** Slots reserved for the starved (longest-since-attempted) bucket before demand gets any. Same ~55% share as at 90. See `mergeRotation`. */
+const STARVED_RESERVE_INGEST = 140
 /** `platform_config` key holding the rotation's `{ [leagueId]: isoLastAttemptedAt }` map. Not a feature toggle — reuses the same generic KV store deliberately, no schema change. */
 const ROTATION_CONFIG_KEY = "decision_os_activity_ingest_rotation"
 /**
@@ -838,9 +851,16 @@ export async function GET(request: Request) {
       // in SyncJobRun telemetry rather than hidden inside the ingest job's numbers.
       rowsWritten: s.created + s.updated + (s.platform?.created ?? 0) + (s.platform?.updated ?? 0) + s.relay.dispatched + s.managerProjection.managersWritten + s.leagueProjection.leaguesWritten,
       rowsSkipped: s.skippedForTime,
+      /*
+       * ⚠ A FEW SLOW LEAGUES ARE A WARNING, NOT A FAILED RUN (2026-11-23). Any entry here marks the whole
+       * run `failed` (buildSyncJobRunPayload), and two or three of ~90 leagues timing out did that to
+       * every fire for weeks — 37 leagues ingested correctly, "failed" in the dashboard. They are warnings
+       * now, so the run reads `partial`; a fire where NOTHING was ingested still reports them as errors.
+       */
       errors: [
-        ...(s.storeUnavailable ? ["imported_activity_store_unavailable"] : s.errors),
-        ...(s.platform?.errors ?? []),
+        ...(s.storeUnavailable ? ["imported_activity_store_unavailable"] : s.processed === 0 ? s.errors : []),
+        // Same rule for the external-provider leagues: errors only when none of them was ingested.
+        ...((s.platform?.processed ?? 0) === 0 ? (s.platform?.errors ?? []) : []),
         // A relay failure must be visible, not swallowed by the isolating catch above.
         ...(s.relay.relayError ? [`outbox_relay: ${s.relay.relayError}`] : []),
         ...(s.managerProjection.error ? [`manager_projection: ${s.managerProjection.error}`] : []),
@@ -848,6 +868,8 @@ export async function GET(request: Request) {
         ...(s.rotationPersistError ? [`rotation_persist: ${s.rotationPersistError}`] : []),
       ],
       warnings: [
+        ...(!s.storeUnavailable && s.processed > 0 && s.failed > 0 ? [`${s.failed} of ${s.processed + s.failed} leagues failed: ${s.errors.join('; ')}`] : []),
+        ...((s.platform?.processed ?? 0) > 0 && (s.platform?.failed ?? 0) > 0 ? [`${s.platform!.failed} external-provider leagues failed: ${s.platform!.errors.join('; ')}`] : []),
         ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : []),
         // A platform league deferred by its own budget wrote nothing — say so, or it reads as quiet.
         ...((s.platform?.skippedForTime ?? 0) > 0 ? [`${s.platform!.skippedForTime} external-provider leagues deferred by the ${PLATFORM_BUDGET_MS / 1000}s platform budget`] : []),

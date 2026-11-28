@@ -14,7 +14,7 @@
  * so an open trade panel or player card is never covered by it.
  */
 
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Bell, X } from 'lucide-react'
 
 type YoureUpAlertProps = {
@@ -29,11 +29,12 @@ type YoureUpAlertProps = {
   onDraftSuggestion: () => void
   onSeePlayers: () => void
   onDismiss: () => void
+  /** True when the player list is already on screen (the phone's Players tab): "See players" would go nowhere. */
+  playersOnScreen?: boolean
 }
 
 export function YoureUpAlert({
   pickLabel,
-  timed,
   suggestion,
   backToBackLabel,
   drafting,
@@ -41,7 +42,31 @@ export function YoureUpAlert({
   onDraftSuggestion,
   onSeePlayers,
   onDismiss,
+  playersOnScreen = false,
 }: YoureUpAlertProps) {
+  /*
+   * Two lines, not three (2026-11-24, the simplify pass): "Your pick clock is running" said what the header's
+   * countdown shows, so the line under the title is the suggestion (or the back-to-back warning) instead.
+   * `timed` stays in the props so the caller's contract is unchanged; the clock itself is the header's.
+   */
+  const detail =
+    [
+      suggestion ? `${suggestion.source === 'queue' ? 'Top of your queue' : 'Best available by ADP'}: ${suggestion.name} · ${suggestion.position}.` : null,
+      backToBackLabel ? `You pick again at ${backToBackLabel} — back-to-back.` : null,
+    ]
+      .filter(Boolean)
+      .join(' ') || null
+  /*
+   * A short buzz when it becomes your turn (2026-11-19), on phones that allow it. Once per pick:
+   * the alert mounts once per pick. Browsers without the Vibration API (iOS Safari) skip it.
+   */
+  useEffect(() => {
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate([70, 50, 70])
+    } catch {
+      /* a hint, never an error */
+    }
+  }, [pickLabel])
   return (
     <div
       role="alert"
@@ -52,7 +77,7 @@ export function YoureUpAlert({
         <Bell className="h-5 w-5 shrink-0" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="text-[15px] font-extrabold uppercase tracking-[0.04em]">You&apos;re up · {pickLabel}</p>
-          {timed ? <p className="text-[13px] font-semibold">Your pick clock is running</p> : null}
+          {detail ? <p className="text-[13px] font-semibold leading-snug" data-testid="draft-youre-up-detail">{detail}</p> : null}
         </div>
         <button
           type="button"
@@ -64,15 +89,8 @@ export function YoureUpAlert({
           <X className="h-4 w-4" aria-hidden />
         </button>
       </div>
-      {suggestion || backToBackLabel ? (
-        <p className="mt-1.5 text-[14px] leading-snug">
-          {suggestion
-            ? `${suggestion.source === 'queue' ? 'Top of your queue' : 'Best available by ADP'}: ${suggestion.name} · ${suggestion.position}.`
-            : null}
-          {backToBackLabel ? ` You pick again at ${backToBackLabel} — back-to-back.` : null}
-        </p>
-      ) : null}
-      <div className="mt-2.5 flex gap-2">
+      {/* No empty row: on the Players tab with nothing to suggest there is no button to show. */}
+      {(suggestion && canDraft) || !playersOnScreen ? <div className="mt-2.5 flex gap-2">
         {suggestion && canDraft ? (
           <button
             type="button"
@@ -84,15 +102,15 @@ export function YoureUpAlert({
             {drafting ? 'Drafting…' : `Draft ${suggestion.name}`}
           </button>
         ) : null}
-        <button
+        {playersOnScreen ? null : <button
           type="button"
           onClick={onSeePlayers}
           data-testid="draft-youre-up-see-players"
           className="h-11 flex-1 rounded-xl border-2 border-[#0a111d] px-3 text-[15px] font-extrabold"
         >
           See players
-        </button>
-      </div>
+        </button>}
+      </div> : null}
     </div>
   )
 }

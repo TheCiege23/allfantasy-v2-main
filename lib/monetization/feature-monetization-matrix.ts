@@ -392,6 +392,26 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
       components: ["AICoachingTab"],
     },
   },
+  /*
+   * 2026-11-26: the "My decisions" screen. requiredPlanId "pro" ONLY: the matrix accepts exactly one plan,
+   * AF Supreme reaches it through SUPREME_INCLUDED_PLAN_IDS (supreme → pro, commissioner), and AF
+   * Commissioner alone does not — which is the point; it is not `af_intelligence`.
+   */
+  {
+    key: "decision_log_history",
+    title: "Your decision history",
+    accessType: "subscription_only",
+    requiredPlanId: "pro",
+    tokenRuleCode: null,
+    lockedReason: "Your decision history — every logged call with its trade grade and how it turned out — is part of AF Pro.",
+    backendEnforcement: "requireFeatureEntitlement(decision_log_history) on GET /api/legacy/decision-log (every view), plus the /core/decisions screen drawn as a CoreDepthLock from the server-side paywall read.",
+    frontendGateBehavior: "CoreDepthLock (from=lock_decision_history) in place of the screen; the list is never fetched for a locked viewer.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/core/decisions"],
+      components: ["DecisionLogScreen"],
+    },
+  },
   {
     key: "guillotine_ai",
     title: "Guilly Chimmy",
@@ -562,12 +582,12 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
   {
     key: "storyline_creation",
     title: "Storyline Creation",
-    accessType: "subscription_or_tokens",
+    accessType: "subscription_only",
     requiredPlanId: "commissioner",
-    tokenRuleCode: "ai_storyline_creation",
+    tokenRuleCode: null,
     lockedReason: "Storyline creation is part of AF Commissioner.",
-    backendEnforcement: "requireFeatureEntitlement(storyline_creation) with allowTokenFallback.",
-    frontendGateBehavior: "InContextMonetizationCard + upgrade/token CTA.",
+    backendEnforcement: "League commissioner's plan via lib/league-story-ai/leagueStoryAiGate.ts (storyline_creation), plus per-league daily caps; tokens do not unlock it.",
+    frontendGateBehavior: "StoryAiLockNotice (LockedFeatureCard) + upgrade CTA.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
       routes: ["/app/league/[leagueId]"],
@@ -769,7 +789,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "pro",
     tokenRuleCode: null,
     lockedReason: "Finding real trade opportunities against your roster is part of AF Pro.",
-    backendEnforcement: "Server: aiCostGate trade_finder (POST /api/trade-finder) and requireFeatureEntitlement on POST /api/trade-finder/matchmaking. Client FeatureGate in components/TradeFinderV2.tsx (the AF Legacy finder tab). /trade-finder redirects to the Trades screen finder.",
+    backendEnforcement: "Server: aiCostGate trade_finder (POST /api/trade-finder) and requireFeatureEntitlement on POST /api/trade-finder/matchmaking. Since 2026-11-27 also the /core finder (GET /api/league/trade-finder) and the redraft Trade Center's partner search and package finder (/api/redraft/trades/discovery, /package-finder), through the `trade_finder` core depth (lib/core-app/coreDepthAccess.ts) — AF Pro and AF Supreme, not AF Commissioner alone. Client FeatureGate in components/TradeFinderV2.tsx (the AF Legacy finder tab). /trade-finder redirects to the Trades screen finder.",
     frontendGateBehavior: "FeatureGate around the 'Find Trades' / 'Find Best Partners' buttons.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -868,6 +888,56 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     surfaceHints: {
       routes: ["/af-legacy"],
       components: [],
+    },
+  },
+  /*
+   * Owner's decision 2026-11-27: the /af-legacy routes that called OpenAI for ANYONE (no session, `userId`
+   * from the body — gating audit H1/H2) now need sign-in and AF Legacy, like the other deep tools above.
+   * The deterministic parts stay free to a signed-in user: the trade's letter grade, the league preview.
+   */
+  {
+    key: "legacy_trade_lookback",
+    title: "Trade lookback",
+    accessType: "subscription_only",
+    requiredPlanId: "war_room",
+    tokenRuleCode: null,
+    lockedReason: "Chimmy's read on a past trade, and what you could have done instead, is part of AF Legacy.",
+    backendEnforcement: "Server (2026-11-27): POST /api/legacy/trade-history `grade` needs a session and writes Chimmy's prose only for this plan (the letter grade stays free); POST /api/legacy/trade-alternatives needs a session and requireFeatureEntitlement(legacy_trade_lookback).",
+    frontendGateBehavior: "TradeAlternatives shows the server's plan sentence with an upgrade link in place of the comparison.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/af-legacy?tab=trade"],
+      components: ["TradeAlternatives"],
+    },
+  },
+  {
+    key: "legacy_league_transfer",
+    title: "League storylines",
+    accessType: "subscription_only",
+    requiredPlanId: "war_room",
+    tokenRuleCode: null,
+    lockedReason: "Chimmy's storylines and rivalry write-ups for your league are part of AF Legacy.",
+    backendEnforcement: "Server (2026-11-27): POST /api/legacy/transfer needs a session; the two model calls (storylines, rivalry narratives) run only for this plan, everyone else gets the data-built storylines.",
+    frontendGateBehavior: "A FeatureGate under the transfer preview names what AF Legacy adds.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/af-legacy?tab=transfer"],
+      components: [],
+    },
+  },
+  {
+    key: "legacy_community_insights",
+    title: "Chimmy news summary",
+    accessType: "subscription_only",
+    requiredPlanId: "war_room",
+    tokenRuleCode: null,
+    lockedReason: "Chimmy's summary of this week's news and injuries is part of AF Legacy.",
+    backendEnforcement: "Server (2026-11-27): GET /api/legacy/community-insights?summarize=true (and /api/ai/community-insights) needs a session and requireFeatureEntitlement(legacy_community_insights); the plain news and injury lists stay public.",
+    frontendGateBehavior: "FeatureGate around the 'Summarize' button in CommunityInsights.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/af-legacy"],
+      components: ["CommunityInsights"],
     },
   },
 ] as const

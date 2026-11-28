@@ -25,7 +25,8 @@ describe('Sleeper tabs', () => {
       Draft: ['Draft HQ'],
       Matchup: ['Matchup', 'Schedule', 'War Room'],
       Team: ['My team', 'Players & waivers', 'Player search', 'Chimmy Coaching'],
-      League: ['Overview', 'Standings & playoffs', 'Activity', 'League chat', 'Legacy'],
+      // One page (owner, 2026-11-27): this week's matchups, the standings and the activity, like Sleeper's League tab.
+      League: ['Standings & playoffs'],
       Trade: ['Trades', 'Decision OS'],
       News: ['News', 'Live Intel'],
       Settings: ['League settings', 'Commissioner tools'],
@@ -34,22 +35,27 @@ describe('Sleeper tabs', () => {
 
   it('every tab the league has is still reachable, under exactly one top tab', () => {
     const leaves = nativeNavLeafIds(groups)
-    // `home` is the core page, not this league's; native_home is its League home.
-    expect([...leaves].sort()).toEqual(CORE.map(t => t.id).filter(id => id !== 'home').sort())
+    // `home` is the core page, not this league's. History, activity, chat and the old overview are not sub-tabs
+    // any more (2026-11-27): the League page shows the activity and links to history, chat is in the bottom bar.
+    const offNav = new Set(['home', 'native_home', 'legacy', 'activity', 'league_chat'])
+    expect([...leaves].sort()).toEqual(CORE.map(t => t.id).filter(id => !offNav.has(id)).sort())
     expect(new Set(leaves).size).toBe(leaves.length)
   })
 
   it('a top tab opens its first sub-tab, and a sub-tab finds its top tab', () => {
-    expect(tabs.map(t => t.id)).toEqual(['draft', 'matchups', 'roster', 'native_home', 'trades', 'news', 'settings'])
+    expect(tabs.map(t => t.id)).toEqual(['draft', 'matchups', 'roster', 'standings', 'trades', 'news', 'settings'])
     expect(nativeNavTabFor(groups, 'waivers')?.label).toBe('Team')
     expect(nativeNavTabFor(groups, 'decide')?.label).toBe('Trade')
     expect(nativeNavTabFor(groups, 'nope')).toBeNull()
   })
 
-  it('after the draft, Draft HQ moves under League and Draft is no longer a tab', () => {
-    const after = buildNativeLeagueNavigation(CORE, true, false, undefined, { draftDone: true })[0].items
+  it('after the draft, the draft lives only in League history: no Draft tab, no Draft HQ anywhere in the nav', () => {
+    const groupsAfter = buildNativeLeagueNavigation(CORE, true, false, undefined, { draftDone: true })
+    const after = groupsAfter[0].items
     expect(after.map(t => t.label)).toEqual(['Matchup', 'Team', 'League', 'Trade', 'News', 'Settings'])
-    expect(after.find(t => t.label === 'League')?.children.map(c => c.id)).toContain('draft')
+    expect(nativeNavLeafIds(groupsAfter)).not.toContain('draft')
+    // History opens from the League page's own link; League itself is that one page.
+    expect(after.find(t => t.label === 'League')?.children.map(c => c.id)).toEqual(['standings'])
   })
 
   it('a member gets the read-only League settings and no commissioner tools', () => {

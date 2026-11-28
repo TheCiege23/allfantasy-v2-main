@@ -42,6 +42,7 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `E-04` | Rate limits. ESPN documents none. A full roster sweep is 362 requests. | UNVERIFIED — spread the sweep across cron ticks; do not burst |
 | `E-05` | Image rights for hotlinking ESPN headshots. Precedent exists (college football devy headshots already use this CDN), but TheSportsDB's contract restricts headshots to CC-licensed images. | **RESOLVED 2026-10-01 — owner decision:** use them for NCAAB on the same basis as college football. |
 | `E-06` | Scope of ESPN roster use given `M-02` (current players with no RI row). | **Updated 2026-10-30:** owner confirmed permission to investigate and use ESPN rosters for college eligibility. The earlier photos-only scope is superseded; roster snapshots retain unmatched athletes, but do not themselves create draftable players or enable scoring. |
+| `E-08` | Current-team player headshots for NBA, NHL and MLB. TheSportsDB's cutouts are not updated after a trade (Darius Garland, traded CLE → LAC, still shows a Cavaliers jersey), and no fresher source is stored: `sports_core_player_images` for NBA is 100% TheSportsDB, and `PlayerIdentityMap` has 0 ESPN ids for NBA/NHL/MLB (measured 2026-11-27). | **RESOLVED 2026-11-27 — owner decision** ("Add ESPN photos"): use ESPN roster headshots for NBA, NHL and MLB on the same basis as `E-05`, TheSportsDB kept as the fallback. Rosters captured: `fixtures/roster.{NBA.team12,NHL.team13,MLB.team10}.json`. |
 | `E-07` | College basketball game and player box scores for fantasy scoring. | **Updated 2026-10-30:** owner confirmed permission to use ESPN box scores. One final-game summary and its daily scoreboard returned HTTP 200; a 403 must still stop the ingest pass. Scoring integration, schedule coverage, rate limits, and historical transfer handling remain to be verified. |
 
 **NCAAB contract captures, 2026-10-31:** `summary.NCAAB.event401825532.json` and
@@ -206,3 +207,119 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
   - Fumble recoveries (96) = Sleeper `fum_rec` + `def_st_fum_rec`; return TDs score as sums at equal weight.
   - ⚠ A shutout has NO `pts_allow` key in Sleeper's weekly rows (zeros are omitted). Reading only rows that
     carry the key dropped exactly the 10 shutouts of 2024–25 and failed the 0-points bucket for no real reason.
+
+
+## Knockout / total-points league with no schedule, 2026-11-20 — recorded without probing
+
+- `KO-01` OPEN, ASK BEFORE PROBING: an ESPN NFL league in a knockout (guillotine) format has no weekly
+  scores stored, so its Guilly tab has nothing to show. Measured on production, read-only: the league
+  syncs daily (`syncStatus: synced`, 18 rosters of 15 players), and its matchup sync state
+  (`SportsDataCache` key `external_matchup_sync:espn:<leagueId>:2026`) reads `status: synced,
+  weeksWritten: 0, weeksUnchanged: 0, soloRowsWritten: 0` in NFL week 11. Per the note on that counter in
+  `lib/import-os/collector/externalMatchupParity.ts`, all three at zero means ESPN served NO schedule
+  entries for this league, paired or solo; unpaired entries would have landed as solo rows. It is the
+  only one of 10 in-season ESPN leagues with no `WeeklyMatchup` rows.
+  - What is not known: where ESPN carries each team's points per week for a league with no schedule
+    (a standings or team view, or per-period team totals), and that view's shape.
+    `fixtures/fantasy-league.NFL.2026.json` is a head-to-head league and cannot answer it.
+  - Not probed. Resolving it needs a capture of this league format through `scripts/probe.sh`, committed
+    as a fixture in the same change, and the owner's go-ahead.
+
+## Pending trade offers, 2026-11-23 — recorded without probing
+
+- `T-03` WAS OPEN (captured 2026-11-27, below): no committed endpoint or fixture lists ESPN trade offers that are PROPOSED and not yet
+  accepted, so the provider-offer ledger (`lib/provider-trades/providerTradeOfferLedger.ts`) and Chimmy's
+  pending-trade block stay Sleeper-only for ESPN. `fantasy-league.NFL.2026.json`'s `mTransactions2` held 8
+  executed roster moves and no trade. `kona_league_communication` answers 401 without cookies even for a
+  public league (`T-01`). A pending offer is most likely visible only to the teams involved, which would
+  mean the reading member's `espn_s2`/`SWID` cookies and one read per user, not one per league. That is
+  unconfirmed.
+- **Needed:** which view (or `mTransactions2` filter) returns pending offers and with whose cookies; then one
+  capture via `scripts/probe.sh` from a league the owner chooses, with an offer open, redacted with
+  `scripts/redact-fantasy.mjs`, committed with the ledger mapping. Not probed.
+- `T-03` DECISION (owner, 2026-11-25) — **whose offers:** AllFantasy may read pending trade offers but
+  must keep and show ONLY offers the signed-in user sent or received. An offer between two other teams
+  is never shown to or kept for anyone else. The same ruling answers Yahoo (`contracts/yahoo/GAPS.md`)
+  and Fleaflicker `G-07`'s "whose" question.
+- `T-03` CAPTURE PATH BUILT 2026-11-25, AWAITING OWNER CAPTURE: the owner-only admin button
+  (Admin → Data & reliability → Provider contract capture; `lib/league-import/espn/espnContractCapture.ts`)
+  reads the owner's own league with his own stored cookies: `mTeam`+`mTransactions2` (contract-named) and
+  ONE labelled candidate, `mPendingTransactions`, recording each request's HTTP status. The body is
+  redacted server-side (`lib/admin/contractCapture/redactContractCapture.ts`, the TS sibling of
+  `scripts/redact-fantasy.mjs`, same refuse-if-anything-survives rule) and downloaded; nothing is stored.
+  Open until that file is reviewed and committed. ⚠ If it shows offers between two OTHER teams, that is a
+  finding about ESPN's visibility — record it here and drop those entries before committing.
+- `T-03` CAPTURED 2026-11-27 — `fixtures/fantasy-pending.NFL.2026.json` (owner's admin capture, redacted
+  server-side, 29 synthetic values, 3 credential values verified absent; committed unmodified). Settled:
+  - `view=mPendingTransactions` is a REAL view (no longer a candidate): HTTP 200 and a top-level
+    `pendingTransactions` array, beside `draftDetail`/`status` only.
+  - Request 1 (`mTeam`+`mTransactions2`) carries the same offer in `teams[].pendingTransactions` of BOTH
+    teams involved (2 and 7, and no other team) and in the top-level `transactions` list as
+    `type: 'TRADE_PROPOSAL', status: 'PENDING'`.
+  - Offer: `{id (uuid), type, status, isPending, teamId (proposer team), memberId (proposer member),
+    proposedDate ms, expirationDate ms, teamActions {"<teamId>": "ACCEPTED"}, scoringPeriodId, items[]}`;
+    item `{type: 'TRADE' | 'DROP', playerId (ESPN id), fromTeamId, toTeamId, fromLineupSlotId,
+    toLineupSlotId}`. A `DROP` has `toTeamId: 0`: the proposing side's conditional drop.
+  - The real offer: team 7 gives 4360761 (Michael Wilson) to team 2, gets 4426515 (Puka Nacua), drops
+    4432708 (Marvin Harrison Jr.); team 7 has accepted; expires 2026-11-28 22:43:50 UTC.
+  - Wired: `lib/provider-trades/syncEspnTradeOffers.ts` (scheduled, cookies of the league's connected user
+    only, writes `provider_trade_offers` with `provider: 'espn'`, a `drop` asset type and `expiresAt`).
+- `T-03a` NOT OBSERVABLE: whether a member sees offers between two OTHER teams. The captured league had one
+  pending offer (teams 7 and 2), and the capture records no owner team (`ownerTeam: null`), so it cannot say
+  whether the reading account was a party to it. The owner rule stands regardless: the sweep keeps only
+  offers the connected user's team sent or received, and its test plants a third-party offer to prove it.
+- `T-03b` UNVERIFIED: whether ESPN omits `pendingTransactions` or sends `[]` when nothing is pending. Only a
+  body that carries the array counts as a complete read (an absent offer is then retired as `vanished`);
+  without it nothing is retired, and an offer still leaves "pending" at its stated `expirationDate`.
+- `T-03c` UNVERIFIED: statuses other than `PENDING` (accepted, declined, cancelled, countered) and whether
+  they ever appear in this list. Mapped to `unknown`, never guessed. A countered offer's shape is not known.
+- `T-03d` NOT CAPTURED, READ-ONLY: accept, decline and counter. AllFantasy shows the offer and links to ESPN.
+
+## Per-player weekly fantasy points, 2026-11-23 — recorded without probing
+
+- `PS-01` WRITER BUILT 2026-11-24 (current week only). `lib/league-import/espn/espnPlayerWeekScores.ts` (pure
+  parser + crosswalk step, tested against the week-11 fixture in `__tests__/league-import/espn-player-week-scores.test.ts`)
+  and `espnPlayerWeekScoresWriter.ts` (crosswalk to the canonical Sleeper id via `crosswalkToSleeperIds` +
+  `withTeamDefenseIds`, upsert, source `espn`). Hooked into `fetchEspnLeagueForImport` behind the opt-in
+  `recordPlayerWeekScores`, which only the import pipeline passes — so the Fantasy OS collector's scheduled ESPN
+  sync writes from the response it already reads; `mMatchupScore` was added to that request's view list (one view,
+  no extra request). Fire and forget, count-only warnings; `ESPN_PLAYER_WEEK_SCORES=off` disables it.
+  - Rows are keyed `espn:<platformLeagueId>`, NOT the bare id: they hold Sleeper ids, and readers that look a
+    league's rows up by the ids its ESPN roster holds would otherwise match ESPN 12483 (Stafford) to Sleeper
+    12483 (Bech). The bench ledger (`ledgerGrading.ts loadBenchRows`) joins the prefixed key; nothing else reads it.
+  - My Team's bench check now records ESPN NFL calls (`benchLedgerWeek`).
+  - STILL OPEN: past weeks (`S-01`, never requested) — a week is stored only if the sync read it while current,
+    and only players whose game had started (`lineupLocked`) by the last in-week read; post-week stat
+    corrections are not seen; a playoff matchup spanning two NFL weeks (`currentMatchupPeriod` !=
+    `scoringPeriodId`) is skipped, because no capture shows which week its block describes. That the import's
+    view list WITHOUT `scoringPeriodId` returns the block is shown by `fixtures/fantasy-league.NFL.2026.json`
+    (same views plus more, no `scoringPeriodId`), not by a capture of the exact list.
+- `PS-01` SHAPE RESOLVED 2026-11-24: `scripts/probe.sh fantasy-matchup NFL`
+  captured week 11 of the owner-chosen public league, with his explicit approval, as
+  `fixtures/fantasy-matchup.NFL.2026.week11.json` (see `fantasy_nfl_matchup` in ENDPOINTS.yaml). Do not
+  re-probe for shape. Established from the full body: `rosterForCurrentScoringPeriod` carries EVERY
+  rostered player with his real slot and own week points, bench included (36 of 70 bench entries scored);
+  non-bench points sum exactly to the side's total on all 10 sides; `lineupLocked: false` means the game
+  has not started (0 is not a score); `rosterForMatchupPeriod` reports slot 0 for everyone and must not
+  be read for slots. Still open: a PAST week by `scoringPeriodId` (`S-01`), and post-week stat corrections.
+  The text below is the original 2026-11-23 record.
+- `PS-01` WAS OPEN: nothing in production reads an ESPN player's fantasy points for a week, so
+  `league_player_weekly_scores` has no ESPN writer and the bench-check ledger
+  (`lib/core-app/benchCheckLedger.ts`) does not record ESPN calls — they could never be graded.
+  `EspnLeagueFetchService` requests `mMatchup`/`mScoreboard` but parses only team totals
+  (`schedule[].home|away.totalPoints`); `parseEspnRosterEntries` reads ids, slots and names, no points.
+  - What the committed fixture shows, and why it is not enough: `fixtures/fantasy-league.NFL.2026.json`
+    carries `schedule[].home|away.rosterForMatchupPeriod` / `rosterForCurrentScoringPeriod`, each
+    `{ appliedStatTotal, entries[] }` with a per-entry `playerPoolEntry.appliedStatTotal`, on the
+    CURRENT week's sides only. In the trimmed capture (week 9, in progress, `winner: UNDECIDED`) one
+    side keeps 3 entries, all in starting slots, and they sum to the side's `appliedStatTotal` (46.7).
+    Not established: that a BENCH entry is present with its own week points (the bench check grades a
+    benched player — no bench entry survived the trim); that the value is the league's own scoring for
+    that matchup period rather than a single scoring period; and a PAST week's values (`S-01`, declined
+    2026-11-09). `ENDPOINTS.yaml` documents none of these fields.
+  - **Needed:** an untrimmed side of `rosterForMatchupPeriod` from a FINISHED week (bench included),
+    captured via `scripts/probe.sh` from the owner-chosen public league, documented in `ENDPOINTS.yaml`,
+    committed with the writer. A writer must store Sleeper ids (`crosswalkToSleeperIds` +
+    `withTeamDefenseIds`), not ESPN ids: the ledger records the CANONICAL Sleeper id, and ESPN 12483
+    (Matthew Stafford) is Sleeper 12483 (Jack Bech) — see `sleeperLookupId` — so an ESPN-keyed row could
+    grade the wrong player. Not probed.

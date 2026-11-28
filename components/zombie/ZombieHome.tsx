@@ -78,6 +78,8 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
   const [summary, setSummary] = useState<ZombieSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /** A league played as Zombie on another platform: no outbreak records here (lib/zombie/importedZombieNote.ts). */
+  const [importedNote, setImportedNote] = useState<string | null>(null)
   /** Null until the first load: the server picks the league's current week. */
   const [week, setWeek] = useState<number | null>(null)
   const [view, setView] = useState<'home' | 'infection'>('home')
@@ -94,7 +96,12 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
         setSummary(null)
         return
       }
-      const data = (await res.json()) as ZombieSummary
+      const data = (await res.json()) as ZombieSummary & { importedNote?: string }
+      if (typeof data.importedNote === 'string' && data.importedNote) {
+        setImportedNote(data.importedNote)
+        setSummary(null)
+        return
+      }
       setSummary(data)
     } catch {
       setError('Failed to load Zombie summary')
@@ -112,6 +119,15 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
     return (
       <div className="zombie-glass flex min-h-[200px] items-center justify-center rounded-2xl border border-white/[0.09] p-8">
         <p className="text-sm text-white/65">Loading outbreak data…</p>
+      </div>
+    )
+  }
+
+  if (importedNote && !summary) {
+    return (
+      <div role="note" data-testid="zombie-imported-note" className="zombie-glass rounded-2xl border border-white/[0.09] p-5">
+        <p className="text-sm font-semibold text-white">No outbreak board for this league</p>
+        <p className="mt-2 text-sm text-white/70">{importedNote}</p>
       </div>
     )
   }
@@ -206,7 +222,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
         ].filter((c): c is string => Boolean(c))}
         title={lg?.name || 'The Outbreak'}
         headline={statusLine(summary, myChip, turned, total)}
-        blurb={`Whisperers lead the outbreak. Lose to a Whisperer${lossToZombieInfects ? ' or a Zombie' : ''} and you turn. Serums cure, weapons are earned by big weeks, and league standings track the outbreak.`}
+        // No blurb (2026-11-24, the simplify pass): it restated "Rules in 30 seconds" further down the page.
         actions={[
           { label: 'My matchup', onClick: scrollToMatchup, primary: true },
           { label: 'Infection night', onClick: () => setView('infection'), testId: 'zombie-open-infection-night' },
@@ -224,26 +240,6 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
           </div>
         }
       />
-      <ZombieRoleActions leagueId={leagueId} onChanged={() => { void load() }} />
-      <ZombieSeasonOperations leagueId={leagueId} />
-      <nav className="flex flex-wrap gap-2" aria-label="Zombie league">
-        {[
-          ['Matchups', `${hub}/matchups`],
-          ['Items', `${hub}/items`],
-          ['Rules', `${hub}/rules`],
-          ['Chat', `/league/${encodeURIComponent(leagueId)}?view=league_chat`],
-        ].map(([label, href]) => (
-          <Link
-            key={label}
-            href={href}
-            className="inline-flex min-h-[44px] items-center rounded-xl border border-white/15 bg-black/45 px-4 text-sm font-semibold text-white/90 hover:bg-black/60"
-          >
-            {label}
-          </Link>
-        ))}
-      </nav>
-      {universeId ? <ZombieUniverseMap universeId={universeId} leagueId={leagueId} /> : null}
-
       {/* Week selector: the whole season, defaulting to the league's current week. */}
       <div className="flex items-center gap-2">
         <label htmlFor="zombie-week" className="text-sm text-white/55">
@@ -267,43 +263,9 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-5">
-          {/* Infection grid */}
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">The outbreak</h2>
-              <span className="font-mono text-sm text-lime-300">
-                {turned}/{total} turned
-              </span>
-            </div>
-            <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-              {cells.map((s) => {
-                const chip = chipFor(s.rosterId, s.status)
-                const isMe = s.rosterId === summary.myRosterId
-                return (
-                  <li
-                    key={s.rosterId}
-                    className={clsx('flex min-w-0 items-center gap-2 rounded-xl border px-2 py-2', CELL_TONE[chip], isMe && 'ring-2 ring-white/60')}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
-                    <img src={`/zombie/art/status-${chip}.svg`} alt="" className="h-6 w-6 shrink-0" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold">
-                        {nameOf(s.rosterId)}
-                        {isMe ? ' · you' : ''}
-                      </span>
-                      <span className="block text-[11px] font-bold uppercase tracking-[0.12em] opacity-70">{chip}</span>
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-            {summary.whispererHidden && (
-              <p className="mt-3 text-[12px] text-violet-200/80">A Whisperer walks among the Survivors. Nobody knows who.</p>
-            )}
-          </section>
-
           {/* This week's matchup */}
           <section id="zombie-week-matchup" className="scroll-mt-4 rounded-2xl border border-lime-500/25 bg-[linear-gradient(180deg,rgba(20,30,10,0.35),rgba(7,8,13,0.9))] p-4 sm:p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">
               Week {summary.week} matchup
               {m && myChip && (myChip === 'survivor' || myChip === 'revived') && (() => {
@@ -311,6 +273,8 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
                 return them === 'whisperer' || (them === 'zombie' && lossToZombieInfects)
               })() ? ' · Danger' : ''}
             </h2>
+            <Link href={`${hub}/matchups`} className="text-xs font-semibold text-lime-300 hover:underline">All matchups</Link>
+            </div>
             {summary.myMatchupView && bashRules ? (
               <div className="mt-3">
                 <ZombieBashingCard m={summary.myMatchupView} rules={bashRules} revived={revived} />
@@ -340,6 +304,46 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
               <p className="mt-2 text-sm text-white/60">No matchup for you this week.</p>
             )}
           </section>
+
+          {/* Decisions only this manager can make (spare or turn, the Whisperer offer, an ambush). Hidden when there are none. */}
+          <ZombieRoleActions leagueId={leagueId} onChanged={() => { void load() }} />
+
+          {/* Infection grid */}
+          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">The outbreak</h2>
+              <span className="font-mono text-sm text-lime-300">
+                {turned}/{total} turned
+              </span>
+            </div>
+            {/* Two across on a phone (2026-11-24): one team per row made twelve rows ~720px. */}
+            <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]" data-testid="zombie-outbreak-grid">
+              {cells.map((s) => {
+                const chip = chipFor(s.rosterId, s.status)
+                const isMe = s.rosterId === summary.myRosterId
+                return (
+                  <li
+                    key={s.rosterId}
+                    className={clsx('flex min-w-0 items-center gap-2 rounded-xl border px-2 py-2', CELL_TONE[chip], isMe && 'ring-2 ring-white/60')}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- local SVG */}
+                    <img src={`/zombie/art/status-${chip}.svg`} alt="" className="h-6 w-6 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="line-clamp-2 break-words text-[13px] font-semibold leading-tight" title={nameOf(s.rosterId)}>
+                        {nameOf(s.rosterId)}
+                        {isMe ? ' · you' : ''}
+                      </span>
+                      <span className="block text-[11px] font-bold uppercase tracking-[0.12em] opacity-70">{chip}</span>
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+            {summary.whispererHidden && (
+              <p className="mt-3 text-[12px] text-violet-200/80">A Whisperer walks among the Survivors. Nobody knows who.</p>
+            )}
+          </section>
+
 
           {/* The Outbreak Report — the week's board */}
           <section
@@ -426,6 +430,9 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
             ) : (
               <p className="mt-2 text-sm text-white/55">Join the league to collect supplies.</p>
             )}
+            {summary.myRosterId ? (
+              <Link href={`${hub}/items`} className="mt-3 inline-block text-xs font-semibold text-lime-300 hover:underline">Your items</Link>
+            ) : null}
             {summary.myWinnings && (
               <div className="mt-4 rounded-xl border border-lime-500/20 bg-lime-500/[0.06] p-3">
                 <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-lime-300">Outbreak Points</p>
@@ -440,8 +447,12 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
           </section>
 
           {/* Rules in 30 seconds — the engine's numbers for this sport. */}
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Rules in 30 seconds</h2>
+          {/* Closed until asked for (2026-11-24): the rules are read once; the summary is a 44px row. */}
+          <details className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="zombie-rules-30s">
+            <summary className="flex min-h-[44px] cursor-pointer items-center">
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Rules in 30 seconds</h2>
+              <span className="ml-auto text-[13px] text-white/40" aria-hidden>▾</span>
+            </summary>
             <ol className="mt-3 space-y-2.5 text-[13px] leading-snug text-white/80">
               {[
                 'Managers start as Survivors or Whisperers.',
@@ -463,9 +474,13 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
             <Link href={`${hub}/rules`} className="mt-3 inline-block text-xs font-semibold text-lime-300 hover:underline">
               Full rules
             </Link>
-          </section>
+          </details>
         </aside>
       </div>
+
+      {/* League-wide, below your week (2026-11-23): on a phone these sat above your matchup. */}
+      {universeId ? <ZombieUniverseMap universeId={universeId} leagueId={leagueId} /> : null}
+      <ZombieSeasonOperations leagueId={leagueId} />
     </div>
     </SpecialtyShell>
   )

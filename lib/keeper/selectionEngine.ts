@@ -4,7 +4,7 @@ import { withKeeperSessionLock } from './keeperSessionLock'
 import { computeKeeperEligibility } from './eligibilityEngine'
 import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
-import { placeTeamKeepers, placedKeeperLabel, resolveKeeperRules } from './keeperRules'
+import { isWaiverCostLabel, placeTeamKeepers, placedKeeperLabel, readWaiverStack, resolveKeeperRules, stackWaiverKeeperCosts } from './keeperRules'
 import { KEEPER_SUBMITTED_NONE, applyMissedDeadlineRule } from './missedDeadlineService'
 import { resolveKeeperSourceRoster } from './keeperSourceRoster'
 
@@ -120,7 +120,16 @@ async function submitKeeperSelectionsLocked(
     e: (typeof elig)[0]
   }[] = []
 
+  // A keeper the commissioner rejected stays rejected: saving him again does not put him back.
+  const rejected = new Set(
+    (await db.keeperRecord.findMany({ where: { leagueId, seasonId, rosterId, status: 'rejected', playerId: { in: playerIds } }, select: { playerId: true } })).map((r) => r.playerId),
+  )
+
   for (const pid of playerIds) {
+    if (rejected.has(pid)) {
+      conflicted.push({ playerIds: [pid], reason: 'rejected_by_commissioner' })
+      continue
+    }
     const e = eligMap.get(pid)
     if (!e?.isEligible) {
       conflicted.push({ playerIds: [pid], reason: e?.ineligibleReason ?? 'ineligible' })
@@ -146,10 +155,15 @@ async function submitKeeperSelectionsLocked(
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     select: { rounds: true },
   })
+  const totalRounds = latestDraft?.rounds ?? Math.max(15, ...candidates.map((c) => c.e.projectedCostRound ?? 1))
+  // Several undrafted pickups stack: last round, the round before, … in the order the manager listed them.
+  const priced = candidates.flatMap(({ pid, e }) =>
+    e.projectedCostRound != null ? [{ playerId: pid, costRound: e.projectedCostRound, waiver: isWaiverCostLabel(e.projectedCost) }] : [])
+  const stacked = readWaiverStack(league.settings) ? stackWaiverKeeperCosts(priced, { totalRounds }) : priced
   const placement = placeTeamKeepers(
     rules,
-    candidates.flatMap(({ pid, e }) => (e.projectedCostRound != null ? [{ playerId: pid, costRound: e.projectedCostRound }] : [])),
-    { totalRounds: latestDraft?.rounds ?? Math.max(15, ...candidates.map((c) => c.e.projectedCostRound ?? 1)) },
+    stacked.map(({ playerId, costRound }) => ({ playerId, costRound })),
+    { totalRounds },
   )
   const placedById = new Map(placement.placed.map((p) => [p.playerId, p]))
   const refusedById = new Map(placement.refused.map((r) => [r.playerId, r]))
@@ -232,9 +246,34 @@ async function submitKeeperSelectionsLocked(
     })
   }
 
+  /*
+   * 🛑 THE LIST A MANAGER SAVES IS THEIR SELECTION. The Keepers tab posts every ticked player, but a
+   * save only ever added: untick a player and save, and his record stayed on file, was locked with
+   * the rest, cost a pick and could put the team over the keeper limit (the limit is checked against
+   * the list sent, not what is stored). Saving nobody left every earlier keeper in place too. A
+   * pending or commissioner-confirmed keeper the list no longer names is removed. Locked and rejected
+   * records are never touched.
+   */
+  await db.keeperRecord.deleteMany({ where: { leagueId, seasonId, rosterId, status: { in: ['pending', 'confirmed'] }, playerId: { notIn: playerIds } } })
+
+  /*
+   * How many TEAMS have submitted, counted, not incremented. It went up by one on every save, so one
+   * manager saving twice read "2 of 4 teams submitted" to the commissioner (walked locally
+   * 2026-11-20), and a refused pick counted too. A team has submitted when it holds a keeper on
+   * file or has deliberately kept nobody.
+   */
+  const [withKeepers, keptNobody] = await Promise.all([
+    db.keeperRecord.findMany({ where: { leagueId, seasonId, status: { not: 'rejected' } }, select: { rosterId: true }, distinct: ['rosterId'] }),
+    db.leagueAuditLog.findMany({ where: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityType: 'keeper_session', entityId: seasonId }, select: { metadata: true } }),
+  ])
+  const submitted = new Set(withKeepers.map((r) => r.rosterId))
+  for (const row of keptNobody) {
+    const id = (row.metadata as { rosterId?: unknown } | null)?.rosterId
+    if (typeof id === 'string' && id) submitted.add(id)
+  }
   await db.keeperSelectionSession.updateMany({
     where: { seasonId, leagueId },
-    data: { teamsSubmitted: { increment: 1 } },
+    data: { teamsSubmitted: submitted.size },
   })
 
   return { valid, conflicted, cost, warnings }
@@ -300,8 +339,14 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
       console.error('[keeper] missed-deadline rule failed; defaults rolled back', { leagueId, sessionId, error: error instanceof Error ? error.message : error })
     }
 
+    /*
+     * 🛑 A KEEPER THE COMMISSIONER CONFIRMED WAS DROPPED AT THE LOCK. The dashboard's Confirm button
+     * sets `confirmed`; the lock promoted only `pending`, and the carryover, the pick forfeits and the
+     * next draft all read `locked`. So approving a keeper was the one way to lose him: he stayed in
+     * the pool and the team kept its pick. Both statuses lock; `rejected` never does.
+     */
     await db.keeperRecord.updateMany({
-      where: { leagueId, seasonId: current.seasonId, status: 'pending' },
+      where: { leagueId, seasonId: current.seasonId, status: { in: ['pending', 'confirmed'] } },
       data: { status: 'locked', lockedAt: new Date() },
     })
     await db.keeperSelectionSession.update({ where: { id: sessionId }, data: { status: 'locked', lockedAt: new Date() } })
@@ -323,6 +368,11 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
       console.error('[keeper] executeSeasonCarryover failed after lock', { leagueId, sessionId, incomingSeasonId: session.seasonId, outgoingSeasonId: outgoing.id, error })
     }
   }
+
+  // AF Commissioner: the locked keepers go straight onto a draft board that is already waiting
+  // (./keeperAutoBoard). Off, unentitled or no pre-draft board → nothing happens; never throws.
+  const { autoPlaceKeepersIfEnabled } = await import('./keeperAutoBoard')
+  await autoPlaceKeepersIfEnabled(leagueId)
 }
 
 /** Cron: lock sessions past deadline */

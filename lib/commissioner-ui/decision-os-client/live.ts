@@ -123,12 +123,16 @@ function withDataAgeCaveat(claim: string, window: Awaited<ReturnType<typeof read
 
 export const liveDecisionOSClient: DecisionOSClient = {
   /*
-   * No `callDecisionOS` and no `isLiveReady` gate — this is a direct read of a table in the same
-   * database the request already has open, the same reasoning Settings' client records at length.
-   * There is no upstream integration here to stage behind a flag.
+   * No `callDecisionOS` — a direct read of a table in the same database the request already has open. It now sits
+   * behind Mission Control's own switch (`commissioner_os_live_ready_mission-control`) like every other method on
+   * this client (owner's call, 2026-11-23): not to stage an integration, but so one switch turns the whole page off.
+   * ⚠ An environment with no such row shows the trend as unavailable, the trade-off Settings' client describes.
    */
   async getActivityTrend() {
     const timestamp = new Date().toISOString()
+    if (!(await isLiveReady('mission-control'))) {
+      return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp }
+    }
     const leagueId = await resolveActiveLeagueId()
     if (!leagueId) {
       return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp }

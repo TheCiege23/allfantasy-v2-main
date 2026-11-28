@@ -208,7 +208,7 @@ export async function getPlayerImpact(
 
   const out: LeagueImpact[] = []
   // Fleaflicker/MFL leagues the identity bridge can read (bridgedRosterIds.ts); no query without one.
-  const bridgedLeagues = await loadBridgedLeagues(teams.map((t) => ({ id: t.leagueId, platform: t.league?.platform })))
+  const bridgedLeagues = await loadBridgedLeagues(teams.map((t) => ({ id: t.leagueId, platform: t.league?.platform, sport: t.league?.sport })))
 
   for (const t of teams) {
     /*

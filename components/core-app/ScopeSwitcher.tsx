@@ -562,6 +562,17 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
               </button>
             </div>
 
+            <label className="af-scope-search">
+              <span className="af-sr-only">{m.findLeague}</span>
+              <input
+                ref={inputRef}
+                type="search"
+                value={query}
+                placeholder={m.findPlaceholder}
+                onChange={(event) => setQuery(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
             <div className="af-scope-filters">
               <div className="af-scope-group" role="group" aria-label={m.scope}>
                 <div className="af-scope-chips">
@@ -588,44 +599,62 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                   ) : null}
                 </div>
               </div>
-              {sportOptions.length > 0 ? (
-                <div className="af-scope-group" role="group" aria-label={m.sport}>
-                  <span className="af-scope-group-title">{m.sport}</span>
-                  <div className="af-scope-chips">
-                    {sportOptions.map((o) => {
-                      const sport = o.value!.slice('sport:'.length)
-                      const icon = leagueSportIcon(leagueSportKey(sport))
-                      const count = sportCounts.get(sport) ?? 0
-                      return chip(
-                        o.value!,
-                        filter.sport === sport,
-                        count,
-                        () => setFilter((f) => ({ ...f, sport: f.sport === sport ? null : sport })),
-                        // The list headings' short names (CFB, CBB): "NCAAF" is what pushed a chip off a phone.
-                        <>{icon ? <span className="af-scope-chip-icon" aria-hidden>{icon}</span> : null}{leagueSportKey(sport) ? leagueSportLabel(leagueSportKey(sport), { short: true }) : o.label}</>,
-                        { disabled: count === 0 },
-                      )
-                    })}
-                  </div>
-                </div>
-              ) : null}
-              {platformOptions.length > 0 ? (
-                <div className="af-scope-group" role="group" aria-label={m.platform}>
-                  <span className="af-scope-group-title">{m.platform}</span>
-                  <div className="af-scope-chips">
-                    {platformOptions.map((o) => {
-                      const platform = o.value!.slice('platform:'.length)
-                      const count = platformCounts.get(platform) ?? 0
-                      return chip(
-                        o.value!,
-                        filter.platform === platform,
-                        count,
-                        () => setFilter((f) => ({ ...f, platform: f.platform === platform ? null : platform })),
-                        <><span className="af-platform af-scope-chip-dot" data-platform={platformTone(platform)} aria-hidden />{o.label}</>,
-                        { disabled: count === 0 },
-                      )
-                    })}
-                  </div>
+              {/*
+                ⚠ DROPDOWNS, NOT CHIP WALLS (user report, 2026-11-28: "turn the search options into dropdowns
+                so more of the leagues show up in the list"). Eight sports and five platforms as chips took
+                four rows — half a phone screen — before the first league. Two native selects take one row,
+                and a phone opens its own picker for them. Counts still follow the other facet.
+              */}
+              {sportOptions.length > 0 || platformOptions.length > 0 ? (
+                <div className="af-scope-selects">
+                  {sportOptions.length > 0 ? (
+                    <label className="af-scope-select" data-active={filter.sport ? 'true' : undefined}>
+                      <span className="af-sr-only">{m.sport}</span>
+                      <select
+                        aria-label={m.sport}
+                        data-testid="scope-sport-select"
+                        value={filter.sport ?? ''}
+                        onChange={(event) => { const v = event.target.value; setFilter((f) => ({ ...f, sport: v || null })) }}
+                      >
+                        <option value="">{m.allSports} ({[...sportCounts.values()].reduce((a, b) => a + b, 0)})</option>
+                        {sportOptions.map((o) => {
+                          const sport = o.value!.slice('sport:'.length)
+                          const icon = leagueSportIcon(leagueSportKey(sport))
+                          const count = sportCounts.get(sport) ?? 0
+                          // The list headings' short names (CFB, CBB): "NCAAF" is what pushed a chip off a phone.
+                          const name = leagueSportKey(sport) ? leagueSportLabel(leagueSportKey(sport), { short: true }) : o.label
+                          return (
+                            <option key={o.value!} value={sport} disabled={count === 0 && filter.sport !== sport}>
+                              {icon ? `${icon} ` : ''}{name} ({count})
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </label>
+                  ) : null}
+                  {platformOptions.length > 0 ? (
+                    <label className="af-scope-select" data-active={filter.platform ? 'true' : undefined}>
+                      <span className="af-sr-only">{m.platform}</span>
+                      {filter.platform ? <span className="af-platform af-scope-chip-dot" data-platform={platformTone(filter.platform)} aria-hidden /> : null}
+                      <select
+                        aria-label={m.platform}
+                        data-testid="scope-platform-select"
+                        value={filter.platform ?? ''}
+                        onChange={(event) => { const v = event.target.value; setFilter((f) => ({ ...f, platform: v || null })) }}
+                      >
+                        <option value="">{m.allPlatforms} ({[...platformCounts.values()].reduce((a, b) => a + b, 0)})</option>
+                        {platformOptions.map((o) => {
+                          const platform = o.value!.slice('platform:'.length)
+                          const count = platformCounts.get(platform) ?? 0
+                          return (
+                            <option key={o.value!} value={platform} disabled={count === 0 && filter.platform !== platform}>
+                              {o.label} ({count})
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </label>
+                  ) : null}
                 </div>
               ) : null}
               {offerHome ? (
@@ -641,17 +670,6 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
               ) : null}
             </div>
 
-            <label className="af-scope-search">
-              <span className="af-sr-only">{m.findLeague}</span>
-              <input
-                ref={inputRef}
-                type="search"
-                value={query}
-                placeholder={m.findPlaceholder}
-                onChange={(event) => setQuery(event.target.value)}
-                autoComplete="off"
-              />
-            </label>
 
             {editing ? (
               <p className="af-scope-edit-hint">
@@ -702,6 +720,20 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                 })
               )}
             </ul>
+            {/*
+              Add a league, right under the leagues (2026-11-23, owner). On a phone the rail — whose foot holds
+              "Create a league" and "Import a league" on a wide screen — is hidden, so after a first import the
+              only way to add another was More → the Play sheet, scrolled. This switcher is the phone's league
+              list, so the two belong at its foot on every width.
+            */}
+            <nav className="af-scope-add" aria-label={m.addLeagueAria} data-testid="scope-add-league">
+              <Link href="/import" prefetch={false} onClick={(event) => navigate(event, '/import')}>
+                <span aria-hidden>⇣</span> {m.importLeague}
+              </Link>
+              <Link href="/create-league" prefetch={false} onClick={(event) => navigate(event, '/create-league')}>
+                <span aria-hidden>＋</span> {m.createLeague}
+              </Link>
+            </nav>
             <p className="af-scope-note">
               {m.favoritesNote}
             </p>

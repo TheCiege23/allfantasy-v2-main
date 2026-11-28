@@ -12,7 +12,12 @@ import {
 } from '@/components/league/specialty/SpecialtyShell'
 import type { SalaryCapSummary } from '@/components/salary-cap/types'
 import { OFFSEASON_STEPS, capBarSegments, contractTags } from '@/lib/salary-cap/capHomeView'
+import { formatCapMoney, isOverCap } from '@/lib/salary-cap/capMoney'
+
 import s from './salary-specialty.module.css'
+
+/** Contract rows Cap home shows before "All N contracts" (the Contracts view has the full table). */
+const HOME_CONTRACT_ROWS = 6
 
 /*
  * Salary cap league home (handoff salary/SalaryCapHome): hero with cap space, the cap bar (active,
@@ -20,8 +25,7 @@ import s from './salary-specialty.module.css'
  * with the offseason calendar, the cap rules and the latest moves. Every figure is the summary route's.
  */
 
-const money = (n: number | null | undefined) =>
-  n == null || !Number.isFinite(n) ? '—' : `$${(Math.round(n * 10) / 10).toFixed(1)}`
+const money = formatCapMoney
 
 const humanEvent = (t: string) => {
   if (t === 'contract_cut') return 'A contract was cut'
@@ -49,8 +53,13 @@ export function SalaryCapSpecialtyHome({
   const ceiling = thisYear?.capCeiling ?? cfg.startupCap
   const ledger = summary.ledger
   const bar = ledger ? capBarSegments(ledger, ceiling) : null
-  const maxCol = Math.max(1, ...projection.map((y) => Math.max(y.capCeiling, y.totalCapHit)))
-  const phase = cfg.offseasonPhase ?? 'in_season'
+  const shownContracts = [...summary.contracts].sort((a, b) => b.salary - a.salary).slice(0, HOME_CONTRACT_ROWS)
+  // A year's commitment is its contracts plus its dead money (FutureCapProjectionService keeps them apart).
+  const committedIn = (y: { totalCapHit: number; deadMoney: number }) => y.totalCapHit + Math.max(0, y.deadMoney)
+  const maxCol = Math.max(1, ...projection.map((y) => Math.max(y.capCeiling, committedIn(y))))
+  // No phase stored means in season once the league has contracts; a league with none yet has not drafted, and calling
+  // it 'in season' was wrong (2026-11-23).
+  const phase = cfg.offseasonPhase ?? (summary.contracts.length ? 'in_season' : null)
   const dead = summary.deadContracts ?? []
 
   const rules = [
@@ -76,9 +85,11 @@ export function SalaryCapSpecialtyHome({
           cfg.mode === 'bestball' ? 'Salary cap best ball' : 'Salary cap dynasty',
           lg?.teamCount ? `${lg.teamCount} teams` : null,
         ].filter((c): c is string => Boolean(c))}
-        title={lg?.name || 'Salary Cap League'}
-        headline={ledger ? `${money(ledger.totalCapHit)} of ${money(ceiling)} committed` : 'Join a team to see your cap.'}
-        blurb="Every player has a salary and a contract length. Stay under the cap, plan for next year, and pay dead money when you cut someone early."
+        // The league name is already in the workspace header (and a long one ran to five lines here).
+        title="Your salary cap"
+        headline={bar ? `${money(bar.committed)} of ${money(ceiling)} committed` : 'Join a team to see your cap.'}
+        // No blurb (2026-11-24, the simplify pass): the headline, the cap bar and the contracts under it say
+        // what a salary cap is with this team's own numbers. "Format rules FAQ" teaches the format.
         actions={[
           { label: 'Contracts', onClick: onOpenContracts, primary: true },
           { label: 'Free-agent bids', onClick: onOpenBid, testId: 'salary-open-bid' },
@@ -92,6 +103,12 @@ export function SalaryCapSpecialtyHome({
               of {money(ceiling)}
               {ledger && ledger.deadMoneyHit > 0 ? ` · after ${money(ledger.deadMoneyHit)} dead money` : ''}
             </span>
+            {/* The Cap space screen warned; Cap home only showed a negative number (Salary Cap audit item 5). */}
+            {ledger && isOverCap(ledger.capSpace) ? (
+              <span className={s.overNote} role="status" data-testid="salary-over-cap">
+                Over the cap by {money(-ledger.capSpace)}
+              </span>
+            ) : null}
           </div>
         }
       />
@@ -137,19 +154,21 @@ export function SalaryCapSpecialtyHome({
                   </h3>
                   <div className={s.years}>
                     {projection.map((y) => {
-                      const over = y.totalCapHit > y.capCeiling
+                      // The engine's own verdict: projected space already nets dead money and rollover.
+                      const over = y.projectedSpace < 0
+                      const committed = committedIn(y)
                       return (
-                        <div key={y.capYear} className={s.year}>
+                        <div key={y.capYear} className={s.year} data-cap-year={y.capYear}>
                           <div className={s.col}>
                             <span
                               className={`${s.fill} ${over ? s.fillOver : ''}`}
-                              style={{ height: `${Math.min(100, (y.totalCapHit / maxCol) * 100)}%` }}
+                              style={{ height: `${Math.min(100, (committed / maxCol) * 100)}%` }}
                             />
                             <span className={s.capLine} style={{ bottom: `${Math.min(100, (y.capCeiling / maxCol) * 100)}%` }} />
                           </div>
                           <b>{y.capYear}</b>
                           <span>
-                            {money(y.totalCapHit)} / {money(y.capCeiling)}
+                            {money(committed)} / {money(y.capCeiling)}
                           </span>
                           {over ? <SpecialtyTag tone="zone">Over the cap</SpecialtyTag> : null}
                         </div>
@@ -160,6 +179,11 @@ export function SalaryCapSpecialtyHome({
               ) : null}
             </SpecialtyCard>
 
+            {/*
+              The biggest contracts, not all of them: the full list (20+ tall rows on a phone) pushed the offseason
+              calendar and the cap rules out of reach (2026-11-07, Salary Cap audit item 4). The Contracts view has the
+              full table; cut players' dead money always shows here because it is this year's cap charge.
+            */}
             <SpecialtyCard label="Contracts" icon={specialtyAsset('salary', 'icon-contract.svg')} testId="salary-contracts">
               {summary.contracts.length === 0 && dead.length === 0 ? (
                 <p className={spStyles.empty}>No contracts on your roster yet.</p>
@@ -169,28 +193,37 @@ export function SalaryCapSpecialtyHome({
                     <thead>
                       <tr>
                         <th scope="col">Player</th>
-                        <th scope="col">Pos</th>
+                        <th scope="col" className={s.posCol}>Pos</th>
                         <th scope="col" className={s.n}>
                           Salary
                         </th>
-                        <th scope="col" className={s.n}>
-                          Years left
+                        <th scope="col" className={s.n} aria-label="Years left">
+                          <span className={s.thLong}>Years left</span>
+                          <span className={s.thShort} aria-hidden="true">Yrs</span>
                         </th>
-                        <th scope="col">Status</th>
+                        <th scope="col" className={s.statusCol}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {summary.contracts.map((c) => (
+                      {shownContracts.map((c) => (
                         <tr key={c.id}>
                           <td>
                             <strong>{c.playerName ?? 'Unknown player'}</strong>
+                            <span className={s.tagsUnder}>
+                              <span className={s.pos}>{c.position ?? '—'}</span>
+                              {contractTags(c, cfg, capYear + 1).map((t) => (
+                                <SpecialtyTag key={t.label} tone={t.tone}>
+                                  {t.label}
+                                </SpecialtyTag>
+                              ))}
+                            </span>
                           </td>
-                          <td>
+                          <td className={s.posCol}>
                             <span className={s.pos}>{c.position ?? '—'}</span>
                           </td>
                           <td className={s.n}>{money(c.salary)}</td>
                           <td className={s.n}>{Math.max(0, c.yearsRemaining) + 1}</td>
-                          <td>
+                          <td className={s.statusCol}>
                             <div className={s.tags}>
                               {contractTags(c, cfg, capYear + 1).map((t) => (
                                 <SpecialtyTag key={t.label} tone={t.tone}>
@@ -205,19 +238,28 @@ export function SalaryCapSpecialtyHome({
                         <tr key={d.id}>
                           <td>
                             <strong>{d.playerName ?? 'Unknown player'}</strong>
+                            <span className={s.tagsUnder}>
+                              <span className={s.pos}>{d.position ?? '—'}</span>
+                              <SpecialtyTag tone="zone">Cut · dead money</SpecialtyTag>
+                            </span>
                           </td>
-                          <td>
+                          <td className={s.posCol}>
                             <span className={s.pos}>{d.position ?? '—'}</span>
                           </td>
                           <td className={s.n}>{money(d.deadThisYear)}</td>
                           <td className={s.n}>—</td>
-                          <td>
+                          <td className={s.statusCol}>
                             <SpecialtyTag tone="zone">Cut · dead money</SpecialtyTag>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  {summary.contracts.length > shownContracts.length ? (
+                    <button type="button" className={`${spStyles.btn} ${s.allContracts}`} onClick={onOpenContracts}>
+                      All {summary.contracts.length} contracts
+                    </button>
+                  ) : null}
                 </div>
               )}
             </SpecialtyCard>
@@ -225,7 +267,8 @@ export function SalaryCapSpecialtyHome({
         }
         rail={
           <>
-            <SpecialtyCard label="Offseason calendar" testId="salary-offseason">
+            {/* In season the calendar is reference, so it folds (2026-11-24); in the offseason it is the live schedule and stays open. */}
+            <SpecialtyCard label="Offseason calendar" testId="salary-offseason" fold={phase === 'in_season'}>
               <ul className={spStyles.feed}>
                 {OFFSEASON_STEPS.filter(
                   (step) => (step.phase !== 'extension' || cfg.extensionsEnabled) && (step.phase !== 'tag' || cfg.franchiseTagEnabled) && (step.phase !== 'rollover' || cfg.rolloverEnabled),
@@ -247,9 +290,8 @@ export function SalaryCapSpecialtyHome({
                   </li>
                 ))}
               </ul>
-              {phase === 'in_season' ? <p className={spStyles.empty}>In season — the offseason steps run in this order.</p> : null}
             </SpecialtyCard>
-            <SpecialtyCard label="Cap rules">
+            <SpecialtyCard label="Cap rules" testId="salary-cap-rules" fold>
               <SpecialtyRules rules={rules} />
             </SpecialtyCard>
             <SpecialtyCard label="Latest">

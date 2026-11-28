@@ -101,7 +101,7 @@ async function loadLatest(leagueId: string): Promise<{
   stored: StoredStatCorrectionReview | null
 }> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, platform: true, settings: true, userId: true, leagueVariant: true, guillotineMode: true } })
-  const covered = STAT_CORRECTION_SPORTS.has(String(league?.sport ?? '').toUpperCase()) && resolveWriteAuthority(league?.platform) === 'NATIVE'
+  const covered = STAT_CORRECTION_SPORTS.has(String(league?.sport ?? '').toUpperCase()) && resolveWriteAuthority({ platform: league?.platform, settings: league?.settings ?? null }) === 'NATIVE'
   if (!league || !covered) return { covered: false, league: null, seasonStatus: null, stored: null }
 
   const season = await prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { season: 'desc' }, select: { id: true, status: true } })

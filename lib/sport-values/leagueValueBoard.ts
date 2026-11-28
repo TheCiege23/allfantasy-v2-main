@@ -1,10 +1,11 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { loadSportPointsBase, type SportPointsBaseResult, type SportPointsLeague } from '@/lib/decision-os/trade/sportPointsContext'
-import { MIN_SAMPLE_GAMES, meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
+import type { SportPointsBaseResult, SportPointsLeague } from '@/lib/decision-os/trade/sportPointsContext'
+import { isFantraxCampusProjectionLeague, MIN_SAMPLE_GAMES, meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
 import { MIN_AT_BATS, MIN_INNINGS } from '@/lib/decision-os/trade/mlbTeamGame'
-import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
+import { isDynastyGradedSport, missingAgeAssumption, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
+import { loadCachedLeagueBoardBase, type CachedBoardResult } from '@/lib/decision-os/value-os/leagueBoard'
 
 /**
  * A league's own value board, for the surfaces that price a player OUTSIDE a trade (2026-11-16, re-score
@@ -25,7 +26,7 @@ import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trad
  * or innings, which `boardSample` reports in those units. NHL joined the same day: a goalie counts for
  * his share of team games (`nhlTeamGame.ts`), a skater for every game, and the sample is games.
  */
-export const BOARD_VALUE_SPORTS: ReadonlySet<PointsGradedSport> = new Set(['NBA', 'MLB', 'NHL'])
+export const BOARD_VALUE_SPORTS: ReadonlySet<PointsGradedSport> = new Set(['NBA', 'MLB', 'NHL', 'NCAAB', 'SOCCER'])
 
 export function isBoardValueSport(sport: string | null | undefined): sport is PointsGradedSport {
   return BOARD_VALUE_SPORTS.has(String(sport ?? '').trim().toUpperCase() as PointsGradedSport)
@@ -35,7 +36,7 @@ export type LeagueBoardRow = SportPointsLeague & { sport: string }
 
 export type LeagueValueBoardDeps = {
   league: (leagueId: string) => Promise<LeagueBoardRow | null>
-  base: (sport: PointsGradedSport, league: SportPointsLeague) => Promise<SportPointsBaseResult>
+  base: (sport: PointsGradedSport, league: SportPointsLeague, options?: { projectionOnly: true }) => Promise<SportPointsBaseResult | CachedBoardResult>
 }
 
 export const defaultLeagueValueBoardDeps: LeagueValueBoardDeps = {
@@ -44,7 +45,8 @@ export const defaultLeagueValueBoardDeps: LeagueValueBoardDeps = {
       where: { id: leagueId },
       select: { id: true, sport: true, platform: true, platformLeagueId: true, settings: true, leagueType: true, leagueSize: true, season: true, status: true },
     }) as Promise<LeagueBoardRow | null>,
-  base: (sport, league) => loadSportPointsBase({ sport, league }),
+  // Through Value OS's three-minute league board, the one the in-league trade grade reads too (2026-11-21).
+  base: (sport, league, options) => loadCachedLeagueBoardBase({ sport, league, ...options }),
 }
 
 export type LeagueValueBoard =
@@ -52,21 +54,24 @@ export type LeagueValueBoard =
   | { kind: 'not_board_sport' }
   /** A board sport whose board could not be built here — the reason is the board's own words. */
   | { kind: 'unavailable'; sport: PointsGradedSport; reason: string }
-  | { kind: 'ok'; sport: PointsGradedSport; ctx: SportPointsContext; byId: ReadonlyMap<string, BoardPlayer> }
+  | { kind: 'ok'; sport: PointsGradedSport; ctx: SportPointsContext; byId: ReadonlyMap<string, BoardPlayer>; servedFrom?: 'store' | 'live'; projectionOnly?: true }
 
 /** The board for one league, or why not. Never throws. */
 export async function loadLeagueValueBoard(
   leagueId: string,
   deps: Partial<LeagueValueBoardDeps> = {},
+  options?: { projectionOnly: true },
 ): Promise<LeagueValueBoard> {
   const d = { ...defaultLeagueValueBoardDeps, ...deps }
   const league = await d.league(leagueId).catch(() => null)
   if (!league || !isBoardValueSport(league.sport)) return { kind: 'not_board_sport' }
   const sport = league.sport.trim().toUpperCase() as PointsGradedSport
-  const base = await d.base(sport, league).catch(() => null)
+  const projection = options?.projectionOnly && isFantraxCampusProjectionLeague(sport, league) ? options : undefined
+  const base = await (projection ? d.base(sport, league, projection) : d.base(sport, league)).catch(() => null)
   if (!base) return { kind: 'unavailable', sport, reason: 'The league’s value board could not be read just now.' }
   if (!base.ok) return { kind: 'unavailable', sport, reason: base.reason }
-  return { kind: 'ok', sport, ctx: base.ctx, byId: new Map(base.ctx.board.map((p) => [p.id, p])) }
+  const servedFrom = 'servedFrom' in base ? base.servedFrom : undefined
+  return { kind: 'ok', sport, ctx: base.ctx, byId: new Map(base.ctx.board.map((p) => [p.id, p])), ...(servedFrom ? { servedFrom } : {}), ...projection }
 }
 
 /** What a board value measures, as a phrase: "fantasy points" or "category score". */
@@ -139,6 +144,7 @@ export type BoardPlayerValue = {
   seasonLabel: string
   sample: BoardSample | null
   baselineSeasonLabel: string | null
+  completedTradeSample?: number
   dynastyValue: number | null
   age: number | null
 }
@@ -153,16 +159,18 @@ export function boardPlayerValue(
 ): { available: true; data: BoardPlayerValue } | { available: false; reason: string } {
   if (board.kind === 'not_board_sport') return { available: false, reason: 'This sport is not valued on a league board yet.' }
   if (board.kind === 'unavailable') return { available: false, reason: board.reason }
+  if (board.projectionOnly) return { available: false, reason: `This board contains ${board.sport} projections for the current season. Campus-to-Canton trade values require both divisions.` }
   const { ctx, sport } = board
   if (ctx.window.gamesRemaining <= 0) {
     return { available: false, reason: `The ${ctx.window.seasonLabel} regular season has no games left, so there is no rest-of-season value.` }
   }
-  const price = priceBoardPlayer(asset, ctx)
+  const price = priceBoardPlayer(asset, ctx, asset.playerId && board.byId.has(asset.playerId) ? board.byId : undefined)
   if (!price.ok) return { available: false, reason: price.reason }
   const age = ctx.dynasty?.ages.get(price.player.id) ?? null
+  const classYear = ctx.dynasty?.classYears?.get(price.player.id)
   const dynastyValue =
-    ctx.dynasty && isDynastyGradedSport(sport)
-      ? playerDynastyValue({ sport, player: price.player, age: age ?? undefined, replacementPerGame: price.replacementPerGame, gamesRemaining: ctx.window.gamesRemaining })
+    ctx.dynasty && isDynastyGradedSport(sport) && (sport !== 'NCAAB' || classYear != null)
+      ? playerDynastyValue({ sport, player: price.player, age: sport === 'NCAAB' ? undefined : age ?? missingAgeAssumption(sport, price.player.position), collegeSeasons: classYear == null ? undefined : 5 - classYear, replacementPerGame: price.replacementPerGame, gamesRemaining: ctx.window.gamesRemaining })
       : null
   return {
     available: true,
@@ -172,6 +180,7 @@ export function boardPlayerValue(
       perGame: price.player.perGame,
       replacementPerGame: price.replacementPerGame,
       replacementName: price.replacementName,
+      completedTradeSample: price.player.tradeMarket?.trades ?? 0,
       value: price.value,
       gamesRemaining: ctx.window.gamesRemaining,
       scheduleKnown: ctx.window.scheduleKnown !== false,
@@ -182,4 +191,9 @@ export function boardPlayerValue(
       age,
     },
   }
+}
+
+/** Candidate identities come from the same scored population as the league's rankings. */
+export function boardRateRows(board: Extract<LeagueValueBoard, { kind: 'ok' }>) {
+  return board.ctx.board.map(p => ({ key: p.id, name: p.name, position: p.position, perGame: p.perGame, components: null }))
 }

@@ -106,3 +106,18 @@
   .af-pr-compare-table th,
   .af-pr-compare-table td { padding: 10px; }
 }
+
+/*
+ * "See it in Commissioner OS" stands alone under a feature name, so it is not an inline link and the
+ * 44px thumb floor applies: on a touch phone it measured 154x19. An invisible box lifts the hit area
+ * to at least 44px without moving a pixel (the `.af-info-tip` convention); a min-height would grow every
+ * compare row. Its own top-level @media at depth 0.
+ */
+@media (pointer: coarse) {
+  .af-pr-examples-link { position: relative; }
+  .af-pr-examples-link::after {
+    content: '';
+    position: absolute;
+    inset: -14px -4px;
+  }
+}

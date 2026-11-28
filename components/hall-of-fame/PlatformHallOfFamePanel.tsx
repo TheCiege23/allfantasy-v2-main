@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from "@/lib/sport-scope"
+import { StoryAiLockNotice, type StoryAiLock } from "@/components/league-story-ai/StoryAiLockNotice"
 
 type EntryRow = {
   id: string
@@ -51,6 +52,7 @@ export default function PlatformHallOfFamePanel() {
   const [error, setError] = useState<string | null>(null)
   const [storyId, setStoryId] = useState<string | null>(null)
   const [story, setStory] = useState<string | null>(null)
+  const [storyLock, setStoryLock] = useState<StoryAiLock>(null)
 
   const params = useMemo(() => {
     const qp = new URLSearchParams()
@@ -90,6 +92,7 @@ export default function PlatformHallOfFamePanel() {
   }, [refresh])
 
   async function tellStory(type: "entry" | "moment", id: string, linkedLeagueId?: string | null) {
+    setStoryLock(null)
     if (!linkedLeagueId) {
       setStoryId(id)
       setStory("This record is available in the platform timeline. Open the league context for full narrative details.")
@@ -104,6 +107,8 @@ export default function PlatformHallOfFamePanel() {
     })
     const data = await res.json().catch(() => ({}))
     setStory(data?.narrative ?? data?.error ?? "No narrative available.")
+    // The linked league's commissioner plan decides; the fact-built narrative is shown either way.
+    setStoryLock(data?.aiLocked ?? null)
   }
 
   return (
@@ -256,6 +261,7 @@ export default function PlatformHallOfFamePanel() {
         <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
           <p className="font-medium">Narrative ({storyId})</p>
           <p className="mt-1">{story}</p>
+          <StoryAiLockNotice lock={storyLock} featureName="Chimmy Hall of Fame write-ups" className="mt-2" />
         </section>
       )}
     </main>

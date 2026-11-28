@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { TribalCouncilView } from '@/lib/survivor/survivorTribalView'
 import { idolDefinition } from '@/lib/survivor/survivorIdolCatalog'
@@ -35,7 +35,9 @@ function useCountdown(targetIso: string | null): string | null {
     return () => window.clearInterval(id)
   }, [target])
   if (!Number.isFinite(target)) return null
-  const left = Math.max(0, Math.floor((target - now) / 1000))
+  const left = Math.floor((target - now) / 1000)
+  // ⚠ Past the deadline there is no countdown: a frozen 00:00:00 read as "closing right now" for days.
+  if (left <= 0) return null
   const days = Math.floor(left / 86400)
   const pad = (n: number) => String(n).padStart(2, '0')
   const clock = `${pad(Math.floor((left % 86400) / 3600))}:${pad(Math.floor((left % 3600) / 60))}`
@@ -64,12 +66,15 @@ export function SurvivorVoteCast({
   backHref,
   idolHref,
   initialView = null,
+  openFooter = null,
 }: {
   leagueId: string
   tribeName?: string | null
   backHref: string
   idolHref?: string
   initialView?: TribalCouncilView | null
+  /** Shown only while the vote is open (the page's "vote with @Chimmy" line). */
+  openFooter?: ReactNode
 }) {
   const [view, setView] = useState<TribalCouncilView | null>(initialView)
   const [selected, setSelected] = useState<string | null>(initialView?.you.yourVoteTargetUserId ?? null)
@@ -122,7 +127,8 @@ export function SurvivorVoteCast({
   const canVote = Boolean(open && view?.you.isEligibleVoter && !view?.you.isSafeFromVote)
   const canChange = Boolean(canVote && view?.you.voteChangeAllowed && !view?.you.voteLocked)
   const votesIn = view?.votesIn ?? null
-  const idol = (view?.you.playableIdols ?? []).find(item => !item.alreadyPlayed) ?? null
+  // Past the deadline an idol can no longer be played, so its "Play it before votes close" prompt is hidden.
+  const idol = deadlinePassed ? null : (view?.you.playableIdols ?? []).find(item => !item.alreadyPlayed) ?? null
   const idolDef = idol ? idolDefinition(idol.powerType) : null
   const idolName = idolDef?.name ?? null
   const week = view?.week ?? null
@@ -190,12 +196,17 @@ export function SurvivorVoteCast({
     <header className="swl-vc-head">
       <Link className="swl-vc-back" href={backHref} aria-label="Back">‹</Link>
       <div className="swl-vc-title">
-        <h1>Cast your vote</h1>
+        <h1>{deadlinePassed ? 'The votes are in' : 'Cast your vote'}</h1>
         <span className="swl-t2 swl-vc-dtitle">{headerSub}</span>
         {clock && <span className="swl-vc-mclock">{tribeName ? `Tribe ${tribeName} · ` : ''}closes in <span className="swl-gold swl-num">{clock}</span></span>}
       </div>
       {clock && <div className="swl-vc-clock" role="timer" aria-live="off"><span className="swl-lbl">Votes close in</span><span className="swl-num">{clock}</span></div>}
     </header>
+
+    {/* A div, not a p: `.swl-vc p { margin: 0 }` strips the alert's side margins and it runs edge to edge. */}
+    {deadlinePassed && <div role="status" className="swl-vc-alert" style={{ marginTop: 16 }} data-testid="survivor-vote-closed">
+      Voting has closed. {view?.you.hasVoted ? 'Your vote is in. ' : ''}The host reads the votes next.
+    </div>}
 
     {error && <p role="alert" className="swl-vc-alert" style={{ marginTop: 16 }}>{error}</p>}
 
@@ -232,6 +243,14 @@ export function SurvivorVoteCast({
         {view.you.isSafeFromVote && <p className="swl-vc-note">You’re safe at this council and don’t cast a vote.</p>}
       </aside>
 
+      {deadlinePassed ? (
+      <section className="swl-vc-center" aria-label="Your ballot" data-testid="survivor-vote-sealed">
+        <div className="swl-card" style={{ textAlign: 'center' }}>
+          <strong>{view?.you.hasVoted ? 'Your vote is in the urn' : 'No vote from you this time'}</strong>
+          <span className="swl-t2" style={{ display: 'block', marginTop: 6 }}>Nobody sees a vote until the host reads them.</span>
+        </div>
+      </section>
+      ) : (
       <section className="swl-vc-center" aria-label="Your ballot">
         <div className="swl-vc-stage">
           <div className={`swl-slip${phase === 'dropping' ? ' is-dropping' : ''}${phase === 'cast' ? ' is-gone' : ''}`} aria-hidden={phase === 'cast'}>
@@ -253,9 +272,10 @@ export function SurvivorVoteCast({
         <img className={`swl-urn${phase !== 'choose' && !instant ? ' is-bumping' : ''}`} src="/survivor/weekly/urn.svg" alt="Voting urn" />
         <div className="swl-vc-actions">{actions}</div>
       </section>
+      )}
 
       <aside className="swl-vc-rail">
-        {idol && idolName && <>
+        {idol && idolName && !deadlinePassed && <>
           <div className="swl-card swl-card-gold swl-idol-desktop" data-testid="survivor-vote-idol">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="swl-idol-art" src={`/survivor/idols/${IDOL_ART[idol.powerType] ?? 'immunity'}.svg`} alt="" />
@@ -281,6 +301,7 @@ export function SurvivorVoteCast({
       </aside>
     </div>
 
-    <div className="swl-vc-bar">{actions}</div>
+    {deadlinePassed ? null : <div className="swl-vc-bar">{actions}</div>}
+    {deadlinePassed ? null : openFooter}
   </div>
 }

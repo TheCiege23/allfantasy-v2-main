@@ -10,7 +10,11 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { STARTUP_COLLEGE_DRAFT_LABEL, STARTUP_PRO_DRAFT_LABEL } from '@/lib/draft-defaults/startupCollegeDraft'
 import { compactDraftPoolCacheKey } from './draftPoolCacheKey'
+import { stripPoolEntriesFallbacks } from './stripPoolEntryFallbacks'
+import { collegeScopeSignature, collegeScopeSportFor, readCollegeConferenceScope } from '@/lib/college/conferenceScope'
 import {
   getEffectiveLeagueRosterTemplate,
   starterEligiblePlayerPositionsFromTemplate,
@@ -19,6 +23,7 @@ import { rosterFingerprintFromEligible } from '@/lib/draft-room/draft-pool-eligi
 import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { getApiCached } from '@/lib/api-performance'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 
 export type EnsureDraftPoolReadyResult =
   | { ok: true; source: 'db-cache' | 'memory-cache' | 'rebuilt' }
@@ -112,6 +117,30 @@ function resolveRosterFingerprint(effectiveLeagueTemplate: EffectiveLeagueTempla
   )}`
 }
 
+async function startupDraftPhaseSuffix(leagueId: string): Promise<string> {
+  try {
+    const session = await prisma.draftSession.findFirst({
+      where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { draftModeLabel: true },
+    })
+    const label = String(session?.draftModeLabel ?? '').toLowerCase()
+    return label === STARTUP_PRO_DRAFT_LABEL || label === STARTUP_COLLEGE_DRAFT_LABEL ? `:phase-${label}` : ''
+  } catch {
+    return ''
+  }
+}
+
+async function collegeScopeCacheSuffix(leagueId: string): Promise<string> {
+  try {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true } })
+    const scope = readCollegeConferenceScope(league?.settings, collegeScopeSportFor(league?.sport))
+    return scope ? `:college-${collegeScopeSignature(scope)}` : ''
+  } catch {
+    return ''
+  }
+}
+
 export async function resolveDraftPoolCacheContext(
   leagueId: string,
   options?: { effectiveLeagueTemplate?: EffectiveLeagueTemplate },
@@ -122,7 +151,19 @@ export async function resolveDraftPoolCacheContext(
 }> {
   const effectiveLeagueTemplate =
     options?.effectiveLeagueTemplate ?? (await getEffectiveLeagueRosterTemplate(leagueId))
-  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate)
+  const draft = await prisma.draftSession?.findFirst({
+    where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { id: true, draftModeLabel: true },
+  })
+  // An annual combined C2C draft gets its own pool per session; a two-draft Devy / C2C startup offers a
+  // different pool in each draft, and this cache is per league: the college draft must not be served the
+  // pro draft's board (lib/draft-defaults/startupCollegeDraft.ts).
+  const scope = draft?.draftModeLabel === ANNUAL_C2C_DRAFT ? `:${draft.id}` : ''
+  // A college league's conference scope changes which players the board holds, so it is part of the
+  // key: changing it must never serve the board cached for the old one.
+  const collegeScope = await collegeScopeCacheSuffix(leagueId)
+  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + scope + collegeScope + (await startupDraftPhaseSuffix(leagueId))
   return {
     effectiveLeagueTemplate,
     rosterFp,
@@ -515,6 +556,8 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
     }
 
     if (model) {
+      // Same slim entries the route writes and serves (stripPoolEntryFallbacks.ts).
+      const storedEntries = stripPoolEntriesFallbacks(resolved.entries)
       const expiresAt = new Date(Date.now() + Math.max(1, dbFirstMode.draftPoolCacheTtlSeconds) * 1000)
       await model.upsert({
         where: { cacheKey },
@@ -526,7 +569,7 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
           sourceFingerprint: rosterFp,
           entryCount: Number(resolved.count ?? resolved.entries.length),
           payload: {
-            entries: resolved.entries,
+            entries: storedEntries,
             sport: resolved.sport,
             count: resolved.count,
             rosterConfigurationIncomplete: resolved.rosterConfigurationIncomplete,
@@ -545,7 +588,7 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
           sourceFingerprint: rosterFp,
           entryCount: Number(resolved.count ?? resolved.entries.length),
           payload: {
-            entries: resolved.entries,
+            entries: storedEntries,
             sport: resolved.sport,
             count: resolved.count,
             rosterConfigurationIncomplete: resolved.rosterConfigurationIncomplete,

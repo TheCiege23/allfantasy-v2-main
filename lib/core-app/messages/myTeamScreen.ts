@@ -157,6 +157,7 @@ export const myTeamScreenMessages = defineMessages({
     lockedNote: (locked: number) =>
       ` ${locked} ${locked === 1 ? 'starter has' : 'starters have'} reached kickoff; confirm individual locks on your platform.`,
     lineupCheck: 'Lineup check',
+    lineupCheckAlso: 'Also check',
     unresolvedSlots: (n: number) => `${n} filled slot(s) could not be checked because the player identity is unresolved.`,
     lineupCheckFootnote: 'These are candidates for review. Confirm eligibility, locks, and AutoSubs on your platform before changing the lineup.',
     lineupCheckClear: 'No issues were identified among the starters we could check. Confirm current news and rules on your platform.',
@@ -185,6 +186,18 @@ export const myTeamScreenMessages = defineMessages({
       `Should I start ${bench} instead of ${starter} in this league? Compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
     benchAskChimmy: 'Ask Chimmy about this swap',
     benchCaveat: 'Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.',
+    /* The bench check's graded record for a swap of this size (2026-11-21, `decision-os/lineup/benchCalibration.ts`). */
+    /** The same small label as every measured line on /core (`messages/adviceRecord.ts` recordLabel). */
+    benchCheckRecordLabel: 'Track record',
+    benchCheckRecord: (pct: number, n: number, band: 'narrow' | 'clear' | 'wide', low: boolean, scale?: 'points' | 'share') => {
+      // NBA / NHL / MLB are banded by the edge's share of the starter's projection, not by points (benchCalibration.ts).
+      const swaps = scale === 'share'
+        ? `Swaps with an edge of ${band === 'narrow' ? 'under 10%' : band === 'clear' ? '10–25%' : '25% or more'} of the starter's projection`
+        : `Swaps with a ${band === 'narrow' ? '2–4 point' : band === 'clear' ? '4–8 point' : '8+ point'} edge`
+      return low
+        ? `${swaps} have been right only ${pct}% of the time (${n} graded calls) — closer than the projections suggest.`
+        : `${swaps} have been right ${pct}% of the time (${n} graded calls).`
+    },
 
     // TaxiYears
     taxiUnknownTitle: "This needs the league's taxi-year limit and its season-end roster history. One of them is missing, so we are not going to guess.",
@@ -358,6 +371,7 @@ export const myTeamScreenMessages = defineMessages({
     lockedNote: (locked) =>
       ` ${locked} ${locked === 1 ? 'titular ya llegó al inicio del partido' : 'titulares ya llegaron al inicio del partido'}.`,
     lineupCheck: 'Revisión de alineación',
+    lineupCheckAlso: 'Revisa también',
     unresolvedSlots: (n) => `${n} puesto(s) ocupado(s) no pudieron revisarse porque no identificamos al jugador.`,
     lineupCheckFootnote: 'Estas son opciones para revisar. Confirma elegibilidad, cierres y AutoSubs en tu plataforma antes de cambiar la alineación.',
     lineupCheckClear: 'No se identificaron problemas entre los titulares que pudimos revisar. Confirma las noticias y las reglas en tu plataforma.',
@@ -384,6 +398,15 @@ export const myTeamScreenMessages = defineMessages({
       `¿Debería poner de titular a ${bench} en lugar de ${starter} en esta liga? Compara las proyecciones con la puntuación de la liga, lesiones, elegibilidad de posición y cierres por inicio de partido.`,
     benchAskChimmy: 'Preguntar a Chimmy por este cambio',
     benchCaveat: 'Comparación de proyecciones · confirma lesiones, cierres por inicio y cambios automáticos en tu plataforma.',
+    benchCheckRecordLabel: 'Historial',
+    benchCheckRecord: (pct, n, band, low, scale) => {
+      const edge = scale === 'share'
+        ? band === 'narrow' ? 'menos del 10% de la proyección del titular' : band === 'clear' ? 'entre el 10% y el 25% de la proyección del titular' : 'más del 25% de la proyección del titular'
+        : band === 'narrow' ? '2 a 4 puntos' : band === 'clear' ? '4 a 8 puntos' : 'más de 8 puntos'
+      return low
+        ? `Los cambios con una ventaja de ${edge} solo han acertado el ${pct}% de las veces (${n} decisiones evaluadas): más ajustado de lo que sugieren las proyecciones.`
+        : `Los cambios con una ventaja de ${edge} han acertado el ${pct}% de las veces (${n} decisiones evaluadas).`
+    },
 
     taxiUnknownTitle: 'Hace falta el límite de años de taxi de la liga y su historial de plantillas a fin de temporada. Falta uno de los dos, así que no vamos a adivinar.',
     taxiUnknown: 'años restantes desconocidos',

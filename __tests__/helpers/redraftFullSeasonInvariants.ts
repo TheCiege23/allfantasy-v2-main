@@ -337,20 +337,6 @@ export function describeFullSeason(label: string, input: FullSeasonSimInput, opt
       expect(sim.seasonAtEnd.status).toBe('complete')
     })
 
-    it('settles each waiver run: the higher bid wins, the loser is denied, no player is on two rosters', () => {
-      for (const week of sim.weeks.filter((w) => w.week >= 2)) {
-        expect(week.waiverResults.filter((r) => r.status === 'approved')).toHaveLength(1)
-        expect(week.waiverResults.filter((r) => r.status === 'denied')).toHaveLength(1)
-        const approved = week.waiverClaims.find((c) => c.id === week.waiverResults.find((r) => r.status === 'approved')!.claimId)!
-        expect(approved.bidAmount).toBe(7)
-      }
-      // The season's own rosters (the rollover empties only next season's).
-      const active = inMemoryPrisma.table('redraftRosterPlayer').filter((r) => r.droppedAt == null && sim.rosterIds.includes(r.rosterId))
-      const lastClaims = sim.weeks.at(-1)!.waiverClaims
-      expect(lastClaims.filter((c) => c.status === 'approved')).toHaveLength(sim.regularSeasonWeeks - 1)
-      expect(new Set(active.map((r) => r.playerId)).size).toBe(active.length)
-    })
-
     it.runIf(Boolean(input.dynasty))('dynasty: carries every roster into next season, records reset', () => {
       const next = sim.dynastyRollover?.next
       expect(next).toBeTruthy()

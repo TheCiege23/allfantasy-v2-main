@@ -38,16 +38,18 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-describe('Devy Draft Center slot count', () => {
+// 2026-11-23: the slot count is said once, on the stash card ("5/6"); the Draft Center no longer repeats it.
+describe('Devy slot count', () => {
   it('matches the stash, not a constant 0', async () => {
     current = summary(5)
     render(<DevyHome leagueId="l" />)
-    expect(await screen.findByText('5 / 6 used')).toBeTruthy()
-    expect(screen.queryByText('0 / 6 used')).toBeNull()
+    expect(await screen.findByText('5/6')).toBeTruthy()
+    expect(screen.queryByText('0/6')).toBeNull()
+    expect(screen.queryByText(/\/ 6 used/)).toBeNull()
   })
   it('reads 0 only when the stash really is empty', async () => {
     current = summary(0)
     render(<DevyHome leagueId="l" />)
-    expect(await screen.findByText('0 / 6 used')).toBeTruthy()
+    expect(await screen.findByText('0/6')).toBeTruthy()
   })
 })

@@ -10,7 +10,10 @@ describe('resolveLeagueSkin', () => {
     expect(resolveLeagueSkin({ leagueType: 'guillotine' })).toBe('guillotine')
     expect(resolveLeagueSkin({ leagueType: 'best_ball' })).toBe('best_ball')
     expect(resolveLeagueSkin({ leagueType: 'devy' })).toBe('devy')
-    expect(resolveLeagueSkin({ leagueVariant: 'merged_devy_c2c' })).toBe('devy')
+    expect(resolveLeagueSkin({ leagueVariant: 'devy_dynasty' })).toBe('devy')
+    // C2C is its own format, never labelled Devy (Peach Bowl is leagueType c2c, no variant).
+    expect(resolveLeagueSkin({ leagueType: 'c2c', isDynasty: true })).toBe('c2c')
+    expect(resolveLeagueSkin({ leagueVariant: 'merged_devy_c2c' })).toBe('c2c')
     expect(resolveLeagueSkin({ leagueType: 'salary_cap' })).toBe('salary_cap')
     expect(resolveLeagueSkin({ leagueType: 'keeper' })).toBe('keeper')
   })

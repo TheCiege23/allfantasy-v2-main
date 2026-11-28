@@ -87,12 +87,28 @@ export function bbHohWeekBody(mode: string | null | undefined, remaining: number
   return 'You name two nominees. You don’t vote at the eviction.'
 }
 
+/** The finale: as many houseguests left as the finale format holds (BigBrotherJuryCenter's own test). */
+function finaleSize(s: BigBrotherSpecialtySummary): number {
+  return s.config.finaleFormat === 'final_3' ? 3 : 2
+}
+function isFinale(s: BigBrotherSpecialtySummary): boolean {
+  const left = s.remainingCount ?? 0
+  return left > 0 && left <= finaleSize(s)
+}
+
+/** The houseguests still in the house, for the finale. */
+function wallFinalists(s: BigBrotherSpecialtySummary) {
+  return (s.memoryWall ?? []).filter((h) => h.status !== 'ELIMINATED' && h.status !== 'JURY')
+}
+
 function yourWeek(s: BigBrotherSpecialtySummary): { title: string; body: string } {
   const st = s.myStatus
   const ballot = s.ballot
   if (!st) return { title: 'You’re watching this house', body: 'You don’t have a houseguest in this league.' }
+  // No week yet (2026-11-23): it said "You’re safe this week" before any week existed.
+  if (!s.cycle) return { title: 'The house opens soon', body: 'Your week starts when week 1 begins.' }
   if (st === 'ELIMINATED') return { title: 'You’ve been evicted', body: 'Your team no longer plays this season.' }
-  if (st === 'JURY') return { title: 'You’re on the jury', body: 'You vote for the winner in the finale.' }
+  if (st === 'JURY') return isFinale(s) ? { title: 'Cast your finale vote', body: 'You and the jury choose the winner.' } : { title: 'You’re on the jury', body: 'You vote for the winner in the finale.' }
   if (st === 'HOH') return { title: 'You’re Head of Household', body: bbHohWeekBody(s.config.evictionTieBreakMode, s.remainingCount) }
   if (st === 'NOMINATED') return { title: 'You’re on the block', body: 'Win the Veto or hope the house keeps you.' }
   if (st === 'VETO_WINNER') return { title: 'You hold the Veto', body: 'You can save one nominee at the Veto meeting.' }
@@ -117,11 +133,24 @@ export function BigBrotherSpecialtyHome({
   const step = home?.phaseStep ?? -1
   const total = summary.totalRosterCount ?? summary.memoryWall?.length ?? 0
   const remaining = summary.remainingCount ?? total
-  const title = home?.leagueName ?? 'Big Brother'
+  // The league name is in the workspace header already; as the hero title a long one ran to seven lines on a phone.
+  const title = 'Big Brother'
+  const finale = isFinale(summary)
+  const juryHref = `/league/${encodeURIComponent(leagueId)}?view=bb_jury`
   const wall = summary.memoryWall ?? []
   const avatarOf = new Map(wall.map((w) => [w.rosterId, w.avatarUrl]))
+  const tagFor = (h: { rosterId: string; status: BigBrotherUserStatus }) => {
+    const out = h.status === 'ELIMINATED' || h.status === 'JURY'
+    const base = finale && !out ? { label: 'Finalist', tone: 'gold' as SpecialtyTone } : STATUS_TAG[h.status] ?? STATUS_TAG.SAFE
+    if (h.rosterId !== summary.myRosterId || out) return base
+    // Your own tile says what you are (2026-11-23: it always read "You", hiding Nominee or Veto).
+    return base.label === 'Safe' ? { label: 'You', tone: 'acc' as SpecialtyTone } : { label: `You · ${base.label}`, tone: base.tone }
+  }
   const week = yourWeek(summary)
-  const headline = cycle ? `Week ${cycle.week}${step >= 0 ? ` · ${BB_PHASE_STEPS[step]}` : ''}` : 'The house opens soon'
+  const headline = finale
+    ? `Finale · final ${remaining}`
+    : cycle ? `Week ${cycle.week}${step >= 0 ? ` · ${BB_PHASE_STEPS[step]}` : ''}` : 'The house opens soon'
+  const finalists = wallFinalists(summary)
 
   const feed: SpecialtyFeedItem[] = (home?.feed ?? []).map((e) => ({
     id: e.id,
@@ -132,12 +161,18 @@ export function BigBrotherSpecialtyHome({
 
   const juryWords =
     summary.config.juryStartMode === 'when_remaining'
-      ? 'when the house reaches the configured size'
+      ? 'when only a few houseguests are left'
       : summary.config.juryStartMode === 'fixed_week'
-        ? 'from the configured week'
-        : 'after the configured number of evictions'
+        ? 'at a set week'
+        : 'after a set number of evictions'
+  const hohRule =
+    summary.config.challengeMode === 'hybrid'
+      ? 'HOH goes to the best fantasy score plus the week’s challenge.'
+      : summary.config.challengeMode === 'ai_theme'
+        ? 'HOH goes to the winner of the week’s themed challenge.'
+        : 'Top fantasy score among eligible houseguests wins HOH.'
   const rules = [
-    'Top fantasy score among eligible houseguests wins HOH.',
+    hohRule,
     'The HOH nominates two houseguests.',
     'Top score among the Veto players wins the Veto and can save a nominee.',
     `The house votes to evict. ${bbTieBreakRule(summary.config.evictionTieBreakMode)}`,
@@ -164,15 +199,16 @@ export function BigBrotherSpecialtyHome({
           headline={headline}
           blurb="Redraft fantasy with a house twist: fantasy points win HOH and the Veto, the house votes someone out, and the last one in wins the league."
           actions={[
-            { label: 'Go to the house', href: '#bb-houseguests', primary: true },
+            ...(finale ? [{ label: 'Finale vote', href: juryHref, primary: true }] : []),
+            { label: 'Go to the house', href: '#bb-houseguests', primary: !finale },
             ...(home?.lastEviction ? [{ label: 'Eviction night', href: '#bb-eviction' }] : []),
             { label: 'My lineup', href: `/league/${encodeURIComponent(leagueId)}?view=team` },
           ]}
           clock={
             <SpecialtyCountdown
-              label={home?.nextDecision?.label ?? 'Next decision'}
-              target={home?.nextDecision?.at}
-              caption={home?.nextDecision ? new Date(home.nextDecision.at).toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }) : 'Not scheduled yet'}
+              label={finale ? 'Finale' : home?.nextDecision?.label ?? 'Next decision'}
+              target={finale ? null : home?.nextDecision?.at}
+              caption={finale ? 'The jury votes for the winner' : home?.nextDecision ? new Date(home.nextDecision.at).toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }) : 'Not scheduled yet'}
             />
           }
         />
@@ -182,6 +218,21 @@ export function BigBrotherSpecialtyHome({
         <SpecialtyGrid
           main={
             <>
+              {finale ? (
+                <SpecialtyCard label={`Final ${finalists.length}`} testId="bb-finalists">
+                  <div className={bb.noms}>
+                    {finalists.map((h) => (
+                      <div key={h.rosterId} className={bb.nom}>
+                        <Avatar id={h.rosterId} name={h.displayName} url={h.avatarUrl} size={64} className={`${bb.ring} ${bb.ringGold}`} />
+                        <span className={bb.spotName}>{h.displayName}</span>
+                        <SpecialtyTag tone="gold">Finalist</SpecialtyTag>
+                      </div>
+                    ))}
+                  </div>
+                  <a className={`${sp.btn} ${sp.btnP}`} href={juryHref}>Finale vote</a>
+                </SpecialtyCard>
+              ) : (
+              <>
               <SpecialtyCard label="This week in the house" testId="bb-phase-tracker">
                 <ol className={bb.ph} aria-label="Week phases">
                   {BB_PHASE_STEPS.map((label, i) => (
@@ -248,6 +299,8 @@ export function BigBrotherSpecialtyHome({
                   )}
                 </div>
               </div>
+              </>
+              )}
 
               <SpecialtyCard
                 id="bb-houseguests"
@@ -259,14 +312,14 @@ export function BigBrotherSpecialtyHome({
                   {wall.map((h) => {
                     const me = h.rosterId === summary.myRosterId
                     const out = h.status === 'ELIMINATED' || h.status === 'JURY'
-                    const tag = me && !out ? { label: 'You', tone: 'acc' as SpecialtyTone } : STATUS_TAG[h.status] ?? STATUS_TAG.SAFE
+                    const tag = tagFor(h)
                     const ring =
                       h.status === 'HOH' ? bb.ringGold : h.status === 'NOMINATED' ? bb.ringPink : h.status === 'VETO_WINNER' ? bb.ringBlue : ''
                     return (
                       <li key={h.rosterId} className={`${bb.hg} ${out ? bb.hgOut : ''} ${me ? bb.hgMe : ''}`} data-status={h.status}>
                         <Avatar id={h.rosterId} name={h.displayName} url={h.avatarUrl} size={52} className={`${bb.ring} ${ring} ${bb.grey}`} />
                         <span className={bb.hgName}>{h.displayName}</span>
-                        <SpecialtyTag tone={tag.tone}>{me && !out ? 'You' : tag.label}</SpecialtyTag>
+                        <SpecialtyTag tone={tag.tone}>{tag.label}</SpecialtyTag>
                       </li>
                     )
                   })}
@@ -274,6 +327,7 @@ export function BigBrotherSpecialtyHome({
               </SpecialtyCard>
             </>
           }
+          railClassName={bb.railWide}
           rail={
             <>
               <SpecialtyCard variant={2} borderColor="rgba(59,130,246,.4)" testId="bb-your-week">
@@ -324,7 +378,26 @@ export function BigBrotherSpecialtyHome({
           />
         ) : (
           <>
-            <SpecialtyCountdown label={home?.nextDecision?.label ?? 'Next decision'} target={home?.nextDecision?.at} />
+            <SpecialtyCountdown label={finale ? 'Finale' : home?.nextDecision?.label ?? 'Next decision'} target={finale ? null : home?.nextDecision?.at} />
+            {/* The phone dropped the HOH / block / Veto spots entirely (2026-11-23). One compact card instead. */}
+            <dl className={`${sp.card} ${bb.phoneSpots}`} data-testid="bb-phone-spots">
+              {finale ? (
+                <>
+                  <dt>Final {finalists.length}</dt>
+                  <dd>{finalists.map((h) => h.displayName).join(' · ')}</dd>
+                  <dd><a className={`${sp.btn} ${sp.btnP}`} href={juryHref}>Finale vote</a></dd>
+                </>
+              ) : (
+                <>
+                  <dt>Head of Household</dt>
+                  <dd>{cycle?.hohRosterId ? nameOf(cycle.hohRosterId) : 'Not decided yet'}</dd>
+                  <dt>On the block</dt>
+                  <dd>{summary.finalNomineeRosterIds.length ? summary.finalNomineeRosterIds.map(nameOf).join(' · ') : 'No nominees yet'}</dd>
+                  <dt>Veto holder</dt>
+                  <dd>{cycle?.vetoWinnerRosterId ? `${nameOf(cycle.vetoWinnerRosterId)}${cycle.vetoUsed ? ' · used' : ''}` : 'Not won yet'}</dd>
+                </>
+              )}
+            </dl>
             <div className={sp.card} style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span className={sp.lbl} style={{ color: '#9fd0ff' }}>Your week</span>
               <strong>{week.title}</strong>
@@ -334,23 +407,17 @@ export function BigBrotherSpecialtyHome({
             <ul className={bb.hgGrid}>
               {wall.map((h) => {
                 const out = h.status === 'ELIMINATED' || h.status === 'JURY'
-                const tag = STATUS_TAG[h.status] ?? STATUS_TAG.SAFE
+                const tag = tagFor(h)
                 return (
                   <li key={h.rosterId} className={`${bb.hg} ${out ? bb.hgOut : ''}`}>
                     <Avatar id={h.rosterId} name={h.displayName} url={h.avatarUrl} size={40} className={bb.grey} />
                     <span className={bb.hgName}>{h.displayName}</span>
-                    <SpecialtyTag tone={h.rosterId === summary.myRosterId && !out ? 'acc' : tag.tone}>
-                      {h.rosterId === summary.myRosterId && !out ? 'You' : tag.label}
-                    </SpecialtyTag>
+                    <SpecialtyTag tone={tag.tone}>{tag.label}</SpecialtyTag>
                   </li>
                 )
               })}
             </ul>
-            {home?.lastEviction ? (
-              <a className={`${sp.btn} ${sp.btnP}`} href="#bb-eviction" style={{ minHeight: 52 }}>
-                Eviction night
-              </a>
-            ) : null}
+            {/* No "Eviction night" button here: the section itself follows right below (2026-11-23). */}
           </>
         )}
       </div>
@@ -504,7 +571,9 @@ export function BigBrotherEvictionMoment({
   return (
     <section
       id="bb-eviction"
-      className={`${sp.card} ${sp.pad}`}
+      // Eviction night is a staged dark scene in every mode: stayDark resets the shell's light tokens inside it (its
+      // title went dark-on-dark in light mode, 2026-11-23).
+      className={`${sp.card} ${sp.pad} ${sp.stayDark}`}
       style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(255,94,200,.12), transparent 60%), #0b0d14', gap: 16 }}
       data-testid="bb-eviction-moment"
       data-state={sealed ? 'sealed' : done ? 'revealed' : 'counting'}
@@ -545,7 +614,7 @@ export function BigBrotherEvictionMoment({
               {counts ? (
                 <>
                   <span className={`${bb.evictCount} ${out ? bb.fade : ''}`} aria-live="polite">
-                    {shown ? shown[i] : '–'}
+                    {shown ? shown[i] : '?'}
                   </span>
                   <span className={sp.lbl}>Votes to evict</span>
                 </>
@@ -559,14 +628,18 @@ export function BigBrotherEvictionMoment({
       </p>
       {!counts ? <p className={sp.empty} style={{ textAlign: 'center' }}>This league keeps vote totals private. Only the result is shown.</p> : null}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-        <div className={sp.card2} style={{ flex: '1 1 260px', padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span className={sp.lbl}>What’s shown, what stays private</span>
-          <ul className={sp.rules}>
+        {/* The privacy promise is the same every week, so it folds (2026-11-24, the simplify pass); "After the
+            eviction" stays open because once the vote is read it says what happened to this manager. */}
+        <details className={`${sp.card2} ${sp.fold}`} style={{ flex: '1 1 260px', padding: 16 }} data-testid="bb-privacy">
+          <summary className={sp.foldSummary} style={{ margin: 0 }}>
+            <span className={sp.lbl}>What’s shown, what stays private</span>
+          </summary>
+          <ul className={sp.rules} style={{ marginTop: 10 }}>
             <li className={sp.rule}><b>✓</b><span>Who was evicted{counts ? ' and the vote count' : ''}.</span></li>
             <li className={sp.rule}><b>✓</b><span>Who voted is never shown until the season ends.</span></li>
             <li className={sp.rule}><b>✓</b><span>AF never reveals sealed ballots in chat or recaps.</span></li>
           </ul>
-        </div>
+        </details>
         <div className={sp.card2} style={{ flex: '1 1 260px', padding: 16, display: 'flex', flexDirection: 'column', gap: 8, borderColor: 'rgba(139,92,246,.35)' }}>
           <span className={sp.lbl} style={{ color: '#c4b5fd' }}>After the eviction</span>
           <span className={sp.t2} style={{ fontSize: 13 }}>

@@ -6,6 +6,7 @@ import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { splitDecisionQueue, TOP_DECISION_LIMIT } from '@/lib/core-app/decisionQueue'
 import { usePersistentDisclosure } from '@/components/core-app/home/homeViewState'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import { useMessages } from '@/components/i18n/useMessages'
 import { decisionQueueMessages } from '@/lib/core-app/messages/decisionQueue'
 import { scopeLabelText } from '@/lib/core-app/shellCopy'
@@ -250,7 +251,6 @@ export function DecisionQueue({
           <div key={tier} className="af-decision-tier" data-tier={tier}>
           <p className="af-decision-tierhead">
             <b>{tierCopy.title}</b>
-            <span>{tierCopy.hint}</span>
           </p>
           <ol
             className="af-decisions-top"
@@ -308,11 +308,7 @@ export function DecisionQueue({
                       ) : null}
                       {stripVerificationStamp(text.meta)}
                     </p>
-                    {showLesson && lesson ? (
-                      <p className="af-decision-why">
-                        <b>{g.why}</b> {teachText(lesson, g)}
-                      </p>
-                    ) : null}
+                    {showLesson && lesson ? <WhyFold label={g.why}>{teachText(lesson, g)}</WhyFold> : null}
                   </div>
                   {issue.action ? (
                     <ActionLink action={issue.action} label={text.actionLabel ?? issue.action.label} severity={issue.severity} />

@@ -110,12 +110,13 @@ describe('Big Brother home', () => {
     }))
   }
 
-  it('is dark in every mode and shows the phase in words', async () => {
+  // 2026-11-23: Big Brother follows light mode (tokens, no af-draft-dark); the HOH view says "Now:" for the phase.
+  it('follows the app mode and shows the phase in words', async () => {
     stubApi()
     const { container } = render(<BigBrotherHome leagueId="L1" isCommissioner initialView="hoh" />)
     await screen.findByText('Morgan')
-    expect((container.firstElementChild as HTMLElement).className.split(/\s+/)).toContain('af-draft-dark')
-    expect(container.textContent).toContain('Phase: Eviction vote open')
+    expect((container.firstElementChild as HTMLElement).className.split(/\s+/)).not.toContain('af-draft-dark')
+    expect(container.textContent).toContain('Now: Eviction vote open')
     expect(container.textContent).not.toContain('VOTING_OPEN')
   })
 

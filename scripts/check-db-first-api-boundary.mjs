@@ -12,6 +12,8 @@ const DATA_API_HOST_PATTERNS = [
   /^api\.x\.com$/i,
   // Draft market references: only ingestion workers may read this provider.
   /^api\.statsguyfantasy\.com$/i,
+  // Official NBA rosters and game logs are read by ingestion. League and OS surfaces read AF's stored projections.
+  /^stats\.nba\.com$/i,
   // ⚠ FANTRAX WAS INVISIBLE TO THIS GUARD ENTIRELY, and it is a full data API:
   // rosters, standings, schedules, live matchup scores and college ADP, all from
   // www.fantrax.com/fxea/general. It has been read by the import stack since
@@ -111,6 +113,10 @@ const DATA_API_HOST_PATTERNS = [
   // and scores/gameScoreProviders.ts by existing allowlist entries, the two scripts/ by the
   // import|refresh pattern, and lib/stats/cfbdPlayerStats.ts by the entry added below.
   /(^|\.)api\.collegefootballdata\.com$/i,
+  // CollegeBasketballData — CFBD's sister API, same key and same monthly quota. Added with its
+  // first caller (2026-11-22), so it is watched from day one: lib/cbbd/cbbdFetch.ts is the adapter
+  // (allowlisted below) and lib/devy/cbbdDraftPicksStore.ts the ingestion that alone imports it.
+  /(^|\.)api\.collegebasketballdata\.com$/i,
   // api-sports.io. NOT the same vendor as `api.sportsdata.io` above, despite the
   // names — that near-collision is how this one stayed off the list while its
   // lookalike was monitored. Seen as `v3.football.api-sports.io` and
@@ -318,6 +324,8 @@ const DATA_API_IDENTIFIERS = [
   // the check for every one of them — the exact failure this list exists to
   // prevent, described in the block comment above.
   'CFBD_BASE_URL',
+  // The CBBD host, hoisted into lib/cbbd/cbbdFetch.ts for the same reason as CFBD_BASE_URL.
+  'CBBD_BASE_URL',
   // ESPN's FANTASY league host (`lm-api-reads.fantasy.espn.com`), hoisted into
   // `lib/providers/espnUrls.ts` for the ESPN import adapter. Same reason as both
   // ESPN entries above: four files held that literal, and without these names the
@@ -538,6 +546,15 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^lib\/espn\/espnNcaabFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
+   * `lib/espn/espnProRosterFetch.ts` — ESPN NBA / NHL / MLB teams + rosters, the adapter half of the
+   * current-team headshot source (contracts/espn GAPS E-08, 2026-11-27). Same split as the NCAAB entry above:
+   * every export is a live fetch or a pure parser, and the writing lives in `lib/espn/proEspnHeadshotIngest.ts`.
+   *
+   * ⚠ RE-CHECK BEFORE TRUSTING THIS. Valid only while that ingest module is the sole runtime importer.
+   * Censused on 2026-11-27 across all four forms: the ingest module and tests, nothing else.
+   */
+  /^lib\/espn\/espnProRosterFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
    * `lib/cfbd-fetch.ts` — the single CFBD request path, and where `CFBD_BASE_URL`
    * is defined. It is an ADAPTER rather than a pure definition site: `cfbdGet`
    * performs the request, so it is allowlisted here with the other clients
@@ -551,6 +568,13 @@ const ALLOWED_PATH_PATTERNS = [
    * does when the answer is "we could not ask", rather than defaulting to `[]`.
    */
   /^lib\/cfbd-fetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * `lib/cbbd/cbbdFetch.ts` — the CollegeBasketballData adapter, defining `CBBD_BASE_URL` and
+   * calling through `cfbdGet` above. Census 2026-11-22 (static, relative, dynamic and require
+   * forms): its only runtime importer is `lib/devy/cbbdDraftPicksStore.ts`, ingestion run from the
+   * `?intel=1` cron tick. If a request path ever imports it, this entry is no longer earned.
+   */
+  /^lib\/cbbd\/cbbdFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * The API-Football adapter. Earned the same way CFBD did, and checked the same
    * way — by its callers.

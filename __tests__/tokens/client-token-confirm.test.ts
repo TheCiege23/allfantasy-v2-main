@@ -140,10 +140,17 @@ describe('every screen that can spend storyline or Survivor tokens asks first', 
   })
 
   it('no storyline route hardcodes the confirmation any more', () => {
-    for (const f of ['app/api/leagues/[leagueId]/drama/tell-story/route.ts', 'app/api/leagues/[leagueId]/story/create/route.ts']) {
+    // story/create and drama/tell-story both left token billing on 2026-11-27 (the league commissioner's AF
+    // Commissioner plan unlocks them, lib/league-story-ai/leagueStoryAiGate.ts): neither has a confirmation,
+    // a token gate or a hardcoded spend left.
+    for (const f of [
+      'app/api/leagues/[leagueId]/drama/tell-story/route.ts',
+      'app/api/leagues/[leagueId]/story/create/route.ts',
+    ]) {
       const src = code(f)
-      expect(src).toMatch(/confirmTokenSpend:\s*body\.confirmTokenSpend === true/)
       expect(src).not.toMatch(/confirmTokenSpend:\s*true/)
+      expect(src).not.toMatch(/requireFeatureEntitlement\(/)
+      expect(src).toMatch(/checkLeagueStoryAiGate\(/)
     }
   })
 })

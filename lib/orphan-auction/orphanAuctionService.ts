@@ -60,7 +60,7 @@ const loadLeague = (leagueId: string, db: Db = prisma) =>
 type LeagueRow = NonNullable<Awaited<ReturnType<typeof loadLeague>>>
 
 function supported(league: LeagueRow): boolean {
-  if (resolveWriteAuthority(league.platform) !== 'NATIVE') return false
+  if (resolveWriteAuthority(league) !== 'NATIVE') return false
   const settings = (league.settings as Record<string, unknown> | null) ?? {}
   return (
     renewalKindFromSelection({

@@ -6,6 +6,8 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 type ShadowLeagueBannerProps = {
   /** `League.platform`. Native/absent values render nothing. */
   platform: string | null | undefined
+  /** `League.settings`: a league made official on AllFantasy is not a shadow. Absent reads as not official. */
+  settings?: unknown
   className?: string
 }
 
@@ -22,9 +24,9 @@ type ShadowLeagueBannerProps = {
  * provider write-back adapter ships and moves that platform to CONNECTED — nothing for those
  * either, with no edit to this file.
  */
-export function ShadowLeagueBanner({ platform, className }: ShadowLeagueBannerProps) {
+export function ShadowLeagueBanner({ platform, settings, className }: ShadowLeagueBannerProps) {
   const { t } = useOptionalLanguage()
-  if (!isShadowLeague(platform)) return null
+  if (!isShadowLeague({ platform, settings: settings ?? null })) return null
   const source = sourcePlatformLabel(platform) ?? t('decide.shadow.fallbackSource')
 
   return (

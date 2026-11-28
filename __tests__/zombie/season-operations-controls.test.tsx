@@ -26,7 +26,7 @@ describe('Zombie season operations controls', () => {
   })
   it('hides owner-only recovery and accounting controls from members', async () => {
     mockFetch.mockImplementation(() => response({ ...pack, canManage: false, userId: 'member' }))
-    render(<ZombieSeasonOperations leagueId="league1" />); await screen.findByText('Season operations')
+    render(<ZombieSeasonOperations leagueId="league1" />); await screen.findByText('League business')
     expect(screen.queryByText('Prepare season allocation')).not.toBeInTheDocument(); expect(screen.queryByText('Review and assign replacement')).not.toBeInTheDocument()
     expect(screen.getByText('I consent to the test week')).toBeEnabled()
   })

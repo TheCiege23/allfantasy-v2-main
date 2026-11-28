@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   snapshotFindMany: vi.fn(),
   teamFindMany: vi.fn(),
   activityFindMany: vi.fn(),
+  factFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -25,6 +26,7 @@ vi.mock('@/lib/prisma', () => ({
     rosterSnapshot: { findFirst: mocks.snapshotFindFirst, findMany: mocks.snapshotFindMany },
     leagueTeam: { findMany: mocks.teamFindMany },
     decisionOsImportedActivity: { findMany: mocks.activityFindMany },
+    transactionFact: { findMany: mocks.factFindMany },
   },
 }))
 
@@ -60,6 +62,7 @@ beforeEach(() => {
     args.where.claimedByUserId ? teams.filter((t) => t.claimedByUserId) : teams,
   )
   mocks.activityFindMany.mockResolvedValue([])
+  mocks.factFindMany.mockResolvedValue([])
 })
 
 describe('a claimed manager keeps their moves', () => {

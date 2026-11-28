@@ -4,14 +4,15 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, MoreHorizontal, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, MoreHorizontal, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX, Zap } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { formatTimerRemaining } from '@/lib/live-draft-engine/DraftTimerService'
 import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
+import { resolveScheduledStartCountdown, SCHEDULED_START_GRACE_MS } from '@/lib/draft/scheduledStartCountdown'
 import type { TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import './af-draft-room.css'
 import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
-import { effectiveDueAt, formatClockTime, isLongPickClock, type QuietWindow } from '@/lib/draft-room/pickClockPlanning'
+import { resolvePickDueTime, type QuietWindow } from '@/lib/draft-room/pickClockPlanning'
 import { useMessages } from '@/components/i18n/useMessages'
 import { pickClockPlannerMessages } from '@/lib/core-app/messages/pickClockPlanner'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
@@ -152,6 +153,23 @@ type DraftTopBarProps = {
   idleClockLabel?: string | null
   /** "Invite leaguemates" and the menu's Copy Invite Link. A solo mock has nobody to invite. */
   showInvite?: boolean
+  /**
+   * The league's scheduled draft time (`LeagueSettings.draftDateUtc`, ISO). Before the draft the
+   * middle slot counts down to it ("Starts in 12:34"). Null / absent renders exactly as before.
+   */
+  scheduledStartIso?: string | null
+  /**
+   * True when the server starts the draft at that time (`scheduledDraftAutoStarts`). Once the time
+   * has passed the countdown then reads "Starting…" for a few minutes; false drops it instead, so
+   * the room never promises a start the commissioner has to press.
+   */
+  scheduledStartAutoStarts?: boolean
+  /**
+   * An auto draft (execution mode `auto`): the server makes every pick. The pick clock, its beeps
+   * and the "you're on the clock" call to act are all off; the middle slot reads "Auto-drafting"
+   * with how far along the board is.
+   */
+  autoDraft?: boolean
 }
 
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {
@@ -185,19 +203,27 @@ function withCount(template: string, count: number): string {
   return template.replace('{{count}}', String(count))
 }
 
+/**
+ * "90 Seconds Per Pick", never "2 Minutes": a clock is stated in the largest unit that divides it
+ * exactly. Rounding to the larger unit told a 54-team draft on a 90-second clock it had two minutes
+ * a pick (2026-11-25).
+ */
 export function formatTimerSummary(timerSeconds: number | null | undefined, t: (key: string) => string): string {
-  if (!timerSeconds || timerSeconds <= 0) return t('draftRoom.topBar.timer.untimed')
-  if (timerSeconds < 60) return withCount(t('draftRoom.topBar.timer.seconds'), timerSeconds)
-  if (timerSeconds < 3600) {
-    const minutes = Math.round(timerSeconds / 60)
-    return withCount(t(minutes === 1 ? 'draftRoom.topBar.timer.minuteOne' : 'draftRoom.topBar.timer.minutes'), minutes)
+  if (!timerSeconds || !Number.isFinite(timerSeconds) || timerSeconds <= 0) return t('draftRoom.topBar.timer.untimed')
+  const seconds = Math.round(timerSeconds)
+  if (seconds % 86400 === 0) {
+    const days = seconds / 86400
+    return withCount(t(days === 1 ? 'draftRoom.topBar.timer.dayOne' : 'draftRoom.topBar.timer.days'), days)
   }
-  if (timerSeconds < 86400) {
-    const hours = Math.round(timerSeconds / 3600)
+  if (seconds % 3600 === 0) {
+    const hours = seconds / 3600
     return withCount(t(hours === 1 ? 'draftRoom.topBar.timer.hourOne' : 'draftRoom.topBar.timer.hours'), hours)
   }
-  const days = Math.round(timerSeconds / 86400)
-  return withCount(t(days === 1 ? 'draftRoom.topBar.timer.dayOne' : 'draftRoom.topBar.timer.days'), days)
+  if (seconds % 60 === 0) {
+    const minutes = seconds / 60
+    return withCount(t(minutes === 1 ? 'draftRoom.topBar.timer.minuteOne' : 'draftRoom.topBar.timer.minutes'), minutes)
+  }
+  return withCount(t('draftRoom.topBar.timer.seconds'), seconds)
 }
 
 function formatPoolReadinessLabel(
@@ -244,7 +270,7 @@ export function DraftTopBar({
   isCurrentUserOnClock = false,
   pickLabel,
   overallPickNumber,
-  timerStatus,
+  timerStatus: timerStatusProp,
   timerRemainingSeconds,
   timerEndAtIso = null,
   timerSeconds = null,
@@ -303,7 +329,13 @@ export function DraftTopBar({
   extraMenuItems = [],
   idleClockLabel = null,
   showInvite = true,
+  scheduledStartIso = null,
+  scheduledStartAutoStarts = false,
+  autoDraft = false,
 }: DraftTopBarProps) {
+  // Nobody is on a clock in an auto draft, so no countdown, urgency styling or beeps.
+  const timerStatus: DraftTopBarProps['timerStatus'] = autoDraft ? 'none' : timerStatusProp
+  const autoDraftLive = autoDraft && (draftStatus === 'in_progress' || draftStatus === 'paused')
   const { t, tInterpolate, language } = useLanguage()
   const pickClockCopy = useMessages(pickClockPlannerMessages)
   const headerCopy = useMessages(draftRoomHeaderMessages)
@@ -328,6 +360,25 @@ export function DraftTopBar({
     timerRemainingSeconds,
     { pauseReason: timerPauseReason, overnightResumeAtIso },
   )
+  // Pre-draft countdown to the scheduled start. The same hook ticks it once a second; it stops
+  // ticking once the time is far enough past that nothing is shown any more.
+  const scheduledStartMs = scheduledStartIso ? Date.parse(scheduledStartIso) : Number.NaN
+  const scheduledStartLive =
+    draftStatus === 'pre_draft' &&
+    Number.isFinite(scheduledStartMs) &&
+    Date.now() - scheduledStartMs <= SCHEDULED_START_GRACE_MS
+  const scheduledStartRemaining = useDraftCountdownSeconds(
+    scheduledStartLive ? 'running' : 'none',
+    scheduledStartLive ? scheduledStartIso : null,
+    null,
+  )
+  const scheduledStart = resolveScheduledStartCountdown({
+    draftStatus,
+    scheduledStartIso,
+    nowMs: Date.now(),
+    autoStarts: scheduledStartAutoStarts,
+    remainingSeconds: scheduledStartRemaining,
+  })
   const menuRef = useRef<HTMLDivElement | null>(null)
   const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const menuDropdownRef = useRef<HTMLDivElement | null>(null)
@@ -443,13 +494,25 @@ export function DraftTopBar({
   // On a long pick clock (10+ minutes) a countdown alone is hard to plan around — "3h 11m" means
   // working out the time. Show the wall-clock deadline beside it. Not a mode: any draft type.
   // Quiet hours freeze the clock server-side, so the deadline is the effective one, not timerEndAt.
+  // ⚠ Not read during the server or hydration render: those run seconds apart and in different time
+  // zones, so the time would differ and React would discard the tree. Until mount the label keeps
+  // its place with an invisible placeholder; the mount effect fills in the viewer's local time.
+  const [dueClockMounted, setDueClockMounted] = useState(false)
+  useEffect(() => {
+    setDueClockMounted(true)
+  }, [])
   const dueLabel = useMemo(() => {
-    if (timerStatus !== 'running' || !isLongPickClock(timerSeconds) || !timerEndAtIso) return null
-    const endMs = Date.parse(timerEndAtIso)
-    if (!Number.isFinite(endMs)) return null
-    const due = effectiveDueAt(Date.now(), endMs, quietWindow ?? null)
-    return pickClockCopy.dueAt(formatClockTime(due, language === 'es' ? 'es-US' : 'en-US'))
-  }, [timerStatus, timerSeconds, timerEndAtIso, quietWindow, pickClockCopy, language])
+    const due = resolvePickDueTime({
+      timerStatus,
+      timerSeconds,
+      timerEndAtIso,
+      quietWindow,
+      locale: language === 'es' ? 'es-US' : 'en-US',
+      nowMs: dueClockMounted ? Date.now() : null,
+    })
+    if (!due) return null
+    return { text: due.time == null ? null : pickClockCopy.dueAt(due.time), placeholder: pickClockCopy.dueAt(due.placeholder) }
+  }, [timerStatus, timerSeconds, timerEndAtIso, quietWindow, pickClockCopy, language, dueClockMounted])
 
   const timerSummary = useMemo(() => formatTimerSummary(timerSeconds, t), [timerSeconds, t])
   const clockProgress = timerStatus === 'running' ? clockProgressPercent(effectiveRemaining, timerSeconds) : null
@@ -485,6 +548,57 @@ export function DraftTopBar({
   const draftFormatLabel = resolveDraftFormatLabel(draftType, thirdRoundReversal, t)
   const poolReadinessLabel = formatPoolReadinessLabel(sport, poolReadiness, t)
 
+  /**
+   * "Starts in 12:34" before the scheduled draft time, "Starting…" just after it when the server
+   * starts the draft. `compact` is the commissioner's version beside the Start Draft button: on a
+   * phone it drops the words and keeps clock + time, so the pair still fits a 390px row.
+   */
+  const scheduledStartPill = (compact: boolean) => {
+    if (scheduledStart.phase === 'none') return null
+    const starting = scheduledStart.phase === 'starting'
+    const startsInLabel = t('draftRoom.topBar.scheduledStart.startsIn')
+    const startingLabel = t('draftRoom.topBar.scheduledStart.starting')
+    const when = Number.isFinite(scheduledStartMs)
+      ? new Date(scheduledStartMs).toLocaleString(language === 'es' ? 'es-US' : 'en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : ''
+    return (
+      <div
+        role="timer"
+        aria-label={starting ? startingLabel : `${startsInLabel} ${scheduledStart.time}`}
+        title={t('draftRoom.topBar.scheduledStart.title').replace('{{when}}', when)}
+        data-testid="draft-topbar-scheduled-countdown"
+        data-phase={scheduledStart.phase}
+        className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-cyan-400/35 bg-cyan-500/[0.12] text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ${
+          compact ? 'min-h-[36px] gap-1.5 px-2.5 py-1 text-[12px]' : 'min-h-[40px] gap-2 px-4 py-2 text-sm'
+        }`}
+      >
+        {starting ? (
+          <>
+            <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300/55 opacity-65" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300" />
+            </span>
+            <span className="font-semibold">{startingLabel}</span>
+          </>
+        ) : (
+          <>
+            <Clock className={`shrink-0 text-cyan-300/90 ${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} aria-hidden />
+            <span className={`font-medium text-cyan-100/85 ${compact ? 'max-sm:hidden' : ''}`}>{startsInLabel}</span>
+            <span className="font-bold tabular-nums text-white" data-testid="draft-topbar-scheduled-countdown-time">
+              {scheduledStart.time}
+            </span>
+          </>
+        )}
+      </div>
+    )
+  }
+
   const centerCta = (() => {
     /** Completed state: show a clear broadcast "Draft Complete" badge. */
     if (draftStatus === 'completed') {
@@ -498,17 +612,24 @@ export function DraftTopBar({
 
     if (draftStatus === 'pre_draft' && isCommissioner && onStartDraft) {
       return (
-        <button
-          type="button"
-          onClick={onStartDraft}
-          disabled={commissionerLoading || startDraftDisabled}
-          data-testid="draft-topbar-start-draft"
-          className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[#aeb7ff]/40 bg-gradient-to-r from-[#9ca9ff] to-[#8b7fd8] px-5 py-2 text-sm font-semibold text-[#0a1030] shadow-[0_12px_36px_rgba(139,127,216,0.35)] transition duration-150 hover:brightness-110 hover:shadow-[0_14px_40px_rgba(156,169,255,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 active:scale-[0.98] disabled:opacity-55"
-          title={startDraftDisabled ? (poolReadinessLabel ?? t('draftRoom.topBar.poolPreparingGeneric')) : t('draftRoom.topBar.startDraftTitle')}
-        >
-          <Grid2x2 className="h-4 w-4" />
-          {t('draftRoom.topBar.startDraftCta')}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={onStartDraft}
+            disabled={commissionerLoading || startDraftDisabled}
+            data-testid="draft-topbar-start-draft"
+            className={`inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[#aeb7ff]/40 bg-gradient-to-r from-[#9ca9ff] to-[#8b7fd8] px-5 py-2 text-sm font-semibold text-[#0a1030] shadow-[0_12px_36px_rgba(139,127,216,0.35)] transition duration-150 hover:brightness-110 hover:shadow-[0_14px_40px_rgba(156,169,255,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 active:scale-[0.98] disabled:opacity-55${
+              // Only beside the countdown: keep the label on one line and tighten it on a phone.
+              scheduledStart.phase !== 'none' ? ' shrink-0 whitespace-nowrap max-sm:px-3.5' : ''
+            }`}
+            title={startDraftDisabled ? (poolReadinessLabel ?? t('draftRoom.topBar.poolPreparingGeneric')) : t('draftRoom.topBar.startDraftTitle')}
+          >
+            <Grid2x2 className="h-4 w-4" />
+            {t('draftRoom.topBar.startDraftCta')}
+          </button>
+          {/* The commissioner keeps Start Draft; the scheduled time counts down beside it. */}
+          {scheduledStartPill(true)}
+        </>
       )
     }
 
@@ -523,6 +644,31 @@ export function DraftTopBar({
      * The legacy "RESUME DRAFT" button-shaped CTA is gone; the clock is the focal
      * point and replaces it. Keeps the resume action one-click for commissioners.
      */
+    if (autoDraftLive) {
+      const totalPicks = Math.max(0, Math.trunc(rounds) * Math.trunc(teamCount))
+      const paused = draftStatus === 'paused'
+      return (
+        <div
+          data-testid="draft-topbar-auto-drafting"
+          data-paused={paused ? 'true' : 'false'}
+          title={headerCopy.autoDraftTitle}
+          className={`inline-flex min-h-[36px] items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-bold ${
+            paused
+              ? 'border-amber-400/45 bg-amber-500/15 text-amber-50'
+              : 'border-cyan-400/40 bg-gradient-to-br from-cyan-500/22 to-violet-600/15 text-cyan-50'
+          }`}
+        >
+          <Zap className="h-4 w-4 shrink-0" aria-hidden />
+          <span>{paused ? t('draftRoom.topBar.timerPaused') : headerCopy.autoDrafting}</span>
+          {overallPickNumber != null && totalPicks > 0 ? (
+            <span className="whitespace-nowrap text-[12px] font-semibold tabular-nums text-white/75" data-testid="draft-topbar-auto-progress">
+              {headerCopy.autoDraftProgress(Math.min(overallPickNumber, totalPicks), totalPicks)}
+            </span>
+          ) : null}
+        </div>
+      )
+    }
+
     const showLiveTimer =
       timerStatus === 'running' || timerStatus === 'paused' || timerStatus === 'expired'
     /*
@@ -545,8 +691,17 @@ export function DraftTopBar({
           <Clock className="h-5 w-5 shrink-0 opacity-90" />
           <span data-testid="draft-topbar-timer-value">{timerDisplay}</span>
           {dueLabel ? (
-            <span className="whitespace-nowrap text-[11px] font-semibold text-cyan-100/80 max-sm:hidden" data-testid="draft-topbar-timer-due">
-              {dueLabel}
+            // One grid cell holding both: the invisible placeholder sets the width before mount and
+            // keeps it after, so the pill does not resize when the real time arrives.
+            <span className="inline-grid whitespace-nowrap text-[11px] font-semibold text-cyan-100/80 max-sm:hidden" data-testid="draft-topbar-timer-due-slot">
+              <span className="invisible col-start-1 row-start-1" aria-hidden>
+                {dueLabel.placeholder}
+              </span>
+              {dueLabel.text ? (
+                <span className="col-start-1 row-start-1" data-testid="draft-topbar-timer-due">
+                  {dueLabel.text}
+                </span>
+              ) : null}
             </span>
           ) : null}
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
@@ -619,6 +774,9 @@ export function DraftTopBar({
         </div>
       )
     }
+
+    // Before the draft, a scheduled time replaces the bare "pre draft" label with its countdown.
+    if (scheduledStart.phase !== 'none' && !idleClockLabel) return scheduledStartPill(false)
 
     return (
       <div className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-sm text-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm">
@@ -720,8 +878,16 @@ export function DraftTopBar({
                 }}
               />
             ) : (
-              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-white/[0.16] to-white/[0.05] ring-1 ring-white/25 shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
-                <Image src="/brand/af-shield-transparent.png" alt="AllFantasy" width={22} height={24} className="h-6 w-[22px] object-contain drop-shadow-[0_0_6px_rgba(255,255,255,0.25)]" data-testid="draft-topbar-brand-logo" />
+              /*
+                The crest is a navy shield (#012d5a) and this header is navy too, so on the old
+                translucent tile the shield body vanished and only the white "AF" showed. A light
+                plate behind it gives the shield an edge on every header skin (default, redraft, dynasty).
+              */
+              <span
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-white to-[#cfe6ff] ring-1 ring-cyan-200/70 shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
+                data-testid="draft-topbar-brand-plate"
+              >
+                <Image src="/brand/af-shield-transparent.png" alt="AllFantasy" width={22} height={24} className="h-6 w-[22px] object-contain" data-testid="draft-topbar-brand-logo" />
               </span>
             )}
 
@@ -808,21 +974,21 @@ export function DraftTopBar({
                     >
                       {noteText}
                     </span>
-                    <span className="text-white/24">·</span>
+                    <span className="text-white/24" aria-hidden>·</span>
                   </>
                 ) : null}
-                <span>{timerSummary}</span>
-                <span className="text-white/24">·</span>
+                <span data-testid="draft-topbar-timer-summary">{autoDraft ? headerCopy.autoDrafting : timerSummary}</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span>{withCount(t('draftRoom.topBar.teamsCount'), teamCount)}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span>{withCount(t('draftRoom.topBar.roundsCount'), rounds)}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span className="text-white/55">{sport}</span>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <span title={t('draftRoom.topBar.draftTypeTitle').replace('{{type}}', draftTypeLabel)}>{draftFormatLabel}</span>
                 {poolReadinessLabel ? (
                   <>
-                    <span className="text-white/24">·</span>
+                    <span className="text-white/24" aria-hidden>·</span>
                     <span
                       data-testid="draft-topbar-pool-readiness"
                       className={poolReadiness?.ready ? 'text-emerald-200' : 'text-amber-200'}
@@ -833,7 +999,7 @@ export function DraftTopBar({
                 ) : null}
                 {thirdRoundReversal ? (
                   <>
-                    <span className="text-white/24">·</span>
+                    <span className="text-white/24" aria-hidden>·</span>
                     <span
                       data-testid="draft-topbar-third-round-reversal-badge"
                       title={t('draftRoom.topBar.thirdRoundReversalTitle')}
@@ -845,7 +1011,7 @@ export function DraftTopBar({
                 ) : null}
                 {showInvite ? (
                   <>
-                <span className="text-white/24">·</span>
+                <span className="text-white/24" aria-hidden>·</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -958,11 +1124,11 @@ export function DraftTopBar({
             */
             <div
               className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 ${
-                isCurrentUserOnClock
+                isCurrentUserOnClock && !autoDraft
                   ? 'animate-pulse bg-amber-500/18 ring-1 ring-amber-400/45'
                   : 'md:bg-transparent max-md:border max-md:border-violet-400/25 max-md:bg-violet-500/[0.12]'
               }`}
-              data-on-clock-self={isCurrentUserOnClock ? 'true' : undefined}
+              data-on-clock-self={isCurrentUserOnClock && !autoDraft ? 'true' : undefined}
             >
               {currentManagerAvatarUrl ? (
                 <Image
@@ -980,7 +1146,7 @@ export function DraftTopBar({
               ) : (
                 <User
                   className={`h-4 w-4 shrink-0 ${
-                    isCurrentUserOnClock ? 'text-amber-300' : 'text-violet-300'
+                    isCurrentUserOnClock && !autoDraft ? 'text-amber-300' : 'text-violet-300'
                   }`}
                 />
               )}
@@ -995,10 +1161,12 @@ export function DraftTopBar({
                    on the clock, because this span otherwise renders "You're on the clock". */
                 data-testid={isOrphanOnClock ? 'draft-topbar-orphan-mode-label' : undefined}
                 className={`shrink-0 text-[11px] font-semibold uppercase tracking-wide ${
-                  isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
+                  isCurrentUserOnClock && !autoDraft ? 'text-amber-100' : 'text-violet-200/75'
                 }`}
               >
-                {isOrphanOnClock && chimmyManagerOnClock
+                {autoDraft
+                  ? isCurrentUserOnClock ? headerCopy.yourAutoPick : headerCopy.autoPick
+                  : isOrphanOnClock && chimmyManagerOnClock
                   ? t('draftRoom.topBarHint.chimmyPicking')
                   : isOrphanOnClock
                   ? orphanModeLabel

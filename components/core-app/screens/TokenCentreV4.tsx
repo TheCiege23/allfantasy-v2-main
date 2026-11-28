@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { BrandShield } from '@/components/brand/BrandShield'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -64,19 +65,7 @@ const CHIMMY_RULE = 'ai_chimmy_chat_message'
 
 /** Same mark as the pricing and landing navs. */
 function Shield() {
-  return (
-    <svg width="24" height="26" viewBox="0 0 28 30" aria-hidden focusable="false">
-      <path
-        d="M14 1.5 26 6v10.5c0 6.4-5 10.6-12 12.5-7-1.9-12-6.1-12-12.5V6l12-4.5Z"
-        fill="var(--accent-soft)"
-        stroke="var(--accent)"
-        strokeWidth="1.5"
-      />
-      <text x="14" y="19" textAnchor="middle" fill="var(--accent)" style={{ font: '900 10px Archivo, sans-serif', letterSpacing: '0.02em' }}>
-        AF
-      </text>
-    </svg>
-  )
+  return <BrandShield height={32} />
 }
 
 export function TokenCentreV4({ packs }: TokenCentreV4Props) {

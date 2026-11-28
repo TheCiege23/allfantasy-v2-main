@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { ProjectionFactorLine } from '@/components/projections/ProjectionFactorLine'
 import MyTeamHighlights from '@/components/core-app/MyTeamHighlights'
 import MyTeamRecentClips from '@/components/core-app/highlights/MyTeamRecentClips'
 import TeamRosterWorkspace from '@/components/core-app/TeamRosterWorkspace'
@@ -31,6 +32,8 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { clubAbbr } from '@/components/core-app/boards/PlayerFace'
+import { initialsFor } from '@/lib/draft-room/classify-avatar-source'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
@@ -45,7 +48,9 @@ import { InfoTip } from '@/components/core-app/InfoTip'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 import { myTeamCardReasonText, myTeamReasonText, scoringNoteText } from '@/lib/core-app/myTeamReasonText'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
-import { messagesFor, type Catalog } from '@/lib/i18n/messages'
+import { defineMessages, messagesFor, type Catalog } from '@/lib/i18n/messages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { EvidenceLine } from '@/components/core-app/primitives'
 import { useMessages } from '@/components/i18n/useMessages'
 import { myTeamScreenMessages } from '@/lib/core-app/messages/myTeamScreen'
 import { myTeamGuideMessages } from '@/lib/core-app/messages/myTeamGuide'
@@ -56,6 +61,12 @@ import '@/components/core-app/home/af-home-guide.css'
 import '@/components/core-app/myteam/af-my-team-guide.css'
 
 type MyTeamScreenMessages = typeof myTeamScreenMessages extends Catalog<infer M> ? M : never
+
+/* The one "More detail" fold's note line (2026-11-20): what the side column used to show open. */
+const myTeamMoreDetailMessages = defineMessages({
+  en: { note: 'Byes · scoring basis · positions · recent moves' },
+  es: { note: 'Descansos · base de puntuación · posiciones · movimientos recientes' },
+})
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -429,7 +440,7 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
           <img className="af-mt-avatar" src={imageUrl} alt="" width={36} height={36} onError={() => setFailedImageUrl(imageUrl)} />
         ) : (
           <span className="af-mt-avatar af-mt-avatar--none" aria-hidden>
-            {player.name.charAt(0)}
+            {initialsFor(player.name)}
           </span>
         )}
         {logoUrl ? (
@@ -443,6 +454,8 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
             loading="lazy"
             onError={() => setFailedLogoUrls((urls) => [...urls, logoUrl])}
           />
+        ) : clubAbbr(player.team) ? (
+          <span className="af-mt-teamlogo af-crest-abbr" aria-hidden>{clubAbbr(player.team)}</span>
         ) : null}
       </span>
       {/*
@@ -471,8 +484,6 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
             team={player.team}
             imageUrl={player.imageUrl}
           />
-          {/* Dynasty leagues only: age on the career arc and ROOKIE (DynastyRosterMarkers.tsx). */}
-          <DynastyRowMarkers sleeperId={player.sleeperId} />
           {/*
             ⚠ BESIDE THE NAME, NOT IN THE META LINE. A bye is the single most
             important fact about a player this week — it is the difference
@@ -509,6 +520,12 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
           ) : null}
         </div>
         <div className="af-mt-player-meta">
+          {/*
+            Dynasty leagues only: age on the career arc and ROOKIE (DynastyRosterMarkers.tsx). On the game
+            line since 2026-11-24, not beside the name: there the chips took the name's room on a phone and
+            pushed each row to three lines.
+          */}
+          <DynastyRowMarkers sleeperId={player.sleeperId} />
           <GameContext text={player.gameContext} />
           {player.latestCollegeBoxScore ? (
             <span>{coreUiCopy('Last game', language)} {player.latestCollegeBoxScore.date} · {player.latestCollegeBoxScore.stats.map(({ key, value }) => `${value} ${key.toUpperCase()}`).join(' · ')}</span>
@@ -528,6 +545,8 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
             </span>
           ) : null}
         </div>
+        {/* Why AF moved his weekly number (injury designation, rest, form …) — only for AF Intelligence viewers. */}
+        <ProjectionFactorLine reasons={player.afFactors?.reasons} testId={`my-team-factors-${player.sleeperId}`} />
       </div>
     </div>
   )
@@ -716,7 +735,7 @@ function ProjHeader() {
  * default so it costs one line; the definitions reuse this file's own explainer strings, so the
  * key cannot drift from the tooltips it stands in for.
  */
-function RosterKey() {
+function RosterKey({ children }: { children?: React.ReactNode }) {
   const sourceKind = useContext(ProjectionSourceContext)
   const afProvider = sourceKind === 'af'
   const { language } = useOptionalLanguage()
@@ -748,6 +767,7 @@ function RosterKey() {
           </dd>
         </div>
       </dl>
+      {children}
     </details>
   )
 }
@@ -981,9 +1001,32 @@ export function checkDrawsFix(check: LineupCheck | null | undefined, fixHref: st
   return Boolean(check && fixHref && check.items.length > 0 && check.items.some((i) => i.kind !== 'questionable'))
 }
 
-function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean }) {
+/**
+ * `also`: the card's title already named one slot, so that item is left out of `check` and the list is
+ * "Also check" (2026-11-24: "Cover Logan Kowalski's bye" then "Logan Kowalski is on bye — find a replacement").
+ * With nothing else to name it draws only the kickoff note — never the all-clear under a problem title.
+ */
+function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false, also = false, fillFrom }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean; also?: boolean; fillFrom?: LineupCheck }) {
   const m = useMessages(myTeamScreenMessages)
-  const certain = check.items.some((i) => i.kind !== 'questionable')
+  // The free-agent search reads the WHOLE check: the slot the title names is the hole it most needs to fill.
+  const fill = fillFrom ?? check
+  // So does the platform fix: the titled slot is a certain problem even when the list left under it is not.
+  const certain = fill.items.some((i) => i.kind !== 'questionable')
+  const fixButton = certain && fixHref ? (
+    <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
+      {m.fixInPlatform(platform)}
+    </a>
+  ) : null
+  if (also && check.items.length === 0) {
+    const note = check.locked ? m.lockedNote(check.locked).trim() : ''
+    return (
+      <>
+        {note ? <p className="af-mt-check-locked">{note}</p> : null}
+        <FreeAgentFill check={fill} leagueId={leagueId} />
+        {fixButton}
+      </>
+    )
+  }
   const lockedNote = check.locked ? m.lockedNote(check.locked) : ''
   return (
     <section
@@ -999,7 +1042,7 @@ function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false 
             <path d="M12 10v4M12 17.5v.01" />
           </svg>
         </span>
-        {m.lineupCheck}
+        {also ? m.lineupCheckAlso : m.lineupCheck}
       </h2>
       {check.unresolved ? <p role="status">{m.unresolvedSlots(check.unresolved)}</p> : null}
       {embedded ? null : <p className="af-mt-footnote">{m.lineupCheckFootnote}</p>}
@@ -1022,12 +1065,8 @@ function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false 
             ))}
           </ul>
           {lockedNote ? <p className="af-mt-check-locked">{lockedNote.trim()}</p> : null}
-          <FreeAgentFill check={check} leagueId={leagueId} />
-          {certain && fixHref ? (
-            <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
-              {m.fixInPlatform(platform)}
-            </a>
-          ) : null}
+          <FreeAgentFill check={fill} leagueId={leagueId} />
+          {fixButton}
         </>
       )}
     </section>
@@ -1137,6 +1176,20 @@ function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: str
           starter: check.starterName,
           starterPts: <span className="af-num">{check.starterProjected.toFixed(1)}</span>,
         })}
+        {/* The bench check's graded record for a swap of this size — said beside the call, never changing it. */}
+        {check.verdict === 'swap' && check.record ? (
+          /* The shared measured line (primitives/EvidenceLine.tsx) — inline, because it sits inside the call's own span. */
+          <EvidenceLine
+            inline
+            className="af-mt-bench-check-record"
+            label={m.benchCheckRecordLabel}
+            tone={check.record.level === 'low' ? 'low' : undefined}
+            lines={[{
+              text: m.benchCheckRecord(check.record.rightPct, check.record.decided, check.record.band, check.record.level === 'low', check.record.scale),
+              data: { level: check.record.level },
+            }]}
+          />
+        ) : null}
       </span>
       <button type="button" className="af-mt-bench-ask" onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: {
         tab: 'chimmy', leagueId,
@@ -1287,16 +1340,8 @@ function BenchRow({
  */
 function TaxiYears({ tenure }: { tenure: TaxiTenure | null }) {
   const m = useMessages(myTeamScreenMessages)
-  if (!tenure) {
-    return (
-      <span
-        className="af-mt-taxi-years af-mt-taxi-years--none"
-        title={m.taxiUnknownTitle}
-      >
-        {m.taxiUnknown}
-      </span>
-    )
-  }
+  // Unknown says nothing per row (2026-11-24: "years left unknown" under every taxi player).
+  if (!tenure) return null
   const n = tenure.yearsRemaining
   return (
     <span className="af-mt-taxi-years af-num" data-last={n <= 1}>
@@ -1651,6 +1696,7 @@ export function MyTeam({ data }: MyTeamProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
+  const md = useMessages(myTeamMoreDetailMessages)
   const [decisionNow, setDecisionNow] = useState(() => data.lock?.available ? data.lock.data.asOf ?? Date.now() : Date.now())
   useEffect(() => {
     setDecisionNow(Date.now())
@@ -1725,13 +1771,26 @@ export function MyTeam({ data }: MyTeamProps) {
    */
   const lineupCheck = !bestBall && data.starters.available ? summariseLineupCheck(data.starters.data, decisionNow) : null
   /*
-   * The guide reads the check's items from the SERVER-time pass (lock asOf), not the ticking clock, so
-   * the server render and the first client render agree on the headline.
+   * 🛑 THE HEADLINE READS THE SAME CHECK AS THE "WHAT TO DO" CARD (2026-11-23). It used to read its own
+   * pass frozen at the server's lock time while the card re-checked every 30s, so once a kickoff passed
+   * with the page open the two disagreed on one screen: "Your lineup is set · 2 starters are
+   * questionable" above a card saying "No issues were identified among the starters". `decisionNow`
+   * STARTS at that same lock time, so the server render and the first client render still agree; after
+   * that both move together.
    */
-  const guideCheck = !bestBall && data.starters.available
-    ? summariseLineupCheck(data.starters.data, data.lock?.available ? data.lock.data.asOf ?? decisionNow : decisionNow)
-    : null
-  const guideHead = myTeamHeadline({ bestBall, check: guideCheck, optimizer: data.lineupOptimizer ?? null })
+  /* The slot the "What to do" title names, left out of the list under it (see LineupCheckCard `also`). */
+  const titledSlot =
+    !decisionStarted && decisionSlot && (decisionSlot.empty || decisionSlot.player?.ruledOut || decisionSlot.player?.onBye || decisionSlot.benchCheck?.verdict === 'swap')
+      ? decisionSlot
+      : null
+  const embeddedCheck = (() => {
+    if (!lineupCheck || !titledSlot) return lineupCheck
+    const i = lineupCheck.items.findIndex((it) =>
+      titledSlot.player ? it.playerId === titledSlot.player.sleeperId : it.kind === 'empty' && it.slotLabel === titledSlot.slotLabel,
+    )
+    return i < 0 ? lineupCheck : { ...lineupCheck, items: lineupCheck.items.filter((_, k) => k !== i) }
+  })()
+  const guideHead = myTeamHeadline({ bestBall, check: lineupCheck, optimizer: data.lineupOptimizer ?? null })
   const guideKickoff = data.lock?.available && data.lock.data.daysAway < DISTANT_LOCK_DAYS ? new Date(data.lock.data.at).toISOString() : null
   const guideProjected =
     data.nextMatchup.available && data.nextMatchup.data.you.projected != null
@@ -1749,6 +1808,25 @@ export function MyTeam({ data }: MyTeamProps) {
    *
    * What replaced it is app-wide: see lib/core-app/rosteredMarket.ts.
    */
+
+  const coverageFootnote = afProvider && data.projections.available ? null : data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
+        <p className="af-mt-footnote">
+          {data.projections.data.unprojected === 0
+            ? m.allStartersProjected(data.projections.data.projected, data.projections.data.season, data.projections.data.week)
+            : m.standardBuiltFrom(data.projections.data.projected, data.projections.data.unprojected)}
+        </p>
+      ) : (
+        <p className="af-mt-footnote">
+          {copy('Projections are not shown because')} {myTeamReasonText(data.projections.reason, language)}.
+        </p>
+      )
+  const hasMoreDetail =
+    data.upcomingByes.length > 0 ||
+    !!proj ||
+    (data.rosterGrade.available && (data.rosterGrade.data.positions?.length ?? 0) > 1) ||
+    !!data.teamActivity ||
+    !!data.dynasty ||
+    coverageFootnote != null
 
   function askChimmy() {
     window.dispatchEvent(
@@ -1970,7 +2048,11 @@ export function MyTeam({ data }: MyTeamProps) {
                         ? m.decisionScoringDisfavors
                         : m.decisionUnconfirmed
                     : data.starters.available
-                      ? lineupCheck && lineupCheck.items.length > 0
+                      ? /*
+                         * Said by the embedded lineup check below whenever there is one — its clear line is the
+                         * same "nothing found, confirm on your platform" (2026-11-23: the card said it twice).
+                         */
+                        lineupCheck
                         ? null
                         : copy('No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.')
                       : myTeamReasonText(data.starters.reason, language)}
@@ -1983,7 +2065,9 @@ export function MyTeam({ data }: MyTeamProps) {
             {lineupCheck ? (
               <LineupCheckCard
                 embedded
-                check={lineupCheck}
+                also={embeddedCheck !== lineupCheck}
+                check={embeddedCheck ?? lineupCheck}
+                fillFrom={lineupCheck}
                 platform={platform}
                 leagueId={data.league.id}
                 fixHref={data.league.sourceLink?.href ?? null}
@@ -2056,6 +2140,16 @@ export function MyTeam({ data }: MyTeamProps) {
         </p>
       ) : null}
 
+      {/*
+        ⚠ ONE "More detail" FOLD FOR THE PAGE (2026-11-20, owner: "the core site is confusing"). Byes,
+        why the two projections differ, positional strength, recent moves, lineup age and the coverage
+        footnote moved in here unchanged; the lineup and what to fix stay open. It stays in the side
+        column on a wide page (where byes and basis already sat) and, like them, drops below the roster
+        on a narrow one (`.af-mt-more { order: 1 }`, af-my-team.css). The column-heading key stays under
+        Starters: it is the table's own key, not the page's.
+      */}
+      {hasMoreDetail ? (
+      <MoreDetail className="af-mt-more" testId="my-team-more" note={md.note}>
       {/* ── Byes forming ────────────────────────────────────────────── */}
       {/*
         Shown ahead of time on purpose. Discovering in week 6 that four
@@ -2134,6 +2228,19 @@ export function MyTeam({ data }: MyTeamProps) {
       {/* ── Dynasty outlook: the next three seasons, not this week ────── */}
       {data.dynasty ? <DynastyCard outlook={data.dynasty} /> : null}
 
+      {/* ── Coverage footnote ───────────────────────────────────────── */}
+      {/*
+        ⚠ NO STANDARD-COVERAGE LINE WHERE THERE IS NO STANDARD TOTAL. In an IDP
+        league the standard tile reads "—" and explains why, but this footnote
+        still said "Standard total built from 7 of 16 starters … so it reads low"
+        — a total the page had just declined to show, and a count inflated by
+        every defender standard scoring cannot price. The tile carries the
+        explanation; the footnote stays out of it.
+      */}
+      {coverageFootnote}
+      </MoreDetail>
+      ) : null}
+
       </div>
       <div className="af-mt-main">
       {/* ── Lineup check: rendered inside the decision card above. ─────── */}
@@ -2153,8 +2260,10 @@ export function MyTeam({ data }: MyTeamProps) {
           </span>
           <ProjHeader />
         </header>
-        <RosterKey />
-        <DynastyAgeKey />
+        {/* The dynasty age key folds in with the other abbreviations (2026-11-24): open, it was ~100px above every lineup. */}
+        <RosterKey>
+          <DynastyAgeKey />
+        </RosterKey>
 
         {data.starterGameDay ? <StarterGameDayLine summary={data.starterGameDay} /> : null}
 
@@ -2237,7 +2346,9 @@ export function MyTeam({ data }: MyTeamProps) {
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Taxi squad')}</h2>
             <span className="af-mt-section-note">
-              {copy('Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.')}
+              {data.taxi.data.some((p) => p.tenure)
+                ? copy('Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.')
+                : copy('Not eligible to start.')}
             </span>
           </header>
           <ul className="af-mt-list" data-look="h2h">
@@ -2263,35 +2374,33 @@ export function MyTeam({ data }: MyTeamProps) {
       */}
       <TeamRosterWorkspace data={data} />
 
-      <MyTeamRecentClips data={data} />
-      <MyTeamHighlights data={data} />
-
-      {/* ── Coverage footnote ───────────────────────────────────────── */}
       {/*
-        ⚠ NO STANDARD-COVERAGE LINE WHERE THERE IS NO STANDARD TOTAL. In an IDP
-        league the standard tile reads "—" and explains why, but this footnote
-        still said "Standard total built from 7 of 16 starters … so it reads low"
-        — a total the page had just declined to show, and a count inflated by
-        every defender standard scoring cannot price. The tile carries the
-        explanation; the footnote stays out of it.
+        Clips and highlights, one closed row (2026-11-23, "crowded"): they were two full panels that
+        loaded on arrival — the X clips one shares browser data with X just by loading. Now neither mounts,
+        and nothing is fetched or shared, until the row is opened.
       */}
-      {afProvider && data.projections.available ? null : data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
-        <p className="af-mt-footnote">
-          {data.projections.data.unprojected === 0
-            ? m.allStartersProjected(data.projections.data.projected, data.projections.data.season, data.projections.data.week)
-            : m.standardBuiltFrom(data.projections.data.projected, data.projections.data.unprojected)}
-        </p>
-      ) : (
-        <p className="af-mt-footnote">
-          {copy('Projections are not shown because')} {myTeamReasonText(data.projections.reason, language)}.
-        </p>
-      )}
+      <LazyFold className="af-frame af-mt-media-fold" title={copy('Clips and highlights')} testId="my-team-media">
+        <MyTeamRecentClips data={data} />
+        <MyTeamHighlights data={data} />
+      </LazyFold>
+
       </div>
       </div>
     </div>
     </DynastyMarkersScope>
     </PlayerCardLeagueScope>
     </ProjectionSourceContext.Provider>
+  )
+}
+
+/** A closed row whose contents do not mount until it is first opened — and then stay mounted. */
+function LazyFold({ title, className, testId, children }: { title: string; className?: string; testId?: string; children: React.ReactNode }) {
+  const [opened, setOpened] = useState(false)
+  return (
+    <details className={className} data-testid={testId} onToggle={(e) => { if (e.currentTarget.open) setOpened(true) }}>
+      <summary>{title}</summary>
+      {opened ? children : null}
+    </details>
   )
 }
 

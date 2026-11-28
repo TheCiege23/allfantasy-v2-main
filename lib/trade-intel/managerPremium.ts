@@ -202,14 +202,18 @@ export async function loadManagerProfile(args: {
     const leagues = await prisma.league
       .findMany({
         where: { id: { in: [...new Set(memberships.map((m) => m.leagueId))] } },
-        select: { id: true, isDynasty: true },
+        select: { id: true, isDynasty: true, sport: true },
       })
       .catch(() => [])
 
     /* Dynasty and redraft price the same player differently; mixing them would
-       measure the format rather than the manager. */
+       measure the format rather than the manager. And NFL only: the profile is priced in a
+       ONE_QB/SUPERFLEX book, and an NBA league's Sleeper ids are other people (NBA 1466 is
+       JaVale McGee, NFL 1466 Travis Kelce). */
     const usable = new Set(
-      leagues.filter((l) => Boolean(l.isDynasty) === args.isDynasty).map((l) => l.id),
+      leagues
+        .filter((l) => Boolean(l.isDynasty) === args.isDynasty && String(l.sport ?? 'NFL').toUpperCase() === 'NFL')
+        .map((l) => l.id),
     )
     const pairs = memberships.filter((m) => usable.has(m.leagueId))
     if (pairs.length === 0) return base
@@ -245,7 +249,8 @@ export async function loadManagerProfile(args: {
     const [players, snaps] = await Promise.all([
       prisma.sportsPlayer
         .findMany({
-          where: { sleeperId: { in: ids } },
+          // NFL by construction (see `usable`): Sleeper reuses ids across sports.
+          where: { sport: 'NFL', sleeperId: { in: ids } },
           select: { sleeperId: true, position: true },
         })
         .catch(() => []),

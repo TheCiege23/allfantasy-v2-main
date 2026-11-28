@@ -129,7 +129,7 @@ async function startDueDraft(
 
 /**
  * Called by the minute draft tick (`/api/cron/draft-tick`). Starts native redraft and Classic Best Ball
- * drafts (NFL, NBA, NHL, MLB) whose `LeagueSettings.draftDateUtc` has passed, through the same `startDraftSession` the
+ * drafts (every sport in SCHEDULED_REDRAFT_SPORTS) whose `LeagueSettings.draftDateUtc` has passed, through the same `startDraftSession` the
  * commissioner's Start button calls. A scheduled redraft draft starts at its time whether or not
  * "Autostart Draft" is on (owner's decision, 2026-10-20): the draft time is the commitment.
  *
@@ -149,7 +149,7 @@ export async function startScheduledRedraftDrafts(now: Date = new Date()): Promi
       draftDateUtc: true,
       league: {
         select: {
-          platform: true, sport: true, leagueType: true, isDynasty: true,
+          platform: true, settings: true, sport: true, leagueType: true, isDynasty: true,
           survivorMode: true, guillotineMode: true, leagueVariant: true,
         },
       },
@@ -201,14 +201,14 @@ export async function startScheduledDynastyDrafts(now: Date = new Date()): Promi
     select: {
       leagueId: true,
       draftDateUtc: true,
-      league: { select: { platform: true, sport: true, survivorMode: true, guillotineMode: true, leagueVariant: true } },
+      league: { select: { platform: true, settings: true, sport: true, survivorMode: true, guillotineMode: true, leagueVariant: true } },
     },
     orderBy: { draftDateUtc: 'asc' },
     take: 100,
   })
   const due = rows.filter(
     ({ league }) =>
-      league.survivorMode !== true && league.guillotineMode !== true && league.leagueVariant !== 'guillotine' && resolveWriteAuthority(league.platform) === 'NATIVE',
+      league.survivorMode !== true && league.guillotineMode !== true && league.leagueVariant !== 'guillotine' && resolveWriteAuthority(league) === 'NATIVE',
   )
   const summary: ScheduledRedraftDraftSummary = { scanned: due.length, started: 0, skipped: 0, skips: [], errors: [] }
   for (const { leagueId, draftDateUtc, league } of due) {

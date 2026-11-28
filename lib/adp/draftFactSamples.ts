@@ -1,6 +1,8 @@
+import { buildDraftContext } from '@/lib/adp/draftContextKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { identitySleeperColumn } from '@/lib/player-identity/identityMapSleeperColumn'
 import type { AggregatablePick } from '@/lib/adp/computeAllFantasyAdp'
 
 /**
@@ -142,13 +144,19 @@ async function resolvePlayers(
     const ids = Array.from(idSet)
     if (ids.length === 0) continue
 
-    const rows = (await prisma.playerIdentityMap.findMany({
-      where: {
-        [column]: { in: ids },
-        ...(column === 'sleeperId' ? {} : { sport: sport.toUpperCase() }),
-      },
-      select: { [column]: true, canonicalName: true, position: true },
-    } as any)) as unknown as Array<Record<string, string | null>>
+    /*
+     * Every column is held to the sport, and a Sleeper id is asked of THAT SPORT'S Sleeper column:
+     * `sleeperId` is NFL, NBA Sleeper ids live in `sleeperNbaId` (NFL 1466 is Travis Kelce, NBA 1466
+     * JaVale McGee). A sport with no Sleeper column skips the identity map and falls through to the
+     * sport-scoped `SportsPlayer` read below.
+     */
+    const dbColumn = column === 'sleeperId' ? identitySleeperColumn(sport) : column
+    const rows = dbColumn
+      ? ((await prisma.playerIdentityMap.findMany({
+          where: { [dbColumn]: { in: ids }, sport: sport.toUpperCase() },
+          select: { [dbColumn]: true, canonicalName: true, position: true },
+        } as any)) as unknown as Array<Record<string, string | null>>).map((r) => ({ ...r, [column]: r[dbColumn] ?? null }))
+      : []
 
     const seen = new Map<string, number>()
     for (const row of rows) {
@@ -169,7 +177,8 @@ async function resolvePlayers(
     if (missing.length === 0) continue
 
     const players = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: missing } },
+      // 🛑 Held to the draft's sport: Sleeper reuses ids across sports (NFL 1466 Kelce / NBA 1466 McGee).
+      where: { sport: sport.toUpperCase(), sleeperId: { in: missing } },
       select: { sleeperId: true, name: true, position: true },
     })
     for (const row of players) {
@@ -183,6 +192,23 @@ async function resolvePlayers(
 
   return out
 }
+
+/**
+ * The FIXED, sport-scoped resolution of Sleeper-id draft picks, by id — exported for
+ * `scripts/measure-cross-sport-sleeper-mislabels.ts`, which compares it with the pre-fix read.
+ */
+export async function resolveDraftFactSleeperPlayers(ids: readonly string[], sport: string): Promise<Map<string, ResolvedPlayer>> {
+  const resolved = await resolvePlayers(new Map([['sleeperId' as IdColumn, new Set(ids)]]), sport)
+  const out = new Map<string, ResolvedPlayer>()
+  for (const id of ids) {
+    const hit = resolved.get(resolutionKey('sleeperId', id))
+    if (hit) out.set(id, hit)
+  }
+  return out
+}
+
+/** Imported dynasty drafts this short are rookie drafts, not startups. */
+export const MAX_ROOKIE_DRAFT_ROUNDS = 6
 
 function leagueTypeOf(league: { leagueVariant: string | null; isDynasty: boolean }): string {
   const variant = (league.leagueVariant ?? '').trim().toLowerCase()
@@ -245,7 +271,7 @@ export async function collectDraftFactSamples(
 
   const leagues = await prisma.league.findMany({
     where: { id: { in: Array.from(new Set(facts.map((f) => f.leagueId))) } },
-    select: { id: true, scoring: true, isDynasty: true, leagueVariant: true, platform: true },
+    select: { id: true, scoring: true, isDynasty: true, leagueVariant: true, platform: true, settings: true },
   })
   const leagueById = new Map(leagues.map((l) => [l.id, l]))
 
@@ -284,15 +310,28 @@ export async function collectDraftFactSamples(
       continue
     }
 
-    const context = {
-      sport: options.sport.toUpperCase(),
-      leagueType: leagueTypeOf(league),
-      draftType: 'imported',
-      scoringFormat: (league.scoring ?? 'ppr').toLowerCase(),
-      rosterFormat: 'standard',
-      teamCount,
+    /*
+     * 🛑 A SHORT DYNASTY DRAFT IS A ROOKIE DRAFT, and gets its own board. An imported dynasty league brings every
+     * season's draft; after the startup, each one is a three-to-five round rookie draft whose 1.01 is a rookie. Read
+     * as a startup, every rookie looked like a first-round pick. Startups run far longer than six rounds.
+     */
+    const rounds = bucket.reduce((m, f) => Math.max(m, f.round), 0)
+    const rookie = leagueTypeOf(league) !== 'redraft' && rounds > 0 && rounds <= MAX_ROOKIE_DRAFT_ROUNDS
+    // The one derivation every writer and reader shares (`draftContextKey.ts`): QB format and rookie split included.
+    const context = buildDraftContext({
+      league: {
+        sport: options.sport,
+        season: Number(season) || 0,
+        scoring: league.scoring ?? null,
+        isDynasty: league.isDynasty,
+        leagueVariant: league.leagueVariant,
+        leagueSize: null,
+        settings: league.settings,
+      },
+      session: { draftType: 'imported', teamCount },
       season,
-    }
+      rookieDraft: rookie,
+    })
 
     const platform = String(league.platform ?? 'unknown').toLowerCase()
     const column = idColumnFor(league.platform)

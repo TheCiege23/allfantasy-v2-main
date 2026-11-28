@@ -52,6 +52,7 @@ const BADGE_COPY: Record<AuthorBadge, { label: string; title: string }> = {
   staff: { label: 'AllFantasy', title: 'Part of the AllFantasy team' },
   commish: { label: 'Commish', title: 'Runs a league on AllFantasy' },
   shipped: { label: 'Idea Shipped', title: 'Pitched a League Lab idea that AllFantasy built' },
+  top: { label: 'Top contributor', title: 'Top three on the Clubhouse leaderboard this month' },
   new: { label: 'New', title: 'Joined in the last week. Say hi!' },
 }
 

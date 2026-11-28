@@ -33,7 +33,7 @@ import {
   type EspnNcaabAthlete,
 } from '@/lib/espn/espnNcaabFetch'
 import { matchRoster, matchSchools, type SchoolMatch } from '@/lib/espn/ncaabEspnMatch'
-import { makeEspnNcaabRosterSnapshot, storeEspnNcaabRosterSnapshot } from '@/lib/espn/ncaabRosterSnapshot'
+import { isEspnNcaabHeadshot, makeEspnNcaabRosterSnapshot, storeEspnNcaabRosterSnapshot } from '@/lib/espn/ncaabRosterSnapshot'
 import { writeCanonicalHeadshot } from '@/lib/player-assets/canonicalHeadshotWrite'
 import { isApiSportsImageUrl } from '@/lib/player-assets/imageUrlHygiene'
 import { isServedImage } from '@/lib/player-assets/servedImage'
@@ -44,7 +44,6 @@ const SPORT = 'NCAAB'
 const TEAM_MAP_SOURCE = 'espn-ncaab-teams'
 const ROSTER_SOURCE = 'espn-ncaab-roster'
 const TEAM_MAP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-const ESPN_NCAAB_HEADSHOT_PREFIX = 'https://a.espncdn.com/i/headshots/mens-college-basketball/'
 
 /** Stop starting new schools this long before the deadline, so the last one can finish its writes. */
 const ROSTER_TAIL_MS = 8_000
@@ -215,6 +214,10 @@ export type EspnNcaabRosterResult = {
   rosterSnapshotsRejected: number
   /** An ESPN athlete already linked to a DIFFERENT canonical player. Never overwritten. */
   identityConflicts: number
+  /** Identity-map rows given an ESPN id this pass (the id the NBA draft pipeline links through). */
+  espnIdsLinked: number
+  /** A match whose ESPN id another identity row already holds: left alone, never given twice. */
+  espnIdHeldElsewhere: number
   headshotsWritten: number
   headshotsMissing: number
   /** ESPN had a photo, but the row already holds another source's real one — left alone. */
@@ -238,6 +241,8 @@ export async function syncEspnNcaabRosters(opts: {
     noCandidate: 0,
     refused: 0,
     identitiesCreated: 0,
+    espnIdsLinked: 0,
+    espnIdHeldElsewhere: 0,
     rosterSnapshotsStored: 0,
     rosterSnapshotsRejected: 0,
     identityConflicts: 0,
@@ -314,6 +319,31 @@ export async function syncEspnNcaabRosters(opts: {
   return result
 }
 
+/**
+ * Give the RI row's identity-map row this ESPN id. Never overwrites an espnId already set (it may
+ * have come from a stronger source), and never gives one ESPN id to a second row: two rows holding
+ * one athlete's id would let the NBA draft pipeline move the wrong player up.
+ */
+async function linkEspnId(riExternalId: string, athleteId: string, result: EspnNcaabRosterResult): Promise<void> {
+  try {
+    const holder = await prisma.playerIdentityMap.findFirst({
+      where: { sport: SPORT, espnId: athleteId },
+      select: { rollingInsightsId: true },
+    })
+    if (holder) {
+      if (holder.rollingInsightsId !== riExternalId) result.espnIdHeldElsewhere += 1
+      return
+    }
+    const written = await prisma.playerIdentityMap.updateMany({
+      where: { sport: SPORT, rollingInsightsId: riExternalId, espnId: null },
+      data: { espnId: athleteId },
+    })
+    result.espnIdsLinked += written.count
+  } catch {
+    result.errors += 1
+  }
+}
+
 async function linkSchoolRoster(
   athletes: EspnNcaabAthlete[],
   riSchoolId: string,
@@ -358,10 +388,31 @@ async function linkSchoolRoster(
     const playerId = canonicalByRi.get(m.riExternalId)
     const athlete = athleteById.get(m.athleteId)!
     const riRow = riRowByExternal.get(m.riExternalId)!
-    if (!playerId) continue
+    /*
+     * 🛑 THE ESPN ID IS WRITTEN BEFORE THE CANONICAL-IDENTITY CHECK, ON PURPOSE. It needs only the
+     * school + name + jersey match above, which is the whole evidence standard here. It used to sit
+     * after `if (!playerId) continue`, so a matched player whose RI row had no canonical identity
+     * never got one: measured 2026-11-22, 2,654 of 2,656 valid matches across 361 schools were
+     * dropped that way, 1,326 of them on a Fantrax roster. The canonical identity is needed only
+     * for the provider identity and the canonical headshot below.
+     */
+    const prior = existingByAthlete.get(m.athleteId)
+    // An ESPN identity already pointing at a DIFFERENT player is a disagreement: write nothing.
+    const disagrees = Boolean(prior?.playerId && prior.playerId !== playerId)
+    if (!disagrees) await linkEspnId(m.riExternalId, m.athleteId, result)
+    if (!playerId) {
+      /*
+       * 🛑 THE PHOTO ON THE VENDOR'S OWN ROW NEEDS NO CANONICAL IDENTITY EITHER. It rests on the same
+       * school + name + jersey match as the ESPN id above, and this used to `continue` before it.
+       * Measured 2026-11-25: 2,275 active rows held an ESPN id and no photo, and most of a college
+       * basketball draft board showed initials. Only the provider identity and the canonical headshot
+       * need the canonical player, and neither is written here.
+       */
+      if (!disagrees) await writeRowHeadshot(athlete, riRow, result)
+      continue
+    }
     result.matched += 1
 
-    const prior = existingByAthlete.get(m.athleteId)
     if (prior && prior.playerId && prior.playerId !== playerId) {
       // Someone already linked this athlete elsewhere. Two answers to one question means
       // neither is safe to act on; leave it and let the count surface it.
@@ -401,49 +452,50 @@ async function linkSchoolRoster(
       continue
     }
 
-    // Never overwrites an espnId already set — it may have come from a stronger source.
-    await prisma.playerIdentityMap
-      .updateMany({
-        where: { sport: SPORT, rollingInsightsId: m.riExternalId, espnId: null },
-        data: { espnId: m.athleteId },
-      })
-      .catch(() => undefined)
 
-    if (!athlete.headshotUrl) {
-      result.headshotsMissing += 1
-      continue
-    }
-    if (!(await isServedImage(athlete.headshotUrl))) {
-      // A miss leaves the row as it was; the next sweep asks again (ESPN adds freshman photos
-      // during the season).
-      result.headshotsMissing += 1
-      continue
-    }
-    /*
-     * Replace only an empty row, an api-sports URL (usually its stock "no photo" picture) or a
-     * previous ESPN URL. A row already holding another source's real photo is left alone — and
-     * so is its canonical player: passing that URL as `previousUrl` would let the canonical
-     * write overwrite the very image this branch just declined to touch.
-     */
-    const current = riRow.imageUrl
-    const ours = !current || isApiSportsImageUrl(current) || current.startsWith(ESPN_NCAAB_HEADSHOT_PREFIX)
-    if (!ours) {
-      result.headshotsKeptOther += 1
-      continue
-    }
-    if (current !== athlete.headshotUrl) {
-      await prisma.sportsPlayer
-        .update({ where: { id: riRow.id }, data: { imageUrl: athlete.headshotUrl } })
-        .catch(() => undefined)
-    }
+    const written = await writeRowHeadshot(athlete, riRow, result)
+    if (!written) continue
     await writeCanonicalHeadshot({
       playerId,
       sportKey: SPORT,
-      url: athlete.headshotUrl,
-      previousUrl: current,
+      url: written.url,
+      previousUrl: written.previousUrl,
       provider: PROVIDER,
       logTag: 'ncaabEspnIngest',
     })
-    result.headshotsWritten += 1
   }
+}
+
+/**
+ * ESPN's headshot onto the RI row itself, when the CDN serves it. Returns what the canonical write
+ * needs, or null when the row was left as it was.
+ *
+ * A miss leaves the row alone; the next sweep asks again (ESPN adds freshman photos during the
+ * season). Only an empty row, an api-sports URL (usually its stock "no photo" picture) or a previous
+ * ESPN URL is replaced. A row already holding another source's real photo is left alone — and so
+ * is its canonical player: passing that URL as `previousUrl` would let the canonical write
+ * overwrite the very image this declined to touch.
+ */
+async function writeRowHeadshot(
+  athlete: EspnNcaabAthlete,
+  riRow: { id: string; imageUrl: string | null },
+  result: EspnNcaabRosterResult,
+): Promise<{ url: string; previousUrl: string | null } | null> {
+  if (!athlete.headshotUrl || !(await isServedImage(athlete.headshotUrl))) {
+    result.headshotsMissing += 1
+    return null
+  }
+  const current = riRow.imageUrl
+  const ours = !current || isApiSportsImageUrl(current) || isEspnNcaabHeadshot(current)
+  if (!ours) {
+    result.headshotsKeptOther += 1
+    return null
+  }
+  if (current !== athlete.headshotUrl) {
+    await prisma.sportsPlayer
+      .update({ where: { id: riRow.id }, data: { imageUrl: athlete.headshotUrl } })
+      .catch(() => undefined)
+  }
+  result.headshotsWritten += 1
+  return { url: athlete.headshotUrl, previousUrl: current }
 }

@@ -140,6 +140,40 @@ describe('ensureZombieSeasonActivated', () => {
     spy.mockRestore()
   })
 
+  /*
+   * 🛑 A LEAGUE DRAFTED MID-SEASON CAN CARRY WEEKS ALREADY SCORED FROM THE SEASON'S REAL GAMES (Zombie
+   * Chimmy Test, 2026-11-22: drafted in NFL week 11, weeks 1-10 final). Starting at its first scheduled
+   * week replayed ten weeks of infections from games played before the league existed.
+   */
+  it('skips weeks already final before activation and starts on the first unplayed week', async () => {
+    overrides.set('redraftSeason.findFirst', async () => ({ season: 2026, totalWeeks: 18 }))
+    overrides.set('redraftMatchup.findFirst', async (args: any) => {
+      if (args?.orderBy?.week === 'desc') return { week: 18 }
+      return { week: args?.where?.status ? 11 : 1 }
+    })
+    const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer').mockResolvedValue({ whispererRecordId: 'w', rosterId: 'R1' })
+
+    await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
+
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ status: 'active', totalWeeks: 18, currentWeek: 11 })
+    expect(argsOf('redraftMatchup.findFirst').some((a: any) => a?.where?.status?.notIn?.includes('final'))).toBe(true)
+    spy.mockRestore()
+  })
+
+  it('[control] when every scheduled week is already final it falls back to the first scheduled week', async () => {
+    overrides.set('redraftSeason.findFirst', async () => ({ season: 2026, totalWeeks: 18 }))
+    overrides.set('redraftMatchup.findFirst', async (args: any) => {
+      if (args?.orderBy?.week === 'desc') return { week: 18 }
+      return args?.where?.status ? null : { week: 3 }
+    })
+    const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer').mockResolvedValue({ whispererRecordId: 'w', rosterId: 'R1' })
+
+    await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })
+
+    expect(argsOf('zombieLeague.updateMany')[0].data).toMatchObject({ currentWeek: 3 })
+    spy.mockRestore()
+  })
+
   it('[control] with no schedule yet it still starts at week 1', async () => {
     const spy = vi.spyOn(await import('@/lib/zombie/whispererEngine'), 'selectWhisperer').mockResolvedValue({ whispererRecordId: 'w', rosterId: 'R1' })
     await ensureZombieSeasonActivated({ leagueId: 'L1', redraftSeasonId: 's1' })

@@ -115,7 +115,8 @@ describe('the mock room draws the chip', () => {
     expect(room).toContain('age: numberFromUnknown(raw.age),')
     expect(room).toContain('classYearLabel: stringFromUnknown(raw.classYearLabel),')
     expect(room).toContain("const leagueConceptForMock = leaguePayload ? leagueAccentFor(leaguePayload.leagueConcept ?? null, { isDynasty: leaguePayload.isDynasty }).concept : null")
-    expect(room).toContain('(draftState?.availablePlayers ?? []).map((player) => ({ ...player, playerId: player.id })),')
+    // `display: null`: mock rows keep age at the top level; their `display` holds only season stats.
+    expect(room).toContain('(draftState?.availablePlayers ?? []).map((player) => ({ ...player, playerId: player.id, display: null })),')
     expect(room).toContain('signatureByOverall={signatureByOverall}')
   })
 

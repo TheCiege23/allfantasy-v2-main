@@ -68,14 +68,18 @@ export default async function NoGamblingPolicyPage(props: NoGamblingPolicyPagePr
           Fantasy sports laws vary by state and are subject to change. AllFantasy enforces the following
           restrictions automatically based on your location:
         </p>
-        <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">Fully Restricted</h3>
-        <ul className="list-disc list-inside space-y-2 ml-4">
-          {fullBlockStates.map((state) => (
-            <li key={state.code}>
-              <strong>{state.name}:</strong> {state.details} ({state.legalBasis})
-            </li>
-          ))}
-        </ul>
+        {fullBlockStates.length > 0 ? (
+          <>
+            <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">Fully Restricted</h3>
+            <ul className="list-disc list-inside space-y-2 ml-4">
+              {fullBlockStates.map((state) => (
+                <li key={state.code}>
+                  <strong>{state.name}:</strong> {state.details} ({state.legalBasis})
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
         <h3 className="text-lg font-semibold text-cyan-300 mt-4 mb-2">Paid Features Restricted</h3>
         <ul className="list-disc list-inside space-y-2 ml-4">
           {paidBlockStates.map((state) => (

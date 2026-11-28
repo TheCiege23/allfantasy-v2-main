@@ -265,3 +265,33 @@ describe('buildImportedLeaguePreview — SLOT:COUNT roster positions', () => {
     expect(slots).toMatchObject({ QB: 1, RB: 2, WR: 2, Bench: 7, 'Injured reserve': 1, 'Flex (RB/WR/TE)': 1 })
   })
 })
+
+/**
+ * 🛑 Reported 2026-11-23: a Sleeper dynasty import with a WR/TE flex (`REC_FLEX`) was told "AF does
+ * not support this lineup spot yet: Flex (WR/TE)". An imported league keeps its provider's lineup
+ * (`importedLineupTemplateSlots`), which reads REC_FLEX exactly, so there is nothing unsupported.
+ */
+describe('buildImportedLeaguePreview — flex spots the imported lineup keeps', () => {
+  function sleeper(rosterPositions: string[], isDynasty = true) {
+    return buildImportedLeaguePreview(
+      buildBaseNormalized({
+        league: { ...buildBaseNormalized().league, isDynasty, roster_positions: rosterPositions } as NormalizedImportResult['league'],
+      }),
+    )
+  }
+
+  it('a Sleeper WR/TE flex (REC_FLEX) is not flagged, and the review raises no warning', () => {
+    const preview = sleeper(['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'REC_FLEX', 'SUPER_FLEX', 'BN', 'BN', 'BN'])
+    expect(preview.formatSummary.unsupportedPositions).toEqual([])
+    const review = buildImportReview({ platform: 'sleeper', preview, playerMatches: null } as Parameters<typeof buildImportReview>[0])
+    expect(review.warnings.map((w) => w.code)).not.toContain('unsupported_roster_slots')
+  })
+
+  it('a Sleeper RB/WR flex (WRRB_FLEX) is not flagged either', () => {
+    expect(sleeper(['QB', 'RB', 'WR', 'WRRB_FLEX', 'BN']).formatSummary.unsupportedPositions).toEqual([])
+  })
+
+  it('control: one unreadable slot means the provider lineup cannot be kept, so the gap is still named', () => {
+    expect(sleeper(['QB', 'RB', 'WR', 'REC_FLEX', 'XYZ', 'BN']).formatSummary.unsupportedPositions).toContain('XYZ')
+  })
+})

@@ -66,7 +66,8 @@ describe('WaiverLineupBoard — bid, needs, priority', () => {
     stubFetch({ supported: false, platform: 'espn' })
     render(<WaiverLineupBoard leagueId="lg-roll" rollingPriority={{ priority: 2, leagueRosters: 12 }} />)
     const line = await screen.findByTestId('waiver-priority-cost')
-    expect(line.textContent).toContain('#2 of 12')
+    // 2026-11-23: no "Your priority: #2 of 12" lead — the Waiver priority tile above it says that.
+    expect(line.textContent).not.toContain('Your priority')
     expect(line.textContent).toContain('sends you to #12')
     expect(line.textContent).toContain('0.3-point gap')
   })

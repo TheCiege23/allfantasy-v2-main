@@ -62,6 +62,12 @@ const BIG_BROTHER_NAV: Record<string, [string, string, string]> = {
 const SAME_SCREEN_ALIASES: string[][] = [['matchups', 'matchup']]
 
 /**
+ * The head-to-head tab ids a guillotine league does not show: its Chop tab is that screen (see `guilly` in
+ * buildNativeLeagueNavigation). LeagueShell reads this list to send a link to any of them to the Chop page.
+ */
+export const GUILLY_MATCHUP_ALIASES: readonly string[] = ['matchups', 'matchup', 'fixtures']
+
+/**
  * More-tools tabs that open a DIFFERENT screen from a main-group item they read as a copy of: `players` is the player
  * search (the main "Players & waivers" is `waivers`), `commissioner` is commissioner operations (the main
  * "Commissioner" is `settings`). Both stay reachable, always under a name of their own.
@@ -147,12 +153,25 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     children.length ? [{ id: children[0].id, label: tr(key, english), icon, children }] : []
   const solo = (items: WorkspaceNavItem[]): NativeNavTab[] => items.map(entry => ({ ...entry, children: [entry] }))
 
+  /*
+   * Keepers (2026-11-22, keeper audit item 5): LeagueShell adds a `keeper` tab only while a keeper league's keeper
+   * window is open, the one thing every manager has to do then. It leads "This league" as a tab of its own, as Draft
+   * does before the draft, where it used to fall to the end of League's sub-tabs (after Legacy, clipped on a phone).
+   */
+  const keepers = solo(item('league.nav.keepers', 'Keepers', 'career', 'keeper'))
   const draftHq = () => item('league.nav.draftHq', 'Draft HQ', 'draft', 'draft')
   const draftTab = options.draftDone ? [] : top('league.nav.tab.draft', 'Draft', 'draft', draftHq())
-  const matchup = top('league.nav.tab.matchup', 'Matchup', 'matchup', [
-    // A guillotine league's defining screen (chop line, danger zone, history): this week's scoring decides it.
-    ...item('league.nav.guilly', 'Guilly', 'guillotine', 'guillotine'),
-    ...item('league.nav.matchup', 'Matchup', 'matchup', 'matchups', 'matchup', 'fixtures'),
+  /*
+   * A guillotine league has no opponent, so it has no Matchup: its first tab is Chop, as Sleeper's is (owner's
+   * decision, 2026-11-25 — "too many tabs"). The Chop page IS the matchup screen there (one list, the whole
+   * league against the chop line), so the head-to-head tab is not offered as a second sub-tab beside it.
+   * LeagueShell sends a `matchups` link in such a league to the Chop page, so nothing that opens it is lost.
+   */
+  const guilly = tabs.some(tab => tab.id === 'guillotine')
+  if (guilly) for (const id of GUILLY_MATCHUP_ALIASES) used.add(id)
+  const matchup = top(guilly ? 'league.nav.tab.chop' : 'league.nav.tab.matchup', guilly ? 'Chop' : 'Matchup', guilly ? 'guillotine' : 'matchup', [
+    ...item('league.nav.chop', 'Chop', 'guillotine', 'guillotine'),
+    ...(guilly ? [] : item('league.nav.matchup', 'Matchup', 'matchup', 'matchups', 'matchup', 'fixtures')),
     ...item('league.nav.liveScores', 'Live scores', 'scores', 'scores'),
     ...item('league.nav.schedule', 'Schedule', 'schedule', 'schedule'),
     ...item('league.nav.warRoom', 'War Room', 'war', 'war_room'),
@@ -164,17 +183,49 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     ...item('league.nav.myPicks', 'My picks', 'picks', 'my-picks'),
     ...item('league.nav.chimmyCoaching', 'Chimmy Coaching', 'insight', 'ai_coaching'),
   ])
-  const leagueChildren = [
-    ...item('league.nav.overview', 'Overview', 'home', 'native_home', 'home'),
-    ...(isSurvivor ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')),
-    ...item('league.nav.activity', 'Activity', 'more', 'activity'),
-    ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
-    ...item('league.nav.legacy', 'Legacy', 'legacy', 'legacy', 'history'),
-    ...(options.draftDone ? draftHq() : []),
-  ]
+  /*
+   * An imported league has no League home tab: its first page is Decide (What's next, record, standing, standings),
+   * which is that league's overview. It sits where native leagues keep theirs, under League, rather than as a Trade
+   * sub-tab it would open on (2026-11-22, imported leagues moved into this workspace).
+   */
+  const nativeOverview = item('league.nav.overview', 'Overview', 'home', 'native_home', 'home')
+  const overview = nativeOverview.length ? nativeOverview : item('league.nav.overview', 'Overview', 'home', 'decide')
+  /*
+   * League is Sleeper-simple (owner, 2026-11-25): it opens on Standings & playoffs, then History.
+   * After the draft the finished draft lives ONLY in History (owner: "only from history"): Draft HQ is
+   * no longer a League sub-tab, and `draft` is marked used so it cannot fall in as a leftover tab.
+   * History links to the draft results page. The League overview stays reachable, last.
+   */
+  if (options.draftDone) used.add('draft')
+  // Survivor and guillotine seasons end with the last team standing: neither has playoffs to name here.
+  const standingsItem = isSurvivor || guilly ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')
+  /*
+   * A league hosted here: League is ONE page (owner, 2026-11-27: "those 3 things are the only things on the
+   * league page") — this week's matchups, the standings and the activity, as Sleeper's League tab. History
+   * is a link at the bottom of that page, chat is in the bottom bar, and the old overview is retired from
+   * the nav. They are marked used so none of them comes back as a leftover sub-tab; each still opens by its
+   * id. An imported league keeps its sub-tabs: its standings tab is a different screen.
+   */
+  const onePage = nativeOverview.length > 0 && standingsItem.length > 0
+  if (onePage) for (const id of ['legacy', 'history', 'activity', 'league_chat', 'native_home', 'home']) used.add(id)
+  /*
+   * The older redraft screens a hosted redraft league still carries (LeagueTabs: Redraft hub, My Team, League)
+   * repeat the Team and League tabs, and fell into League as leftover sub-tabs — the row the owner asked to
+   * remove (live check, 2026-11-27). They still open by id. Finance (dues tracking) is real: it moves to Settings.
+   */
+  if (onePage) for (const id of ['redraft', 'team', 'league']) used.add(id)
+  const leagueChildren = onePage
+    ? standingsItem
+    : [
+        ...standingsItem,
+        ...item('league.nav.leagueHistory', 'League history', 'legacy', 'legacy', 'history'),
+        ...item('league.nav.activity', 'Activity', 'more', 'activity'),
+        ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
+        ...overview,
+      ]
   const trade = top('league.nav.tab.trade', 'Trade', 'trades', [
     ...item('league.nav.trades', 'Trades', 'trades', 'trades', 'transfers'),
-    ...item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide'),
+    ...(used.has('decide') ? [] : item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide')),
   ])
   const news = top('league.nav.tab.news', 'News', 'intel', [
     ...item('league.nav.news', 'News', 'intel', 'news'),
@@ -184,6 +235,7 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   const settings = top('league.nav.tab.settings', 'Settings', 'settings', [
     ...item('league.nav.leagueSettings', 'League settings', 'settings', 'settings'),
     ...(commissioner ? item('league.nav.commissionerTools', 'Commissioner tools', 'settings', 'commissioner') : []),
+    ...(onePage ? item('league.nav.finance', 'Finance', 'capHome', 'finance') : []),
   ])
   /*
    * Dynasty / Taxi / Picks used to fall into "More tools" with the generic icon. The tabs only exist when
@@ -226,7 +278,7 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     })
   const league = top('league.nav.tab.league', 'League', 'standings', [...leagueChildren, ...rest])
   const groups: NativeNavGroup[] = [
-    { id: 'league', title: tr('league.nav.group.thisLeague', 'This league'), items: [...draftTab, ...matchup, ...team, ...league, ...trade, ...news, ...settings] },
+    { id: 'league', title: tr('league.nav.group.thisLeague', 'This league'), items: [...keepers, ...draftTab, ...matchup, ...team, ...league, ...trade, ...news, ...settings] },
     { id: 'dynasty', title: tr('league.nav.group.dynasty', 'Dynasty'), items: solo(dynasty) },
     { id: 'survivor', title: tr('league.nav.group.survivor', 'Survivor'), items: solo(survivor) },
     { id: 'bigbrother', title: tr('league.nav.group.bigBrother', 'Big Brother'), items: solo(bigBrother) },
@@ -268,4 +320,28 @@ export function leagueSectionHref(league: UserLeague, view: string) {
   const id = native?.[1] ?? imported?.[1]
   if (!id) return href
   return leagueSwitchHref({ id: decodeURIComponent(id), platform: native ? 'allfantasy' : 'imported' }, { view })
+}
+
+/**
+ * The tab a league opens on when the URL names none (owner, 2026-11-25):
+ * - before and during the draft, the first top tab — Draft (or Keepers while a keeper window is open);
+ * - after the draft, the first top tab — Matchup (Chop in a guillotine league).
+ * The tab last open in this league still wins (owner, 2026-11-19: "it resets to home"), EXCEPT the
+ * League overview and a Draft tab that no longer exists once the draft is done: those fall back to
+ * the phase's first tab, so a league that has drafted always opens on its matchup.
+ * Switching leagues carries `?view=` in the URL, which never reaches this function.
+ */
+export function nativeLeagueLandingTab(input: {
+  remembered: string | null
+  firstTopTabId: string | null
+  draftDone: boolean
+}): string | null {
+  const remembered = input.remembered?.trim() || null
+  const stale =
+    !remembered ||
+    remembered === 'native_home' ||
+    remembered === 'home' ||
+    remembered === 'decide' ||
+    (input.draftDone && remembered === 'draft')
+  return stale ? input.firstTopTabId : remembered
 }
