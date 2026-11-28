@@ -7,7 +7,7 @@ import { canCommissionerAct, commissionerAccessResponse } from '@/lib/league/com
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { sourcePlatformLabel } from '@/lib/league/write-authority'
-import { hasTeamSwitched, isOfficialOnAllFantasy } from '@/lib/league/switching/switchingLeague'
+import { hasTeamSwitched, isOfficialOnAllFantasy, readSwitchingState } from '@/lib/league/switching/switchingLeague'
 import { isSeasonInProgress, makeLeagueOfficial } from '@/lib/league/switching/makeLeagueOfficial'
 
 export const dynamic = 'force-dynamic'
@@ -38,6 +38,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ leagueId: stri
   if (isNativePlatform(league.platform)) return NextResponse.json({ applies: false }, noStore)
 
   const official = isOfficialOnAllFantasy(league.settings)
+  const state = readSwitchingState(league.settings)
   const [isHead, viewing, teams, rosters] = await Promise.all([
     canCommissionerAct(leagueId, userId, 'head'),
     resolveViewingRoster(leagueId, userId, null, { allowCoOwner: false }).catch(() => null),
@@ -54,6 +55,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ leagueId: stri
   return NextResponse.json({
     applies: true,
     official,
+    /** The switching period is over (step 5): every team runs here and nothing is copied any more. */
+    ended: state?.ended != null,
     seasonInProgress: isSeasonInProgress(league),
     platformLabel: sourcePlatformLabel(league.platform),
     isHeadCommissioner: isHead,
@@ -62,6 +65,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ leagueId: stri
       ? teams.map((t) => ({ name: t.teamName?.trim() || 'A team', manager: t.ownerName?.trim() || null, switched: hasTeamSwitched(league.settings, t.id) }))
       : null,
     invitePath: invite ? `/join/${invite.token}` : null,
+    // The teams that had not switched when it ended, for the head commissioner to follow up.
+    leftBehind: isHead ? (state?.leftBehind ?? []).map((t) => ({ name: t.name, manager: t.manager })) : null,
   }, noStore)
 }
 

@@ -29,9 +29,19 @@ export const SWITCHING_SETTINGS_KEY = 'switching'
 
 export type SwitchStamp = { at: string; byUserId: string }
 
+/** A team that had not switched when the switching period ended (step 5), so its commissioner can follow up. */
+export type LeftBehindTeam = { teamId: string; name: string; manager: string | null }
+
 export type SwitchingState = {
   official: SwitchStamp | null
   teams: Record<string, SwitchStamp>
+  /**
+   * The switching period is over (step 5): everyone switched, or the commissioner said "Everyone's here". From then
+   * on every team counts as switched, so the old platform's copy leaves them all alone. Only ever set once official.
+   */
+  ended?: SwitchStamp | null
+  /** The teams that had not switched when it ended. Empty when everyone switched. */
+  leftBehind?: LeftBehindTeam[]
 }
 
 function readStamp(raw: unknown): SwitchStamp | null {
@@ -51,7 +61,22 @@ export function readSwitchingState(settings: unknown): SwitchingState | null {
     const s = readStamp(stamp)
     if (teamId && s) teams[teamId] = s
   }
-  return { official: readStamp(r.official), teams }
+  const leftBehind = Array.isArray(r.leftBehind)
+    ? r.leftBehind.flatMap((raw) => {
+        const t = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+        return typeof t.teamId === 'string' && t.teamId
+          ? [{ teamId: t.teamId, name: typeof t.name === 'string' ? t.name : 'A team', manager: typeof t.manager === 'string' ? t.manager : null }]
+          : []
+      })
+    : []
+  const official = readStamp(r.official)
+  // An end without an official stamp is not a state any writer produces; read it as not ended.
+  return { official, teams, ended: official ? readStamp(r.ended) : null, leftBehind }
+}
+
+/** True once a switching league's switching period has ended: every team is run on AllFantasy. */
+export function isSwitchingEnded(settings: unknown): boolean {
+  return readSwitchingState(settings)?.ended != null
 }
 
 /** True once the commissioner has made this imported league official on AllFantasy. */
@@ -59,10 +84,14 @@ export function isOfficialOnAllFantasy(settings: unknown): boolean {
   return readSwitchingState(settings)?.official != null
 }
 
-/** True when this team's manager has switched to AllFantasy. */
+/**
+ * True when this team is run on AllFantasy as a switched team: its manager switched, or the switching period has
+ * ended, after which every team counts as switched.
+ */
 export function hasTeamSwitched(settings: unknown, leagueTeamId: string | null | undefined): boolean {
   if (!leagueTeamId) return false
-  return readSwitchingState(settings)?.teams[leagueTeamId] != null
+  const state = readSwitchingState(settings)
+  return state?.ended != null || state?.teams[leagueTeamId] != null
 }
 
 /** The settings value to write when the commissioner makes the league official. */
@@ -76,6 +105,19 @@ export function withTeamSwitched(settings: unknown, leagueTeamId: string, stamp:
   const current = readSwitchingState(settings) ?? { official: null, teams: {} }
   if (current.teams[leagueTeamId]) return current
   return { ...current, teams: { ...current.teams, [leagueTeamId]: stamp } }
+}
+
+/** The value to write when the switching period ends. Idempotent: the first end stands. */
+export function withEnded(settings: unknown, stamp: SwitchStamp, leftBehind: LeftBehindTeam[]): SwitchingState {
+  const current = readSwitchingState(settings) ?? { official: null, teams: {} }
+  if (current.ended) return current
+  return { ...current, ended: stamp, leftBehind }
+}
+
+/** True when every one of these teams has switched (the moment the switching period ends by itself). */
+export function everyTeamSwitched(settings: unknown, teamIds: readonly string[]): boolean {
+  const state = readSwitchingState(settings)
+  return teamIds.length > 0 && teamIds.every((id) => state?.teams[id] != null)
 }
 
 /**
@@ -97,7 +139,8 @@ export function teamsRunOnAllFantasy(
   const out = new Set<string>()
   if (!state?.official) return out
   for (const t of teams) {
-    if (t.externalId && state.teams[t.id]) out.add(t.externalId)
+    // Once the switching period has ended, every team counts as switched.
+    if (t.externalId && (state.ended || state.teams[t.id])) out.add(t.externalId)
   }
   return out
 }

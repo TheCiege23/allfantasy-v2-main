@@ -34,6 +34,7 @@ import { bootstrapLeagueWaiverSettings } from '@/lib/waiver-defaults/LeagueWaive
 import { ensureLeagueSettingsRow } from '@/lib/draft-defaults/ensureLeagueSettingsRow'
 import { sourcePlatformLabel } from '@/lib/league/write-authority'
 import { copyPlatformScheduleToAllFantasy } from './takeOverSchedule'
+import { endSwitchingInTransaction, tellCommissionerSwitchingEnded } from './endSwitching'
 import { isOfficialOnAllFantasy, withOfficial, withTeamSwitched, type SwitchStamp } from './switchingLeague'
 
 export type MakeOfficialResult =
@@ -46,6 +47,8 @@ export type MakeOfficialResult =
       matchupsCreated: number
       weeksFinal: number
       switchedTeams: number
+      /** Every team had already switched, so the switching period ended at once (step 5). */
+      switchingEnded: boolean
     }
   | { ok: false; reason: string }
 
@@ -95,7 +98,7 @@ export async function makeLeagueOfficial(
   const existingInvite = () => db.leagueInvite.findFirst({ where: { leagueId, isActive: true }, select: { token: true } })
   if (isOfficialOnAllFantasy(league.settings)) {
     const invite = await existingInvite()
-    return { ok: true, alreadyOfficial: true, invitePath: invite ? `/join/${invite.token}` : null, scoring: 'kept_af', matchupsCreated: 0, weeksFinal: 0, switchedTeams: 0 }
+    return { ok: true, alreadyOfficial: true, invitePath: invite ? `/join/${invite.token}` : null, scoring: 'kept_af', matchupsCreated: 0, weeksFinal: 0, switchedTeams: 0, switchingEnded: false }
   }
   if (!isSeasonInProgress(league)) {
     return { ok: false, reason: 'The season is not being played right now. Use Switch to AllFantasy instead.' }
@@ -134,7 +137,7 @@ export async function makeLeagueOfficial(
   if (!schedule.ok) return schedule
 
   const stamp: SwitchStamp = { at: (args.now ?? new Date()).toISOString(), byUserId: userId }
-  const { invitePath, switchedTeams } = await db.$transaction(async (tx) => {
+  const { invitePath, switchedTeams, switchingEnded } = await db.$transaction(async (tx) => {
     // Re-read inside the transaction: the roster writer and a sync may both have touched `settings` since.
     const fresh = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
     let state = withOfficial(fresh?.settings, stamp)
@@ -143,15 +146,18 @@ export async function makeLeagueOfficial(
 
     const active = await tx.leagueInvite.findFirst({ where: { leagueId, isActive: true }, select: { token: true } })
     const switchedTeams = Object.keys(state.teams).length
-    if (active) return { invitePath: `/join/${active.token}`, switchedTeams }
+    // Every team switched early (practice): the switching period is over as soon as it starts.
+    const switchingEnded = (await endSwitchingInTransaction(tx, { leagueId, stamp, onlyIfEveryoneSwitched: true })) != null
+    if (active) return { invitePath: `/join/${active.token}`, switchedTeams, switchingEnded }
     const seats = await tx.leagueTeam.count({ where: { leagueId } })
     const invite = await tx.leagueInvite.create({
       data: { leagueId, createdBy: userId, createdByRole: 'commissioner', maxUses: inviteMaxUsesFor(seats) },
       select: { token: true },
     })
-    return { invitePath: `/join/${invite.token}`, switchedTeams }
+    return { invitePath: `/join/${invite.token}`, switchedTeams, switchingEnded }
   })
 
+  if (switchingEnded) await tellCommissionerSwitchingEnded(leagueId, [])
   return {
     ok: true,
     alreadyOfficial: false,
@@ -160,5 +166,6 @@ export async function makeLeagueOfficial(
     matchupsCreated: schedule.matchupsCreated,
     weeksFinal: schedule.weeksFinal,
     switchedTeams,
+    switchingEnded,
   }
 }

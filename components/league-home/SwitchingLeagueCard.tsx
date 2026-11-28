@@ -21,6 +21,10 @@ export type SwitchingState = {
   myTeam?: { name: string; switched: boolean } | null
   teams?: Array<{ name: string; manager: string | null; switched: boolean }> | null
   invitePath?: string | null
+  /** The switching period is over (step 5): every team runs here and nothing is copied any more. */
+  ended?: boolean
+  /** The teams that had not switched when it ended (head commissioner only). */
+  leftBehind?: Array<{ name: string; manager: string | null }> | null
 }
 
 type Load = { kind: 'loading' } | { kind: 'error' } | { kind: 'ok'; state: SwitchingState }
@@ -82,11 +86,11 @@ export function SwitchingLeagueCommissionerView({ leagueId, state, onChanged }: 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const makeOfficial = async () => {
+  const post = async (path: string) => {
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/switching`, { method: 'POST' })
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/switching${path}`, { method: 'POST' })
       const body = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) setError(body.error ?? 'That did not work. Try again.')
       else onChanged()
@@ -97,6 +101,8 @@ export function SwitchingLeagueCommissionerView({ leagueId, state, onChanged }: 
       setConfirming(false)
     }
   }
+  const makeOfficial = () => post('')
+  const endSwitching = () => post('/end')
 
   if (!state.official) {
     return (
@@ -130,29 +136,65 @@ export function SwitchingLeagueCommissionerView({ leagueId, state, onChanged }: 
   }
 
   const still = (state.teams ?? []).filter((t) => !t.switched)
+  const leftBehind = state.leftBehind ?? []
   const link = state.invitePath ? `${origin}${state.invitePath}` : null
   const message = link ? `Our league now runs on AllFantasy. Switch your team here: ${link}` : null
+  const teamList = (teams: Array<{ name: string; manager: string | null }>, testId: string) => (
+    <ul className="mt-1 space-y-1 text-xs leading-5 text-white/70" data-testid={testId}>
+      {teams.map((t, i) => (
+        <li key={`${t.name}-${i}`}>{t.name}{t.manager ? <span className="text-white/45"> · {t.manager}</span> : null}</li>
+      ))}
+    </ul>
+  )
   return (
-    <section className={cardClass} data-testid="switching-league-card" data-status="official">
+    <section className={cardClass} data-testid="switching-league-card" data-status={state.ended ? 'ended' : 'official'}>
       <p className="af-admin-eyebrow text-[11px] font-black uppercase tracking-[0.18em]">Switch to AllFantasy</p>
-      <h3 className="mt-1 text-base font-black text-white">AllFantasy is your official league</h3>
+      <h3 className="mt-1 text-base font-black text-white">
+        {state.ended ? 'Your league runs fully on AllFantasy' : 'AllFantasy is your official league'}
+      </h3>
       {link ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <code className="min-w-0 flex-1 truncate rounded-lg bg-black/30 px-3 py-2 text-xs text-white/80">{link}</code>
           <CopyButton text={link} label="Copy link" />
         </div>
       ) : null}
-      {still.length === 0 ? (
+      {state.ended ? (
+        leftBehind.length === 0 ? (
+          <p className="mt-3 text-xs leading-5 text-white/70">Every team switched. Nothing is copied from {platform} any more.</p>
+        ) : (
+          <>
+            <p className="mt-3 text-xs leading-5 text-white/70">
+              Nothing is copied from {platform} any more. These teams hadn&apos;t switched, so AllFantasy runs them as they stood:
+            </p>
+            {teamList(leftBehind, 'switching-left-behind')}
+            {message ? <div className="mt-3"><CopyButton text={message} label="Copy a message to send them" /></div> : null}
+          </>
+        )
+      ) : still.length === 0 ? (
         <p className="mt-3 text-xs leading-5 text-white/70">Every team has switched.</p>
       ) : (
         <>
           <p className="mt-3 text-xs font-bold text-white">Still on {platform}</p>
-          <ul className="mt-1 space-y-1 text-xs leading-5 text-white/70" data-testid="switching-still-copying">
-            {still.map((t) => (
-              <li key={t.name}>{t.name}{t.manager ? <span className="text-white/45"> · {t.manager}</span> : null}</li>
-            ))}
-          </ul>
+          {teamList(still, 'switching-still-copying')}
           {message ? <div className="mt-3"><CopyButton text={message} label="Copy a message to send them" /></div> : null}
+          {error ? <p className="mt-3 text-xs font-bold text-rose-300" role="alert">{error}</p> : null}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {confirming ? (
+              <>
+                <p className="w-full text-xs leading-5 text-white/60">
+                  {still.length === 1 ? 'This team stops' : `These ${still.length} teams stop`} copying from {platform}. AllFantasy runs
+                  {still.length === 1 ? ' it' : ' them'} from the roster {still.length === 1 ? 'it has' : 'they have'} now, and nothing is copied again.
+                  This can&apos;t be undone.
+                </p>
+                <button type="button" className={buttonClass} disabled={busy} onClick={endSwitching}>
+                  {busy ? 'Ending…' : 'Yes, stop copying'}
+                </button>
+                <button type="button" className={quietButtonClass} disabled={busy} onClick={() => setConfirming(false)}>Cancel</button>
+              </>
+            ) : (
+              <button type="button" className={quietButtonClass} onClick={() => setConfirming(true)}>Everyone&apos;s here</button>
+            )}
+          </div>
         </>
       )}
     </section>
@@ -218,13 +260,15 @@ export function SwitchingLeagueTeamCard({ leagueId }: { leagueId: string }) {
 }
 
 /**
- * The Commissioner tab's switch card for an imported league. ONE at a time (owner, 2026-11-27): in season, or once
- * the league is official, the switching card; otherwise the in-place "Switch to AllFantasy" card it is given.
+ * The Commissioner tab's switch card for an imported league. ONE at a time (owner, 2026-11-27): in season, the
+ * switching card; in the offseason the in-place "Switch to AllFantasy" card it is given, which also finishes a
+ * league made official mid-season.
  */
 export function ImportedLeagueSwitchCard({ leagueId, offseasonCard }: { leagueId: string; offseasonCard: ReactNode }) {
   const { load, reload } = useSwitchingState(leagueId)
   if (load.kind === 'loading') return null
-  if (load.kind === 'ok' && load.state.applies && load.state.isHeadCommissioner && (load.state.seasonInProgress || load.state.official)) {
+  // In the offseason the in-place switch finishes a league, official or not (owner, 2026-11-27).
+  if (load.kind === 'ok' && load.state.applies && load.state.isHeadCommissioner && load.state.seasonInProgress) {
     return <SwitchingLeagueCommissionerView leagueId={leagueId} state={load.state} onChanged={reload} />
   }
   return <>{offseasonCard}</>

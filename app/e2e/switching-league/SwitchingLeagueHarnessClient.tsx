@@ -57,6 +57,16 @@ export function SwitchingLeagueHarnessClient() {
           <Frame title="Commissioner tab — official">
             <SwitchingLeagueCommissionerView leagueId="sample" state={official} onChanged={noop} />
           </Frame>
+          <Frame title="Commissioner tab — ended with Everyone's here">
+            <SwitchingLeagueCommissionerView
+              leagueId="sample"
+              state={{ ...official, ended: true, leftBehind: [{ name: 'Owl Street', manager: 'mbrooks' }, { name: 'Tank Command', manager: 'deshawn22' }] }}
+              onChanged={noop}
+            />
+          </Frame>
+          <Frame title="Commissioner tab — ended, everyone switched">
+            <SwitchingLeagueCommissionerView leagueId="sample" state={{ ...official, ended: true, leftBehind: [] }} onChanged={noop} />
+          </Frame>
         </div>
         <Frame title="Team tab — manager, before official">
           <SwitchingLeagueTeamView leagueId="sample" state={{ ...base, isHeadCommissioner: false, myTeam: { name: 'Owl Street', switched: false } }} onChanged={noop} />
