@@ -143,7 +143,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const [pos, setPos] = useState('ALL')
   const [query, setQuery] = useState('')
   const q = useDeferredValue(query)
-  const [drawer, setDrawer] = useState<{ player: UnifiedPlayerWireDto; immediate: boolean } | null>(null)
+  /** `notice`: why this is a claim (an add refused by a lock); `dropId`: the drop that add had chosen, kept. */
+  const [drawer, setDrawer] = useState<{ player: UnifiedPlayerWireDto; immediate: boolean; notice?: string; dropId?: string | null } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [bidDrafts, setBidDrafts] = useState<Record<string, string>>({})
   /*
@@ -395,6 +396,16 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       if (j?.code === 'DROP_REQUIRED') {
         setDrawer({ player, immediate: true })
         toast.message('Your roster is full — choose a player to drop.')
+        return
+      }
+      /*
+       * A game has started (the add's drop, usually): no add tonight, but a claim settles at the next run,
+       * after the game. Offer that claim, with its bid and its run time, instead of a dead end
+       * (owner report, 2026-11-28). Only where a run exists to settle it.
+       */
+      if (j?.code === 'PLAYER_LOCKED' && nextRunAt) {
+        setDrawer({ player, immediate: false, dropId: dropPlayerId, notice: `${j?.error ?? 'A player in this move is locked.'} You can claim him instead: the claim goes through at the next waiver run.` })
+        toast.message('Locked for now. Claim him for the next waiver run instead.')
         return
       }
       toast.error(j?.error ?? 'Could not complete add/drop.')
@@ -787,8 +798,11 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         hasOpenRosterSpot={drawer?.immediate ? false : roster.capacity == null || roster.ids.length < roster.capacity}
         rosterPlayerIds={roster.ids}
         rosterPlayers={roster.names}
-        initialDropId={handoffDrop && roster.ids.includes(handoffDrop) ? handoffDrop : null}
+        initialDropId={(drawer?.dropId ?? null) || (handoffDrop && roster.ids.includes(handoffDrop) ? handoffDrop : null)}
         immediate={Boolean(drawer?.immediate)}
+        notice={drawer?.notice ?? null}
+        // A claim says when it settles; an instant add needs no run.
+        nextRunLabel={!drawer?.immediate && viewerRun ? viewerRun : null}
         conditionalClaims={conditionalClaims}
         bidHelpLeagueId={faabMode ? id : null}
         onSubmit={async (opts) => {

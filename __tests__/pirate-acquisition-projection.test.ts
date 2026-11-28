@@ -15,7 +15,8 @@ vi.mock('@/lib/roster-lineup-engine/lineupLockService', () => ({
 }))
 import { previewWaiverClaimEligibility } from '@/lib/waiver-wire/transaction-eligibility'
 
-const input = { leagueId: 'L', rosterId: 'r1', addPlayerId: 'add-2', dropPlayerId: 'drop-2' }
+// The pirate witness proves an IMMEDIATE pickup and says so, as lib/pirate/waiverEvidence.ts does.
+const input = { leagueId: 'L', rosterId: 'r1', addPlayerId: 'add-2', dropPlayerId: 'drop-2', claimMetadata: { source: 'free_agent_immediate' } }
 const projection = { playerData: { players: ['add-1', 'drop-2'] }, priorDrops: 1 }
 beforeEach(() => {
   vi.resetAllMocks()
@@ -87,5 +88,19 @@ describe('a BENCH player whose game has started is locked too (owner, 2026-11-25
   it('a bench player whose game has NOT started can be dropped', async () => {
     sched.locked.mockResolvedValue([])
     await expect(previewWaiverClaimEligibility(input, benched)).resolves.toBeUndefined()
+  })
+})
+
+describe('a WAIVER CLAIM is not held to tonight\'s lock (owner, 2026-11-28: "claim a player for tomorrow\'s games")', () => {
+  // The run checks the drop again when the claim settles (waiverRunDropRefusal), against that moment's games.
+  const started = { playerData: { players: ['add-1', 'drop-2'], lineup_sections: { starters: [{ id: 'drop-2' }], bench: [{ id: 'add-1' }] } }, priorDrops: 0 }
+  const claim = { leagueId: 'L', rosterId: 'r1', addPlayerId: 'add-2', dropPlayerId: 'drop-2' }
+  it('files a claim whose drop is playing now', async () => {
+    sched.locked.mockResolvedValue(['drop-2'])
+    await expect(previewWaiverClaimEligibility(claim, started)).resolves.toBeUndefined()
+  })
+  it('CONTROL: the same move as an instant add is refused', async () => {
+    sched.locked.mockResolvedValue(['drop-2'])
+    await expect(previewWaiverClaimEligibility({ ...claim, freeAgent: true }, started)).rejects.toThrow('This starter is locked because their game has started.')
   })
 })

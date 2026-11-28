@@ -36,6 +36,10 @@ type DrawerProps = {
   bidHelpLeagueId?: string | null
   /** A drop already chosen (the player card's Drop hand-off): picked when the sheet opens, still changeable. */
   initialDropId?: string | null
+  /** Why this is a claim rather than an add (an instant add was refused because a game has started). */
+  notice?: string | null
+  /** When the claim settles, in the viewer's time ("Sat 8:00 AM EST"); a claim with none says nothing. */
+  nextRunLabel?: string | null
 }
 
 type BidHelpState =
@@ -58,6 +62,8 @@ export default function WaiverClaimDrawer({
   conditionalClaims = false,
   bidHelpLeagueId = null,
   initialDropId = null,
+  notice = null,
+  nextRunLabel = null,
 }: DrawerProps) {
   const dropOptions = rosterPlayers?.length ? rosterPlayers : rosterPlayerIds.map((id) => ({ id, name: null }))
   // The name alone: a roster id means nothing to a manager. The id is the fallback when no name is known.
@@ -154,6 +160,16 @@ export default function WaiverClaimDrawer({
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-sm text-[var(--muted)]">
+        {notice ? (
+          <p role="status" data-testid="waiver-claim-notice" className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs leading-relaxed text-amber-200">
+            {notice}
+          </p>
+        ) : null}
+        {!immediate && nextRunLabel ? (
+          <p data-testid="waiver-claim-next-run" className="text-xs text-[var(--muted)]">
+            Processes <strong className="text-[var(--text)]">{nextRunLabel}</strong>
+          </p>
+        ) : null}
         <div>
           <label className="mb-1.5 block text-xs text-[var(--muted)]" htmlFor="waiver-drop-player">
             {needsDrop ? "Your roster is full. Choose a player to drop" : "Drop a player (optional)"}
