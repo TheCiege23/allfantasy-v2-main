@@ -12,12 +12,12 @@ const route = read('app/api/chimmy/route.ts')
 const pipeline = read('lib/agents/anthropic-pipeline.ts')
 
 describe('Chimmy live grounding wiring', () => {
-  it('route imports + invokes the grounding resolver in both pipeline paths', () => {
+  it('route imports + invokes the grounding resolver on the forwarded path', () => {
     expect(route).toContain('resolveChimmyCommissionerGrounding')
     // legacy forwarded path passes grounding into buildForwardedRequest
     expect(route).toMatch(/buildForwardedRequest\(req, parseResult\.data, commissionerGrounding\)/)
-    // anthropic path attaches grounding to the context
-    expect(route).toMatch(/anthropicContext\.commissionerGrounding = await resolveChimmyCommissionerGrounding/)
+    // 2026-11-28: there is no anthropic path on this route any more — every request is forwarded.
+    expect(route).not.toContain('runAgentPipeline(')
   })
 
   it('buildForwardedRequest appends grounding additively WITHOUT changing existing behavior', () => {

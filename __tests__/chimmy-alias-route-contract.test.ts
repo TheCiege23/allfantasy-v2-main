@@ -229,13 +229,20 @@ describe("POST /api/chimmy compatibility route", () => {
     expect(runAgentPipelineMock).not.toHaveBeenCalled()
   })
 
-  it("uses the Anthropic pipeline when the feature flag is enabled for supported requests", async () => {
-    isAnthropicChimmyEnabledMock.mockResolvedValueOnce(true)
-    runAgentPipelineMock.mockResolvedValueOnce({
-      result: "Hold the core and ask for a better plus piece.",
-      intent: "trade_evaluation",
-      model: "claude-sonnet-4-6",
-      tokensUsed: 143,
+  /*
+   * 2026-11-28 owner decision: `feature_chimmy_anthropic` no longer routes this alias to the ungrounded
+   * `runAgentPipeline`. These three cases used to assert that it did; they now assert the opposite,
+   * with the flag ON, for the same three request shapes (plain, image, streaming).
+   */
+  it("forwards to the dedicated handler even when the Anthropic flag is enabled", async () => {
+    isAnthropicChimmyEnabledMock.mockResolvedValue(true)
+    chatChimmyPostMock.mockImplementationOnce(async (req: Request) => {
+      const formData = await req.formData()
+      expect(formData.get("message")).toBe("Should I trade CeeDee Lamb for Diggs and a 2026 2nd?")
+      expect(formData.get("confirmTokenSpend")).toBe("true")
+      expect(formData.get("leagueId")).toBe("league-1")
+      expect(formData.get("tone")).toBe("strategic")
+      return new Response(JSON.stringify({ response: "Grounded." }), { status: 200 })
     })
 
     const { POST } = await import("@/app/api/chimmy/route")
@@ -250,141 +257,60 @@ describe("POST /api/chimmy compatibility route", () => {
           sport: "NFL",
           leagueId: "league-1",
           source: "trade_analyzer",
-          leagueFormat: "dynasty",
-          scoring: "PPR",
-          memory: {
-            tone: "strategic",
-            detailLevel: "concise",
-            riskMode: "balanced",
-          },
+          memory: { tone: "strategic", detailLevel: "concise", riskMode: "balanced" },
         },
       }) as any
     )
 
-    expect(chatChimmyPostMock).not.toHaveBeenCalled()
-    expect(runAgentPipelineMock).toHaveBeenCalledWith(
-      "Should I trade CeeDee Lamb for Diggs and a 2026 2nd?",
-      expect.objectContaining({
-        userId: "session-user",
-        tier: "pro",
-        sport: "NFL",
-        leagueId: "league-1",
-        source: "trade_analyzer",
-        leagueFormat: "dynasty",
-        scoring: "PPR",
-        conversation: [{ role: "assistant", content: "Prior context" }],
-      })
-    )
-    expect(requireFeatureEntitlementMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "session-user",
-        featureId: "ai_chat",
-        confirmTokenSpend: true,
-      })
-    )
     expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toMatchObject({
-      result: "Hold the core and ask for a better plus piece.",
-      response: "Hold the core and ask for a better plus piece.",
-      intent: "trade_evaluation",
-      model: "claude-sonnet-4-6",
-      tokensUsed: 143,
-      meta: {
-        responseStructure: {
-          shortAnswer: "Hold the core and ask for a better plus piece.",
-        },
-        recommendedTool: "trade_analyzer",
-      },
-      upgradeRequired: false,
-    })
+    expect(chatChimmyPostMock).toHaveBeenCalledTimes(1)
+    expect(runAgentPipelineMock).not.toHaveBeenCalled()
+    // The dedicated handler owns the gate; this alias must not charge a second time.
+    expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
+    await expect(res.json()).resolves.toMatchObject({ response: "Grounded.", result: "Grounded." })
   })
 
-  it("uses the Anthropic pipeline for image requests when Anthropic is enabled", async () => {
-    isAnthropicChimmyEnabledMock.mockResolvedValueOnce(true)
-    runAgentPipelineMock.mockResolvedValueOnce({
-      result: "Claude analyzed the uploaded image successfully.",
-      intent: "quick_ask",
-      model: "claude-sonnet-4-6",
-      tokensUsed: 77,
+  it("forwards image requests to the dedicated handler when Anthropic is enabled", async () => {
+    isAnthropicChimmyEnabledMock.mockResolvedValue(true)
+    chatChimmyPostMock.mockImplementationOnce(async (req: Request) => {
+      const formData = await req.formData()
+      const image = formData.get("image") as File | null
+      expect(image).toBeTruthy()
+      expect(image?.type).toBe("image/png")
+      return new Response(JSON.stringify({ response: "Read the screenshot." }), { status: 200 })
     })
 
     const { POST } = await import("@/app/api/chimmy/route")
     const res = await POST(
       buildJsonRequest({
         message: "Analyze this screenshot",
-        image: {
-          dataUrl: "data:image/png;base64,aW1hZ2UtYnl0ZXM=",
-          name: "upload.png",
-          type: "image/png",
-        },
-        userContext: {
-          sport: "NFL",
-          leagueId: "league-1",
-          source: "trade_analyzer",
-        },
+        image: { dataUrl: "data:image/png;base64,aW1hZ2UtYnl0ZXM=", name: "upload.png", type: "image/png" },
+        userContext: { sport: "NFL", leagueId: "league-1", source: "trade_analyzer" },
       }) as any
     )
 
     expect(res.status).toBe(200)
-    expect(chatChimmyPostMock).not.toHaveBeenCalled()
-    expect(runAgentPipelineMock).toHaveBeenCalledWith(
-      "Analyze this screenshot",
-      expect.objectContaining({
-        userId: "session-user",
-        tier: "pro",
-        sport: "NFL",
-        leagueId: "league-1",
-        source: "trade_analyzer",
-        image: {
-          data: "aW1hZ2UtYnl0ZXM=",
-          mediaType: "image/png",
-          name: "upload.png",
-        },
-      })
-    )
-    await expect(res.json()).resolves.toMatchObject({
-      response: "Claude analyzed the uploaded image successfully.",
-      result: "Claude analyzed the uploaded image successfully.",
-      intent: "quick_ask",
-      model: "claude-sonnet-4-6",
-      tokensUsed: 77,
-      upgradeRequired: false,
-    })
+    expect(chatChimmyPostMock).toHaveBeenCalledTimes(1)
+    expect(runAgentPipelineMock).not.toHaveBeenCalled()
   })
 
-  it("streams Anthropic responses when the client opts in", async () => {
-    isAnthropicChimmyEnabledMock.mockResolvedValueOnce(true)
-    streamAgentPipelineMock.mockImplementationOnce(async (_message, _ctx, onText) => {
-      onText("Hold ", "Hold ")
-      onText("tight.", "Hold tight.")
-      return {
-        result: "Hold tight.",
-        intent: "trade_evaluation",
-        model: "claude-sonnet-4-6",
-        tokensUsed: 88,
-      }
-    })
+  it("does not stream the ungrounded pipeline when a client opts into streaming", async () => {
+    isAnthropicChimmyEnabledMock.mockResolvedValue(true)
+    chatChimmyPostMock.mockResolvedValueOnce(new Response(JSON.stringify({ response: "Hold tight." }), { status: 200 }))
 
     const { POST } = await import("@/app/api/chimmy/route")
     const res = await POST(
       buildJsonRequest({
         message: "Should I make this trade?",
         stream: true,
-        userContext: {
-          sport: "NFL",
-          leagueId: "league-1",
-          source: "trade_analyzer",
-        },
+        userContext: { sport: "NFL", leagueId: "league-1", source: "trade_analyzer" },
       }) as any
     )
 
     expect(res.status).toBe(200)
-    expect(res.headers.get("content-type")).toContain("text/event-stream")
-    const body = await res.text()
-    expect(body).toContain('event: chunk')
-    expect(body).toContain('"response":"Hold tight."')
-    expect(body).toContain('event: done')
-    expect(body).toContain('"tokensUsed":88')
+    expect(streamAgentPipelineMock).not.toHaveBeenCalled()
+    expect(chatChimmyPostMock).toHaveBeenCalledTimes(1)
+    await expect(res.json()).resolves.toMatchObject({ response: "Hold tight." })
   })
   it('routes versioned previews through the canonical handler even when the legacy provider is enabled', async () => {
     isAnthropicChimmyEnabledMock.mockResolvedValue(true);isAnthropicPipelineAvailableMock.mockReturnValue(true)
