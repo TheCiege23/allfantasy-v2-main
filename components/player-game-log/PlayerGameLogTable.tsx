@@ -8,6 +8,9 @@ import {
   type GameLogColumn,
   type GameLogValue,
 } from '@/lib/player-game-log/gameLogColumns'
+import { applyLayout, isDefaultLayout } from '@/lib/table-layout/statTableLayout'
+import { ColumnsMenu } from '@/components/stat-table/ColumnsMenu'
+import { useStatTableLayouts } from '@/components/stat-table/useStatTableLayouts'
 import './af-game-log.css'
 
 /**
@@ -159,9 +162,21 @@ export default function PlayerGameLogTable({
   }, [query])
 
   const group = data?.groups.find((g) => g.group === groupKey) ?? data?.groups[0] ?? null
+  // A manager's own column order / hidden columns (Columns menu), per sport and box group.
+  const { layoutFor, density } = useStatTableLayouts()
+  const tableId = group ? `gamelog:${sport.toUpperCase()}:${group.group}` : null
+  const savedLayout = tableId ? layoutFor(tableId) : null
+  const customLayout = !isDefaultLayout(savedLayout)
   const columns = useMemo(
-    () => (group ? (compact && !expanded ? group.columns.filter((c) => !c.compactHidden) : group.columns) : []),
-    [group, compact, expanded],
+    () =>
+      !group
+        ? []
+        : customLayout
+          ? applyLayout(group.columns, savedLayout) // the manager's choice wins over the card's short list
+          : compact && !expanded
+            ? group.columns.filter((c) => !c.compactHidden)
+            : group.columns,
+    [group, compact, expanded, customLayout, savedLayout],
   )
 
   const summaries = useMemo(() => {
@@ -198,9 +213,8 @@ export default function PlayerGameLogTable({
   const sportUpper = sport.toUpperCase()
 
   return (
-    <div className="af-gl" data-testid="af-game-log">
-      {(data.groups.length > 1 || (!compact && data.seasons.length > 1)) && (
-        <div className="af-gl-bar">
+    <div className="af-gl" data-testid="af-game-log" data-density={density}>
+      <div className="af-gl-bar">
           {data.groups.length > 1 && (
             <div className="af-gl-tabs" role="tablist" aria-label="Stat group">
               {data.groups.map((g) => (
@@ -231,8 +245,8 @@ export default function PlayerGameLogTable({
               ))}
             </select>
           )}
-        </div>
-      )}
+          {tableId ? <ColumnsMenu tableId={tableId} columns={group.columns} /> : null}
+      </div>
 
       <div className="af-gl-scroll">
         <table className="af-gl-table">
@@ -290,9 +304,9 @@ export default function PlayerGameLogTable({
         </table>
       </div>
 
-      {compact && (group.rows.length > COMPACT_ROWS || group.columns.length > columns.length || expanded) && (
+      {compact && (group.rows.length > COMPACT_ROWS || (!customLayout && group.columns.length > columns.length) || expanded) && (
         <button type="button" className="af-gl-more" onClick={() => setExpanded((x) => !x)}>
-          {expanded ? 'Show less' : `Show all ${group.rows.length} games and stats`}
+          {expanded ? 'Show less' : customLayout ? `Show all ${group.rows.length} games` : `Show all ${group.rows.length} games and stats`}
         </button>
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { PlannerTeam, WeekPlanner } from '@/lib/league/weekPlanner'
+import { useStatTableLayouts } from '@/components/stat-table/useStatTableLayouts'
 
 /**
  * "Games this week" on the Players & waivers screen (2026-11-27): the streaming planner for the
@@ -84,11 +85,12 @@ export function WeekPlannerCard({
 }) {
   const [open, setOpen] = useState(false)
   const [all, setAll] = useState(false)
+  const { density } = useStatTableLayouts()
   if (!planner) return null
   const rows = all ? planner.teams : planner.teams.slice(0, COLLAPSED_TEAMS)
   const light = planner.days.filter((d) => d.light)
   return (
-    <section className="nls-card nls-card-flush nls-wp" aria-label="Games this week" data-testid="week-planner">
+    <section className="nls-card nls-card-flush nls-wp" aria-label="Games this week" data-testid="week-planner" data-density={density}>
       <div className="nls-wp-head">
         <button type="button" className="nls-wp-toggle" aria-expanded={open} onClick={() => setOpen((x) => !x)}>
           <span className="nls-label">Games {offset ? 'next' : 'this'} week · Week {planner.week}</span>

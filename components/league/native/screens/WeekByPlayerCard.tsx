@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { useStatTableLayouts } from '@/components/stat-table/useStatTableLayouts'
 import { fmt1 } from '@/lib/league/native/nativeScreenModels'
 import type { WeekByPlayer } from '@/lib/league/native/weekByPlayer'
 
@@ -29,11 +30,12 @@ export function WeekByPlayerCard({
   /** The player's name as the screen shows it (a button that opens his card). */
   renderName: (playerId: string) => ReactNode
 }) {
+  const { density } = useStatTableLayouts()
   if (data.rows.length === 0) return null
   // A day's total shows once someone on the roster has a line that day; until then it is blank, not 0.0.
   const dayPlayed = new Set(data.rows.flatMap((r) => r.cells.filter((c) => c.pts != null).map((c) => c.day)))
   return (
-    <section className="nls-card nls-card-flush nls-wbp" aria-label={`Week ${data.week} by player`} data-testid="week-by-player">
+    <section className="nls-card nls-card-flush nls-wbp" aria-label={`Week ${data.week} by player`} data-testid="week-by-player" data-density={density}>
       {/* The week total is the day picker's "Week N so far" line and this table's Total row — not a third time here. */}
       <h3 className="nls-label nls-card-head">
         <span>Week {data.week} by player</span>

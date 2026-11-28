@@ -175,3 +175,19 @@
     animation: none;
   }
 }
+
+/* Compact tables (Columns menu → "Compact tables"): tighter rows; text stays at the 11px floor. */
+.af-gl[data-density='compact'] .af-gl-table th,
+.af-gl[data-density='compact'] .af-gl-table td {
+  padding: 3px 5px;
+}
+.af-gl[data-density='compact'] .af-gl-table {
+  font-size: 11px;
+}
+.af-gl[data-density='compact'] .af-gl-score {
+  display: inline;
+  margin-left: 6px;
+}
+.af-gl[data-density='compact'] .af-gl-pin {
+  min-width: 0;
+}

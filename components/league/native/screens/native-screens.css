@@ -645,3 +645,8 @@
 .nls-gl-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 6px; border: 1px solid var(--line2); border-radius: 999px; color: var(--text2); font: 700 11px/1.4 var(--nl-mono); white-space: nowrap; }
 .nls-gl-chip[data-none] { color: var(--faint); }
 .nls-gl-light { color: var(--accent); }
+
+/* Compact tables (the Columns menu's "Compact tables", saved per account): tighter rows, 11px floor. */
+.nls-wbp[data-density=compact] .nls-wbp-table th, .nls-wbp[data-density=compact] .nls-wbp-table td,
+.nls-wp[data-density=compact] .nls-wp-table th, .nls-wp[data-density=compact] .nls-wp-table td { padding: 3px 5px; font-size: 11px; }
+.nls-wbp[data-density=compact] .nls-wbp-dow, .nls-wp[data-density=compact] .nls-wp-dow { display: inline; margin-right: 3px; }
