@@ -177,3 +177,25 @@ describe('AF Commissioner waiver extras save (2026-11-26)', () => {
     expect((await executeLeagueSettingsPatch('u', { leagueId: 'L', waiverExtras: { version: 2 } }, { section: 'waivers' })).status).toBe(400)
   })
 })
+
+describe('settingsMerge cannot write the AF Commissioner waiver settings around their plan checks (2026-11-27)', () => {
+  const extras = { version: 1, conditionalClaims: true, faabRefills: [], rebuildPriority: false, secondChance: { enabled: false, maxGap: 1 }, runReport: { enabled: false, hideLosingBids: false }, faLockWindows: [] }
+
+  it.each([
+    ['waiver extras', 'af_waiver_extras', extras],
+    ['the day-by-day schedule', KEY, schedule()],
+    ['the saved prior schedule', PRIOR, { processingDays: [1] }],
+  ])('%s through settingsMerge is a 400 and nothing is written, even without the plan', async (_label, key, value) => {
+    m.hasAccess = false
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', settingsMerge: { [key]: value } }, { section: 'waivers' })
+    expect(res.status).toBe(400)
+    expect(m.prisma.league.update).not.toHaveBeenCalled()
+  })
+
+  it('[control] an ordinary settingsMerge key still saves', async () => {
+    m.hasAccess = false
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', settingsMerge: { leagueTheme: 'night' } }, { section: 'general' })
+    expect(res.status).toBe(200)
+    expect(lastSettingsWrite().leagueTheme).toBe('night')
+  })
+})
