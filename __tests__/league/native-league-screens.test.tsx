@@ -71,7 +71,10 @@ describe('NativeStandingsScreen', () => {
     expect(rows[2].getAttribute('data-cut')).toBe('true')
     expect(within(rows[0]).getByText('BYE')).toBeTruthy()
     expect(within(rows[1]).getByText('81%')).toBeTruthy()
-    expect(screen.getByText(/44% for a bye/)).toBeTruthy()
+    // Sleeper pass 4: no "Your path" card (the odds column says it); the playoff format sits with the Playoffs view.
+    expect(screen.queryByText(/44% for a bye/)).toBeNull()
+    expect(screen.queryByText('Toilet bowl')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Playoffs' }))
     expect(screen.getByText('2 · 1 byes')).toBeTruthy()
     expect(screen.getByText('15 – 15')).toBeTruthy()
     expect(screen.getByText('Toilet bowl')).toBeTruthy()
@@ -79,14 +82,12 @@ describe('NativeStandingsScreen', () => {
     expect(calls.every((c) => !c.init?.method || c.init.method === 'GET')).toBe(true)
   })
 
-  it('Power ranks by all-play, not by record', async () => {
+  it('two views only, Standings and Playoffs; Power rankings is gone (Sleeper pass 4)', async () => {
     stubFetch({ '/scoring/standings': standings, '/season-forecast': { teamForecasts: null }, '/scoring/playoff-seeds': { seeds: [] } })
     render(<NativeStandingsScreen league={league} isCommissioner={false} onSelectTab={() => {}} />)
     await screen.findByRole('table')
-    fireEvent.click(screen.getByRole('button', { name: 'Power rankings' }))
-    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
-    expect(rows[0].querySelector('strong')?.textContent).toBe('Open Team 5')
-    expect(screen.queryByText('Edit in Commissioner')).toBeNull()
+    const views = within(screen.getByRole('group', { name: 'Standings view' })).getAllByRole('button').map((b) => b.textContent)
+    expect(views).toEqual(['Standings', 'Playoffs'])
   })
 })
 

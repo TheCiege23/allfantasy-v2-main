@@ -220,7 +220,7 @@ describe('Standings & playoffs — playoff line, clinched / eliminated, bracket'
     render(<NativeStandingsScreen league={sLeague(redraft)} isCommissioner={false} onSelectTab={() => {}} />)
     expect((await screen.findByTestId('native-standings-race-r1')).textContent).toBe('Clinched')
     expect(screen.getByTestId('native-standings-race-r4').textContent).toBe('Eliminated')
-    fireEvent.click(screen.getByRole('button', { name: 'Playoff picture' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Playoffs' }))
     const bracket = await screen.findByTestId('redraft-playoff-bracket-view')
     expect(within(bracket).getByText('Championship')).toBeTruthy()
     expect(within(bracket).getByText('101.5')).toBeTruthy()

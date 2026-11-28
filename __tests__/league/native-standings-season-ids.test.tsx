@@ -61,7 +61,7 @@ describe('Standings rows and the playoff runtime speak different ids', () => {
     stubFetch({ '/scoring/standings': standings, '/playoff-runtime': { playoffs: { ...runtime.playoffs, seeds: [] } }, '/scoring/playoff-seeds': { seeds: [] } })
     render(<NativeStandingsScreen league={league} isCommissioner={false} onSelectTab={() => {}} />)
     await screen.findByRole('table')
-    fireEvent.click(screen.getByRole('button', { name: 'Playoff picture' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Playoffs' }))
     const bracket = await screen.findByTestId('redraft-playoff-bracket-view')
     // With no seed names to fall back on, the names can only have come from the table's rows.
     expect(bracket.textContent).toContain('One')

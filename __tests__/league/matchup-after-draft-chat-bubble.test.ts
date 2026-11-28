@@ -58,3 +58,17 @@ describe('Chat is the bubble, not a tab', () => {
     expect(shell.match(/onSelectTab=\{selectScreenTab\}/g)?.length).toBe(2)
   })
 })
+
+describe('League page: no Matchups section before the schedule exists', () => {
+  it('a hosted league that has not drafted has no schedule yet; one in season, or an import, does', async () => {
+    const { noScheduleYet } = await import('@/components/league/native/screens/NativeLeaguePageScreen')
+    expect(noScheduleYet({ platform: 'allfantasy', lifecycleState: 'pre_draft', status: null } as never)).toBe(true)
+    expect(noScheduleYet({ platform: 'allfantasy', lifecycleState: 'drafting', status: null } as never)).toBe(true)
+    expect(noScheduleYet({ platform: 'allfantasy', lifecycleState: 'in_season', status: null } as never)).toBe(false)
+    expect(noScheduleYet({ platform: 'sleeper', lifecycleState: 'pre_draft', status: null } as never)).toBe(false)
+    // No lifecycle at all is not read as "before the draft".
+    expect(noScheduleYet({ platform: 'allfantasy', lifecycleState: null, status: null } as never)).toBe(false)
+    const page = readFileSync(resolve(__dirname, '../../components/league/native/screens/NativeLeaguePageScreen.tsx'), 'utf8')
+    expect(page).toContain('{noScheduleYet(league) ? null : <LeagueWeekMatchups leagueId={league.id} />}')
+  })
+})

@@ -69,8 +69,9 @@ describe('LeagueSettingsHubView', () => {
 
   it('titles format rules and endgame by league type', () => {
     render(<LeagueSettingsHubView data={makeData('guillotine', true)} cb={cb()} />)
-    const jump = screen.getByRole('navigation', { name: 'On this page' })
-    expect(within(jump).getByText('Waivers')).toBeTruthy()
+    // Sleeper pass 4: no "On this page" jump list or section chips; the tabs are the navigation.
+    expect(screen.queryByRole('navigation', { name: 'On this page' })).toBeNull()
+    expect(document.querySelector('.af-lsh-chips')).toBeNull()
     expect(screen.getByText('Endgame')).toBeTruthy()
     expect(screen.getByText('Chopped Rosters')).toBeTruthy()
     expect(screen.queryByText('Playoff Teams')).toBeNull()
@@ -184,12 +185,6 @@ describe('League Setup folds', () => {
     expect(fold('draft').open).toBe(false)
   })
 
-  it('a section chip opens the section it jumps to', () => {
-    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="setup" />)
-    expect(fold('scoring').open).toBe(false)
-    fireEvent.click(document.querySelector('.af-lsh-chips a[href="#af-lsh-scoring"]')!)
-    expect(fold('scoring').open).toBe(true)
-  })
 })
 
 /*
@@ -202,12 +197,6 @@ describe('Record Book, Members and My Settings folds', () => {
     render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="record" />)
     expect(fold('history').open).toBe(true)
     for (const id of ['standings', 'highs', 'corrections', 'legend']) expect(fold(id).open).toBe(false)
-  })
-
-  it('a Record Book chip opens the section it jumps to', () => {
-    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="record" />)
-    fireEvent.click(document.querySelector('.af-lsh-chips a[href="#af-lsh-legend"]')!)
-    expect(fold('legend').open).toBe(true)
   })
 
   it('Members folds Set Commissioners and keeps Manage Members open', () => {

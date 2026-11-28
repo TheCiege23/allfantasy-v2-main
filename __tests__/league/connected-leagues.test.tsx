@@ -196,7 +196,9 @@ describe('in the Commissioner Hub', () => {
 
   it('a connected league shows the banner first, and it opens the pop-up', () => {
     render(<LeagueSettingsHubView data={data(zombie)} cb={cb()} initialTab="hub" />)
-    expect(screen.getByRole('navigation', { name: 'On this page' }).textContent).toMatch(/^On this pageConnected leaguesNeeds you/)
+    // The connected-leagues card leads the Commissioner Hub (the jump list that also said so went in Sleeper pass 4).
+    const cards = [...document.querySelectorAll('[id^="af-lsh-"]')].map((el) => el.id)
+    expect(cards.indexOf('af-lsh-connected')).toBeLessThan(cards.indexOf('af-lsh-needs'))
     expect(screen.getByText('Outbreak · 2 leagues')).toBeTruthy()
     fireEvent.click(screen.getByTestId('connected-open'))
     expect(screen.getByTestId('connected-leagues-dialog')).toBeTruthy()
