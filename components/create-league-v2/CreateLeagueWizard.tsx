@@ -51,7 +51,6 @@ import {
   isSportAllowedForType,
   resolveValidScoringPresetIdForSelection,
 } from '@/lib/create-league-v2/rules-engine'
-import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, lockedOddTeamCounts, oddTeamGateLeagueWord, teamCountOptionsForPlan } from '@/lib/league/oddTeamLeagues'
 import {
   IMPORT_LEAGUE_PROVIDERS,
@@ -88,14 +87,6 @@ type WizardProps = {
   fieldErrors: Partial<Record<string, string>> | null
   submitError: string | null
   submitting: boolean
-  importSourceName?: string
-  importCarryover?: boolean
-  acceptWeeklyLineups?: boolean
-  onAcceptWeeklyLineups?: (accepted: boolean) => void
-  createdLeagueHref?: string | null
-  creationWarning?: string | null
-  retryingFinalization?: boolean
-  onRetryFinalization?: () => void
   onSubmit: () => void
   onCancel: () => void
   /** Imported leagues this manager commissions, which can be converted to native leagues. */
@@ -516,7 +507,7 @@ export function CreateLeagueWizard(props: WizardProps) {
   useEffect(() => {
     if (hasStalePremium) onChange({ advancedSetup: {} })
   }, [hasStalePremium, onChange])
-  const canCreate = props.completionIssues.length === 0 && !props.createdLeagueHref
+  const canCreate = props.completionIssues.length === 0
 
   // ── Validation, per step and per field ──────────────────────────────────────────────────
   // A blank form does not open covered in red: a field's error shows once it is edited, and every
@@ -662,28 +653,6 @@ export function CreateLeagueWizard(props: WizardProps) {
             <div className="flex min-h-11 items-center pr-16 lg:pr-0">
               <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} priority className="h-auto w-36 max-w-full sm:w-52" />
             </div>
-            {props.importSourceName ? (
-              <p className="rounded-xl border border-violet-500/35 bg-violet-600/10 p-3 text-sm leading-6" data-testid="standalone-import-template-notice">
-                Creating a native AllFantasy league from {props.importSourceName}. Teams, current player rosters, and available season history carry over. Claimed managers keep their seats; other managers must claim theirs. Supported baseball points rules or standard category rules are preserved; unsupported rules stop creation for review. The imported roster snapshot is recorded separately from historical drafts. Baseball imports after the regular season prepare for next season; past results remain archived. Chat stays in the original import. Keep the sport and team count the same to preserve every roster.
-              </p>
-            ) : null}
-            {props.importCarryover && props.state.sport === 'MLB' ? (
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-6">
-                <CheckBox className="mt-1" checked={props.acceptWeeklyLineups ?? false} onChange={(checked) => props.onAcceptWeeklyLineups?.(checked)} />
-                <span>Use weekly lineups in this native baseball league. One lineup locks at the first game of each week and scores the entire week. Daily lineup changes from the source platform remain in the archive.</span>
-              </label>
-            ) : null}
-            {props.creationWarning && props.createdLeagueHref ? (
-              <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-6" role="status">
-                {props.creationWarning}{' '}
-                <a href={props.createdLeagueHref} className="font-bold underline">Open your league</a>
-                {props.onRetryFinalization ? (
-                  <button type="button" onClick={props.onRetryFinalization} disabled={props.retryingFinalization} className="ml-3 font-bold underline disabled:opacity-50">
-                    {props.retryingFinalization ? 'Retrying setup…' : 'Retry roster setup'}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300 sm:text-xs">
               {t('createLeague.g30.eyebrow')}
             </p>
@@ -795,10 +764,10 @@ export function CreateLeagueWizard(props: WizardProps) {
 
           <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-3.5 shadow-xl shadow-black/5 sm:p-5">
             {activeStep === 'sport' ? (
-              <SportStep state={props.state} onChange={onFieldChange} importCarryover={props.importCarryover} />
+              <SportStep state={props.state} onChange={onFieldChange} />
             ) : null}
             {activeStep === 'basics' ? (
-              <LeagueBasicsStep state={props.state} onChange={onFieldChange} fieldErrors={mergedFieldErrors} importCarryover={props.importCarryover} hasCommissioner={isCommissioner} />
+              <LeagueBasicsStep state={props.state} onChange={onFieldChange} fieldErrors={mergedFieldErrors} hasCommissioner={isCommissioner} />
             ) : null}
             {activeStep === 'draft' ? (
               <DraftStep state={props.state} onChange={onFieldChange} fieldErrors={mergedFieldErrors} />
@@ -953,7 +922,7 @@ function ImportedLeaguesCard({ leagues }: { leagues: ImportedLeagueSummary[] }) 
   )
 }
 
-export function SportStep({ state, onChange, importCarryover }: Pick<WizardProps, 'state' | 'onChange' | 'importCarryover'>) {
+export function SportStep({ state, onChange }: Pick<WizardProps, 'state' | 'onChange'>) {
   const { t } = useLanguage()
 
   return (
@@ -989,7 +958,6 @@ export function SportStep({ state, onChange, importCarryover }: Pick<WizardProps
                   : tx(t, 'createLeague.g30.sport.noScoringHint', 'Draft and league tools only — no weekly scoring yet')
               }
               selected={selected}
-              disabled={importCarryover && !selected}
               media={media}
               onSelect={() => onChange(nextStateForSport(state, sport))}
               testId={`g30-sport-${sport}`}
@@ -1011,37 +979,23 @@ export function LeagueBasicsStep({
   state,
   onChange,
   fieldErrors,
-  importCarryover,
   hasCommissioner = false,
-}: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors' | 'importCarryover'> & { hasCommissioner?: boolean }) {
+}: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors'> & { hasCommissioner?: boolean }) {
   const { t } = useLanguage()
-  // Only the concepts the server accepts for this sport (the catalog's allowedSportsByConcept).
-  // A carryover keeps the imported league's team count, which the import-flexible types accept
-  // even when their native list lacks it (lib/league-creation/importedTeamCount.ts).
-  const importedTeamCount = importCarryover ? state.teamCount : null
   // Odd keeper sizes are an AF Commissioner option: without the plan they leave the stepper and are
-  // shown locked below instead (lib/league/oddTeamLeagues.ts). A carryover keeps its own size.
+  // shown locked below instead (lib/league/oddTeamLeagues.ts).
   const teamCountOptionsFor = (leagueType: LeagueTypeId) =>
-    teamCountOptionsWithImported(
-      importCarryover
-        ? getTeamCountOptions(state.sport, leagueType, state.soccerPipeline)
-        : teamCountOptionsForPlan(getTeamCountOptions(state.sport, leagueType, state.soccerPipeline), leagueType, hasCommissioner),
-      leagueType,
-      importedTeamCount,
-    )
+    teamCountOptionsForPlan(getTeamCountOptions(state.sport, leagueType, state.soccerPipeline), leagueType, hasCommissioner)
   const teamCountOptions = teamCountOptionsFor(getEffectiveLeagueType(state) ?? 'redraft')
-  const lockedTeamCounts = importCarryover
-    ? []
-    : lockedOddTeamCounts(getTeamCountOptions(state.sport, getEffectiveLeagueType(state) ?? 'redraft', state.soccerPipeline), getEffectiveLeagueType(state), hasCommissioner)
+  const lockedTeamCounts = lockedOddTeamCounts(getTeamCountOptions(state.sport, getEffectiveLeagueType(state) ?? 'redraft', state.soccerPipeline), getEffectiveLeagueType(state), hasCommissioner)
   const teamCountStep = teamCountOptions.length > 1 ? teamCountOptions[1] - teamCountOptions[0] : 1
   const catalog = getClientLeagueCreateOptionsCatalog()
+  // Only the concepts the server accepts for this sport (the catalog's allowedSportsByConcept).
   const typeOptions = catalog.concepts.filter((concept) =>
-    concept.id !== 'idp' && isSportAllowedForType(state.sport, concept.id as LeagueTypeId) &&
-      (!importCarryover || teamCountOptionsFor(concept.id as LeagueTypeId).includes(state.teamCount)),
+    concept.id !== 'idp' && isSportAllowedForType(state.sport, concept.id as LeagueTypeId),
   )
   const showIdp = catalog.concepts.some((concept) => concept.id === 'idp') &&
-    (state.sport === 'NFL' || state.sport === 'NCAAF') &&
-    (!importCarryover || teamCountOptionsFor('redraft').includes(state.teamCount))
+    (state.sport === 'NFL' || state.sport === 'NCAAF')
   const setTeamCount = (teamCount: number) => {
     const tribeOptions = getSurvivorTribeOptions(teamCount)
     // League median follows the size's parity until the commissioner sets it: an odd league leaves one
@@ -1188,7 +1142,7 @@ export function LeagueBasicsStep({
             <button
               type="button"
               onClick={() => stepTeamCount(-1)}
-              disabled={importCarryover || !canFewer}
+              disabled={!canFewer}
               aria-label={tx(t, 'createLeague.g30.teamCount.fewer', 'Fewer teams')}
               className="grid min-h-12 w-12 shrink-0 touch-manipulation place-items-center rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] text-[color:var(--text-primary)] transition hover:border-violet-400 disabled:opacity-40 sm:min-h-11 sm:w-11"
               data-testid="g30-team-count-decrease"
@@ -1204,7 +1158,6 @@ export function LeagueBasicsStep({
               step={teamCountStep}
               aria-describedby="g30-team-count-options"
               value={state.teamCount}
-              disabled={importCarryover}
               onChange={(event) => setTeamCount(Number(event.target.value))}
               className={cx(fieldClass(Boolean(fieldErrors?.teamCount)), 'text-center tabular-nums')}
               data-testid="g30-team-count"
@@ -1212,7 +1165,7 @@ export function LeagueBasicsStep({
             <button
               type="button"
               onClick={() => stepTeamCount(1)}
-              disabled={importCarryover || !canMore}
+              disabled={!canMore}
               aria-label={tx(t, 'createLeague.g30.teamCount.more', 'More teams')}
               className="grid min-h-12 w-12 shrink-0 touch-manipulation place-items-center rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] text-[color:var(--text-primary)] transition hover:border-violet-400 disabled:opacity-40 sm:min-h-11 sm:w-11"
               data-testid="g30-team-count-increase"
@@ -1303,7 +1256,7 @@ export function LeagueBasicsStep({
       ) : null}
 
       {getEffectiveLeagueType(state) === 'zombie' ? (
-        <ZombieCreationOptions state={state} onChange={onChange} importCarryover={importCarryover} />
+        <ZombieCreationOptions state={state} onChange={onChange} />
       ) : null}
 
       {getEffectiveLeagueType(state) === 'survivor_guillotine' ? (
@@ -1441,14 +1394,14 @@ export function LeagueBasicsStep({
       ) : null}
 
       <BestBallPoolNote state={state} t={t} />
-      <PlayerSupplyNote state={state} t={t} importCarryover={importCarryover} />
+      <PlayerSupplyNote state={state} t={t} />
     </section>
   )
 }
 
 /** Why a pro-sport league this size cannot be created, with the largest size that can (playerSupply.ts). */
-function PlayerSupplyNote({ state, t, importCarryover }: { state: CreateLeagueV2State; t: (key: string) => string; importCarryover?: boolean }) {
-  const check = playerSupplyCheckForWizard(state, importCarryover === true)
+function PlayerSupplyNote({ state, t }: { state: CreateLeagueV2State; t: (key: string) => string }) {
+  const check = playerSupplyCheckForWizard(state)
   if (!check || check.ok || !check.message) return null
   return (
     <div role="alert" className="space-y-1 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs leading-5 text-rose-700 dark:text-rose-200" data-testid="g30-player-supply-refused">

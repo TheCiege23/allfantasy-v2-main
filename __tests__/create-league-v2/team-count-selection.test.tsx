@@ -95,13 +95,6 @@ describe('Zombie universe controls', () => {
     fireEvent.click(screen.getByTestId('g30-league-type-zombie'))
     expect(onChange.mock.calls.at(-1)![0].teamCount).toBe(4)
   })
-  it('shows imported rosters as a single league and disables batching', () => {
-    render(<LeagueBasicsStep state={{ ...DEFAULT_V2_STATE, leagueType: 'zombie', teamCount: 20, zombieLeagueCount: 6 }}
-      onChange={vi.fn()} importCarryover fieldErrors={null} />)
-    expect(screen.getByTestId('g30-zombie-league-count')).toBeDisabled()
-    expect(screen.getByTestId('g30-zombie-league-count')).toHaveValue('1')
-  })
-
   it('a pro-sport league is offered no more teams than the real league has', () => {
     const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
     const view = render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} hasCommissioner />)

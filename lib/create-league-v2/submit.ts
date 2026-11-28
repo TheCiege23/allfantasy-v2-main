@@ -49,7 +49,6 @@ export interface CreateLeagueV2Result {
   error?: string
   redirectTo?: string
   fieldErrors?: CreateLeagueFieldErrors
-  warning?: string
 }
 
 // ── Endpoint routing ────────────────────────────────────────────────
@@ -386,8 +385,6 @@ function summarizeSubmittedPayload(payload: unknown): Record<string, unknown> {
 
 export async function submitCreateLeagueV2(
   state: CreateLeagueV2State,
-  sourceLeagueId?: string,
-  acceptWeeklyLineups = false,
   /** "Create a test league": the server fills open seats with placeholder AI managers. */
   testLeague = false,
 ): Promise<CreateLeagueV2Result> {
@@ -399,16 +396,12 @@ export async function submitCreateLeagueV2(
   }
 
   const endpoint = getEndpoint(state)
-  if (sourceLeagueId && endpoint !== '/api/leagues') {
-    return { ok: false, error: 'This league concept cannot carry over imported rosters yet.' }
-  }
-
   let payload: unknown
   if (endpoint === '/api/tournament/create') {
     payload = buildTournamentPayload(state)
   } else {
     const canonical = buildCanonicalPayload(state)
-    payload = { ...canonical, ...(testLeague && !sourceLeagueId ? { testLeague: true } : {}), ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), ...(getEffectiveLeagueType(state) === 'zombie' ? { zombieLeagueCount: 1 } : {}), acceptWeeklyLineups } } : {}) }
+    payload = { ...canonical, ...(testLeague ? { testLeague: true } : {}) }
   }
 
   if (process.env.NODE_ENV === 'development') {
@@ -471,10 +464,8 @@ export async function submitCreateLeagueV2(
 
   const leagueId = parseLeagueId(json)
   const redirectTo = parseRedirectUrl(state, json)
-  const warnings = Array.isArray(json.warnings) ? json.warnings as Array<{ code?: string; message?: string }> : []
-  const warning = warnings.find((item) => item.code === 'IMPORT_MATERIALIZATION_PENDING')?.message
   // A test league is not a lead; the server sends no metaEvent for one, and the client must not either.
   if (!testLeague) trackMetaEventsFromResponse(json)
 
-  return { ok: true, leagueId, redirectTo, warning }
+  return { ok: true, leagueId, redirectTo }
 }
