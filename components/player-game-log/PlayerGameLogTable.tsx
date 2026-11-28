@@ -70,6 +70,11 @@ export function gameLogSupported(sport: string | null | undefined): boolean {
   return isGameLogSport(String(sport ?? '').toUpperCase())
 }
 
+/** The query both player-stat routes read (`resolveStatPlayerId` on the server). */
+export function playerStatQuery(sport: string, playerKey: PlayerGameLogKey, season: number | null, ctx?: GameLogScoringContext): string {
+  return gameLogQuery(sport, playerKey, season, ctx)
+}
+
 function gameLogQuery(sport: string, playerKey: PlayerGameLogKey, season: number | null, ctx?: GameLogScoringContext): string {
   const p = new URLSearchParams({ sport: sport.toUpperCase() })
   if ('identityId' in playerKey) p.set('identityId', playerKey.identityId)

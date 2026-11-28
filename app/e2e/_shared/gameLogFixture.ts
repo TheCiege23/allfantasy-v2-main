@@ -108,3 +108,22 @@ export function harnessGameLog(
     scoring,
   }
 }
+
+/** Sample `/api/players/window-ranks` answer: a layout fixture, not anybody's real ranks. */
+export function harnessWindowRanks(sport: string, scoring: { kind: 'league'; leagueName: string | null } | { kind: 'default' } = { kind: 'default' }) {
+  const s = sport.toUpperCase()
+  const pos = s === 'NHL' ? 'C' : s === 'MLB' ? 'OF' : s === 'SOCCER' ? 'MID' : 'G'
+  const cell = (key: string, label: string, rank: number, positionRank: number, games: number, perGame: number) => ({
+    key, label, rank, positionRank, games, perGame, points: Math.round(perGame * games * 10) / 10, population: 640,
+  })
+  return {
+    supported: true,
+    resolved: true,
+    season: 2026,
+    scoring,
+    ranks: {
+      position: pos,
+      windows: [cell('d7', 'Last 7', 9, 4, 3, 6.4), cell('d14', 'Last 14', 21, 8, 7, 5.1), cell('d30', 'Last 30', 14, 6, 13, 5.6), cell('season', 'Season', 11, 5, 24, 5.4)],
+    },
+  }
+}

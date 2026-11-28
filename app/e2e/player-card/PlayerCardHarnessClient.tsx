@@ -6,7 +6,7 @@ import type { PlayerCardData } from '@/lib/core-app/playerCard'
 import type { PlayerCardMore } from '@/lib/core-app/playerCardMore'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-card.css'
-import { harnessGameLog } from '@/app/e2e/_shared/gameLogFixture'
+import { harnessGameLog, harnessWindowRanks } from '@/app/e2e/_shared/gameLogFixture'
 
 const NO = (reason: string) => ({ available: false as const, reason })
 const OK = <T,>(data: T) => ({ available: true as const, data })
@@ -117,6 +117,7 @@ function installHarnessFetch(sport: string) {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
     if (url.startsWith('/api/players/game-log')) return json(harnessGameLog(w.__pcHarnessSport ?? sport, undefined, 30))
+    if (url.startsWith('/api/players/window-ranks')) return json(harnessWindowRanks(w.__pcHarnessSport ?? sport))
     if (url.startsWith('/api/user/table-layout')) return json({ error: 'Unauthorized' }, 401)
     return real(input, init)
   }
