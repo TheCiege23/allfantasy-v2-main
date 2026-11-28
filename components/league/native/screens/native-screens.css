@@ -656,3 +656,15 @@
 .nls-goalie-chip[data-tone=in], .nls-goalie-chip[data-tone=start] { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); }
 .nls-goalie-chip[data-tone=lean] { border-style: dashed; }
 .nls-goalie-chip[data-tone=bench] { color: var(--faint); }
+
+/*
+ * In a standings row the icon must not take the team name's width. Measured on a 390px phone
+ * (2026-11-28, the redraft screens harness): a 40px-wide button clipped 11 of 12 team names against
+ * 5 without it. So the button DRAWS at 24px, pulls 10px of the row's 14px gap back (margin-left), and keeps the workspace's 44px touch target (the
+ * `.nl-workspace :is(button…)` minimum) through an invisible ::after that takes no layout space. The
+ * extra `.nl-workspace` is what lets this win over that rule, which otherwise ties and comes later.
+ */
+.nl-workspace .nls-team .nls-msg-btn,
+.nls-team .nls-msg-btn { position: relative; flex: none; min-width: 24px; min-height: 24px; width: 24px; height: 24px; margin-left: -10px; padding: 0; }
+.nls-team .nls-msg-btn::after { content: ''; position: absolute; inset: -10px; }
+.nls-team .nls-msg-icon { width: 14px; height: 14px; }

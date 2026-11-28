@@ -32,9 +32,13 @@ import { guillotineSummaryResponse,
   waiverPlayersResponse,
   waiverSettingsResponse,
   waiverStateResponse,
+  managerContactsResponse,
+  weekPlannerResponse,
+  goalieStartsResponse,
   type HarnessSport,
   type HarnessStage,
 } from './fixtures'
+import { harnessGameLog } from '@/app/e2e/_shared/gameLogFixture'
 
 export type HarnessTab = 'roster' | 'matchups' | 'waivers' | 'trades' | 'standings' | 'players'
 
@@ -99,6 +103,12 @@ function installFixtureFetch(sport: HarnessSport, stage: HarnessStage) {
       return json(map)
     }
     if (path === '/api/players/rolling-insights/batch') return json({ bySleeperId: {} })
+    // The 2026-11-27/28 additions: every one answered from the fixtures, so the screens draw them.
+    if (path.endsWith('/manager-contacts')) return json(managerContactsResponse())
+    if (path.endsWith('/week-planner')) return json(weekPlannerResponse(s, new URL(url, window.location.origin).searchParams.get('offset') === '1' ? 1 : 0))
+    if (path === '/api/nhl/goalie-starts') return json(goalieStartsResponse())
+    if (path === '/api/user/table-layout') return json({ error: 'Unauthorized' }, 401)
+    if (path === '/api/players/game-log') return json(harnessGameLog(s))
     return json({ error: 'not in harness' }, 404)
   }
 }
