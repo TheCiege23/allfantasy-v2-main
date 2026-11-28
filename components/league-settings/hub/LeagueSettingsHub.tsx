@@ -271,7 +271,7 @@ export function LeagueSettingsHub({
   }, [leagueId, loadSettings])
 
   /** One setting from its picker (Sleeper-style rows, 2026-11-28): the same PATCH as a switch, one field. */
-  const onSetSetting = useCallback(async (field: string, value: string | number): Promise<string | null> => {
+  const onSetSetting = useCallback(async (field: string, value: string | number | null): Promise<string | null> => {
     setBusyField(field)
     // Trade review has its own writer (it must reach every trade runtime's store); everything else is the settings PATCH.
     const r = COMMISSIONER_ROUTE_FIELDS.has(field)

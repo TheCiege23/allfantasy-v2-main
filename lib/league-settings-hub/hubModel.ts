@@ -104,6 +104,8 @@ export type HubRow = {
    * validates every value: a refusal is shown in the picker, never applied.
    */
   edit?: HubRowEdit
+  /** A date and time, set in the league's own time zone and saved as UTC (Draft Time, 2026-11-28). */
+  dateTime?: { field: string; currentIso: string | null; timeZone: string | null }
   schedule?: HubScheduleDay[]
 }
 
@@ -767,7 +769,13 @@ export function buildDraftGroups(p: HubSettingsPayload, opts: { draftStarted?: b
   const rounds = num(s.rounds)
   const typeLabel = (v: string | number) => DRAFT_TYPE_CHOICES.find((c) => c.value === v)?.label ?? humanize(String(v))
   const left: HubRow[] = [
-    { key: 'time', label: 'Draft Time', description: tz ? `Shown in ${tz}` : undefined, value: formatDate(s.draftDateUtc, tz) },
+    {
+      key: 'time',
+      label: 'Draft Time',
+      description: tz ? `Shown in ${tz}` : undefined,
+      value: formatDate(s.draftDateUtc, tz),
+      dateTime: open ? { field: 'draftDateUtc', currentIso: str(s.draftDateUtc), timeZone: tz } : undefined,
+    },
     {
       key: 'type',
       label: 'Draft Type',
