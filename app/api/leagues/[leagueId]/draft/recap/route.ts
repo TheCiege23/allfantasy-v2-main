@@ -8,7 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { openaiChatText } from '@/lib/openai-client'
-import { aiCostGate } from '@/lib/ai-protection/costGate'
+import { aiWriteUpLimit } from '@/lib/ai-protection/costGate'
 import { getProviderStatus } from '@/lib/provider-config'
 import {
   buildDraftExecutionMetadata,
@@ -160,9 +160,27 @@ export async function POST(
     }
 
     // Owner, 2026-11-28: every model call is signed in and capped. After the AI cache (a hit costs nothing),
-    // before the model call. The deterministic recap above stays free and uncapped.
-    const gated = await aiCostGate(req, 'draft_recap_ai', userId)
-    if (gated) return gated
+    // before the model call. The deterministic recap above stays free and uncapped; capped, it is the
+    // answer, with a note — never a 429 (owner follow-up, same day).
+    const aiLimit = await aiWriteUpLimit(req, 'draft_recap_ai', userId)
+    if (aiLimit) {
+      const response = NextResponse.json({
+        recap: deterministicRecap,
+        deterministicRecap,
+        sections: deterministicSections,
+        fallback: true,
+        aiLimit,
+        execution: buildDraftExecutionMetadata({
+          feature: 'explain_draft_recap',
+          aiUsed: false,
+          aiEligible: invocation.canShowAIButton,
+          reasonCode: 'ai_daily_limit_deterministic_fallback',
+          fallbackToDeterministic: true,
+        }),
+      })
+      response.headers.set('Cache-Control', 'private, no-store')
+      return response
+    }
 
     const aiResponse = await dedupeInFlight(aiCacheKey, async () => {
       const hotCachedAi = getApiCached(aiCacheKey)

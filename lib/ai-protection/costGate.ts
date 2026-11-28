@@ -331,3 +331,35 @@ export async function aiCostGate(
   const outcome = await evaluateAiCostGate(req, key, userId, opts)
   return outcome.ok ? null : outcome.response
 }
+
+/** What a route with a non-AI answer attaches to that answer when the AI write-up was not allowed. */
+export type AiWriteUpLimitNote = {
+  reason: 'sign_in' | 'rate' | 'plan' | 'daily'
+  message: string
+  upgradePath: string | null
+}
+
+export const AI_WRITE_UP_DAILY_LIMIT_MESSAGE = 'AI write-up limit reached, resets at midnight UTC.'
+
+/**
+ * For a route that ALREADY HAS a non-AI answer (owner follow-up 2026-11-28: reputation, legacy-score, bracket
+ * review, draft recap). The same gate as `aiCostGate`, but a refusal is not a response: the route serves its
+ * deterministic answer with this note instead of a 429. `null` means go ahead and call the model.
+ */
+export async function aiWriteUpLimit(
+  req: Request,
+  key: AiCostGateKey,
+  userId: string | null | undefined,
+  opts: { email?: string | null; now?: Date } = {},
+): Promise<AiWriteUpLimitNote | null> {
+  const outcome = await evaluateAiCostGate(req, key, userId, opts)
+  if (outcome.ok) return null
+  const body = (await outcome.response.clone().json().catch(() => ({}))) as { message?: string; upgradePath?: string | null }
+  const message =
+    outcome.reason === 'daily'
+      ? AI_WRITE_UP_DAILY_LIMIT_MESSAGE
+      : typeof body.message === 'string' && body.message
+        ? body.message
+        : 'The AI write-up is unavailable right now.'
+  return { reason: outcome.reason, message, upgradePath: typeof body.upgradePath === 'string' ? body.upgradePath : null }
+}

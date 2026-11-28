@@ -89,7 +89,7 @@ export default function PlatformLegacyLeaderboardPanel() {
       }),
     })
     const data = await res.json().catch(() => ({}))
-    setNarrative(data?.narrative ?? data?.message ?? data?.error ?? "No explanation available.")
+    setNarrative([data?.narrative ?? data?.message ?? data?.error ?? "No explanation available.", data?.aiLimit?.message].filter(Boolean).join("\n\n"))
   }
 
   return (

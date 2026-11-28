@@ -80,7 +80,7 @@ export default function LegacyBreakdownPage() {
         if (!r.ok) throw new Error(res?.message ?? res?.error ?? "Could not load explanation.")
         return res
       })
-      .then((res) => setNarrative(res?.narrative ?? "No explanation available."))
+      .then((res) => setNarrative([res?.narrative ?? "No explanation available.", res?.aiLimit?.message].filter(Boolean).join("\n\n")))
       .catch((e: unknown) => setNarrative(e instanceof Error && e.message ? e.message : "Could not load explanation."))
       .finally(() => setNarrativeLoading(false))
   }

@@ -95,7 +95,7 @@ export default function LegacyTab({ leagueId }: LeagueTabProps) {
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data?.message ?? data?.error ?? "Could not load explanation.")
-        setExplainNarrative(data?.narrative ?? "No explanation available.")
+        setExplainNarrative([data?.narrative ?? "No explanation available.", data?.aiLimit?.message].filter(Boolean).join("\n\n"))
       } catch (e: any) {
         setExplainNarrative(e?.message ?? "Could not load explanation.")
       } finally {

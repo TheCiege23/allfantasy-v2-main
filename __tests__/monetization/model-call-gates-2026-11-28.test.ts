@@ -280,11 +280,25 @@ const SIGNED_IN_CAPPED: Row[] = [
     body: { leagueId: 'L1' },
   },
   {
+    name: 'POST /api/simulation/matchup/insight',
+    path: '@/app/api/simulation/matchup/insight/route',
+    url: 'http://localhost/api/simulation/matchup/insight',
+    body: { teamA: { mean: 110 }, teamB: { mean: 100 } },
+  },
+]
+
+/**
+ * Routes that already have a non-AI answer (owner follow-up 2026-11-28): capped, they serve that answer with
+ * a note instead of a 429. `answer` names the field that carries the non-AI answer.
+ */
+const SOFT_CAPPED: Array<Row & { answer: string }> = [
+  {
     name: 'POST /api/leagues/[leagueId]/draft/recap (includeAiExplanation)',
     path: '@/app/api/leagues/[leagueId]/draft/recap/route',
     url: 'http://localhost/api/leagues/L1/draft/recap',
     body: { includeAiExplanation: true },
     ctx: leagueCtx,
+    answer: 'recap',
   },
   {
     name: 'POST /api/leagues/[leagueId]/reputation/explain',
@@ -292,6 +306,7 @@ const SIGNED_IN_CAPPED: Row[] = [
     url: 'http://localhost/api/leagues/L1/reputation/explain',
     body: { managerId: 'm1' },
     ctx: leagueCtx,
+    answer: 'narrative',
   },
   {
     name: 'POST /api/leagues/[leagueId]/legacy-score/explain',
@@ -299,21 +314,17 @@ const SIGNED_IN_CAPPED: Row[] = [
     url: 'http://localhost/api/leagues/L1/legacy-score/explain',
     body: { entityType: 'MANAGER', entityId: 'm1' },
     ctx: leagueCtx,
+    answer: 'narrative',
   },
   {
     name: 'POST /api/bracket/intelligence/review',
     path: '@/app/api/bracket/intelligence/review/route',
     url: 'http://localhost/api/bracket/intelligence/review',
-    body: { entryId: 'e1' },
+    body: { entryId: 'e1', includeAiReview: true },
     before: () => {
       db['bracketEntry.findUnique'] = async () => ({ id: 'e1', userId: 'u1', league: { id: 'b1', tournamentId: 't1' }, picks: [] })
     },
-  },
-  {
-    name: 'POST /api/simulation/matchup/insight',
-    path: '@/app/api/simulation/matchup/insight/route',
-    url: 'http://localhost/api/simulation/matchup/insight',
-    body: { teamA: { mean: 110 }, teamB: { mean: 100 } },
+    answer: 'metrics',
   },
 ]
 
@@ -353,6 +364,57 @@ describe('A. signed-in model routes: sign-in, then a daily cap, before any model
     expect(r.status).toBe(429)
     expect(String(r.json.message)).toMatch(/AF Pro/)
     expect(r.json.upgradePath).toBe('/upgrade?plan=pro')
+  })
+})
+
+describe('A. routes with a non-AI answer: capped → that answer plus a note, never a 429', () => {
+  for (const row of SOFT_CAPPED) {
+    describe(row.name, () => {
+      it('signed out → 401, the model is never called', async () => {
+        row.before?.()
+        session.mockResolvedValue(null)
+        const r = await call(row)
+        expect(r.status, JSON.stringify(r)).toBe(401)
+        expect(spend).not.toHaveBeenCalled()
+      })
+
+      it('capped → 200 with the non-AI answer and the limit note; the model is never called', async () => {
+        row.before?.()
+        daily.mockResolvedValue({ success: false, retryAfterSec: 3600 })
+        const r = await call(row)
+        expect(r.status, JSON.stringify(r)).toBe(200)
+        expect(r.json[row.answer]).toBeTruthy()
+        expect(r.json.aiLimit).toMatchObject({ reason: 'daily', message: 'AI write-up limit reached, resets at midnight UTC.' })
+        expect(spend).not.toHaveBeenCalled()
+      })
+
+      it('under the cap → the model is reached, and one call was counted', async () => {
+        row.before?.()
+        await call(row)
+        expect(daily).toHaveBeenCalledTimes(1)
+        expect(spend).toHaveBeenCalled()
+      })
+    })
+  }
+
+  it('bracket review on page open (no includeAiReview) → metrics only; the cap and the model are never touched', async () => {
+    const row = SOFT_CAPPED.find((r) => r.name.includes('bracket'))!
+    row.before?.()
+    const r = await call({ ...row, body: { entryId: 'e1' } })
+    expect(r.status).toBe(200)
+    expect(r.json.metrics).toBeTruthy()
+    expect(r.json.aiReview).toBeNull()
+    expect(daily).not.toHaveBeenCalled()
+    expect(spend).not.toHaveBeenCalled()
+  })
+
+  it('the bracket intelligence page no longer asks for the review on open; the button does', async () => {
+    const { readFileSync } = await import('node:fs')
+    const page = readFileSync('app/bracket-intelligence/page.tsx', 'utf8')
+    const effect = page.slice(page.indexOf('  useEffect(() => {'))
+    expect(effect.slice(0, effect.indexOf('\n  }, ['))).not.toMatch(/intelligence\/review/)
+    expect(page).toMatch(/body: JSON\.stringify\(\{ entryId, includeAiReview: true \}\)/)
+    expect(readFileSync('components/bracket/BracketEntryActionsCard.tsx', 'utf8')).toMatch(/includeAiReview: true/)
   })
 })
 
