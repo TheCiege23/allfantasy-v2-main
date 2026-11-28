@@ -9,7 +9,8 @@ import { maxWeekForSport } from '@/components/matchup-center/MatchupTabContainer
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlayerName, type ScoreboardRow } from '@/lib/league/native/nativeScreenModels'
-import type { NativeBoardGame } from '@/lib/matchup-center/nativeMatchupModel'
+import type { NativeBoardGame, NativeBoardSide } from '@/lib/matchup-center/nativeMatchupModel'
+import { formatWinProbabilityPercents } from '@/lib/matchup-center/winProbability'
 import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
 import { GuillotineMatchupScreen } from './NativeGuillotineScreens'
 import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
@@ -297,6 +298,34 @@ function RotisserieMatchupScreen({ onSelectTab }: ScreenProps) {
   )
 }
 
+/**
+ * One team in a scoreboard game, Sleeper-style: name and score on top, its AF projection and win chance
+ * beneath. A game not started shows a dash for the score, never 0.0, and leads with the projection.
+ */
+function BoardSide({ side, other, winPct, categories }: { side: NativeBoardSide; other: NativeBoardSide | null; winPct: number | null; categories: boolean }) {
+  const pts = side.totalPoints
+  const theirs = other?.totalPoints ?? null
+  const lead = pts != null && theirs != null && pts > theirs
+  const proj = side.projectedPoints
+  return (
+    <div className="nls-board-side" data-lead={lead || undefined}>
+      <div className="nls-board-line" data-lead={lead}>
+        <span>{side.teamName}</span>
+        <span className="nls-board-score">{pts == null ? '—' : categories ? String(Math.round(pts)) : fmt1(pts)}</span>
+      </div>
+      {proj != null || winPct != null ? (
+        <div className="nls-board-sub">
+          <span>
+            {proj != null ? <span data-testid="native-scoreboard-proj">Proj {fmt1(proj)}</span> : null}
+            {proj != null && winPct != null ? ' · ' : null}
+            {winPct != null ? <span data-win={winPct >= 50 || undefined}>{winPct}% win</span> : null}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
   const rd = useRedraftScreenContext()
   const season = useMemo(() => {
@@ -445,6 +474,20 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
    * that plays five games a week has 90 games, which pushed the page to nine screens (seen on a real
    * league, 2026-11-19). It shows the first few, the viewer's own first, and a way to the full list.
    */
+  // Two teams meeting more than once in a week (a league that plays several games a week) look like
+  // the same line repeated; numbering them says why.
+  const gameOrdinals = useMemo(() => {
+    const out = new Map<string, { n: number; of: number }>()
+    if (!games) return out
+    const byPair = new Map<string, string[]>()
+    for (const g of games) {
+      if (!g.away) continue
+      const key = [g.home.rosterId, g.away.rosterId].sort().join('|')
+      byPair.set(key, [...(byPair.get(key) ?? []), g.id])
+    }
+    for (const ids of byPair.values()) if (ids.length > 1) ids.forEach((id, i) => out.set(id, { n: i + 1, of: ids.length }))
+    return out
+  }, [games])
   const boardCard = (limit: number | null) => {
     const shown = games && limit != null && games.length > limit ? games.slice(0, limit) : games
     return (
@@ -453,15 +496,24 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
         games.length ? (
           // One line per game, from the league's own schedule and bracket.
           <>
-          <ul className="nls-board" data-testid="native-scoreboard">
+          <ul className="nls-board" data-testid="native-scoreboard" data-cards="true">
             {shown.map((g) => {
               const hp = g.home.totalPoints
               const ap = g.away?.totalPoints ?? null
+              const repeat = gameOrdinals.get(g.id)
+              const label = [g.label, repeat ? `Game ${repeat.n} of ${repeat.of}` : null].filter(Boolean).join(' · ')
+              const wp = formatWinProbabilityPercents(g.homeWinProbability ?? null)
               return (
                 <li key={g.id} data-mine={g.mine || undefined} data-state={g.status}>
-                  {g.label ? <div className="nls-board-line"><span className="nls-muted">{g.label}</span><span /></div> : null}
-                  {boardLine(g.home.teamName, hp, hp != null && ap != null && hp > ap)}
-                  {g.away ? boardLine(g.away.teamName, ap, hp != null && ap != null && ap > hp) : <div className="nls-board-line"><span className="nls-muted">Bye</span><span /></div>}
+                  {label ? <div className="nls-board-label nls-muted">{label}{g.status === 'live' ? <span className="nls-board-live">Live</span> : null}</div> : g.status === 'live' ? <div className="nls-board-label"><span className="nls-board-live">Live</span></div> : null}
+                  <BoardSide side={g.home} other={g.away} winPct={wp?.leftPct ?? null} categories={categories} />
+                  {wp && g.status !== 'final' ? (
+                    <div className="nls-board-wp" role="img" aria-label={`Win chance ${wp.leftPct}% to ${wp.rightPct}%`} data-testid="native-scoreboard-winprob">
+                      <span style={{ width: `${wp.leftPct}%` }} data-lead={wp.leftPct >= wp.rightPct || undefined} />
+                      <span style={{ width: `${wp.rightPct}%` }} data-lead={wp.rightPct > wp.leftPct || undefined} />
+                    </div>
+                  ) : null}
+                  {g.away ? <BoardSide side={g.away} other={g.home} winPct={wp?.rightPct ?? null} categories={categories} /> : <div className="nls-board-line"><span className="nls-muted">Bye</span><span /></div>}
                 </li>
               )
             })}

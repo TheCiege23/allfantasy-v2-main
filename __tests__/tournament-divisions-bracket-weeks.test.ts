@@ -17,7 +17,15 @@ const m = vi.hoisted(() => ({
   isGuillotine: vi.fn(async () => false),
 }))
 vi.mock('server-only', () => ({}))
-vi.mock('@/lib/prisma', () => ({ prisma: { league: m.league, redraftSeason: m.redraftSeason, redraftMatchup: m.redraftMatchup, redraftRoster: m.redraftRoster } }))
+vi.mock('@/lib/prisma', () => {
+  const prisma: Record<string, unknown> = {
+    league: m.league, redraftSeason: m.redraftSeason, redraftMatchup: m.redraftMatchup, redraftRoster: m.redraftRoster,
+    // The schedule insert runs under a per-season advisory lock (lib/redraft/scheduleWriteLock.ts).
+    $executeRaw: async () => 0,
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(prisma),
+  }
+  return { prisma }
+})
 vi.mock('@/lib/guillotine/GuillotineLeagueConfig', () => ({ isGuillotineLeague: m.isGuillotine, getGuillotineConfig: vi.fn(async () => null) }))
 
 const { ensureRedraftSeason, ensureScheduleForNewSeason } = await import('@/lib/redraft/finalizeDraftToRedraftSeason')

@@ -153,6 +153,19 @@
 .nls-board-line[data-lead=true] { color: var(--text); font-weight: 600; }
 .nls-board-line span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nls-board-line span:last-child { font-family: var(--nl-mono); font-variant-numeric: tabular-nums; }
+/* Scoreboard as game cards (Sleeper-style): each game is its own tile, a projection and win chance per team. */
+.nls-board[data-cards=true] > li { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised, transparent); }
+.nls-board[data-cards=true] > li:first-child { margin-top: 0; padding-top: 12px; }
+.nls-board[data-cards=true] > li[data-mine=true] { margin-left: 0; margin-right: 0; padding-left: 14px; padding-right: 14px; border-color: var(--accent, var(--line)); }
+.nls-board-label { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+.nls-board-live { color: var(--good, #2ecc71); font-weight: 700; }
+.nls-board-side .nls-board-line { min-height: 24px; }
+.nls-board-score { font-size: 18px; font-weight: 700; color: var(--text); }
+.nls-board-sub { display: flex; justify-content: space-between; font-size: 12px; color: var(--faint, var(--text2)); font-family: var(--nl-mono); font-variant-numeric: tabular-nums; margin-top: -2px; }
+.nls-board-sub [data-win] { color: var(--good, #2ecc71); }
+.nls-board-wp { display: flex; gap: 2px; height: 4px; margin: 8px 0; border-radius: 2px; overflow: hidden; background: var(--line); }
+.nls-board-wp > span { display: block; height: 100%; background: var(--faint, #5b6478); opacity: .5; }
+.nls-board-wp > span[data-lead] { background: var(--good, #2ecc71); opacity: 1; }
 
 /* ── Lineup ──────────────────────────────────────────────────────────── */
 .nls-lockbar { display: flex; align-items: center; gap: 16px; min-height: 64px; padding: 12px 22px; border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--warn) 6%, var(--surface)); color: var(--text); font-size: 15px; }

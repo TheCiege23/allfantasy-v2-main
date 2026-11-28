@@ -12,6 +12,7 @@
 import { prisma } from '@/lib/prisma'
 import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
+import { createScheduleRowsOnce } from '@/lib/redraft/scheduleWriteLock'
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
@@ -80,9 +81,12 @@ export async function backfillPreLeagueWeeks(params: {
   const slots = generateSchedule(rosters, weeks.length, weeks.length + 1, season.sport).filter(
     (slot) => slot.type !== 'median' && missing.includes(slot.week),
   )
+  // Re-checked under a per-season lock, so two runs racing cannot both fill the same missed weeks.
   if (slots.length > 0) {
-    await prisma.redraftMatchup.createMany({
-      data: slots.map((slot) => ({
+    await createScheduleRowsOnce({
+      seasonId: season.id,
+      alreadyWritten: async (tx) => (await tx.redraftMatchup.count({ where: { seasonId: season.id, week: { in: missing } } })) > 0,
+      rows: slots.map((slot) => ({
         seasonId: season.id,
         leagueId: season.leagueId,
         week: slot.week,

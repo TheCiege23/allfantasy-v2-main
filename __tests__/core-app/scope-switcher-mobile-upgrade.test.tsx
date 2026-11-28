@@ -49,6 +49,12 @@ function open(props: Partial<React.ComponentProps<typeof ScopeSwitcher>> = {}) {
 const names = () => Array.from(document.querySelectorAll('.af-scope-league-name')).map((n) => n.textContent)
 const headings = () => Array.from(document.querySelectorAll('[data-testid="scope-sport-heading"]')).map((h) => h.getAttribute('data-section'))
 const chip = (name: RegExp) => within(document.querySelector('.af-scope-filters') as HTMLElement).getByRole('button', { name })
+// Sport and platform are dropdowns since 2026-11-28 ("turn the search options into dropdowns").
+const sportSelect = () => screen.getByTestId('scope-sport-select') as HTMLSelectElement
+const platformSelect = () => screen.getByTestId('scope-platform-select') as HTMLSelectElement
+const optionText = (sel: HTMLSelectElement) => Array.from(sel.options).map((o) => o.textContent ?? '')
+const option = (sel: HTMLSelectElement, re: RegExp) => Array.from(sel.options).find((o) => re.test(o.textContent ?? ''))!
+const pick = (sel: HTMLSelectElement, value: string) => fireEvent.change(sel, { target: { value } })
 
 describe('sport on every row, and the list grouped by sport', () => {
   it('draws a heading per sport in product order, each row under its own', () => {
@@ -73,14 +79,14 @@ describe('sport on every row, and the list grouped by sport', () => {
     expect(row.querySelector('[data-testid="scope-league-sport"]')).toBeNull()
   })
 
-  it('names college sports on the filter chips by their short names, as the headings do', () => {
+  it('names college sports in the sport dropdown by their short names, as the headings do', () => {
     open({ leagues: [...LEAGUES, { id: 'c1', name: 'Campus', sport: 'NCAAF', platform: 'sleeper' }, { id: 'c2', name: 'Hoops U', sport: 'NCAAB', platform: 'sleeper' }] })
-    const chips = Array.from(document.querySelectorAll('.af-scope-filters .af-scope-chip')).map((c) => c.textContent ?? '')
-    expect(chips.some((t) => /CFB\s*1/.test(t))).toBe(true)
-    expect(chips.some((t) => /CBB\s*1/.test(t))).toBe(true)
-    expect(chips.some((t) => /NCAA/.test(t))).toBe(false)
-    // …and the chip still filters by the real sport code.
-    fireEvent.click(chip(/CFB/))
+    const opts = optionText(sportSelect())
+    expect(opts.some((t) => /CFB \(1\)/.test(t))).toBe(true)
+    expect(opts.some((t) => /CBB \(1\)/.test(t))).toBe(true)
+    expect(opts.some((t) => /NCAA/.test(t))).toBe(false)
+    // …and the option still filters by the real sport code.
+    pick(sportSelect(), 'NCAAF')
     expect(names()).toEqual(['Campus'])
   })
 
@@ -108,42 +114,51 @@ describe('the platform in its own colour', () => {
   })
 })
 
-describe('chips filter the list in place', () => {
-  it('a sport chip narrows the list and does not navigate', () => {
+describe('the dropdowns filter the list in place', () => {
+  it('takes one row for every sport and platform, not a wall of chips', () => {
     open()
-    fireEvent.click(chip(/NBA/))
+    expect(document.querySelectorAll('.af-scope-filters .af-scope-chip[data-platform]')).toHaveLength(0)
+    expect(optionText(sportSelect())).toEqual(['All sports (5)', '🏈 NFL (3)', '🏀 NBA (2)'])
+    expect(optionText(platformSelect())[0]).toBe('All platforms (5)')
+  })
+
+  it('a sport narrows the list and does not navigate', () => {
+    open()
+    pick(sportSelect(), 'NBA')
     expect(names()).toEqual(['Hoops Club', 'Fantrax Hoops'])
     expect(nav.push).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog')).toBeTruthy()
-    expect(chip(/NBA/).getAttribute('aria-pressed')).toBe('true')
+    expect(sportSelect().value).toBe('NBA')
   })
 
-  it('a sport and a platform combine, and the counts follow the other chip', () => {
+  it('a sport and a platform combine, and the counts follow the other dropdown', () => {
     open()
-    fireEvent.click(chip(/NFL/))
+    pick(sportSelect(), 'NFL')
     // Under NFL: Sleeper 1, ESPN 1, AllFantasy 1, Fantrax 0 (disabled).
-    expect(chip(/Fantrax/)).toBeDisabled()
-    fireEvent.click(chip(/Sleeper/))
+    expect(option(platformSelect(), /Fantrax/).disabled).toBe(true)
+    expect(option(platformSelect(), /Fantrax/).textContent).toBe('Fantrax (0)')
+    pick(platformSelect(), 'sleeper')
     expect(names()).toEqual(['Dynasty Dragons'])
   })
 
-  it('tapping a pressed chip lets it go; All leagues clears everything', () => {
+  it('choosing "All" lets a filter go; All leagues clears everything', () => {
     open()
-    fireEvent.click(chip(/NBA/))
-    fireEvent.click(chip(/NBA/))
+    pick(sportSelect(), 'NBA')
+    pick(sportSelect(), '')
     expect(names()).toHaveLength(5)
-    fireEvent.click(chip(/ESPN/))
+    pick(platformSelect(), 'espn')
     expect(names()).toEqual(['Work League'])
     fireEvent.click(chip(/All leagues/))
     expect(names()).toHaveLength(5)
+    expect(platformSelect().value).toBe('')
   })
 
   it('opens on the filter Home is showing, and offers to put a new one on Home', () => {
     open({ scopeValue: 'sport:NBA', label: 'NBA leagues' })
     expect(names()).toEqual(['Hoops Club', 'Fantrax Hoops'])
+    expect(sportSelect().value).toBe('NBA')
     expect(screen.queryByTestId('scope-apply-home')).toBeNull()
-    fireEvent.click(chip(/NBA/))
-    fireEvent.click(chip(/NFL/))
+    pick(sportSelect(), 'NFL')
     const apply = screen.getByTestId('scope-apply-home')
     expect(apply.getAttribute('href')).toBe('/core?view=all&scope=sport%3ANFL')
     fireEvent.click(apply)
@@ -152,9 +167,16 @@ describe('chips filter the list in place', () => {
 
   it('CONTROL: two facets at once cannot be a Home filter, so none is offered', () => {
     open()
-    fireEvent.click(chip(/NFL/))
-    fireEvent.click(chip(/Sleeper/))
+    pick(sportSelect(), 'NFL')
+    pick(platformSelect(), 'sleeper')
     expect(screen.queryByTestId('scope-apply-home')).toBeNull()
+  })
+
+  it('puts the search box above the filters, so typing is the first thing on the sheet', () => {
+    open()
+    const search = document.querySelector('.af-scope-search')!
+    const filters = document.querySelector('.af-scope-filters')!
+    expect(search.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
