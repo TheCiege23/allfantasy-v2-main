@@ -66,6 +66,11 @@ type NflRedraftLeagueHomeDashboardProps = {
    * knows engine turns (HOH, council, chop) and opens the format walkthrough once after create.
    */
   nextSlot?: ReactNode
+  /**
+   * Synced from another site (Sleeper, Fantrax…). Managers join and set lineups there, so no Invite row and
+   * no AllFantasy announcements panel; the caller's "What's next?" says where the league lives.
+   */
+  imported?: boolean
 }
 
 function formatDraftDate(draftDateIso: string | null): string | null {
@@ -150,6 +155,7 @@ export function NflRedraftLeagueHomeDashboard({
   formatRows = [],
   formatSlot,
   nextSlot,
+  imported = false,
 }: NflRedraftLeagueHomeDashboardProps) {
   const entitlements = useEntitlements()
   const hasManagerIntelligence = entitlements.hasPro || entitlements.hasSupreme
@@ -199,7 +205,7 @@ export function NflRedraftLeagueHomeDashboard({
       : `${sportLabel} · Pre-draft`
 
   const rows: (Row | null)[] = []
-  if (!seasonStarted && isCommissioner && joinedTeams < teamCount) {
+  if (!imported && !seasonStarted && isCommissioner && joinedTeams < teamCount) {
     // The invite lives at the top of the Draft tab.
     rows.push({ id: 'invite', icon: UserPlus, label: 'Invite managers', value: `${joinedTeams}/${teamCount}`, onClick: () => onOpenTab('draft') })
   }
@@ -304,7 +310,7 @@ export function NflRedraftLeagueHomeDashboard({
         </nav>
 
         {/* Announcements and notifications: kept, but folded — it was an always-open panel with two inputs. */}
-        <section className={`${card} overflow-hidden`}>
+        {imported ? null : <section className={`${card} overflow-hidden`}>
           <button
             type="button"
             onClick={() => setAnnouncementsOpen((v) => !v)}
@@ -323,7 +329,7 @@ export function NflRedraftLeagueHomeDashboard({
               <RedraftCommunicationPanel leagueId={leagueId} isCommissioner={isCommissioner} onOpenChat={() => onOpenTab(chatTab ?? 'league_chat')} />
             </div>
           ) : null}
-        </section>
+        </section>}
 
         {/* Renders nothing unless MANAGER_REPLAY_INSIGHTS_DASHBOARD_ENABLED=true. */}
         <ManagerReplayInsightsCard leagueId={leagueId} />

@@ -111,7 +111,6 @@ import type { LeagueRailData } from '@/components/league/native/LeagueRail'
 import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/LeagueSettingsHomeContainer'
 import { resolveLegacySettingsPanel, settingsPanelView } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
-import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { LeagueRulesHomeHost } from '@/components/league/native/LeagueRulesHomeHost'
 import { LeagueStakesCard, stakesFormatFor } from '@/components/league/native/LeagueStakesCard'
 import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
@@ -2645,37 +2644,38 @@ function LeagueTabRouter({
         />
       )
       /*
-       * Every AllFantasy-hosted league gets the one simple League home, whatever the sport or format
+       * Every league gets the one simple League home, whatever the sport, format or host
        * (owner, 2026-11-28: redraft first, then "simplify the dynasty and specialty league homes too").
        * Its next-up card does the "What's next?" job, so the panel is not stacked above it. A format
        * adds only its stakes card (Guillotine, Big Brother) and one row per format tab (Picks, Taxi,
        * Keepers, Chop…). Survivor too (owner, same day): its island — tribes, council, idols — is the
        * Island tab, so the home lists Island / Tribal / Challenges / Jury rows instead of the whole board.
-       * Imported leagues keep the full home below: their data comes from another site.
+       * Imported leagues too (owner, same day): their "What's next?" is the main card (it says where the
+       * league lives and links there), and nothing that only a hosted league has (invites, announcements,
+       * the rules popup, stakes) is shown.
        */
-      if (!importedWhatsNext) {
-        const stakesFormat = stakesFormatFor(selectedLeague)
-        const plainRedraft = isRedraftFormatUserLeague(selectedLeague) && guillyTabKind(selectedLeague, true) == null
-        return oneLeagueHome(
-          <NflRedraftLeagueHomeDashboard
-            league={selectedLeague}
-            leagueId={leagueId}
-            teamSlots={teamSlots}
-            userTeamName={userTeam?.teamName ?? null}
-            isCommissioner={isCommissioner}
-            draftDateIso={draftDateIso}
-            hasActiveRedraftSeason={hasActiveRedraftSeason}
-            onOpenSettings={onOpenLeagueSettingsModal}
-            onOpenTab={onSelectTab}
-            availableTabIds={tabDefs.map((item) => item.id)}
-            rulesSlot={<LeagueRulesHomeHost leagueId={leagueId} blocked={settingsOpen} />}
-            formatRows={tabDefs.filter((item) => SIMPLE_HOME_FORMAT_TABS.has(item.id))}
-            formatSlot={stakesFormat ? <LeagueStakesCard leagueId={leagueId} format={stakesFormat} onSelectTab={onSelectTab} /> : null}
-            nextSlot={plainRedraft ? undefined : whatsNext}
-          />,
-        )
-      }
-      return <div className="wn-home-stack">{whatsNext}{oneLeagueHome(<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} imported={importedWhatsNext != null} />)}</div>
+      const imported = importedWhatsNext != null
+      const stakesFormat = imported ? null : stakesFormatFor(selectedLeague)
+      const plainRedraft = isRedraftFormatUserLeague(selectedLeague) && guillyTabKind(selectedLeague, true) == null
+      return oneLeagueHome(
+        <NflRedraftLeagueHomeDashboard
+          league={selectedLeague}
+          leagueId={leagueId}
+          teamSlots={teamSlots}
+          userTeamName={userTeam?.teamName ?? null}
+          isCommissioner={isCommissioner}
+          draftDateIso={draftDateIso}
+          hasActiveRedraftSeason={hasActiveRedraftSeason}
+          onOpenSettings={onOpenLeagueSettingsModal}
+          onOpenTab={onSelectTab}
+          availableTabIds={tabDefs.map((item) => item.id)}
+          rulesSlot={imported ? undefined : <LeagueRulesHomeHost leagueId={leagueId} blocked={settingsOpen} />}
+          imported={imported}
+          formatRows={tabDefs.filter((item) => SIMPLE_HOME_FORMAT_TABS.has(item.id))}
+          formatSlot={stakesFormat ? <LeagueStakesCard leagueId={leagueId} format={stakesFormat} onSelectTab={onSelectTab} /> : null}
+          nextSlot={plainRedraft && !imported ? undefined : whatsNext}
+        />,
+      )
     }
     case 'home':
       return (
