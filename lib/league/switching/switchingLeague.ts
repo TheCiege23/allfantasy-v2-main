@@ -116,6 +116,19 @@ export function tradeTeamNotSwitchedMessage(teamNames: readonly string[], platfo
   return `${who} switched to AllFantasy yet, so this trade has to happen on ${where}. Trades here need every team to have switched.`
 }
 
+/** Refusal code when a lineup change names a team that has not switched, in an official league. */
+export const TEAM_NOT_SWITCHED_CODE = 'TEAM_NOT_SWITCHED'
+
+/**
+ * The refusal shown when a lineup change in an official league names a team that still plays on the old
+ * platform. That team's lineup is copied from there, so a change made here would be replaced by the next
+ * copy, and AllFantasy's score would briefly count a lineup its manager never set.
+ */
+export function lineupTeamNotSwitchedMessage(teamName: string, platformLabel: string | null): string {
+  const where = platformLabel ?? 'the other platform'
+  return `${teamName} hasn't switched to AllFantasy yet, so its lineup is set on ${where}. AllFantasy copies it from there.`
+}
+
 /**
  * True when AllFantasy runs this league's season: scoring, standings and waivers (rule 3: AllFantasy
  * scoring is official once the league is). A native league, or an imported one made official here.

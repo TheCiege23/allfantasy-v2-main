@@ -3,7 +3,7 @@
  * official league), by platform team id and by `LeagueTeam.id`. See `teamsRunOnAllFantasy`.
  */
 import { prisma } from '@/lib/prisma'
-import { isOfficialOnAllFantasy, teamsRunOnAllFantasy } from './switchingLeague'
+import { hasTeamSwitched, isOfficialOnAllFantasy, teamsRunOnAllFantasy } from './switchingLeague'
 
 export type TeamsRunOnAllFantasy = {
   /** `LeagueTeam.externalId` (the import's `source_team_id`). */
@@ -59,6 +59,29 @@ export async function redraftRosterIdsRunOnAllFantasy(leagueId: string, external
     if (r.redraftRosterId && externalIds.has(String(pd.source_team_id ?? ''))) out.add(r.redraftRosterId)
   }
   return out
+}
+
+/**
+ * The team behind a legacy `Roster`, when its league is official on AllFantasy and that team has NOT
+ * switched; null otherwise. Lineup writes use it: a mirrored team's lineup is copied from the old
+ * platform, so a change made here would be undone by the next copy.
+ *
+ * A roster whose team cannot be found is read as not switched, the same safe side the trade gate takes.
+ * Every league that is not official returns before any team query.
+ */
+export async function mirroredTeamOfRoster(
+  leagueId: string,
+  settings: unknown,
+  playerData: unknown,
+): Promise<{ name: string } | null> {
+  if (!isOfficialOnAllFantasy(settings)) return null
+  const pd = playerData && typeof playerData === 'object' ? (playerData as Record<string, unknown>) : {}
+  const externalId = String(pd.source_team_id ?? '')
+  const team = externalId
+    ? await prisma.leagueTeam.findFirst({ where: { leagueId, externalId }, select: { id: true, teamName: true } })
+    : null
+  if (team && hasTeamSwitched(settings, team.id)) return null
+  return { name: team?.teamName?.trim() || 'This team' }
 }
 
 /**
