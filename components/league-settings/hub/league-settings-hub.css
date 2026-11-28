@@ -366,3 +366,9 @@
 .af-lsh-slot.af-lsh-slot-btn:hover, .af-lsh-slot.af-lsh-slot-btn:focus-visible { background: rgba(255,255,255,.04); }
 .af-lsh-slot.af-lsh-slot-btn b { color: var(--lsh-accent); }
 .af-lsh-step-count { display: grid; place-items: center; }
+
+/* Draft Time (2026-11-28): a date and a time in the league's zone, side by side. */
+.af-lsh-datetime { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 10px; padding: 8px 18px; }
+.af-lsh-datetime label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.af-lsh-datetime label > span { font-size: 12px; font-weight: 700; color: var(--lsh-muted, #9fb2c9); }
+.af-lsh-datetime .af-lsh-step-input { font-size: 16px; padding: 0 10px; text-align: left; color-scheme: dark; }

@@ -48,11 +48,24 @@ type EditablePlayoffForm = {
   consolationPickGoesTo: string
 }
 
-const SEEDING_RULES = [
-  { value: 'standard_standings', label: 'Standard standings' },
+/**
+ * Only orders the playoff engine applies (lib/scoring-engine/scoringSettingsResolved.ts
+ * `getPlayoffSeedingRule`). This list offered "Points-for then record" (`points_for_then_record`), which the
+ * engine does not recognise and seeds exactly like standard standings, so a league choosing it got
+ * record-first seeding with no warning. No league had it set (checked 2026-11-28). Replaced with
+ * `points_only`, which the engine does apply; the League Setup picker offers the same three.
+ */
+export const SEEDING_RULES = [
+  { value: 'standard_standings', label: 'Record, then points for' },
+  { value: 'points_only', label: 'Points for only' },
   { value: 'division_winners_first', label: 'Division winners first' },
-  { value: 'points_for_then_record', label: 'Points-for then record' },
 ] as const
+
+/** A stored rule as words; one outside the list (older or imported) is shown as stored. */
+function seedingRuleLabel(value: string | null | undefined): string {
+  if (!value) return '—'
+  return SEEDING_RULES.find((r) => r.value === value)?.label ?? value
+}
 
 const RESEED_BEHAVIORS = [
   { value: 'fixed_bracket', label: 'Fixed bracket' },
@@ -698,7 +711,7 @@ export default function PlayoffSettingsPanel({ leagueId }: { leagueId: string })
         </div>
         <div>
           <dt className="text-white/50">Seeding rules</dt>
-          <dd className="text-white/90">{editing ? form.seedingRules : config.seeding_rules ?? '—'}</dd>
+          <dd className="text-white/90">{seedingRuleLabel(editing ? form.seedingRules : config.seeding_rules)}</dd>
         </div>
         <div>
           <dt className="text-white/50">Reseed behavior</dt>

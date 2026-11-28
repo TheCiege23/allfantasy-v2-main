@@ -34,6 +34,8 @@ import { buildAfOptions,
   buildRosterItems,
   buildTypeRuleGroups,
   buildWaiverGroups,
+  DAILY_WAIVER_HOUR_FIELD,
+  dailyScheduleWithHour,
   groupScoringRules,
   isLeagueCategoryOn,
   resolveHubKind,
@@ -270,8 +272,30 @@ export function LeagueSettingsHub({
     await loadSettings()
   }, [leagueId, loadSettings])
 
+  /**
+   * The daily waiver run's hour (2026-11-28). The settings PATCH takes the whole schedule, so it is read
+   * FRESH and only `processHour` changed, as the roster slot sheet does with its map: a screen opened an
+   * hour ago must not write back day modes another tab has since changed.
+   */
+  const setDailyWaiverHour = useCallback(async (hour: number): Promise<string | null> => {
+    setBusyField(DAILY_WAIVER_HOUR_FIELD)
+    const fresh = await getJson<HubSettingsPayload>(`/api/league/settings?leagueId=${encodeURIComponent(leagueId)}`)
+    const schedule = dailyScheduleWithHour(fresh?.settingsSnapshot ?? null, hour)
+    if (!schedule) {
+      setBusyField(null)
+      return tx('Custom daily waivers are off. Turn them on to set a processing time.')
+    }
+    const r = await sendJson('/api/league/settings', 'PATCH', { leagueId, dailyWaiverSchedule: schedule })
+    setBusyField(null)
+    if (!r.ok) return tx(r.error ?? 'Save failed')
+    toast.success(tx('Saved'))
+    await loadSettings()
+    return null
+  }, [leagueId, loadSettings])
+
   /** One setting from its picker (Sleeper-style rows, 2026-11-28): the same PATCH as a switch, one field. */
-  const onSetSetting = useCallback(async (field: string, value: string | number): Promise<string | null> => {
+  const onSetSetting = useCallback(async (field: string, value: string | number | null): Promise<string | null> => {
+    if (field === DAILY_WAIVER_HOUR_FIELD) return setDailyWaiverHour(Number(value))
     setBusyField(field)
     // Trade review has its own writer (it must reach every trade runtime's store); everything else is the settings PATCH.
     const r = COMMISSIONER_ROUTE_FIELDS.has(field)
@@ -282,7 +306,7 @@ export function LeagueSettingsHub({
     toast.success(tx('Saved'))
     await loadSettings()
     return null
-  }, [leagueId, loadSettings])
+  }, [leagueId, loadSettings, setDailyWaiverHour])
 
   /**
    * One scoring stat (2026-11-28): the commissioner scoring PUT already merges a partial rule list over

@@ -10,6 +10,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { timeZoneShortName, utcToWallClock, wallClockToUtc } from '@/lib/timezone'
 import './league-settings-hub.css'
 import {
   CalendarDays, ChevronRight, ClipboardList, Coins, Crown, Flame, Lock, LockKeyhole, Network, Scale, Settings2, Sparkles, Trophy, UserCog, Users, type LucideIcon,
@@ -120,7 +121,7 @@ export type HubCallbacks = {
    * One setting chosen from its picker (a row's `edit`): saves that one field. Resolves to the
    * server's refusal, or null once saved. Optional: without it the rows stay read-only values.
    */
-  onSetSetting?: (field: string, value: string | number) => Promise<string | null>
+  onSetSetting?: (field: string, value: string | number | null) => Promise<string | null>
   /**
    * One scoring stat's points, from its own editor (2026-11-28). `confirmMidSeason` is sent only after the
    * commissioner has read the server's mid-season warning and chosen to go ahead; it is never set first.
@@ -423,13 +424,13 @@ function Face({ name, src }: { name: string; src?: string | null }) {
   return <span className="af-lsh-face" aria-hidden>{src ? <img src={src} alt="" /> : initials(name)}</span>
 }
 
-type OnSetSetting = (field: string, value: string | number) => Promise<string | null>
+type OnSetSetting = (field: string, value: string | number | null) => Promise<string | null>
 
 function RowView({ row, canEdit, busyField, onToggle, onSet }: { row: HubRow; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void; onSet?: OnSetSetting }) {
   const { t, tMode } = useT()
   const [picking, setPicking] = useState(false)
   const value = <span className="af-lsh-value" data-empty={row.value == null ? 'true' : undefined}>{row.value == null ? '—' : translateValue(t, row.value)}</span>
-  const pickable = Boolean(row.edit && onSet && canEdit && !row.toggle)
+  const pickable = Boolean((row.edit || row.dateTime) && onSet && canEdit && !row.toggle)
   return (
     <>
       {pickable ? (
@@ -442,7 +443,7 @@ function RowView({ row, canEdit, busyField, onToggle, onSet }: { row: HubRow; ca
           className="af-lsh-row af-lsh-pickrow"
           data-indent={row.indent ? 'true' : undefined}
           onClick={() => setPicking(true)}
-          data-testid={`setting-row-${row.edit!.field}`}
+          data-testid={`setting-row-${row.edit?.field ?? row.dateTime!.field}`}
           aria-haspopup="dialog"
         >
           <span className="af-lsh-row-copy">
@@ -476,6 +477,7 @@ function RowView({ row, canEdit, busyField, onToggle, onSet }: { row: HubRow; ca
         </div>
       ) : null}
       {picking && row.edit && onSet ? <SettingPicker row={row} onSet={onSet} onClose={() => setPicking(false)} /> : null}
+      {picking && !row.edit && row.dateTime && onSet ? <DateTimeSheet row={row} onSet={onSet} onClose={() => setPicking(false)} /> : null}
     </>
   )
 }
@@ -544,6 +546,75 @@ function SettingPicker({ row, onSet, onClose }: { row: HubRow; onSet: OnSetSetti
               </button>
             )
           })}
+        </div>
+      </div>
+    </div>
+  )
+  return typeof document === 'undefined' ? sheet : createPortal(sheet, document.body)
+}
+
+/**
+ * A date and time in the LEAGUE'S time zone (Draft Time, 2026-11-28): the commissioner types the wall
+ * clock the league plays on, never their own device's, and it is saved as the UTC instant it names
+ * (lib/timezone.ts wallClockToUtc, DST resolved by the zone). A time in the past or one that does not
+ * exist is refused before anything is sent; saving tells the league the draft time, so it is one tap on
+ * purpose. "Clear" removes the time.
+ */
+function DateTimeSheet({ row, onSet, onClose }: { row: HubRow; onSet: OnSetSetting; onClose: () => void }) {
+  const { t } = useT()
+  const spec = row.dateTime!
+  const start = spec.currentIso ? utcToWallClock(spec.currentIso, spec.timeZone) : null
+  const [date, setDate] = useState(start?.date ?? '')
+  const [time, setTime] = useState(start?.time ?? '20:00')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const instant = date && time ? wallClockToUtc(date, time, spec.timeZone) : null
+  const zone = timeZoneShortName(spec.timeZone, instant ?? new Date())
+  const problem = !date || !time ? t('Choose a date and a time.') : !instant ? t('That date or time does not exist.') : instant.getTime() <= Date.now() ? t('Choose a time in the future.') : null
+  const save = async (value: string | null) => {
+    if (saving) return
+    setSaving(true)
+    setError(null)
+    const refusal = await onSet(spec.field, value)
+    setSaving(false)
+    if (refusal) setError(refusal)
+    else onClose()
+  }
+  const sheet = (
+    <div className="af-lsh-sheet-backdrop" onClick={onClose} data-testid="datetime-picker">
+      <div className="af-lsh-sheet" role="dialog" aria-modal="true" aria-label={t(row.label)} onClick={(e) => e.stopPropagation()}>
+        <div className="af-lsh-sheet-grab" aria-hidden />
+        <div className="af-lsh-sheet-head">
+          <strong>{t(row.label)}</strong>
+          <button type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" onClick={onClose}>{t('Cancel')}</button>
+        </div>
+        <p className="af-lsh-sheet-sub">{t(`League time (${zone}). Every manager is told when you save.`)}</p>
+        <div className="af-lsh-datetime">
+          <label>
+            <span>{t('Date')}</span>
+            <input type="date" className="af-lsh-step-input" value={date} onChange={(e) => setDate(e.target.value)} data-testid="datetime-date" />
+          </label>
+          <label>
+            <span>{t('Time')}</span>
+            <input type="time" className="af-lsh-step-input" value={time} onChange={(e) => setTime(e.target.value)} data-testid="datetime-time" />
+          </label>
+        </div>
+        {date && time && problem ? <p className="af-lsh-sheet-error" role="alert">{problem}</p> : null}
+        {error ? <p className="af-lsh-sheet-error" role="alert">{error}</p> : null}
+        <div className="af-lsh-sheet-actions">
+          <button type="button" className="af-lsh-btn" data-variant="primary" disabled={Boolean(problem) || saving} onClick={() => instant && void save(instant.toISOString())} data-testid="datetime-save">
+            {saving ? t('Saving…') : t('Save')}
+          </button>
+          {spec.currentIso ? (
+            <button type="button" className="af-lsh-btn" data-variant="ghost" disabled={saving} onClick={() => void save(null)} data-testid="datetime-clear" style={{ marginTop: 8 }}>
+              {t('Clear draft time')}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
