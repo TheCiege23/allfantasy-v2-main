@@ -576,5 +576,23 @@ so, because the build follows the answer.
    two legacy re-syncs, and every Sleeper bulk writer (`processImportJob`, the batch route, `sleeper-import-process`,
    `sleeper-ranking-import`). Routes answer 409 `LEAGUE_NOW_ON_ALLFANTASY` with the league id. Fails open, like the
    deleted-league check beside it. The renewal follower needs nothing: it only reads `platform: 'sleeper'` rows.
-6. Undo.
+6. Undo (`lib/league/undoNativeConversion.ts`, `GET`/`POST /api/leagues/[leagueId]/convert-to-native/undo`, and
+   `components/league-home/NativeUndoCard.tsx` in the Commissioner tab of a switched league). Decisions taken
+   building it, each the conservative reading of Q10:
+   - **"The first native season starts" = the league has a `RedraftSeason` newer than the one it switched in** (a
+     renewal or a new-season rollover made it). The new season's rows are keyed to AllFantasy ids the provider never
+     saw, so undo stops there. The first preview that finds one stamps `undoClosedAt`; nothing else needs to.
+   - **Teams added or removed since the switch close undo too**: the snapshot cannot put back a seat it never saw.
+   - **Discarded = deleted**, for what was made since the switch: trades, waiver claims and pickups, players added,
+     keeper picks, drafts set up, new future picks, invite links, and managers who joined (their seats go back to
+     open). Everything the switch changed is restored from the snapshot, including what a seat claim overwrites
+     (team owner, name, logo, commissioner flags), so the snapshot gained those fields here, optional, so a snapshot
+     written before them still undoes and says what it could not restore.
+   - **Confirm what you saw.** The preview lists every discard with a count and a token; the undo refuses a token
+     that no longer matches the league, and answers with the new list.
+   - **Left on purpose:** chat; the roster layout and the fill-only waiver / draft-settings rows the switch wrote
+     before its transaction (an imported league reads its provider's positions first); and the
+     `LeagueNativeConversion` row, now `undone`, which releases the re-import refusal and lets the switch run again.
+   - ⚠ Discards are found by `createdAt > convertedAt`. Prisma stamps both on app servers, so clock skew between
+     servers of more than the gap between a switch and the first action after it would misfile that action.
 7. Repoint the "Make it native" button. Retire or relabel the copy flow per Q9.

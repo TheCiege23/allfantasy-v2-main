@@ -29,6 +29,9 @@ const { prisma } = await import('@/lib/prisma')
 const { convertImportedLeagueInPlace, NativeConversionRefusal } = await import('@/lib/league/convertImportedLeagueInPlace')
 const { nativeWeeklyLeague } = await import('@/lib/core-app/weeklyCapabilities')
 const { isNativePlatform } = await import('@/lib/league/isNativeLeague')
+const { previewNativeUndo, undoNativeConversion, NativeUndoRefusal } = await import('@/lib/league/undoNativeConversion')
+const { assignLeagueSeat } = await import('@/lib/league/leagueSeats')
+const { findConvertedLeague } = await import('@/lib/league/nativeConversionLookup')
 
 const created = { leagueIds: [] as string[], userIds: [] as string[], sleeperIds: [] as string[], providerLeagueIds: [] as string[] }
 
@@ -130,6 +133,36 @@ async function clean() {
   await prisma.appUser.deleteMany({ where: { id: { in: created.userIds.splice(0) } } })
 }
 
+/** Every row the switch or later native activity can touch, minus bookkeeping timestamps, for a field-level comparison. */
+async function captureLeague(leagueId: string) {
+  const strip = <T extends Record<string, unknown>>(rows: T[]) =>
+    // `updatedAt` / `lastUpdatedAt` (LeagueTeam) are @updatedAt bookkeeping: any write moves them, undo's included.
+    rows.map(({ updatedAt: _u, lastUpdatedAt: _l, ...rest }) => rest).sort((a, b) => String(a.id ?? a.matchupId).localeCompare(String(b.id ?? b.matchupId)))
+  const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId } })
+  // The switch writes the roster layout through the one roster writer BEFORE its transaction (and before its snapshot);
+  // an imported league reads its provider's positions first, so undo leaves it. That writer saves two keys: `roster`
+  // and the sport's `<sport>_roster_config` (UnifiedRosterConfigService). Everything else must come back.
+  const { roster: _layout, nfl_roster_config: _sportLayout, ...settings } = (league.settings ?? {}) as Record<string, unknown>
+  const redraftRosters = await prisma.redraftRoster.findMany({ where: { leagueId } })
+  return {
+    league: { platform: league.platform, platformLeagueId: league.platformLeagueId, syncStatus: league.syncStatus, settings, playoffTeams: league.playoffTeams, playoffStartWeek: league.playoffStartWeek },
+    teams: strip(await prisma.leagueTeam.findMany({ where: { leagueId } })),
+    rosters: strip(await prisma.roster.findMany({ where: { leagueId } })),
+    redraftRosters: strip(redraftRosters),
+    redraftPlayers: strip(await prisma.redraftRosterPlayer.findMany({ where: { rosterId: { in: redraftRosters.map((r) => r.id) } } })),
+    picks: strip(await prisma.futureDraftPick.findMany({ where: { leagueId } })),
+    drafts: strip(await prisma.draftSession.findMany({ where: { leagueId } })),
+    facts: strip(await prisma.matchupFact.findMany({ where: { leagueId } })),
+    slots: await prisma.leagueEntrySlot.count({ where: { leagueId } }),
+    members: await prisma.redraftLeagueMember.count({ where: { leagueId } }),
+    invites: await prisma.leagueInvite.count({ where: { leagueId } }),
+    matchups: await prisma.redraftMatchup.count({ where: { leagueId } }),
+    nativePlayerScores: await prisma.leaguePlayerWeeklyScore.count({ where: { leagueId } }),
+    trades: await prisma.afLeagueTrade.count({ where: { leagueId } }),
+    claims: await prisma.waiverClaim.count({ where: { leagueId } }),
+  }
+}
+
 describe.runIf(enabled)('switching an imported league to native in place, against a real database', () => {
   beforeAll(async () => { await prisma.$connect() })
   afterEach(clean)
@@ -219,6 +252,71 @@ describe.runIf(enabled)('switching an imported league to native in place, agains
 
     // A retry is a receipt, not a second switch.
     expect(await convertImportedLeagueInPlace(prisma, { leagueId: league.id, userId: commish.id })).toEqual({ kind: 'already_converted', conversionId: conversion.id })
+  })
+
+  it('undo puts every row back exactly, after a seat claim, roster moves, a pick trade, a trade and a claim on AllFantasy', async () => {
+    const { league, commish, seats, tag } = await seedImportedLeague()
+    const before = await captureLeague(league.id)
+
+    // Nothing to undo before a switch.
+    expect(await previewNativeUndo(prisma, league.id)).toEqual({ status: 'none' })
+    await convertImportedLeagueInPlace(prisma, { leagueId: league.id, userId: commish.id })
+    await new Promise((r) => setTimeout(r, 10))
+
+    // Positive control on the comparison: the switch itself must make it differ, or "equal after undo" proves nothing.
+    expect(await captureLeague(league.id)).not.toEqual(before)
+    const fresh = await previewNativeUndo(prisma, league.id)
+    expect(fresh).toMatchObject({ status: 'open', fromPlatform: 'sleeper', discards: [] })
+
+    // A league that runs on AllFantasy for a while: a new manager claims the open team through its link, a player is
+    // added and another dropped, a pick changes hands, a trade is proposed and a waiver claim filed.
+    const joiner = await prisma.appUser.create({ data: { email: `nc-${tag}-j@nativeconv.invalid`, username: `nc-${tag}-j` } })
+    created.userIds.push(joiner.id)
+    expect(await prisma.$transaction((tx) => assignLeagueSeat(tx, { leagueId: league.id, rosterId: seats[2]!.rosterId, userId: joiner.id }))).toMatchObject({ ok: true })
+    await prisma.redraftRosterPlayer.create({ data: { rosterId: seats[0]!.redraftId, playerId: 'af-free-agent', playerName: 'Free Agent', position: 'WR', sport: 'NFL', slotType: 'bench', acquisitionType: 'waiver' } })
+    const dropped = await prisma.redraftRosterPlayer.findFirstOrThrow({ where: { rosterId: seats[1]!.redraftId } })
+    await prisma.redraftRosterPlayer.update({ where: { id: dropped.id }, data: { droppedAt: new Date() } })
+    await prisma.futureDraftPick.updateMany({ where: { leagueId: league.id }, data: { currentOwnerId: seats[1]!.rosterId } })
+    await prisma.afLeagueTrade.create({ data: { leagueId: league.id, proposedByUserId: commish.id, proposerRosterId: seats[0]!.rosterId, receiverRosterId: seats[1]!.rosterId } })
+    await prisma.waiverClaim.create({ data: { leagueId: league.id, rosterId: seats[0]!.rosterId, addPlayerId: 'af-other', userId: commish.id } })
+
+    const preview = await previewNativeUndo(prisma, league.id)
+    if (preview.status !== 'open') throw new Error(`undo should be open, got ${preview.status}`)
+    expect(Object.fromEntries(preview.discards.map((d) => [d.code, d.count]))).toEqual({
+      trades: 1, waiver_claims: 1, players_added: 1, players_dropped: 1, joined: 1,
+    })
+
+    // A token from before the activity is refused, and refuses BEFORE writing anything.
+    const stale = undoNativeConversion(prisma, { leagueId: league.id, userId: commish.id, token: (fresh as { token: string }).token })
+    await expect(stale).rejects.toBeInstanceOf(NativeUndoRefusal)
+    await expect(stale).rejects.toMatchObject({ code: 'changed', preview: { token: preview.token } })
+    expect((await prisma.league.findUniqueOrThrow({ where: { id: league.id } })).platform).toBe('manual')
+
+    const result = await undoNativeConversion(prisma, { leagueId: league.id, userId: commish.id, token: preview.token })
+    expect(result).toMatchObject({ kind: 'undone', notRestored: [] })
+
+    // Every row the switch or the activity touched is back, field for field.
+    expect(await captureLeague(league.id)).toEqual(before)
+    const conversion = await prisma.leagueNativeConversion.findUniqueOrThrow({ where: { leagueId: league.id } })
+    expect(conversion).toMatchObject({ status: 'undone', undoneByUserId: commish.id })
+    // The re-import refusal (step 5) lets go, chat is untouched, and the switch can run again later.
+    expect(await findConvertedLeague({ platform: 'sleeper', platformLeagueIds: [league.platformLeagueId] })).toBeNull()
+    expect(await prisma.leagueChatMessage.count({ where: { leagueId: league.id } })).toBe(1)
+    expect(await previewNativeUndo(prisma, league.id)).toEqual({ status: 'none' })
+    await expect(convertImportedLeagueInPlace(prisma, { leagueId: league.id, userId: commish.id })).resolves.toMatchObject({ kind: 'converted' })
+  })
+
+  it('undo closes for good once the league has a newer season', async () => {
+    const { league, commish } = await seedImportedLeague()
+    await convertImportedLeagueInPlace(prisma, { leagueId: league.id, userId: commish.id })
+    expect(await previewNativeUndo(prisma, league.id)).toMatchObject({ status: 'open' })
+
+    await prisma.redraftSeason.create({ data: { leagueId: league.id, sport: 'NFL', season: 2027, status: 'setup', totalWeeks: 14, playoffStartWeek: 15, currentWeek: 1 } })
+    expect(await previewNativeUndo(prisma, league.id)).toMatchObject({ status: 'closed', reason: expect.stringContaining('2027') })
+    const conversion = await prisma.leagueNativeConversion.findUniqueOrThrow({ where: { leagueId: league.id } })
+    expect(conversion.undoClosedAt).not.toBeNull()
+    await expect(undoNativeConversion(prisma, { leagueId: league.id, userId: commish.id, token: 'any' })).rejects.toMatchObject({ code: 'closed' })
+    expect((await prisma.league.findUniqueOrThrow({ where: { id: league.id } })).platform).toBe('manual')
   })
 
   it('refuses while another copy of the league exists, and writes nothing', async () => {

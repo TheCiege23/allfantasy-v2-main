@@ -49,12 +49,14 @@ SPORT="$(echo "$SPORT_RAW" | tr '[:lower:]' '[:upper:]')"
 case "$SPORT" in
   NBA)
     # teams: the copy-league team table (lib/league/copyLeagueTeamTables.ts, 2026-11-19).
-    case "$ENDPOINT" in scoreboard|teams) ;; *) echo "NBA currently supports scoreboard and teams capture" >&2; exit 2 ;; esac
+    # roster: current-team player headshots (owner OK 2026-11-27, GAPS E-08).
+    case "$ENDPOINT" in scoreboard|teams|roster) ;; *) echo "NBA currently supports scoreboard, teams and roster capture" >&2; exit 2 ;; esac
     SPORT_PATH="basketball/nba"
     ;;
   NHL)
     # teams: the copy-league team table (lib/league/copyLeagueTeamTables.ts, 2026-11-19).
-    if [[ "$ENDPOINT" != "teams" ]]; then echo "NHL currently supports only teams capture" >&2; exit 2; fi
+    # roster: current-team player headshots (owner OK 2026-11-27, GAPS E-08).
+    case "$ENDPOINT" in teams|roster) ;; *) echo "NHL currently supports teams and roster capture" >&2; exit 2 ;; esac
     SPORT_PATH="hockey/nhl"
     ;;
   NCAAB) SPORT_PATH="basketball/mens-college-basketball" ;;
@@ -69,7 +71,8 @@ case "$SPORT" in
     ;;
   MLB)
     # teams: the copy-league team table (lib/league/copyLeagueTeamTables.ts, 2026-11-19).
-    case "$ENDPOINT" in fantasy-league|teams) ;; *) echo "MLB currently supports fantasy-league and teams capture" >&2; exit 2 ;; esac
+    # roster: current-team player headshots (owner OK 2026-11-27, GAPS E-08).
+    case "$ENDPOINT" in fantasy-league|teams|roster) ;; *) echo "MLB currently supports fantasy-league, teams and roster capture" >&2; exit 2 ;; esac
     SPORT_PATH="baseball/mlb"
     ;;
   *)

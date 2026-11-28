@@ -70,6 +70,14 @@ const ESPN_NCAAB_MAX_MS = 45_000
 const ESPN_NCAAB_MIN_MS = 15_000
 
 /**
+ * The ESPN pro-league headshot pass (NBA, NHL, MLB — contracts/espn GAPS E-08) on the same tick: up to six
+ * team rosters per sport, rotating, so each league comes round in about five ticks. Sized from the
+ * 2026-11-27 probe (one request per team, well under a second); tune from `cron-espn-pro-headshots`.
+ */
+const ESPN_PRO_MAX_MS = 30_000
+const ESPN_PRO_MIN_MS = 10_000
+
+/**
  * The NCAAB devy pool writer on the `?intel=1` tick (`lib/devy/ingestNcaabDevyPool.ts`).
  *
  * It runs BEFORE the devy intel sweep, so its allowance is carved out of what that sweep does not
@@ -417,6 +425,31 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       }))
 
       /*
+       * ESPN CURRENT-TEAM HEADSHOTS for NBA / NHL / MLB (owner, 2026-11-27): TheSportsDB's cutouts keep a
+       * traded player's old jersey. Writes the ESPN photo onto the Rolling Insights player row, which every
+       * surface then prefers (lib/espn/espnProHeadshots.ts). Its own heartbeat, like the college pass.
+       */
+      const espnPro = await withSyncJobRun(
+        { jobName: 'cron-espn-pro-headshots', trigger: 'cron' },
+        async () => {
+          const allowanceMs = Math.min(ESPN_PRO_MAX_MS, budget.remainingMs() - TRADE_FACT_MIN_RUNWAY_MS)
+          if (allowanceMs < ESPN_PRO_MIN_MS) return { skipped: 'no runway' as const, remainingMs: budget.remainingMs() }
+          const { syncEspnProHeadshots } = await import('@/lib/espn/proEspnHeadshotIngest')
+          return syncEspnProHeadshots({ deadlineAt: Date.now() + allowanceMs })
+        },
+        (r) =>
+          'skipped' in r
+            ? { warnings: [`skipped: ${r.skipped}`] }
+            : {
+                rowsWritten: Object.values(r.bySport).reduce((t, x) => t + x.photosWritten + x.espnIdsLinked, 0),
+                warnings: [...(r.blocked ? ['ESPN returned 403 — pass stopped'] : []), ...(r.errors > 0 ? [`${r.errors} team/row errors`] : [])],
+                metadata: { bySport: r.bySport },
+              },
+      ).catch((err: unknown) => ({
+        error: err instanceof Error ? err.message.slice(0, 160) : 'espn pro headshot pass failed',
+      }))
+
+      /*
        * NEW SLEEPER TRADES -> `dw_transaction_facts` (lib/league-import/sleeper/sleeperTradeFactRotation.ts).
        *
        * The psych profile rotation ran here until 2026-11-19, when the manager-profile engine was retired
@@ -493,6 +526,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         mode: 'intel',
         ...outcome,
         espnNcaab,
+        espnPro,
         sleeperTradeFacts,
         providerWaivers,
         // After the existing keys: the dispatcher echoes only the first 1500 chars of the body.

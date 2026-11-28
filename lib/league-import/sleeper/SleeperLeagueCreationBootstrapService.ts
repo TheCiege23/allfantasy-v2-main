@@ -294,12 +294,10 @@ export async function bootstrapLeagueFromNormalizedImport(
         ownerName: r.owner_name,
         teamName: r.team_name || r.owner_name,
         avatarUrl: r.avatar_url ?? null,
-        wins: r.wins,
-        losses: r.losses,
-        ties: r.ties,
-        pointsFor: r.points_for,
-        pointsAgainst,
-        currentRank: rank,
+        // Rule 3 of a switching league: once official, AllFantasy keeps every team's record.
+        ...(runOnAllFantasy.official
+          ? {}
+          : { wins: r.wins, losses: r.losses, ties: r.ties, pointsFor: r.points_for, pointsAgainst, currentRank: rank }),
         role: importedRole,
         isOrphan,
         platformUserId: r.source_manager_id || null,
