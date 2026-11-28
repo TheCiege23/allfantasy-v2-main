@@ -133,3 +133,28 @@ describe('MLB / NHL Proj/G column', () => {
     expect((entry.display.stats as Record<string, unknown>).projectedPointsPerGame).toBeUndefined()
   })
 })
+
+describe('NHL pool: GP, HIT, PPP and last season FP/G', () => {
+  it('carries hits and power-play points (summed from PPG + PPA when no total is stored)', () => {
+    const line = extractNhlDraftSeasonStats({ goals: 30, assists: 40, hits: 112, blocks: 41, power_play_goals: 9, power_play_assists: 17 })!
+    expect(line.hits).toBe(112)
+    expect(line.power_play_points).toBe(26)
+    expect(valuesFor('NHL', 'C', { ...line, gamesPlayed: 80, seasonFantasyPointsPerGame: 3.41 })).toMatchObject({
+      gp_nhl: 80,
+      fppg_nhl: 3.41,
+      hit_nhl: 112,
+      ppp_nhl: 26,
+      blk_nhl: 41,
+    })
+  })
+
+  it('a stored total wins over the PPG + PPA sum, and no PP stats means no PPP', () => {
+    expect(extractNhlDraftSeasonStats({ goals: 1, power_play_points: 12, power_play_goals: 1 })!.power_play_points).toBe(12)
+    expect(extractNhlDraftSeasonStats({ goals: 1 })!.power_play_points).toBeUndefined()
+  })
+
+  it('GP leads the skater and goalie columns, FP/G right after it', () => {
+    expect(getDraftStatColumnsForSport('NHL', { position: 'C' }).slice(0, 2).map((c) => c.label)).toEqual(['GP', 'FP/G'])
+    expect(getDraftStatColumnsForSport('NHL', { position: 'G' }).slice(0, 2).map((c) => c.label)).toEqual(['GP', 'FP/G'])
+  })
+})

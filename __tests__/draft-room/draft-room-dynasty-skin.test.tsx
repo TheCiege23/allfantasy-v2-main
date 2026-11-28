@@ -294,8 +294,10 @@ describe('wiring in the draft room', () => {
     expect(client).toMatch(/surfaceVariant=\{presentationVariant === 'redraft_snake' \? 'redraft_snake' : isDynasty \? 'dynasty' : 'default'\}/)
   })
 
-  it('the round-1 queue and overlay share one gate', () => {
-    expect(client.match(/roomAnnouncesRoundOne\(\{ presentationVariant, isDynasty, draftType: session\??\.draftType \}\)/g)).toHaveLength(2)
+  it('the round-1 queue, the overlay and the last-pick notice share one gate', () => {
+    // Three uses of the SAME call: the queue, the overlay, and DraftLastPickToast's skipRoundOne
+    // (it stays quiet for round 1 exactly when the round-1 card is the one announcing it).
+    expect(client.match(/roomAnnouncesRoundOne\(\{ presentationVariant, isDynasty, draftType: session\??\.draftType \}\)/g)).toHaveLength(3)
   })
 
   it('reads the season the settings route already returns', () => {

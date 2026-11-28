@@ -239,6 +239,58 @@ function DraftBoardInner({
   // `position: sticky` cannot do this here.
   useStickyBoardHeader(teamGridRef, teamHeaderRef, draftType !== 'auction')
   const lastFollowedOverallRef = useRef<number | null>(null)
+  /*
+   * FOLLOW THE LIVE PICK — UNTIL THE MANAGER LOOKS ELSEWHERE. The board used to scroll to the
+   * current cell (and jump the focused round) after EVERY pick, so anyone studying another team's
+   * column or an earlier round was dragged back mid-read — the "draft board keeps reverting to its
+   * original position" complaint about Yahoo's 2026 room. Any scroll, swipe or round change made by
+   * the person pauses following; "Back to live pick" resumes it. Programmatic scrolls do not count:
+   * only wheel / touch / keyboard input from the person does.
+   */
+  const [followLive, setFollowLive] = useState(true)
+  const followLiveRef = useRef(true)
+  followLiveRef.current = followLive
+  useEffect(() => {
+    const el = boardRef.current
+    if (!el || draftType === 'auction') return
+    const pause = () => {
+      if (followLiveRef.current) setFollowLive(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) pause()
+    }
+    el.addEventListener('wheel', pause, { passive: true })
+    el.addEventListener('touchmove', pause, { passive: true })
+    el.addEventListener('keydown', onKey)
+    return () => {
+      el.removeEventListener('wheel', pause)
+      el.removeEventListener('touchmove', pause)
+      el.removeEventListener('keydown', onKey)
+    }
+  }, [draftType])
+  const pickRound = (manual: (prev: number) => number) => {
+    setFollowLive(false)
+    setSelectedRound(manual)
+  }
+  const scrollToLivePick = () => {
+    if (currentOverallPick == null) return
+    const el = boardRef.current?.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
+    el?.scrollIntoView?.({
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    })
+    el?.classList.add('draft-live-focus-ring')
+    window.setTimeout(() => el?.classList.remove('draft-live-focus-ring'), 900)
+  }
+  const resumeFollowing = () => {
+    setFollowLive(true)
+    if (currentOverallPick == null) return
+    const round = Math.ceil(currentOverallPick / teamCount)
+    setSelectedRound(Math.min(rounds, Math.max(1, round)))
+    // After the round switch paints, so the cell exists in a single-round view.
+    window.requestAnimationFrame(() => scrollToLivePick())
+  }
 
   useEffect(() => {
     setSelectedRound((prev) => Math.min(Math.max(1, prev), Math.max(1, rounds)))
@@ -251,6 +303,7 @@ function DraftBoardInner({
     lastFollowedOverallRef.current = currentOverallPick
     if (prev === null) return
     if (currentOverallPick <= prev) return
+    if (!followLiveRef.current) return
     const round = Math.ceil(currentOverallPick / teamCount)
     setSelectedRound((r) => Math.min(rounds, Math.max(1, round)))
     setViewMode((mode) => (mode === 'all' ? 'all' : 'single'))
@@ -258,17 +311,11 @@ function DraftBoardInner({
 
   useEffect(() => {
     if (draftType === 'auction' || currentOverallPick == null) return
-    const raf = window.requestAnimationFrame(() => {
-      const el = boardRef.current?.querySelector<HTMLElement>(`[data-testid="draft-board-cell-${currentOverallPick}"]`)
-      el?.scrollIntoView?.({
-        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'nearest',
-        inline: 'nearest',
-      })
-      el?.classList.add('draft-live-focus-ring')
-      window.setTimeout(() => el?.classList.remove('draft-live-focus-ring'), 900)
-    })
+    if (!followLiveRef.current) return
+    const raf = window.requestAnimationFrame(() => scrollToLivePick())
     return () => window.cancelAnimationFrame(raf)
+    // scrollToLivePick reads only refs and currentOverallPick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOverallPick, draftType])
 
   const slotOrderBySlot = useMemo(() => new Map(slotOrder.map((entry) => [entry.slot, entry])), [slotOrder])
@@ -612,7 +659,7 @@ function DraftBoardInner({
               <button
                 type="button"
                 data-testid="draft-board-prev-round"
-                onClick={() => setSelectedRound((prev) => Math.max(1, prev - 1))}
+                onClick={() => pickRound((prev) => Math.max(1, prev - 1))}
                 disabled={!navigation.canGoPrev}
                 className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[11px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
               >
@@ -621,7 +668,10 @@ function DraftBoardInner({
               <select
                 value={navigation.round}
                 data-testid="draft-board-round-selector"
-                onChange={(event) => setSelectedRound(Math.max(1, Number(event.target.value) || 1))}
+                onChange={(event) => {
+                  const round = Math.max(1, Number(event.target.value) || 1)
+                  pickRound(() => round)
+                }}
                 className="rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white shadow-inner"
                 aria-label="Draft board round selector"
               >
@@ -634,7 +684,7 @@ function DraftBoardInner({
               <button
                 type="button"
                 data-testid="draft-board-next-round"
-                onClick={() => setSelectedRound((prev) => Math.min(rounds, prev + 1))}
+                onClick={() => pickRound((prev) => Math.min(rounds, prev + 1))}
                 disabled={!navigation.canGoNext}
                 className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[11px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
               >
@@ -1057,6 +1107,17 @@ function DraftBoardInner({
           </div>
         </div>
       )}
+      {/* Fixed, not absolute: the board is taller than the screen, so its own bottom edge is off-screen. */}
+      {!followLive && draftType !== 'auction' && currentOverallPick != null ? (
+        <button
+          type="button"
+          data-testid="draft-board-follow-live"
+          onClick={resumeFollowing}
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+112px)] left-1/2 z-[60] min-h-[44px] -translate-x-1/2 rounded-full border border-cyan-300/50 bg-[#06263a] px-4 text-[12px] font-semibold text-cyan-50 shadow-[0_8px_24px_rgba(0,0,0,0.5)] transition hover:bg-[#0a3550] active:scale-95"
+        >
+          Back to live pick · #{currentOverallPick}
+        </button>
+      ) : null}
     </section>
   )
 }

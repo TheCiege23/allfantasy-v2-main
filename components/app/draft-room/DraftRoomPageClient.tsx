@@ -51,6 +51,8 @@ import {
 import { useWeekGames } from '@/components/app/draft-room/useWeekGames'
 import { DraftRosterStrip } from '@/components/app/draft-room/DraftRosterStrip'
 import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/DraftRoundOneAnnouncementOverlay'
+import { DraftLastPickToast } from '@/components/app/draft-room/DraftLastPickToast'
+import { useYourTurnSignals } from '@/components/app/draft-room/useYourTurnSignals'
 import { DraftDayShow } from '@/components/draft-day/DraftDayShow'
 import { DraftIntroGate } from '@/components/draft/DraftIntroGate'
 import type { DraftAiOverlaySignal, PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
@@ -1043,6 +1045,14 @@ export function DraftRoomPageClient({
       draftCore.currentOverall > 0 &&
       draftCore.currentTeamId === currentUserRosterId,
   )
+  // Tab title, chime and a background notification when the clock reaches this seat (useYourTurnSignals).
+  useYourTurnSignals({
+    active: session?.status === 'in_progress' && !isAutoDraft && session?.draftType !== 'auction' && !!currentUserRosterId,
+    onClock: isCurrentUserOnClock,
+    picksUntil: ribbonPicksUntilUser,
+    pickLabel:
+      currentPick?.overall != null ? formatPickLabel(currentPick.overall, Math.max(1, session?.teamCount ?? 1)) : null,
+  })
   // Commissioner quiet hours, if set — the same window the server freezes the clock for.
   const pickClockQuietWindow = useMemo(
     () => normalizeQuietWindow(draftUISettings?.slowDraftPauseWindow),
@@ -4942,6 +4952,7 @@ export function DraftRoomPageClient({
     {boardCardPick ? (
       <PlayerDetailModal
         open
+        scoringLeagueId={leagueId ?? null}
         onClose={() => setBoardCardOverall(null)}
         sport={typeof effectiveDraftSport === 'string' ? effectiveDraftSport : String(sport)}
         presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
@@ -4973,6 +4984,17 @@ export function DraftRoomPageClient({
         formatType={formatType}
         queue={roundOneAnnouncementQueue}
         onDismissFront={dismissRoundOneAnnouncement}
+      />
+    ) : null}
+    {!draftRoomState.isAuction ? (
+      <DraftLastPickToast
+        picks={session?.picks ?? []}
+        slotOrder={slotOrder}
+        active={session?.status === 'in_progress'}
+        skipRoundOne={
+          roomAnnouncesRoundOne({ presentationVariant, isDynasty, draftType: session?.draftType }) &&
+          draftUISettings?.roundOnePickAnnouncementEnabled !== false
+        }
       />
     ) : null}
     {isCurrentUserOnClock &&

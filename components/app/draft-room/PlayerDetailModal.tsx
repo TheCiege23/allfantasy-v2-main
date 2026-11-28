@@ -28,6 +28,7 @@ import { NflDraftPoolStatsGroupHeader, NflDraftPoolStatsRow } from '@/components
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import type { PlayerDraftOutlook } from '@/lib/draft-room/playerDraftOutlook'
 import { PlayerDraftOutlookSection } from './PlayerDraftOutlookSection'
+import PlayerGameLogTable, { gameLogSupported } from '@/components/player-game-log/PlayerGameLogTable'
 import { NcaabSeasonsSection } from './NcaabSeasonsSection'
 
 interface PlayerDetailPlayer {
@@ -97,6 +98,8 @@ interface PlayerDetailModalProps {
   nflDraftProjectionSplits?: NflDraftProjectionSplits | null
   /** Live draft: survival to the viewer's next pick, falling, who's circling. */
   draftOutlook?: PlayerDraftOutlook | null
+  /** The draft's league: the box-score game log scores each game on its settings (members only). */
+  scoringLeagueId?: string | null
 }
 
 /** Matches lib/player-card-analytics/types.ts PlayerCardAnalyticsPayload */
@@ -365,6 +368,16 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
   // keyed by the Rolling Insights id the draft pool carries. Other sports keep the year tabs below.
   const isNcaabCard = String(sport).toUpperCase() === 'NCAAB'
   const ncaabPlayerId = isNcaabCard && /^\d+$/.test(String(player.id ?? '')) ? String(player.id) : null
+  /*
+   * NHL / NBA / MLB / soccer: the per-game box log (final score, TOI first, hits and blocks, fantasy
+   * points on this league's scoring) — the same table as the player card. Outside NFL a pool id is
+   * the Rolling Insights id (normalize-draft-player.ts), and the route answers "not linked" for any
+   * id it cannot resolve rather than guessing by name. NCAAB keeps its own seasons section.
+   */
+  const boxLogRiId =
+    !isNcaabCard && String(sport).toUpperCase() !== 'NFL' && gameLogSupported(sport) && /^\d+$/.test(String(player.id ?? ''))
+      ? String(player.id)
+      : null
   const colSet = columnSetForPosition(player.position)
   const rankings = analytics?.rankings ?? null
   const news =
@@ -792,6 +805,17 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
           {/* Game-log table */}
           {isNcaabCard ? (
             <NcaabSeasonsSection playerId={ncaabPlayerId} open={open} />
+          ) : boxLogRiId ? (
+            <div className="px-6 pb-6 pt-3" data-testid="draft-player-box-log">
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">Game log</p>
+              <PlayerGameLogTable
+                compact
+                sport={String(sport).toUpperCase()}
+                playerName={player.name ?? undefined}
+                playerKey={{ externalId: boxLogRiId, source: 'rolling_insights' }}
+                scoringContext={{ leagueId: props.scoringLeagueId ?? null, position: player.position ?? null }}
+              />
+            </div>
           ) : (
           <div className="px-6 pb-6 pt-3">
             {logsLoading && <p className="py-4 text-center text-[12px] text-white/50">Loading game logs…</p>}
