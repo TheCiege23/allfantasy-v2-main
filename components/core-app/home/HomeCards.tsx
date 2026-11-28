@@ -102,6 +102,11 @@ export type HomeLoads = {
   rivals: Promise<ComponentProps<typeof Dash3ARivals>['rivals']>
   following: Promise<ComponentProps<typeof Dash3AFollowing>['following']>
   receipts: Promise<ComponentProps<typeof Dash3AReceipts>['receipts']>
+  /**
+   * The /core/decisions lock (AF Pro, AF Supreme — `decision_history`) for the Receipts card's link to
+   * the full log (2026-11-28). Absent or null: the plain link; the screen still draws its own lock.
+   */
+  decisionLogDepth?: Promise<CoreDepthAccess | null>
   routine: Promise<ComponentProps<typeof Dash3ARoutine>['routine']>
   userOs: Promise<{
     snapshot: ComponentProps<typeof DashUserOs>['snapshot']
@@ -577,8 +582,9 @@ async function FollowingCardSlot({ following }: { following: HomeLoads['followin
   return <Dash3AFollowing following={await following} />
 }
 
-async function ReceiptsCardSlot({ receipts }: { receipts: HomeLoads['receipts'] }) {
-  return <Dash3AReceipts receipts={await receipts} />
+async function ReceiptsCardSlot({ receipts, decisionLogDepth }: { receipts: HomeLoads['receipts']; decisionLogDepth?: HomeLoads['decisionLogDepth'] }) {
+  const [data, depth] = await Promise.all([receipts, (decisionLogDepth ?? Promise.resolve(null)).catch(() => null)])
+  return <Dash3AReceipts receipts={data} fullLog={depth ? { unlocked: depth.unlocked, planName: depth.planName } : null} />
 }
 
 async function LeaguesCard({ dash34, leagueStamp }: { dash34: HomeLoads['dash34'] } & LeagueStamp) {
@@ -805,7 +811,7 @@ export function CoreHomeCards({
               ),
               exposure: card('exposure', <ExposureCard exposure={loads.exposure} leagueStamp={leagueStamp} />, 180),
               following: card('following', <FollowingCardSlot following={loads.following} />),
-              receipts: card('receipts', <ReceiptsCardSlot receipts={loads.receipts} />),
+              receipts: card('receipts', <ReceiptsCardSlot receipts={loads.receipts} decisionLogDepth={loads.decisionLogDepth} />),
               leagues: card('leagues', <LeaguesCard dash34={loads.dash34} leagueStamp={leagueStamp} />, 180),
             }}
           />

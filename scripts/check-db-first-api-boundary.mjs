@@ -115,7 +115,8 @@ const DATA_API_HOST_PATTERNS = [
   /(^|\.)api\.collegefootballdata\.com$/i,
   // CollegeBasketballData — CFBD's sister API, same key and same monthly quota. Added with its
   // first caller (2026-11-22), so it is watched from day one: lib/cbbd/cbbdFetch.ts is the adapter
-  // (allowlisted below) and lib/devy/cbbdDraftPicksStore.ts the ingestion that alone imports it.
+  // (allowlisted below); lib/devy/cbbdDraftPicksStore.ts and lib/devy/cbbdDraftHistoryIngest.ts
+  // (2026-11-28) are the two ingestion modules that import it.
   /(^|\.)api\.collegebasketballdata\.com$/i,
   // api-sports.io. NOT the same vendor as `api.sportsdata.io` above, despite the
   // names — that near-collision is how this one stayed off the list while its
@@ -572,7 +573,10 @@ const ALLOWED_PATH_PATTERNS = [
    * `lib/cbbd/cbbdFetch.ts` — the CollegeBasketballData adapter, defining `CBBD_BASE_URL` and
    * calling through `cfbdGet` above. Census 2026-11-22 (static, relative, dynamic and require
    * forms): its only runtime importer is `lib/devy/cbbdDraftPicksStore.ts`, ingestion run from the
-   * `?intel=1` cron tick. If a request path ever imports it, this entry is no longer earned.
+   * `?intel=1` cron tick. Re-censused 2026-11-28 (same four forms): a second importer,
+   * `lib/devy/cbbdDraftHistoryIngest.ts`, the draft-history ingestion run by
+   * `scripts/backfill-cbbd-draft-history.ts` and by the store above — ingestion too. If a request path
+   * ever imports it, this entry is no longer earned.
    */
   /^lib\/cbbd\/cbbdFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*

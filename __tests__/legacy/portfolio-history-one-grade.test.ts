@@ -51,7 +51,11 @@ vi.mock('@/lib/decision-os/trade/frozenCompletedGrade', () => ({ loadFrozenCompl
 vi.mock('next-auth', () => ({ getServerSession: mockSession }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/hybrid-valuation', () => ({ computeDualModeTradeDelta: mockHybrid }))
+// The viewer holds AF Legacy: since 2026-11-28 the chart is sign-in + `legacy_portfolio_history`
+// (owner-tier-gates-2026-11-28.test.ts runs the other tiers).
+vi.mock('@/lib/subscription/EntitlementResolver', async () => (await import('../monetization/tierMatrixHarness')).resolverModule())
 
+import { setTier } from '../monetization/tierMatrixHarness'
 import { GET } from '@/server/api-route-modules/legacy/portfolio/history/route'
 import { NOT_YOUR_LEAGUE_REASON } from '@/lib/decision-os/trade/evaluationLeague'
 
@@ -77,6 +81,7 @@ const byTrade = (table: Record<string, unknown>) => mockOneGrade.mockImplementat
 beforeEach(() => {
   for (const m of [mockResolveLeague, mockOneGrade, mockLoadFrozen, mockSession, mockHybrid]) m.mockReset()
   mockSession.mockResolvedValue({ user: { id: 'af-user-1' } })
+  setTier('legacy')
   mockResolveLeague.mockResolvedValue('af-league-1')
   mockLoadFrozen.mockResolvedValue(new Map())
   mockHybrid.mockResolvedValue({

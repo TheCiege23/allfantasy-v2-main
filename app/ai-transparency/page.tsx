@@ -33,7 +33,7 @@ export default async function AiTransparencyPage(props: AiTransparencyPageProps)
           including trade analysis and grading, waiver wire recommendations, power rankings and tiers, mock draft
           assistance, and the{" "}
           <Link href="/ai/tools" className="text-cyan-400 hover:text-cyan-300">
-            AF Intelligence Hub
+            Chimmy Intelligence Hub
           </Link>
           .
         </p>

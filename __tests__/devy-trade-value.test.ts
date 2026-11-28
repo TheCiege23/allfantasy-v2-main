@@ -5,9 +5,7 @@ import {
   DEVY_POINTS,
   devyAssetValue,
   devyShareAtRank,
-  gradeDevyTrade,
   rankDevyPool,
-  type DevyTradeSide,
 } from '@/lib/trade-intel/devyTradeValue'
 import { projectDevyOutlook } from '@/lib/trade-intel/devyOutlook'
 
@@ -161,60 +159,8 @@ describe('the wait is priced on top of the curve', () => {
   })
 })
 
-describe('gradeDevyTrade', () => {
-  const side = (label: string, rank: number | null): DevyTradeSide => ({
-    label,
-    value: valueAt(rank),
-  })
-
-  it('one elite prospect beats two mid ones, which raw standings would get backwards', () => {
-    const v = gradeDevyTrade({
-      give: [side('Elite WR', 1)],
-      get: [side('Mid RB', 30), side('Mid TE', 34)],
-    })
-
-    expect(v.conclusive).toBe(true)
-    expect(v.net).toBeLessThan(0)
-    expect(v.basis).toMatch(/You give up \d+ devy points/)
-  })
-
-  it('a level deal reports level', () => {
-    const v = gradeDevyTrade({ give: [side('A', 5)], get: [side('B', 5)] })
-    expect(v.net).toBe(0)
-    expect(v.basis).toMatch(/level/)
-  })
-
-  /**
-   * ⚠ THE FAILURE THIS GUARDS. An unpriced side sums to 0, which reads as "he
-   * gave up nothing" and reports the other side as a free win — the same defect
-   * as grading a trade C off zero points.
-   */
-  it('refuses a verdict when one whole side is unranked', () => {
-    const v = gradeDevyTrade({
-      give: [side('Unknown A', null), side('Unknown B', null)],
-      get: [side('Ranked', 3)],
-    })
-
-    expect(v.conclusive).toBe(false)
-    expect(v.basis).toMatch(/No verdict/)
-    expect(v.basis).toMatch(/free win/)
-    expect(v.giveUnpriced).toEqual(['Unknown A', 'Unknown B'])
-  })
-
-  it('still grades when only some assets are unranked, and says how many', () => {
-    const v = gradeDevyTrade({
-      give: [side('Ranked A', 1)],
-      get: [side('Ranked B', 20), side('Unknown', null)],
-    })
-
-    expect(v.conclusive).toBe(true)
-    expect(v.getUnpriced).toEqual(['Unknown'])
-    expect(v.basis).toMatch(/1 player in this deal could not be ranked/)
-  })
-
-  it('carries the gaps up from every asset without duplicating them', () => {
-    const v = gradeDevyTrade({ give: [side('A', 1)], get: [side('B', 2)] })
-    expect(v.gaps).toEqual([...new Set(v.gaps)])
-    expect(v.gaps.join(' ')).toMatch(/borrowed from the NFL rookie-pick curve/)
-  })
-})
+/*
+ * `gradeDevyTrade` was retired 2026-11-28 — a devy-points trade verdict beside a grade priced by
+ * option value told two stories. The same-scale verdict is covered in
+ * __tests__/devy/one-devy-number.test.ts; this file keeps the board's devy-points curve.
+ */

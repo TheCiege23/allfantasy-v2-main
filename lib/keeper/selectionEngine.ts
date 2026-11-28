@@ -5,7 +5,7 @@ import { computeKeeperEligibility } from './eligibilityEngine'
 import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
 import { isWaiverCostLabel, placeTeamKeepers, placedKeeperLabel, readWaiverStack, resolveKeeperRules, stackWaiverKeeperCosts } from './keeperRules'
-import { KEEPER_SUBMITTED_NONE, applyMissedDeadlineRule } from './missedDeadlineService'
+import { KEEPER_SUBMITTED_NONE, applyMissedDeadlineRule, preloadMissedDeadlineRanks, type MissedDeadlinePreload } from './missedDeadlineService'
 import { resolveKeeperSourceRoster } from './keeperSourceRoster'
 
 export async function openKeeperSelectionPhase(
@@ -321,6 +321,13 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
   const initial = await prisma.keeperSelectionSession.findFirst({ where: { id: sessionId, leagueId } })
   if (!initial) throw new Error('Session not found')
 
+  // 🛑 The missed-deadline rule's market ranks (a board sport's league value board, or the NFL chart)
+  // are loaded HERE, before the lock's transaction opens — never inside it, where a slow board build
+  // would hold the advisory lock and the transaction open. A failed load is `rankOf: null`: no defaults.
+  const preload: MissedDeadlinePreload = initial.status === 'locked'
+    ? { rankOf: null }
+    : await preloadMissedDeadlineRanks(leagueId, initial.seasonId).catch(() => ({ rankOf: null }))
+
   const session = await withKeeperSessionLock(leagueId, initial.seasonId, async (db) => {
     // Re-read after the lock: another deadline runner may have completed while we waited.
     const current = await db.keeperSelectionSession.findFirst({ where: { id: sessionId, leagueId } })
@@ -331,7 +338,7 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
     // partially created defaults before locking the manager selections already on file.
     await db.$executeRaw`SAVEPOINT keeper_defaults`
     try {
-      await applyMissedDeadlineRule(leagueId, current.seasonId, db)
+      await applyMissedDeadlineRule(leagueId, current.seasonId, db, preload)
       await db.$executeRaw`RELEASE SAVEPOINT keeper_defaults`
     } catch (error) {
       await db.$executeRaw`ROLLBACK TO SAVEPOINT keeper_defaults`

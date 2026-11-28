@@ -2,12 +2,11 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { fetchEspnPendingTradeOffersForSync } from '@/lib/league-import/espn/EspnLeagueFetchService'
-import { createLeagueTradeGrader, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { persistProviderTradeOffers, type NormalizedOffer } from './providerTradeOfferLedger'
 import { rotationWindow } from './syncProviderTradeOffers'
 import { espnTeamId, parseEspnPendingOffersForTeam } from './espnTradeOffers'
-import { gradeEspnOfferViews, viewsForRows, type EspnLedgerRow, type EspnOfferView } from './espnOfferView'
+import type { EspnOfferView } from './espnOfferView'
 
 /**
  * ESPN pending trade offers → the provider trade-offer ledger. The INGESTION half; the Trade Center,
@@ -31,12 +30,12 @@ import { gradeEspnOfferViews, viewsForRows, type EspnLedgerRow, type EspnOfferVi
  *  - A failed read (no cookies, cookies refused, ESPN error) retires NOTHING.
  *
  * ── NOTIFY ────────────────────────────────────────────────────────────────────────────────────
- * The first time an offer is seen that is waiting on the viewer (they did not send it and have not
- * accepted it), they get one `trade_proposals` notice carrying THE grade — once, by a claim row, as
- * the pending-offer reminders do. Chimmy reads the same ledger rows (`pendingTradeDecisionGrounding`).
+ * The first time an offer is seen, each AllFantasy manager IN it who still has to answer it gets one
+ * `trade_proposals` notice carrying THE grade — bell, push and the offer email, under their own
+ * settings — and, when both teams are claimed on AllFantasy, the offer card lands in their DM. Once
+ * each, by claim rows. See `notifyEspnOffers.ts`. Chimmy reads the same ledger rows
+ * (`pendingTradeDecisionGrounding`).
  */
-
-const NOTIFY_CLAIM_TTL_MS = 45 * 24 * 60 * 60 * 1000
 
 export type EspnLeagueOfferSyncResult = {
   leagueId: string
@@ -47,6 +46,8 @@ export type EspnLeagueOfferSyncResult = {
   expired: number
   vanished: number
   notified: number
+  /** Offer cards posted into a two-manager DM this run. */
+  dmPosted: number
   feedComplete: boolean
   skipped?: string
   error?: string
@@ -74,6 +75,8 @@ export type EspnOfferSyncDeps = {
   storedPending: (leagueId: string) => Promise<Array<{ providerTradeId: string; expiresAt: Date | null }>>
   expire: (leagueId: string, providerTradeIds: string[]) => Promise<number>
   notify: (args: { league: LeagueRow; viewerTeamId: string; offers: NormalizedOffer[]; now: Date }) => Promise<number>
+  /** The DM card between the two managers, when both teams are claimed. */
+  dm: (args: { league: LeagueRow; viewerTeamId: string; offers: NormalizedOffer[]; now: Date }) => Promise<number>
 }
 
 const normSwid = (v: string | null | undefined) => String(v ?? '').replace(/[{}]/g, '').trim().toLowerCase()
@@ -108,7 +111,8 @@ const defaultDeps: EspnOfferSyncDeps = {
     })
     return r.count
   },
-  notify: (args) => notifyNewEspnOffers(args),
+  notify: async (args) => (await import('./notifyEspnOffers')).notifyNewEspnOffers(args),
+  dm: async (args) => (await import('./notifyEspnOffers')).postEspnOfferDms(args),
 }
 
 /** PURE. Stored pending offers whose ESPN-stated expiry has passed. */
@@ -131,7 +135,7 @@ export async function syncEspnTradeOffersForLeague(
   const d: EspnOfferSyncDeps = { ...defaultDeps, ...opts.deps }
   const now = opts.now ?? new Date()
   const result: EspnLeagueOfferSyncResult = {
-    leagueId: league.id, offersSeen: 0, excluded: 0, offersWritten: 0, expired: 0, vanished: 0, notified: 0, feedComplete: false,
+    leagueId: league.id, offersSeen: 0, excluded: 0, offersWritten: 0, expired: 0, vanished: 0, notified: 0, dmPosted: 0, feedComplete: false,
   }
 
   // Expiry first, and regardless of whether the read below succeeds: ESPN stated these times.
@@ -183,9 +187,17 @@ export async function syncEspnTradeOffersForLeague(
     return { ...result, error: e instanceof Error ? e.name : 'persist failed' }
   }
 
-  const fresh = parsed.offers.filter((o) => !known.has(o.providerTradeId) && offerNeedsViewer(o, viewerTeamId, now))
+  /*
+   * New to THIS row, still open, and this row's team is in it (the parse already dropped the rest).
+   * Who is told is decided per manager in `notifyNewEspnOffers` — the other team's manager may be
+   * waiting on it even when this row's user sent it.
+   */
+  const fresh = parsed.offers.filter(
+    (o) => !known.has(o.providerTradeId) && o.status === 'pending' && (!o.expiresAt || o.expiresAt.getTime() > now.getTime()),
+  )
   if (fresh.length) {
     result.notified = await d.notify({ league, viewerTeamId, offers: fresh, now }).catch(() => 0)
+    result.dmPosted = await d.dm({ league, viewerTeamId, offers: fresh, now }).catch(() => 0)
   }
   return result
 }
@@ -258,62 +270,4 @@ export function espnOfferNotice(args: {
     ' Answer it on ESPN.',
   ].join('')
   return { title: `Trade offer in ${name}${letter ? ` — ${letter} for you` : ''}`, body }
-}
-
-async function claimOnce(key: string, now: Date): Promise<boolean> {
-  try {
-    await prisma.sportsDataCache.create({
-      data: { cacheKey: key, data: { claimedAt: now.toISOString() }, expiresAt: new Date(now.getTime() + NOTIFY_CLAIM_TTL_MS) },
-    })
-    return true
-  } catch {
-    // Unique key: already sent. A database failure fails closed — no duplicate pushes.
-    return false
-  }
-}
-
-async function notifyNewEspnOffers(args: {
-  league: LeagueRow
-  viewerTeamId: string
-  offers: NormalizedOffer[]
-  now: Date
-}): Promise<number> {
-  const userId = args.league.userId
-  const rows: EspnLedgerRow[] = args.offers.map((o) => ({
-    providerTradeId: o.providerTradeId,
-    status: o.status,
-    proposedByRosterId: o.proposedByRosterId,
-    rosterIds: o.rosterIds,
-    consentedRosterIds: o.consentedRosterIds,
-    proposedAt: o.proposedAt,
-    firstSeenAt: args.now,
-    expiresAt: o.expiresAt ?? null,
-    assets: o.assets,
-  }))
-  const views = await viewsForRows({ leagueId: args.league.id, rows, viewerTeamId: args.viewerTeamId })
-  if (views.length === 0) return 0
-  const grader: LeagueTradeGrader | null = await createLeagueTradeGrader({ leagueId: args.league.id, userId }).catch(() => null)
-  const grades = await gradeEspnOfferViews(views, grader)
-  const { dispatchNotification } = await import('@/lib/notifications/NotificationDispatcher')
-  let sent = 0
-  for (const view of views) {
-    const id = view.trade.transactionId
-    if (!(await claimOnce(`espn-offer-notify:v1:${args.league.id}:${id}:${userId}`, args.now))) continue
-    const { title, body } = espnOfferNotice({ leagueName: args.league.name, view, grade: grades.get(id) ?? null })
-    await dispatchNotification({
-      userIds: [userId],
-      category: 'trade_proposals',
-      type: 'trade_proposed',
-      title,
-      body,
-      actionHref: `/league/${encodeURIComponent(args.league.id)}?view=trades`,
-      actionLabel: 'Review offer',
-      leagueId: args.league.id,
-      severity: 'medium',
-      dedupePrefix: `espn-offer:v1:${id}`,
-      meta: { leagueId: args.league.id, provider: 'espn', providerTradeId: id, expiresAt: view.expiresAt },
-      skipChannels: { email: true, sms: true },
-    }).then(() => { sent += 1 }).catch(() => undefined)
-  }
-  return sent
 }

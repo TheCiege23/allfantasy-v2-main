@@ -30,9 +30,13 @@ const h = vi.hoisted(() => {
     redraftSeason: { findFirst: vi.fn(async (args?: { where?: { id?: string } }) => (args?.where?.id === 'S' ? null : { id: 'previous' })) },
   }
   const keys: unknown[] = []
+  /** What happened, in order: the preload, the transaction opening and closing, the rule running in it. */
+  const events: string[] = []
+  const ranks = { rankOf: (() => 1) as unknown }
   const client = {
     ...db,
     $transaction: vi.fn(async (action: (tx: unknown) => Promise<unknown>) => {
+      events.push('transaction:open')
       let release: (() => void) | undefined
       let savepoint: typeof state.records = []
       const tx = { ...db, $executeRaw: vi.fn(async (sql: TemplateStringsArray, ...values: unknown[]) => {
@@ -46,22 +50,29 @@ const h = vi.hoisted(() => {
         else if (text.startsWith('ROLLBACK TO')) state.records = [...savepoint]
         return 1
       }) }
-      try { return await action(tx) } finally { release?.() }
+      try { return await action(tx) } finally { release?.(); events.push('transaction:close') }
     }),
   }
-  const apply = vi.fn(async (_league: string, _season: string, tx: typeof db) => {
+  const apply = vi.fn(async (_league: string, _season: string, tx: typeof db, _preload?: unknown) => {
+    events.push('apply')
     state.autoEntered(); await state.autoHold
     if ((await tx.keeperRecord.findMany()).some((record) => record.rosterId === 'R')) return
     await tx.keeperRecord.create({ data: { rosterId: 'R', playerId: 'automatic' } })
     if (state.failAfterDefault) throw new Error('write failed after first automatic keeper')
   })
-  return { state, db, client, apply, keys, carryover: vi.fn(async () => ({})) }
+  const preload = vi.fn(async () => {
+    events.push('preload:start')
+    await Promise.resolve()
+    events.push('preload:done')
+    return ranks
+  })
+  return { state, db, client, apply, preload, ranks, events, keys, carryover: vi.fn(async () => ({})) }
 })
 
 vi.mock('@/lib/prisma', () => ({ prisma: h.client }))
 vi.mock('@/lib/keeper/eligibilityEngine', () => ({ computeKeeperEligibility: vi.fn() }))
 vi.mock('@/lib/keeper/carryoverEngine', () => ({ executeSeasonCarryover: h.carryover }))
-vi.mock('@/lib/keeper/missedDeadlineService', () => ({ KEEPER_SUBMITTED_NONE: 'keeper_submitted_none', applyMissedDeadlineRule: h.apply }))
+vi.mock('@/lib/keeper/missedDeadlineService', () => ({ KEEPER_SUBMITTED_NONE: 'keeper_submitted_none', applyMissedDeadlineRule: h.apply, preloadMissedDeadlineRanks: h.preload }))
 
 import { lockKeeperSelections, submitKeeperSelections } from '@/lib/keeper/selectionEngine'
 
@@ -77,6 +88,7 @@ beforeEach(() => {
   h.state.manualHold = Promise.resolve(); h.state.autoHold = Promise.resolve()
   h.state.manualEntered = () => {}; h.state.autoEntered = () => {}; h.state.failAfterDefault = false
   h.keys.length = 0
+  h.events.length = 0
 })
 
 describe('keeper submissions racing the deadline runner', () => {
@@ -120,5 +132,28 @@ describe('keeper submissions racing the deadline runner', () => {
     expect(h.apply).toHaveBeenCalledTimes(1)
     expect(h.carryover).toHaveBeenCalledTimes(1)
     expect(h.state.records.map((record) => record.playerId)).toEqual(['automatic'])
+  })
+
+  it('loads the missed-deadline ranks (a board) BEFORE the lock transaction opens, and hands them in', async () => {
+    await lockKeeperSelections('L', 'K')
+    expect(h.preload).toHaveBeenCalledTimes(1)
+    expect(h.preload).toHaveBeenCalledWith('L', 'S')
+    // The whole load finished before the transaction began; the rule ran inside it with the preloaded ranks.
+    expect(h.events.filter((e) => e !== 'transaction:close').slice(0, 4)).toEqual(['preload:start', 'preload:done', 'transaction:open', 'apply'])
+    expect(h.apply.mock.calls[0][3]).toBe(h.ranks)
+  })
+
+  it('a preload that throws still locks, with no ranks (so no defaults), and never retries inside the lock', async () => {
+    h.preload.mockRejectedValueOnce(new Error('board down'))
+    await lockKeeperSelections('L', 'K')
+    expect(h.preload).toHaveBeenCalledTimes(1)
+    expect(h.apply.mock.calls[0][3]).toEqual({ rankOf: null })
+    expect(h.state.status).toBe('locked')
+  })
+
+  it('an already-locked session loads no board at all', async () => {
+    h.state.status = 'locked'
+    await lockKeeperSelections('L', 'K')
+    expect(h.preload).not.toHaveBeenCalled()
   })
 })

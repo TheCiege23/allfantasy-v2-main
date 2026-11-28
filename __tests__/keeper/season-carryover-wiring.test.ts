@@ -78,6 +78,7 @@ vi.mock('@/lib/keeper/eligibilityEngine', () => ({
 const mockApplyMissedDeadlineRule = vi.hoisted(() => vi.fn(async () => ({ rule: 'auto_no_keepers', applied: [], skippedReason: null })))
 vi.mock('@/lib/keeper/missedDeadlineService', () => ({
   applyMissedDeadlineRule: mockApplyMissedDeadlineRule,
+  preloadMissedDeadlineRanks: vi.fn(async () => ({ rankOf: null })),
   KEEPER_SUBMITTED_NONE: 'keeper_submitted_none',
 }))
 
@@ -265,7 +266,7 @@ describe('lockKeeperSelections — missed-deadline rule', () => {
     mockRedraftSeasonFindFirst.mockResolvedValueOnce({ id: 'season-1' })
     await lockKeeperSelections('league-1', 'sess-1')
     expect(mockApplyMissedDeadlineRule).toHaveBeenCalledTimes(1)
-    expect(mockApplyMissedDeadlineRule).toHaveBeenCalledWith('league-1', 'season-2', prisma)
+    expect(mockApplyMissedDeadlineRule).toHaveBeenCalledWith('league-1', 'season-2', prisma, { rankOf: null })
     expect(mockApplyMissedDeadlineRule.mock.invocationCallOrder[0]).toBeLessThan(mockKeeperRecordUpdateMany.mock.invocationCallOrder[0])
     // The lock promotes a pending keeper AND one the commissioner confirmed; never a rejected one.
     expect(mockKeeperRecordUpdateMany.mock.calls[0][0]).toEqual({

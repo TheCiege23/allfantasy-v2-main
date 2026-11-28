@@ -68,9 +68,56 @@ function BracketIntelligenceInner() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
   const [sim, setSim] = useState<SimulationResponse | null>(null)
   const [aiReview, setAiReview] = useState<AiReview>(null)
+  const [aiReviewLoading, setAiReviewLoading] = useState(false)
+  const [aiReviewNote, setAiReviewNote] = useState<string | null>(null)
   const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [story, setStory] = useState<string | null>(null)
+
+  const requestAiReview = () => {
+    if (!entryId || aiReviewLoading) return
+    setAiReviewLoading(true)
+    setAiReviewNote(null)
+    fetch('/api/bracket/intelligence/review', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ entryId, includeAiReview: true }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })).catch(() => ({ ok: false, data: {} })))
+      .then(({ ok, data }) => {
+        if (!ok || !data?.ok) return
+        setAiReviewNote(typeof data.aiLimit?.message === 'string' ? data.aiLimit.message : null)
+        if (data.aiReview && typeof data.aiReview === 'object') {
+          setAiReview({
+            strengths: Array.isArray(data.aiReview.strengths)
+              ? data.aiReview.strengths
+              : [],
+            risks: Array.isArray(data.aiReview.risks) ? data.aiReview.risks : [],
+            strategyNotes: Array.isArray(data.aiReview.strategyNotes)
+              ? data.aiReview.strategyNotes
+              : [],
+            summary:
+              typeof data.aiReview.summary === 'string'
+                ? data.aiReview.summary
+                : '',
+          })
+          fetch('/api/analytics/insight', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              event: 'ai_dashboard_insight_viewed',
+              entry_id: entryId,
+              insight_type: 'bracket_intelligence',
+              placement: 'bracket_intelligence_page',
+            }),
+          }).catch(() => {})
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setAiReviewLoading(false)
+      })
+  }
 
   useEffect(() => {
     if (!entryId) return
@@ -146,45 +193,8 @@ function BracketIntelligenceInner() {
       })
       .catch(() => {})
 
-    // AI insights from existing review endpoint
-    fetch('/api/bracket/intelligence/review', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ entryId }),
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })).catch(() => ({ ok: false, data: {} })))
-      .then(({ ok, data }) => {
-        if (!ok || !data?.ok) return
-        if (data.aiReview && typeof data.aiReview === 'object') {
-          setAiReview({
-            strengths: Array.isArray(data.aiReview.strengths)
-              ? data.aiReview.strengths
-              : [],
-            risks: Array.isArray(data.aiReview.risks) ? data.aiReview.risks : [],
-            strategyNotes: Array.isArray(data.aiReview.strategyNotes)
-              ? data.aiReview.strategyNotes
-              : [],
-            summary:
-              typeof data.aiReview.summary === 'string'
-                ? data.aiReview.summary
-                : '',
-          })
-          fetch('/api/analytics/insight', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              event: 'ai_dashboard_insight_viewed',
-              entry_id: entryId,
-              insight_type: 'bracket_intelligence',
-              placement: 'bracket_intelligence_page',
-            }),
-          }).catch(() => {})
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        setLoading(false)
-      })
+    // The AI review is NOT fetched on page open (owner follow-up 2026-11-28): it spends the caller's daily
+    // write-up allowance, so it runs only from the button below.
 
     // Bracket narrative story (engaging summary)
     fetch('/api/bracket/intelligence/story', {
@@ -421,7 +431,21 @@ function BracketIntelligenceInner() {
             )}
           </div>
 
-          {/* AI insights */}
+          {/* AI insights: an explicit request, never on page open (owner follow-up 2026-11-28). */}
+          {!aiReview && (
+            <div className="rounded-2xl border border-white/12 bg-white/5 p-4 space-y-2 mode-panel-soft">
+              <button
+                type="button"
+                onClick={requestAiReview}
+                disabled={aiReviewLoading}
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50"
+                data-testid="bracket-intel-ai-review-request"
+              >
+                {aiReviewLoading ? t('bracket.intel.review.running') : t('bracket.intel.review.run')}
+              </button>
+              {aiReviewNote && <p className="text-[11px] text-white/60" data-testid="bracket-intel-ai-review-note">{aiReviewNote}</p>}
+            </div>
+          )}
           {aiReview && (
             <div className="rounded-2xl border border-white/12 bg-white/5 p-4 space-y-2 mode-panel-soft">
               <div className="text-xs font-semibold text-white/80">

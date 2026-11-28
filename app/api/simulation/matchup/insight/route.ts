@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { aiCostGate } from '@/lib/ai-protection/costGate';
 import { runMatchupSimulation } from '@/lib/simulation-engine/MatchupSimulator';
 import { getMatchupSimulationInsight } from '@/lib/simulation-engine/MatchupSimulationInsightAI';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
@@ -81,6 +82,11 @@ export async function POST(req: NextRequest) {
       downsideScenario: out.downsideScenario,
       iterations: out.iterations,
     }
+
+    // Owner, 2026-11-28: every model call is signed in and capped. The simulation above is deterministic and
+    // free; the cap is taken immediately before the orchestration and the insight model call below.
+    const capped = await aiCostGate(req, 'matchup_insight_ai', userId);
+    if (capped) return capped;
 
     const envelope = buildEnvelopeForTool('matchup', {
       sport,

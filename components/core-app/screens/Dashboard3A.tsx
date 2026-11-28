@@ -35,7 +35,7 @@ import type { ExposureData, RivalsData, PanelState } from '@/lib/core-app/dash3a
 import { ExposureRowItem } from '@/components/core-app/screens/ExposureImpact'
 import { FollowingCard } from '@/components/core-app/screens/FollowingCard'
 import type { FollowingCardData } from '@/lib/core-app/followingCard'
-import { ReceiptsCard } from '@/components/core-app/screens/ReceiptsCard'
+import { ReceiptsCard, type ReceiptsFullLogAccess } from '@/components/core-app/screens/ReceiptsCard'
 import type { DecisionReceiptsData } from '@/lib/core-app/decisionReceipts'
 import { YourWeekRoutine } from '@/components/core-app/screens/YourWeekRoutine'
 import type { WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
@@ -1162,11 +1162,19 @@ export function Dash3AFollowing({ following }: { following: FollowingCardData | 
  * only, wins and losses stated the same way; too-early, unscored and unreadable cases
  * counted rather than shown as a number. Not rendered with nothing to say.
  */
-export function Dash3AReceipts({ receipts }: { receipts: DecisionReceiptsData | null }) {
+export function Dash3AReceipts({
+  receipts,
+  fullLog = null,
+}: {
+  receipts: DecisionReceiptsData | null
+  /** The /core/decisions lock (`decision_history`), for the card's link to the full log. */
+  fullLog?: ReceiptsFullLogAccess
+}) {
   return (
           <ReceiptsCard
             data={receipts}
             help={<TopicTip topic="homeReceipts" />}
+            fullLog={fullLog}
           />
   )
 }

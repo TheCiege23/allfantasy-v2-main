@@ -54,6 +54,10 @@ export function DevyRosterClient({
 }: {
   leagueId: string
   userId: string
+  /**
+   * Chimmy Intelligence (AF Pro or AF Commissioner; AF Supreme includes both). The roster's only Chimmy actions are
+   * member player advice, which the server gates on `af_intelligence` since 2026-11-28 — not AF Commissioner.
+   */
   hasAfSub?: boolean
 }) {
   const [loading, setLoading] = useState(true)
@@ -542,7 +546,6 @@ export function DevyRosterClient({
         onClose={() => setModal({ open: false, payload: null })}
         payload={modal.payload}
         leagueId={leagueId}
-        hasAfSub={hasAfSub}
       />
     </div>
   )

@@ -40,6 +40,7 @@ export type CoreCardRead =
   | 'trades'
   | 'trade-depth'
   | 'player-depth'
+  | 'decision-log-depth'
   | 'streak'
   | 'following'
   | 'receipts'

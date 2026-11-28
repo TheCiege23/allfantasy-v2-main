@@ -84,6 +84,13 @@ type Offer = {
   dropNote?: string | null
   /** When ESPN says the offer lapses. */
   expiresAt?: string | null
+  /** The viewer's lineup effect (ESPN). Absent: not computed for this provider; null: unavailable. */
+  rosterImpact?: LineupImpactSummary | null
+  /**
+   * Answer-in-AllFantasy actions (ESPN). EMPTY while `ESPN_TRADE_OFFER_ACTIONS` is off or no ESPN
+   * write is captured (contracts/espn/GAPS.md T-03e) — and then no button renders at all.
+   */
+  actions?: Array<'accept' | 'decline' | 'counter'>
   direction: 'incoming' | 'outgoing'
   partnerName: string
   proposedAt: string | null
@@ -699,11 +706,35 @@ export function TradeInbox(props: {
               </div>
             </div>
             {o.dropNote ? <p className="af-tc-row-sub af-tc-offer-drop">{copy(o.dropNote)}</p> : null}
+            {o.provider === 'espn' && lineupImpactLine(o.rosterImpact) ? (
+              <p className="af-tc-row-sub af-tc-offer-lineup" data-direction={lineupImpactDirection(o.rosterImpact)}>
+                {copy(lineupImpactLine(o.rosterImpact) ?? '')}
+              </p>
+            ) : null}
 
             <div className="af-tc-offer-actions">
               <button type="button" className="af-btn af-btn--ghost" onClick={() => loadOffer(o)}>
                 {copy('Load into builder')}
               </button>
+              {/* Hidden unless the server enabled ESPN actions (it does not until a write is captured). */}
+              {o.provider === 'espn' && leagueId
+                ? (o.actions ?? []).map((action) => (
+                    <button
+                      key={`${o.transactionId}-${action}`}
+                      type="button"
+                      className="af-btn af-btn--ghost"
+                      onClick={() => {
+                        void fetch('/api/league/espn-trade-offers/action', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ leagueId, offerId: o.transactionId, action }),
+                        }).then(() => load({ background: true })).catch(() => undefined)
+                      }}
+                    >
+                      {copy(action === 'accept' ? 'Accept' : action === 'decline' ? 'Decline' : 'Counter')}
+                    </button>
+                  ))
+                : null}
               {/*
                 Not an accept button. The provider has no write endpoint, so the
                 only truthful action is to send them where the offer lives.

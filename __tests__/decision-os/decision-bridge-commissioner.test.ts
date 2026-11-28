@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('server-only', () => ({}))
+// The commissioner holds AF Commissioner here; the plan rule itself is pinned in
+// __tests__/chimmy/tools/league-health-plan-2026-11-28.test.ts.
+vi.mock('@/lib/core-app/corePaywall', () => ({ resolveCoreDepth: async () => ({ unlocked: true }) }))
 
 const { assertCommish, loadHealth, runCommish, buildDeps } = vi.hoisted(() => ({
   assertCommish: vi.fn(),

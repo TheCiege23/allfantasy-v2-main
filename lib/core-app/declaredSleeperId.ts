@@ -44,3 +44,41 @@ export function declaredLineupIds(starters: readonly unknown[]): string[] {
     return declaredSleeperId(raw) ?? `unbridged:${raw}`
   })
 }
+
+/**
+ * A PASTED roster's bench, from its plain arrays — the only lineup a paste carries that names people.
+ *
+ * The paste importer files every pasted slot (yahooSnapshotModel.ts `buildYahooSnapshotPayload`): a
+ * starting slot into `starters`, an IR/IL/NA slot into `reserve`, a BN slot into neither, and every
+ * player into `players`. So the bench is `players` minus `starters` minus `reserve`. Its id-only
+ * `lineup_sections` say the same thing with no name or position on any entry, which is why a reader
+ * that took them showed "Unknown" at a placeholder position.
+ *
+ * 🛑 NO RECORDED STARTERS IS NOT "EVERYONE IS ON THE BENCH". `recorded: false` when the roster has no
+ * starter at all: the bench cannot be told apart from the starters, and the whole roster is never
+ * passed off as one.
+ *
+ * Only a declared id can be priced; every other bench id is COUNTED in `unmatched`, never listed.
+ * `priced` keeps the stored (declared) id so the caller can read its `player_metadata` row.
+ */
+export type DeclaredBench =
+  | { recorded: false }
+  | { recorded: true; priced: Array<{ rosterId: string; sleeperId: string }>; unmatched: number }
+
+export function declaredBenchOf(playerData: unknown): DeclaredBench {
+  const pd = playerData && typeof playerData === 'object' && !Array.isArray(playerData) ? (playerData as Record<string, unknown>) : {}
+  const ids = (key: string) =>
+    (Array.isArray(pd[key]) ? (pd[key] as unknown[]) : []).map((x) => (x == null ? '' : String(x))).filter((x) => x !== '' && x !== '0')
+  const starters = ids('starters')
+  if (starters.length === 0) return { recorded: false }
+  const notBench = new Set([...starters, ...ids('reserve')])
+  const priced: Array<{ rosterId: string; sleeperId: string }> = []
+  let unmatched = 0
+  for (const rosterId of new Set(ids('players'))) {
+    if (notBench.has(rosterId)) continue
+    const sleeperId = declaredSleeperId(rosterId)
+    if (sleeperId) priced.push({ rosterId, sleeperId })
+    else unmatched += 1
+  }
+  return { recorded: true, priced, unmatched }
+}

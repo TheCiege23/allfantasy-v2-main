@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
+import { FeatureGate } from '@/components/subscription/FeatureGate'
 import type { CampusPlayerEval } from '@/lib/c2c/ai/c2cChimmy'
 import type { C2CPlayerRow } from './c2cPlayerTypes'
 
@@ -12,7 +13,6 @@ export function C2CPlayerModal({
   side,
   leagueId,
   userId,
-  hasAfSub = false,
   countsTowardScore,
 }: {
   open: boolean
@@ -21,13 +21,12 @@ export function C2CPlayerModal({
   side: 'campus' | 'canton'
   leagueId: string
   userId: string
-  hasAfSub?: boolean
   countsTowardScore: boolean
 }) {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiEval, setAiEval] = useState<CampusPlayerEval | null>(null)
   const [aiErr, setAiErr] = useState<string | null>(null)
-  const { handleApiResponse } = useAfSubGate('commissioner_c2c_scouting')
+  const { handleApiResponse } = useAfSubGate('af_intelligence')
 
   if (!open || !player) return null
 
@@ -220,7 +219,9 @@ export function C2CPlayerModal({
               </>
             ) : null}
           </div>
-          {campus && hasAfSub ? (
+          {campus ? (
+            /* A member's read on their own campus player: AF Intelligence (AF Pro, AF Commissioner, AF Supreme; owner, 2026-11-28). */
+            <FeatureGate featureId="af_intelligence" featureNameOverride="Chimmy campus analysis">
             <button
               type="button"
               onClick={() => void runCampusAi()}
@@ -228,10 +229,9 @@ export function C2CPlayerModal({
               className="mt-2 inline-flex justify-center rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
               data-testid="c2c-player-modal-ai"
             >
-              {aiLoading ? 'Analyzing…' : 'Chimmy Analysis (AF Commissioner)'}
+              {aiLoading ? 'Analyzing…' : 'Chimmy Analysis (Chimmy Intelligence)'}
             </button>
-          ) : campus ? (
-            <p className="text-center text-[11px] text-[var(--faint)]">Chimmy analysis requires AF Commissioner.</p>
+            </FeatureGate>
           ) : (
             <p className="text-center text-[11px] text-[var(--faint)]">Campus Chimmy evaluates college prospects (open a campus player).</p>
           )}

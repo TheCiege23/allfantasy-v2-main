@@ -540,6 +540,7 @@ export async function createLeagueTradeGrader(args: {
     leagueType,
     season: leagueRow.season ?? null,
     status: leagueRow.status ?? null,
+    leagueSize: leagueRow.leagueSize ?? null,
   })
 
   /*

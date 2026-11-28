@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { DraftBoard } from './DraftBoard'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import type { DraftPickRecord, DraftPickOrderEntry, DraftStatePayload } from '../types'
 
 type Props = {
@@ -13,6 +15,8 @@ type Props = {
 export function DraftResultsView({ state, picks, sessionId }: Props) {
   const [recap, setRecap] = useState<string | null>(null)
   const [grade, setGrade] = useState<string | null>(null)
+  // Grade and Recap are AF Pro / AF Supreme with a daily cap (owner, 2026-11-28): show the plan and its link.
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
   const order = (state.pickOrder ?? []) as DraftPickOrderEntry[]
 
   const runRecap = async () => {
@@ -21,7 +25,10 @@ export function DraftResultsView({ state, picks, sessionId }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId, picks }),
     })
-    const j = (await r.json()) as { result?: unknown }
+    const j = (await r.json().catch(() => ({}))) as { result?: unknown }
+    const refused = r.ok ? null : readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() })
+    setRefusal(refused)
+    if (refused) return
     setRecap(JSON.stringify(j.result ?? j, null, 2))
   }
 
@@ -31,7 +38,10 @@ export function DraftResultsView({ state, picks, sessionId }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId, picks }),
     })
-    const j = (await r.json()) as { result?: unknown }
+    const j = (await r.json().catch(() => ({}))) as { result?: unknown }
+    const refused = r.ok ? null : readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() })
+    setRefusal(refused)
+    if (refused) return
     setGrade(JSON.stringify(j.result ?? j, null, 2))
   }
 
@@ -71,6 +81,7 @@ export function DraftResultsView({ state, picks, sessionId }: Props) {
           Share recap link
         </button>
       </div>
+      {refusal ? <PlanRefusalNotice refusal={refusal} /> : null}
       {grade ? (
         <pre className="max-h-48 overflow-auto rounded-lg bg-black/40 p-3 text-[11px] text-white/70">{grade}</pre>
       ) : null}

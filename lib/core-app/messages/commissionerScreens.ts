@@ -151,6 +151,8 @@ export const commissionerScreensMessages = defineMessages({
     // LineupIntegrity
     integrityUnsupportedPlatform:
       'Available for leagues run on AllFantasy and for Sleeper leagues. This league’s platform does not give AllFantasy each week’s starting lineup.',
+    integrityPastedNoMatchups:
+      'Not available for pasted leagues: a pasted Yahoo league has no weekly matchups or scores, so lineups and tanking cannot be checked.',
     integrityNotNfl: 'Only NFL leagues have a weekly lineup lock to audit.',
     integrityBestBall: 'Best ball leagues set lineups automatically, so there is nothing to audit.',
     integrityNoLineupRules: 'This league’s starting slots could not be read, so empty slots cannot be counted.',
@@ -358,6 +360,8 @@ export const commissionerScreensMessages = defineMessages({
     // LineupIntegrity
     integrityUnsupportedPlatform:
       'Disponible para ligas de AllFantasy y de Sleeper. La plataforma de esta liga no le da a AllFantasy la alineación de cada semana.',
+    integrityPastedNoMatchups:
+      'No disponible para ligas pegadas: una liga de Yahoo pegada no tiene enfrentamientos ni puntos semanales, así que no se pueden revisar las alineaciones ni el tanking.',
     integrityNotNfl: 'Solo las ligas de la NFL tienen un cierre semanal de alineación que auditar.',
     integrityBestBall: 'Las ligas best ball fijan la alineación solas, así que no hay nada que auditar.',
     integrityNoLineupRules: 'No se pudieron leer los puestos titulares de esta liga, así que no se pueden contar los vacíos.',

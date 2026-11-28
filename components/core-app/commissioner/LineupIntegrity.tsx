@@ -16,6 +16,7 @@ type M = typeof commissionerScreensMessages.en
 
 const UNSUPPORTED: Record<string, (m: M) => string> = {
   unsupported_platform: (m) => m.integrityUnsupportedPlatform,
+  pasted_no_matchups: (m) => m.integrityPastedNoMatchups,
   not_nfl: (m) => m.integrityNotNfl,
   best_ball: (m) => m.integrityBestBall,
   no_lineup_rules: (m) => m.integrityNoLineupRules,

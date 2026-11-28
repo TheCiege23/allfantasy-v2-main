@@ -751,6 +751,10 @@
 
 /* Receipts: the triage card's tips and their "AF saved me" share (2026-10-17). */
 .af3a-receipt-share-row { margin-top: -6px; }
+/* The link to the full log, /core/decisions (2026-11-28). Locked: it names the plan that opens it. */
+.af3a-receipt-full-log { margin-top: 11px; font: 600 12px/1.5 'Archivo', system-ui, sans-serif; }
+.af3a-receipt-full-log a { color: var(--accent); text-decoration: none; }
+.af3a-receipt-full-log a[data-locked='true'] { color: var(--muted); }
 .af3a-receipt-share {
   padding: 4px 10px;
   border-radius: 999px;

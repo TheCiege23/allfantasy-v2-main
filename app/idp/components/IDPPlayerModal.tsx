@@ -94,7 +94,7 @@ export function IDPPlayerModal({
   const [aiLoading, setAiLoading] = useState(false)
   const [aiEval, setAiEval] = useState<DefenderEvaluation | null>(null)
   const [aiNarrative, setAiNarrative] = useState<string | null>(null)
-  const { handleApiResponse } = useAfSubGate('commissioner_idp_analysis')
+  const { handleApiResponse } = useAfSubGate('af_intelligence')
 
   /*
    * ⚠ NO FALLBACK CONTRACT. THE ONE THAT WAS HERE PRINTED A SALARY NOBODY HAD AGREED TO.
@@ -535,7 +535,7 @@ export function IDPPlayerModal({
               data-testid="idp-player-ai-analysis"
             >
               {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-amber-200/90" />}
-              Chimmy Analysis (AF Commissioner)
+              Chimmy Analysis (Chimmy Intelligence)
             </button>
           </div>
         </DialogContent>

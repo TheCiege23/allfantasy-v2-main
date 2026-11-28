@@ -153,6 +153,12 @@ export type DevyOptionValue = {
 }
 
 export type DevyOptionValueArgs = {
+  /**
+   * `DevyPlayer.sport`. Every factor here was measured on NCAAF recruits against the NFL draft and the NFL
+   * dynasty board, so any other sport is refused outright — never read through a position that happens to
+   * match. Absent means a caller from before the field existed, which only ever passed NCAAF rows.
+   */
+  sport?: string | null
   position: string | null
   /**
    * `DevyPlayer.ppaSeasonTotal` — peak season-TOTAL PPA. The strongest signal and
@@ -182,6 +188,28 @@ export function devyOptionValue(args: DevyOptionValueArgs): DevyOptionValue {
   const recruitingComposite = args.recruitingComposite ?? null
   const ppaSeasonTotal = args.ppaSeasonTotal ?? null
   const missing: string[] = []
+
+  /*
+   * 🛑 A COLLEGE BASKETBALL PROSPECT IS NEVER PRICED HERE. These tables are NCAAF → NFL, in FantasyCalc NFL
+   * board units; an NCAAB → NBA prospect needs NBA units and his own measured rates, and neither table exists
+   * (`contracts/cbbd/GAPS.md` B-02). NBA leagues price ranked prospects on the NBA rookie pick curve instead
+   * (`nbaProspectValue` in lib/decision-os/trade/sportDynastyValue.ts).
+   */
+  const sport = String(args.sport ?? 'NCAAF').trim().toUpperCase()
+  if (sport !== 'NCAAF') {
+    return {
+      scale: DEVY_MARKET_SCALE,
+      value: null,
+      pDrafted: null,
+      pSampleSize: null,
+      pSource: null,
+      arrivalValue: null,
+      horizonYears: null,
+      horizonDiscount: null,
+      missing: [`an NFL devy measurement for ${sport} prospects`],
+      basis: `${args.name ?? 'This prospect'} is a ${sport} prospect, and this option is measured only on college football recruits against the NFL draft and the NFL dynasty board. This is not a low value.`,
+    }
+  }
 
   /*
    * ⚠ COMPOSITE FIRST, STARS SECOND, AND THE SOURCE IS REPORTED. The composite

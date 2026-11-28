@@ -89,7 +89,8 @@ import type { TrustData } from "@/lib/analytics/confidence-types"
 import { MessageSquareText, HelpCircle, BarChart3, ArrowLeftRight, Target, Search, TrendingUp, Trophy, Radio, Swords, MessageCircle, Share2, PackageOpen, ShoppingBag, Sparkles, Shield, CheckCircle2, Info, ChevronRight, X, LayoutGrid, Lightbulb } from "lucide-react"
 import { useAnalytics } from "@/app/hooks/useAnalytics"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
-import { readPlanRefusal } from '@/lib/monetization/planRefusal'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ')
@@ -1199,6 +1200,8 @@ function AFLegacyContent() {
   const [playerSearchQuery, setPlayerSearchQuery] = useState('')
   const [playerSearchLoading, setPlayerSearchLoading] = useState(false)
   const [playerSearchError, setPlayerSearchError] = useState('')
+  // Player Finder is AF Pro / AF Supreme with a daily cap (owner, 2026-11-28): the plan and its link, not an error.
+  const [playerSearchRefusal, setPlayerSearchRefusal] = useState<PlanRefusal | null>(null)
   const [playerSearchResults, setPlayerSearchResults] = useState<any[]>([])
   /*
    * Mount time, used as `form_rendered_at` when the Team Scan funnel claims a guest
@@ -3376,6 +3379,7 @@ function AFLegacyContent() {
     setShowAutoSuggestions(false)
     setPlayerSearchLoading(true)
     setPlayerSearchError('')
+    setPlayerSearchRefusal(null)
     setPlayerSearchResults([])
     trackToolUse('player_finder', { username, query: playerSearchQuery })
 
@@ -3413,6 +3417,11 @@ function AFLegacyContent() {
       const data = await res.json()
 
       if (!res.ok) {
+        const refused = readPlanRefusal(res.status, data, { returnTo: currentPathForReturn() })
+        if (refused) {
+          setPlayerSearchRefusal(refused)
+          return
+        }
         setPlayerSearchError(data.error || 'Failed to search players')
         return
       }
@@ -11383,6 +11392,10 @@ function AFLegacyContent() {
                       </div>
                     )}
 
+                    {playerSearchRefusal && (
+                      <PlanRefusalNotice refusal={playerSearchRefusal} className="mb-4" />
+                    )}
+
                     {playerSearchError && (
                       <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm">
                         {playerSearchError}
@@ -11488,7 +11501,7 @@ function AFLegacyContent() {
                   </div>
                 )}
 
-                    {!playerSearchLoading && playerSearchResults.length === 0 && !playerSearchError && (
+                    {!playerSearchLoading && playerSearchResults.length === 0 && !playerSearchError && !playerSearchRefusal && (
                       <div className="text-center py-12 text-white/50">
                         <div className="text-4xl mb-3">🔍</div>
                         <p>Search for a player to see which of your teams have them</p>

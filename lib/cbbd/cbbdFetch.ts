@@ -12,8 +12,8 @@ import { getCfbdApiKey } from '@/lib/cfbd-env'
  * client's docs: the wire is camelCase.
  *
  * DB-first: `CBBD_BASE_URL` is a monitored identifier in scripts/check-db-first-api-boundary.mjs and
- * this file is allowlisted by exact path. Its only runtime importer is the ingestion store
- * lib/devy/cbbdDraftPicksStore.ts. Keep it that way — a request path that needs draft picks reads
+ * this file is allowlisted by exact path. Its only runtime importers are the two ingestion modules,
+ * lib/devy/cbbdDraftPicksStore.ts and lib/devy/cbbdDraftHistoryIngest.ts. Keep it that way — a request path that needs draft picks reads
  * the stored row, never this.
  */
 
@@ -35,6 +35,9 @@ export type CbbdDraftPick = {
   pick: number
   name: string
   position: string | null
+  /** Pre-draft rank among this draft's prospects (fixture: 58 of 59 set). Drafted players only, so no denominator. */
+  overallRank?: number | null
+  positionRank?: number | null
 }
 
 /** One team from `/teams/roster` (contracts/cbbd/fixtures/roster-*.json). */

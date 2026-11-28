@@ -6,6 +6,9 @@ const appUserFindUniqueMock = vi.fn()
 const legacyUserFindUniqueMock = vi.fn()
 
 vi.mock('@/lib/auth-guard', () => ({ requireAuth: requireAuthMock }))
+// The AF Pro plan + daily cap (2026-11-28) is covered by __tests__/monetization/model-call-gates-2026-11-28.test.ts;
+// this suite is about what happens past it.
+vi.mock('@/lib/ai-protection/planCostGate', () => ({ requirePlanThenAiCostGate: async () => null }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {

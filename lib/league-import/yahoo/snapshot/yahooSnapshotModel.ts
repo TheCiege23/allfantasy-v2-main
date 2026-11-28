@@ -217,8 +217,19 @@ function isReserveSlot(slot: string): boolean {
   return /^(IR|IL|NA|DL)/.test(slot.toUpperCase())
 }
 
+/**
+ * 🛑 ACCENTS ARE FOLDED BEFORE `normalizePlayerName`, BECAUSE IT DROPS A NON-ASCII LETTER ("José
+ * Ramírez" → "jos ramrez"). An unmatched player's paste id is the name `hides`
+ * (lib/core-app/declaredAvailability.ts) keeps him off the free agents by; built lossy, an unaccented
+ * wire spelling ("Jose Ramirez") could never meet it when no `player_metadata` was stored. Folding first
+ * (NFD, combining marks stripped — the same composition lib/redraft/rosterGameLogIdBridge.ts uses) keeps
+ * the letter, so every spelling meets it. Still ONE normalizer: an ASCII name builds byte-identically the
+ * id it always did. An id built before this (letters already lost) still hides each accented spelling,
+ * because `hides` also keys the wire name through `normalizePlayerName`.
+ */
 function snapshotPlayerId(playerName: string, position?: string | null, nflTeam?: string | null): string {
-  return `yahoo-paste:${normalizePlayerName(playerName)}|${String(position ?? '').toUpperCase()}|${String(nflTeam ?? '').toUpperCase()}`
+  const folded = String(playerName ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return `yahoo-paste:${normalizePlayerName(folded)}|${String(position ?? '').toUpperCase()}|${String(nflTeam ?? '').toUpperCase()}`
 }
 
 /** The NFL season a date belongs to: Jan–Feb still count as the previous season. */

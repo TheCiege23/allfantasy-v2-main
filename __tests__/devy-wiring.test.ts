@@ -20,10 +20,26 @@ const VERDICT = read('lib/devy/devyTradeVerdict.ts')
 const EVALUATOR = read('app/api/trade-evaluator/route.ts')
 
 describe('devy valuation is reachable from the trade console', () => {
-  it('imports the devy module rather than reimplementing it', () => {
-    expect(VERDICT).toContain("from '@/lib/trade-intel/devyOutlook'")
-    expect(VERDICT).toContain('refuseMixedScaleGrade')
-    expect(VERDICT).toContain('projectDevyOutlook')
+  /*
+   * 🛑 ONE DEVY NUMBER (2026-11-28). The verdict prices prospects with the grade's own call, and the
+   * devy-points trade verdict is gone. If `gradeDevyTrade` or the mixed-scale refusal comes back here,
+   * the note and the letter can tell two stories again.
+   */
+  it('prices prospects with the grade’s own call, not devy points', () => {
+    expect(VERDICT).toContain('heldDevyOptionValue(')
+    expect(VERDICT).not.toMatch(/\bgradeDevyTrade\s*\(/)
+    expect(VERDICT).not.toMatch(/\brefuseMixedScaleGrade\s*\(/)
+  })
+
+  it('reads the league grade’s rule in a league — the prospects it holds', () => {
+    expect(SRC).toMatch(/identifyDevyAssets\(\{[\s\S]{0,200}leagueId: args\.leagueId/)
+  })
+
+  it('the evaluator grades on the verdict’s prices before its unpriced refusal', () => {
+    const apply = EVALUATOR.indexOf('applyDevyVerdictPrices(senderPlayerPrices')
+    const refuse = EVALUATOR.indexOf('const unpricedAssets = allPlayerPrices.filter')
+    expect(apply).toBeGreaterThan(0)
+    expect(apply).toBeLessThan(refuse)
   })
 
   it('actually calls the identifier from the scale notes', () => {
@@ -61,9 +77,9 @@ describe('devy valuation is reachable from the trade console', () => {
     expect(SRC).toContain('notDevy(args.pricedGet)')
   })
 
-  it('only reinterprets names that carry no market price', () => {
+  it('only reinterprets names that carry no market price, or were priced AS a prospect', () => {
     // A name that priced is an NFL player whatever else shares his name.
-    expect(VERDICT).toContain('x.marketValue == null')
+    expect(VERDICT).toContain('l.marketValue == null || l.devy')
   })
 })
 

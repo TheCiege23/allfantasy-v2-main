@@ -39,9 +39,13 @@ import { collectRosterIds } from './rosterIdSpace'
  * `normalizePlayerName` first, because that one DROPS a non-ASCII letter ("José" → "jos") and the paste
  * id was built with it. Then a given-name nickname with the same surname ("Mitch"/"Mitchell",
  * `givenNameNicknameOf` — a 3+ letter prefix, NOT a nickname table, so "Bob"/"Robert" does not meet).
- * ⚠ One accent case stays open: a paste id with no stored metadata has lost the letter, so an
- * UNACCENTED wire spelling ("Jose" vs the stored "jos") cannot meet it. Every import writes metadata,
- * so this needs a roster written before it did.
+ * ACCENTS (2026-11-28): a paste id is now built from the accent-folded name (yahooSnapshotModel.ts
+ * `snapshotPlayerId`), so with no stored metadata every spelling meets it ("José"/"Jose" → "jose"). An id
+ * built BEFORE that has lost the letter ("jos"): it still meets every ACCENTED spelling through the
+ * `normalizePlayerName` key below, and a same-surname spelling through the nickname pass ("Jose Ramírez"
+ * → given "jose" extends "jos"). ⚠ What stays open is only an OLD id with no metadata against a wire
+ * spelling whose SURNAME has no accent ("jos ramrez" vs "Jose Ramirez" or "José Ramirez") — and every
+ * import writes metadata, so that needs a roster written before both fixes.
  *
  * THE ONE THING THAT UN-HIDES A NAME MATCH: both sides state a position, on different sides of the ball
  * (`sideOfBall`) — QB Josh Allen rostered does not hide LB Josh Allen. A CLUB disagreement does NOT

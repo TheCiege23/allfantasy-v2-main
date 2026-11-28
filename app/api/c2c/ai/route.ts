@@ -2,6 +2,7 @@ import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
+import { requireMemberPlayerAiOrHostGate } from '@/lib/subscription/memberPlayerAiGate'
 import { getLeagueRole } from '@/lib/league/permissions'
 import {
   buildC2CAiCacheContextSummary,
@@ -30,19 +31,69 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 const C2C_AI_CACHE_TTL_MS = 30 * 60 * 1000
 
-export async function POST(req: NextRequest) {
-  const gate = await requireAfSub()
-  if (gate instanceof NextResponse) return gate
-  const userId = gate
+/**
+ * Player-level actions — advice to a manager about their own roster (owner, 2026-11-28): Chimmy Intelligence
+ * (`af_intelligence`) plus the member daily cap. Everything else here administers the league (setup
+ * recommendation, commissioner chat, constitution, weekly recap) and keeps `commissioner_ai_tools`.
+ */
+const C2C_MEMBER_PLAYER_AI_ACTIONS: ReadonlySet<string> = new Set([
+  'campus_eval',
+  'campus_rankings',
+  'breakout_alerts',
+  'roster_balance',
+  'transition_advice',
+  'draft_advice',
+])
 
+/**
+ * 🛑 A MEMBER MAY ONLY ASK ABOUT THEIR OWN TEAM (owner follow-up 2026-11-28). `roster_balance`,
+ * `transition_advice` and `draft_advice` take a `managerId`, which used to be read straight off the body —
+ * any member could ask Chimmy about any other manager's roster. Now: your own team always; another team only
+ * when you can act as this league's commissioner AND that manager is in this league; anything else is a 403.
+ * Runs after the plan gate and before any read or model call.
+ */
+async function refuseOtherManager(leagueId: string, userId: string, managerId: string): Promise<NextResponse | null> {
+  if (managerId === userId) return null
+  const forbidden = NextResponse.json(
+    { error: "You can only ask about your own team. A commissioner can ask about any team in their league." },
+    { status: 403 },
+  )
+  if (!(await canCommissionerAct(leagueId, userId, 'league').catch(() => false))) return forbidden
+  const target = await assertLeagueMember(leagueId, managerId).catch(() => ({ ok: false as const }))
+  return target.ok ? null : forbidden
+}
+
+/** The roster form of the same rule: the roster must be in this league, and yours unless you commission it. */
+async function refuseOtherRoster(leagueId: string, userId: string, rosterId: string): Promise<NextResponse | null> {
+  const forbidden = NextResponse.json(
+    { error: "You can only ask about your own team. A commissioner can ask about any team in their league." },
+    { status: 403 },
+  )
+  const roster = await prisma.redraftRoster
+    .findFirst({ where: { id: rosterId, leagueId }, select: { ownerId: true } })
+    .catch(() => null)
+  if (!roster) return forbidden
+  if (roster.ownerId === userId) return null
+  return (await canCommissionerAct(leagueId, userId, 'league').catch(() => false)) ? null : forbidden
+}
+
+export async function POST(req: NextRequest) {
   let body: Record<string, unknown>
   try {
     body = (await req.json()) as Record<string, unknown>
   } catch {
+    const gate = await requireAfSub()
+    if (gate instanceof NextResponse) return gate
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
   const action = typeof body.action === 'string' ? body.action : ''
+
+  // The member player-AI action (C2CPlayerModal's campus read) is AF Intelligence — Pro, Commissioner,
+  // Supreme (owner, 2026-11-28). Every host/league tool keeps the Commissioner AI gate. Before any model call.
+  const gate = await requireMemberPlayerAiOrHostGate(action, C2C_MEMBER_PLAYER_AI_ACTIONS, requireAfSub, req)
+  if (gate instanceof NextResponse) return gate
+  const userId = gate
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId.trim() : ''
 
   if (action !== 'setup_rec' && leagueId) {
@@ -206,6 +257,8 @@ export async function POST(req: NextRequest) {
       case 'roster_balance': {
         const managerId = typeof body.managerId === 'string' ? body.managerId : userId
         if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+        const notYours = await refuseOtherManager(leagueId, userId, managerId)
+        if (notYours) return notYours
         const report = await getRosterBalanceAnalysis(leagueId, managerId)
         return NextResponse.json({ report })
       }
@@ -213,6 +266,8 @@ export async function POST(req: NextRequest) {
         const managerId = typeof body.managerId === 'string' ? body.managerId : userId
         const playerId = typeof body.playerId === 'string' ? body.playerId : ''
         if (!leagueId || !playerId) return NextResponse.json({ error: 'leagueId and playerId required' }, { status: 400 })
+        const notYours = await refuseOtherManager(leagueId, userId, managerId)
+        if (notYours) return notYours
         const cacheInputs = {
           action,
           leagueId,
@@ -284,6 +339,14 @@ export async function POST(req: NextRequest) {
         const draftType = typeof body.draftType === 'string' ? body.draftType : 'combined'
         const pickNumber = typeof body.pickNumber === 'number' ? body.pickNumber : 1
         if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+        const notYoursDraft = await refuseOtherManager(leagueId, userId, managerId)
+        if (notYoursDraft) return notYoursDraft
+        // A named roster follows the same rule (owner follow-up 2026-11-28): your own roster, or — as this
+        // league's commissioner — any roster IN this league. Checked before the roster's states or any model.
+        if (typeof body.rosterId === 'string') {
+          const notYoursRoster = await refuseOtherRoster(leagueId, userId, body.rosterId)
+          if (notYoursRoster) return notYoursRoster
+        }
         const rosterId =
           typeof body.rosterId === 'string'
             ? body.rosterId

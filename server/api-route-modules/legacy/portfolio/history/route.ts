@@ -15,6 +15,7 @@ import {
 } from '@/lib/sleeper-client';
 import { getCanonicalPlayerMapForSport } from '@/lib/canonical/getCanonicalPlayer';
 import type { LegacyDataStatus } from '@/lib/legacy/dataStatus';
+import { requireLegacyPlan } from '@/lib/legacy/legacyPlanGate';
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -198,6 +199,9 @@ async function fetchUserTrades(leagueId: string, sleeperUserId: string): Promise
 }
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/portfolio/history", tool: "LegacyPortfolioHistory" })(async (req: NextRequest) => {
+  // Sign-in, then AF Legacy (Supreme inherits it), before any Sleeper read or grading (owner, 2026-11-28).
+  const gate = await requireLegacyPlan('legacy_portfolio_history', 'your portfolio over time');
+  if (!gate.ok) return gate.response;
   try {
     const { searchParams } = new URL(req.url);
     const leagueId = searchParams?.get('leagueId');

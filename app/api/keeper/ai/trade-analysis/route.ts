@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
+import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
 import { evaluateStoredTrade } from '@/lib/decision-os/trade/evaluateStoredTrade'
 import { NO_LEAGUE_REASON } from '@/lib/decision-os/trade/evaluateTrade'
@@ -42,7 +42,10 @@ const STATUS_FOR: Record<string, number> = { not_member: 403, not_party: 403, no
 const KEEPER_TRADE_ANALYSIS_SURFACE = 'keeper-ai-trade-analysis'
 
 export async function POST(req: NextRequest) {
-  const gate = await requireAfSub()
+  // A member's own trade read is AF Intelligence — AF Pro, AF Commissioner, AF Supreme (owner, 2026-11-28;
+  // gating audit: a player trade tool, not commissioner work). It was `commissioner_ai_tools`. No screen
+  // calls this route yet; the tier is set so it is right when one does. Gated before any read.
+  const gate = await requireEntitlement('af_intelligence')
   if (gate instanceof Response) return gate
   const userId = gate
 

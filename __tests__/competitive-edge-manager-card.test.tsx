@@ -8,11 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 
-const h = vi.hoisted(() => ({ session: vi.fn(), depth: vi.fn(), load: vi.fn(), language: 'en' }))
+const h = vi.hoisted(() => ({ session: vi.fn(), depth: vi.fn(), load: vi.fn(), language: 'en', killed: [] as string[] }))
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/core-app/corePaywall', () => ({ resolveCoreDepth: h.depth }))
 vi.mock('@/lib/competitive-edge/managerRecordLoader', () => ({ loadLeagueManagerRecords: h.load }))
+vi.mock('@/lib/decision-os/flags', () => ({
+  resolveDecisionOsFeedFlags: async () => ({ enabled: (feed: string) => !h.killed.includes(feed), killed: h.killed }),
+}))
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useOptionalLanguage: () => ({ language: h.language }) }))
 
 import { GET } from '@/app/api/leagues/[leagueId]/manager-record/route'
@@ -55,6 +58,7 @@ const params = { params: Promise.resolve({ leagueId: 'L1' }) }
 beforeEach(() => {
   vi.clearAllMocks()
   h.language = 'en'
+  h.killed = []
   h.session.mockResolvedValue({ user: { id: 'u1' } })
   h.depth.mockResolvedValue(access(true))
   h.load.mockResolvedValue({ available: true, data: { league: { id: 'L1', name: 'X', platform: 'sleeper' }, viewerTeamExternalId: '1', records: [RECORD] } })
@@ -131,5 +135,48 @@ describe('ManagerRecordSheet', () => {
     expect(await screen.findByText('Mike adquirió un WR en 3 de sus 3 intercambios y no cedió ninguno.')).toBeTruthy()
     expect(screen.getByText('Intercambios')).toBeTruthy()
     expect(screen.getByText('Competitive Edge utiliza el historial de drafts de Sleeper. Las ligas de ESPN todavía no están conectadas.')).toBeTruthy()
+  })
+})
+
+/*
+ * The `managerRecords` kill switch (2026-11-28). The packet slice and the Chimmy tool already honour it
+ * (chimmyTools.ts `get_manager_record`); the screen did not, so killing the feed left the card reading the
+ * same history. Off now means: no read, and a plain "temporarily unavailable" — not an error, not an empty record.
+ */
+describe('the managerRecords kill switch', () => {
+  it('🛑 off: the route reads nothing and says unavailable — not an error status, not a record', async () => {
+    h.killed = ['managerRecords']
+    const res = await GET(req('3'), params)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.unavailable).toBe(true)
+    expect(body.record).toBeUndefined()
+    expect(h.load).not.toHaveBeenCalled()
+    expect(h.depth).not.toHaveBeenCalled()
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
+  })
+
+  it('another feed killed does not switch the card off', async () => {
+    h.killed = ['marketValues']
+    const body = await (await GET(req('3'), params)).json()
+    expect(body.record.manager.name).toBe('Mike')
+  })
+
+  it('the sheet draws a calm "temporarily unavailable" state, with no alert and no empty sections', async () => {
+    await act(async () => {
+      sheet(json({ unavailable: true }))
+    })
+    expect(await screen.findByTestId('manager-record-unavailable')).toBeTruthy()
+    expect(screen.getByTestId('manager-record-unavailable').textContent).toMatch(/temporarily unavailable/i)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText('Trades')).toBeNull()
+  })
+
+  it('Spanish: the unavailable state translates', async () => {
+    h.language = 'es'
+    await act(async () => {
+      sheet(json({ unavailable: true }))
+    })
+    expect((await screen.findByTestId('manager-record-unavailable')).textContent).toMatch(/temporalmente no disponible/i)
   })
 })

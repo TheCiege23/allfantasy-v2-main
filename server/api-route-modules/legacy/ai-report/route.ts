@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
+import { aiCostGate } from '@/lib/ai-protection/costGate';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -116,6 +117,10 @@ Output valid JSON only:
   "windowStatus": "READY_TO_COMPETE|REBUILDING|OVEREXTENDED|AGING_CORE|DIRECTION_NEEDED",
   "shareText": "shareable summary under 280 chars"
 }`;
+
+    // Owner, 2026-11-28: every model call is signed in and capped. The daily cap, immediately before the call.
+    const gated = await aiCostGate(req, 'legacy_ai_report', session.user.id);
+    if (gated) return gated;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',

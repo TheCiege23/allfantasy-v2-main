@@ -21,11 +21,18 @@ const lsKey = (leagueId: string) => `af-c2c-ai-prefs-${leagueId}`
 export function C2CAIPanel({
   leagueId,
   hasAfSub,
+  hasPlayerAi = hasAfSub,
   c2cConfig,
   isCommissioner = false,
 }: {
   leagueId: string
   hasAfSub: boolean
+  /**
+   * Chimmy Intelligence (`af_intelligence`: AF Pro, AF Commissioner, AF Supreme). The player-level buttons
+   * (breakout alerts, rankings, draft advice) use it, as the server does since 2026-11-28; the league tools
+   * stay on `hasAfSub` (AF Commissioner).
+   */
+  hasPlayerAi?: boolean
   c2cConfig: C2CConfigClient | null
   isCommissioner?: boolean
 }) {
@@ -100,7 +107,9 @@ export function C2CAIPanel({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100">
           <Lock className="h-4 w-4 shrink-0" />
           <span>
-            C2C Chimmy runs with AF Commissioner. Until then, these toggles are saved as preferences only.
+            {hasPlayerAi
+              ? 'C2C league tools run with AF Commissioner. The player tools below are included with your plan.'
+              : 'C2C Chimmy runs with AF Commissioner. Until then, these toggles are saved as preferences only.'}
           </span>
           <SubscriptionGateBadge
             featureId="commissioner_c2c_scouting"
@@ -207,7 +216,7 @@ export function C2CAIPanel({
           </button>
           <button
             type="button"
-            disabled={!hasAfSub || busy !== null}
+            disabled={!hasPlayerAi || busy !== null}
             onClick={() => void run('breakout_alerts')}
             className="rounded-lg border border-white/[0.1] px-3 py-2 text-[12px] text-white/85 disabled:opacity-40"
           >
@@ -215,7 +224,7 @@ export function C2CAIPanel({
           </button>
           <button
             type="button"
-            disabled={!hasAfSub || busy !== null}
+            disabled={!hasPlayerAi || busy !== null}
             onClick={() => void run('campus_rankings')}
             className="rounded-lg border border-white/[0.1] px-3 py-2 text-[12px] text-white/85 disabled:opacity-40"
           >
@@ -239,7 +248,7 @@ export function C2CAIPanel({
           </button>
           <button
             type="button"
-            disabled={!hasAfSub || busy !== null}
+            disabled={!hasPlayerAi || busy !== null}
             onClick={() =>
               void run('draft_advice', {
                 draftType: c2cConfig?.startupDraftFormat ?? 'combined',

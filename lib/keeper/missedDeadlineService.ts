@@ -4,7 +4,7 @@ import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { computeKeeperEligibility } from './eligibilityEngine'
 import { isWaiverCostLabel, placeTeamKeepers, placedKeeperLabel, readWaiverStack, resolveKeeperRules } from './keeperRules'
 import { chooseBestValueKeepers, readMissedDeadlineRule, type BestValueCandidate } from './missedDeadline'
-import { loadKeeperMarketRanks } from './keeperMarketValues'
+import { loadKeeperMarketRanks, type KeeperMarketRankOptions, type MarketRankLookup } from './keeperMarketValues'
 
 /**
  * Apply the league's missed-deadline rule (./missedDeadline) as keepers lock: every team with no
@@ -16,14 +16,49 @@ import { loadKeeperMarketRanks } from './keeperMarketValues'
  * so `submitKeeperSelections` leaves a `keeper_submitted_none` audit marker this reads. This is a
  * default for silence, never a second opinion on a choice.
  *
- * Fails safe to "no keepers": a lapsed plan, a sport without market values (FantasyCalc is NFL),
- * or an unreadable chart each leave the old behaviour in place, and say why in the audit log.
+ * Fails safe to "no keepers": a lapsed plan, a league whose market values cannot be read (no
+ * FantasyCalc chart for an NFL league; no buildable value board for NBA · MLB · NHL · NCAAB · SOCCER),
+ * or a board on which none of the silent teams' players is ranked each leave the old behaviour in
+ * place, and say why in the audit log. AF never keeps a player it cannot price.
+ *
+ * 🛑 THE RANKS ARE LOADED BEFORE THE KEEPER LOCK'S TRANSACTION, NEVER INSIDE IT (owner 2026-11-28).
+ * A board sport is ranked on the league's own value board — the same `loadKeeperMarketRanks(…,
+ * { includeBoardSports: true })` the player card and the Keepers tab read, so AF keeps exactly the
+ * players those surfaces call the best value. Building that board can take seconds, and doing it
+ * inside `withKeeperSessionLock` would hold the advisory lock and the transaction open for all of it.
+ * So `lockKeeperSelections` calls `preloadMissedDeadlineRanks` first and passes the result in; called
+ * with a transaction client and nothing preloaded, this does NOT load — it skips, and says so.
  */
 
 export type MissedDeadlineOutcome = {
   rule: 'auto_no_keepers' | 'auto_best_value'
   applied: Array<{ rosterId: string; keepers: Array<{ playerId: string; name: string; costLabel: string }> }>
-  skippedReason: null | 'not_entitled' | 'no_market_values' | 'no_silent_teams'
+  skippedReason: null | 'not_entitled' | 'no_market_values' | 'no_ranked_players' | 'no_silent_teams'
+}
+
+/** Market ranks loaded OUTSIDE the keeper lock's transaction. `rankOf: null` = none could be read. */
+export type MissedDeadlinePreload = { rankOf: MarketRankLookup | null }
+
+type PreloadOptions = Pick<KeeperMarketRankOptions, 'boardDeps'>
+
+function ranksFor(league: Parameters<typeof loadKeeperMarketRanks>[0], rosterCount: number, options: PreloadOptions = {}) {
+  return loadKeeperMarketRanks(league, rosterCount, { includeBoardSports: true, ...options }).catch(() => null)
+}
+
+/**
+ * The ranks the missed-deadline rule keeps by, read with the plain client — call it BEFORE opening the
+ * keeper lock's transaction. A league whose rule is "keep nobody" loads nothing. Never throws.
+ */
+export async function preloadMissedDeadlineRanks(leagueId: string, seasonId: string, options: PreloadOptions = {}): Promise<MissedDeadlinePreload> {
+  try {
+    const league = await prisma.league.findFirst({ where: { id: leagueId } })
+    if (!league || readMissedDeadlineRule(league.keeperMissedDeadlineRule) !== 'auto_best_value') return { rankOf: null }
+    const rosterCount = league.leagueSize ?? (await prisma.redraftRoster.count({ where: { leagueId, seasonId } }))
+    return { rankOf: await ranksFor(league, rosterCount, options) }
+  } catch (e) {
+    console.warn('[keeper] missed-deadline rank preload failed', e instanceof Error ? e.message : e)
+    return { rankOf: null }
+  }
 }
 
 /** Audit action a deliberate "no keepers" submission leaves (entityId = the incoming season). */
@@ -37,7 +72,12 @@ async function audit(db: Prisma.TransactionClient, leagueId: string, userId: str
   }
 }
 
-export async function applyMissedDeadlineRule(leagueId: string, seasonId: string, db: Prisma.TransactionClient = prisma): Promise<MissedDeadlineOutcome> {
+export async function applyMissedDeadlineRule(
+  leagueId: string,
+  seasonId: string,
+  db: Prisma.TransactionClient = prisma,
+  preloaded?: MissedDeadlinePreload,
+): Promise<MissedDeadlineOutcome> {
   const league = await db.league.findFirst({ where: { id: leagueId } })
   if (!league) return { rule: 'auto_no_keepers', applied: [], skippedReason: null }
   const rule = readMissedDeadlineRule(league.keeperMissedDeadlineRule)
@@ -67,9 +107,14 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
 
   const sport = String(league.sport ?? 'NFL').toUpperCase()
   const teams = league.leagueSize ?? rosters.length
-  const rankOf = await loadKeeperMarketRanks(league, rosters.length)
+  const source = sport === 'NFL' ? 'fantasycalc' : 'league_value_board'
+  // Outside a transaction (the plain client) it is safe to load here; inside one, only preloaded ranks count.
+  const notPreloaded = !preloaded && db !== prisma
+  const rankOf = preloaded ? preloaded.rankOf : notPreloaded ? null : await ranksFor(league, rosters.length)
   if (!rankOf) {
-    await audit(db, leagueId, null, 'keeper_missed_deadline_skipped', { reason: 'no_market_values', sport, rosterIds: silent.map((r) => r.id) })
+    await audit(db, leagueId, null, 'keeper_missed_deadline_skipped', {
+      reason: 'no_market_values', sport, source, ...(notPreloaded ? { detail: 'ranks_not_preloaded' } : {}), rosterIds: silent.map((r) => r.id),
+    })
     return { rule, applied: [], skippedReason: 'no_market_values' }
   }
 
@@ -84,6 +129,7 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
   const maxKeepers = league.keeperCount ?? 3
 
   const applied: MissedDeadlineOutcome['applied'] = []
+  let anyRanked = false
   for (const roster of silent) {
     const live = roster.players.filter((p) => !p.droppedAt)
     const byId = new Map(live.map((p) => [p.playerId, p]))
@@ -99,6 +145,7 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
           waiver: isWaiverCostLabel(e.projectedCost),
         }
       })
+    if (candidates.some((c) => c.marketRank != null)) anyRanked = true
     const chosen = chooseBestValueKeepers({ candidates, maxKeepers, teams, rules, totalRounds, waiverStack: readWaiverStack(league.settings) })
     if (!chosen.length) continue
     const placement = placeTeamKeepers(rules, chosen.map((c) => ({ playerId: c.playerId, costRound: c.costRound })), { totalRounds })
@@ -123,6 +170,11 @@ export async function applyMissedDeadlineRule(leagueId: string, seasonId: string
     }
     if (kept.length) applied.push({ rosterId: roster.id, keepers: kept })
   }
-  await audit(db, leagueId, null, 'keeper_missed_deadline_applied', { rule, applied })
+  if (!anyRanked) {
+    // A board (or chart) that prices none of these teams' players is not a reason to guess.
+    await audit(db, leagueId, null, 'keeper_missed_deadline_skipped', { reason: 'no_ranked_players', sport, source, rosterIds: silent.map((r) => r.id) })
+    return { rule, applied: [], skippedReason: 'no_ranked_players' }
+  }
+  await audit(db, leagueId, null, 'keeper_missed_deadline_applied', { rule, sport, source, applied })
   return { rule, applied, skippedReason: null }
 }

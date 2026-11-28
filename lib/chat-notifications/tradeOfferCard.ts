@@ -24,7 +24,7 @@
 export const TRADE_OFFER_META_KEY = 'tradeOffer'
 export const TRADE_OFFER_STATUS_META_KEY = 'tradeOfferStatus'
 
-export type TradeOfferSource = 'native' | 'redraft' | 'draft_pick' | 'sleeper' | 'yahoo'
+export type TradeOfferSource = 'native' | 'redraft' | 'draft_pick' | 'sleeper' | 'yahoo' | 'espn'
 
 export type TradeOfferStatus =
   | 'pending'
@@ -81,7 +81,7 @@ export type TradeOfferCard = {
    */
   directionKnown: boolean
   /** Set for an imported league, where the offer can only be answered on the platform itself. */
-  answerOn?: 'sleeper' | 'yahoo' | null
+  answerOn?: 'sleeper' | 'yahoo' | 'espn' | null
   createdAt: string
 }
 
@@ -92,7 +92,7 @@ export type TradeOfferStatusNote = {
   href: string | null
 }
 
-const PROVIDER_NAME: Record<'sleeper' | 'yahoo', string> = { sleeper: 'Sleeper', yahoo: 'Yahoo' }
+const PROVIDER_NAME: Record<'sleeper' | 'yahoo' | 'espn', string> = { sleeper: 'Sleeper', yahoo: 'Yahoo', espn: 'ESPN' }
 
 export const TRADE_OFFER_NOTE_MAX = 500
 
@@ -146,7 +146,7 @@ export function buildTradeStatusMessageText(input: {
   receiverName?: string | null
   /** One extra sentence, e.g. "It goes to commissioner review before it processes." */
   detail?: string | null
-  answerOn?: 'sleeper' | 'yahoo' | null
+  answerOn?: 'sleeper' | 'yahoo' | 'espn' | null
 }): string {
   const actor = input.actorName?.trim() || null
   const detail = input.detail?.trim() ? ` ${input.detail.trim()}` : ''
@@ -194,7 +194,7 @@ function isStatus(v: unknown): v is TradeOfferStatus {
 }
 
 function isSource(v: unknown): v is TradeOfferSource {
-  return v === 'native' || v === 'redraft' || v === 'draft_pick' || v === 'sleeper' || v === 'yahoo'
+  return v === 'native' || v === 'redraft' || v === 'draft_pick' || v === 'sleeper' || v === 'yahoo' || v === 'espn'
 }
 
 /** A link we are willing to render: same-origin path only. */
@@ -232,7 +232,7 @@ export function readTradeOffer(meta: unknown): TradeOfferCard | null {
     href: safeTradeHref(raw.href),
     hrefs: Object.keys(hrefs).length ? hrefs : null,
     directionKnown: raw.directionKnown !== false,
-    answerOn: raw.answerOn === 'sleeper' || raw.answerOn === 'yahoo' ? raw.answerOn : null,
+    answerOn: raw.answerOn === 'sleeper' || raw.answerOn === 'yahoo' || raw.answerOn === 'espn' ? raw.answerOn : null,
     createdAt: str(raw.createdAt, 40) ?? '',
   }
 }

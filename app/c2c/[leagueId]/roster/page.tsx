@@ -19,7 +19,7 @@ export default async function C2CRosterPage({ params }: { params: Promise<{ leag
 
   return (
     <C2CPageFrame leagueId={leagueId} title="C2C franchise" backTestId="c2c-roster-back">
-      <C2CRosterClient leagueId={leagueId} userId={session.user.id} hasAfSub={plans.commissioner} />
+      <C2CRosterClient leagueId={leagueId} userId={session.user.id} hasAfSub={plans.pro || plans.commissioner} />
     </C2CPageFrame>
   )
 }

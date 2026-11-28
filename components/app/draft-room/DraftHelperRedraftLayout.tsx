@@ -177,7 +177,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
             <div className="grid gap-2">
               <InContextMonetizationCard
                 title="Draft prep access"
-                featureId="draft_prep"
+                featureId="draft_room_ai_explanation"
                 tokenRuleCodes={['ai_draft_pick_explanation']}
                 testIdPrefix="draft-prep-monetization"
               />

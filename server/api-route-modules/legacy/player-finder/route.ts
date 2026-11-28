@@ -2,6 +2,7 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
+import { requirePlanThenAiCostGate } from '@/lib/ai-protection/planCostGate'
 import { getLeagueRosters, getLeagueUsers, getPlayersBySport } from '@/lib/sleeper-client'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
@@ -261,6 +262,18 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/player-finder", tool: 
     if (!searchQuery || searchQuery.length < 2) {
       return NextResponse.json({ error: 'Search query must be at least 2 characters' }, { status: 400 })
     }
+
+    /*
+     * 🛑 AF PRO / AF LEGACY / AF SUPREME, THEN A DAILY CAP (owner, 2026-11-28). One search fans out to ~20 model calls (a
+     * buy/sell signal per owned player), so this is an expensive player tool. Both run before any league read
+     * or model call; the identity gate above only ever resolves a signed-in session here (no guest).
+     */
+    const planGated = await requirePlanThenAiCostGate(req, {
+      userId: gate.identity.actorId,
+      featureId: 'player_finder_stock_ai',
+      capKey: 'player_finder_ai',
+    })
+    if (planGated) return planGated
 
     const sport: Sport = sportRaw === 'nba' ? 'nba' : 'nfl'
 

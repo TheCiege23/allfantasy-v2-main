@@ -4,7 +4,15 @@ import { prisma } from '@/lib/prisma'
 import type { PricedAsset } from '@/lib/hybrid-valuation'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-console/types'
-import { applyDevyPricing, pickPolicyRefusal, priceHeldDevyAssets, type HeldDevyPlayer } from './leagueAssetRules'
+import {
+  applyDevyPickPricing,
+  applyDevyPricing,
+  devyPickBoard,
+  nextDraftYearFor,
+  pickPolicyRefusal,
+  priceHeldDevyAssets,
+  type HeldDevyPlayer,
+} from './leagueAssetRules'
 
 /**
  * The league half of Phase 9's asset rules (`./leagueAssetRules.ts`), shared by `createLeagueTradeGrader`
@@ -51,12 +59,44 @@ export async function loadHeldDevyPlayers(leagueId: string): Promise<HeldDevyPla
       select: {
         id: true,
         name: true,
+        sport: true,
         position: true,
         ppaSeasonTotal: true,
         recruitingComposite: true,
         recruitingStars: true,
         draftEligibleYear: true,
       },
+    })
+    .catch(() => [])
+  return rows.map((r) => ({
+    devyPlayerId: r.id,
+    name: r.name,
+    sport: r.sport ?? null,
+    position: r.position ?? null,
+    ppaSeasonTotal: r.ppaSeasonTotal ?? null,
+    recruitingComposite: r.recruitingComposite ?? null,
+    recruitingStars: r.recruitingStars ?? null,
+    draftEligibleYear: r.draftEligibleYear ?? null,
+  }))
+}
+
+const DEVY_SKILL_POSITIONS = ['QB', 'RB', 'WR', 'TE']
+
+/**
+ * The prospects a devy-draft pick in this league can still select: every not-yet-drafted skill prospect
+ * no team here holds rights on. DB-first (`DevyRights`, `DevyPlayer`). Empty on a read failure — every
+ * devy pick is then withheld, never priced on the rookie chart.
+ */
+export async function loadAvailableDevyPool(leagueId: string): Promise<HeldDevyPlayer[]> {
+  const rights = await prisma.devyRights
+    .findMany({ where: { leagueId, state: { notIn: [...DEVY_RIGHTS_NOT_HELD_STATES] } }, select: { devyPlayerId: true } })
+    .catch(() => null)
+  if (!rights) return []
+  const taken = [...new Set(rights.map((r) => r.devyPlayerId))]
+  const rows = await prisma.devyPlayer
+    .findMany({
+      where: { graduatedToNFL: false, position: { in: DEVY_SKILL_POSITIONS }, ...(taken.length ? { id: { notIn: taken } } : {}) },
+      select: { id: true, name: true, position: true, ppaSeasonTotal: true, recruitingComposite: true, recruitingStars: true, draftEligibleYear: true },
     })
     .catch(() => [])
   return rows.map((r) => ({
@@ -102,15 +142,55 @@ export async function priceEvaluatorDevy(
   }
 }
 
-type LeagueAssetPolicyDeps = { loadHeld: (leagueId: string) => Promise<HeldDevyPlayer[]> }
+type LeagueAssetPolicyDeps = {
+  loadHeld: (leagueId: string) => Promise<HeldDevyPlayer[]>
+  /** The undrafted pool a devy-draft pick selects from. */
+  loadPool?: (leagueId: string) => Promise<HeldDevyPlayer[]>
+}
 
 export function createLeagueAssetPolicy(
-  league: { id: string; sport: string; leagueType: LeagueTypeBasis; season?: number | null; status?: string | null },
-  deps: LeagueAssetPolicyDeps = { loadHeld: loadHeldDevyPlayers },
+  league: {
+    id: string
+    sport: string
+    leagueType: LeagueTypeBasis
+    season?: number | null
+    status?: string | null
+    /** Teams in the league — places a devy-draft pick's slot. */
+    leagueSize?: number | null
+  },
+  deps: LeagueAssetPolicyDeps = { loadHeld: loadHeldDevyPlayers, loadPool: loadAvailableDevyPool },
 ): LeagueAssetPolicy {
   const isNfl = String(league.sport).toUpperCase() === 'NFL'
   let held: Promise<HeldDevyPlayer[]> | null = null
   const heldOnce = () => (held ??= deps.loadHeld(league.id).catch(() => []))
+  let board: Promise<number[]> | null = null
+  const boardOnce = (season: number) =>
+    (board ??= (deps.loadPool ?? loadAvailableDevyPool)(league.id).catch(() => [] as HeldDevyPlayer[]).then((pool) => devyPickBoard(pool, season)))
+
+  /*
+   * A devy-draft pick (`pool: 'devy'`) buys a prospect, so it is priced on the prospects' scale or
+   * withheld — never left on the NFL rookie chart (see `devyDraftPickValue`). C2C keeps its own pick rules
+   * (`footballTradeFormatGrade`), which already withhold a pick without its Campus/Canton/Combined side.
+   */
+  const priceDevyPicks = async (side: DevyPricedSide & { inputs: readonly TradeAssetInput[] }): Promise<DevyPricedSide> => {
+    if (league.leagueType.type === 'c2c' || !side.inputs.some((a) => a.kind === 'pick' && a.pool === 'devy')) return side
+    const season = league.season ?? null
+    const refusal = !isNfl
+      ? null // pickPolicyRefusal already refuses every pick outside the NFL.
+      : season == null
+        ? 'A devy-draft pick cannot be priced: the league season is not on file, so neither is the pool it selects from.'
+        : null
+    const out = applyDevyPickPricing({
+      inputs: side.inputs,
+      lines: side.lines,
+      priced: side.priced,
+      board: season != null && isNfl ? await boardOnce(season) : [],
+      teams: league.leagueSize ?? null,
+      nextDraftYear: season != null ? nextDraftYearFor(season, league.status) : 0,
+      refusal,
+    })
+    return { lines: out.lines, priced: out.priced, devyPriced: side.devyPriced, unmeasured: [...side.unmeasured, ...out.refused] }
+  }
 
   return {
     pickRefusal(assets) {
@@ -123,12 +203,15 @@ export function createLeagueAssetPolicy(
       })
     },
     async priceDevy(side) {
-      const unchanged: DevyPricedSide = { lines: side.lines, priced: side.priced, devyPriced: 0, unmeasured: [] }
-      // Nothing the chart missed, or no season to measure the wait from: nothing to read.
-      if (!isNfl || league.season == null || !side.lines.some((l) => l.unpriced)) return unchanged
-      const list = await heldOnce()
-      if (list.length === 0) return unchanged
-      return applyDevyPricing({ inputs: side.inputs, lines: side.lines, priced: side.priced, held: list, currentSeason: league.season })
+      const players = await (async (): Promise<DevyPricedSide> => {
+        const unchanged: DevyPricedSide = { lines: side.lines, priced: side.priced, devyPriced: 0, unmeasured: [] }
+        // Nothing the chart missed, or no season to measure the wait from: nothing to read.
+        if (!isNfl || league.season == null || !side.lines.some((l) => l.unpriced)) return unchanged
+        const list = await heldOnce()
+        if (list.length === 0) return unchanged
+        return applyDevyPricing({ inputs: side.inputs, lines: side.lines, priced: side.priced, held: list, currentSeason: league.season })
+      })()
+      return priceDevyPicks({ ...players, inputs: side.inputs })
     },
   }
 }

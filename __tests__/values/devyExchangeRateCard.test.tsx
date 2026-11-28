@@ -48,7 +48,7 @@ describe('the exchange rate card', () => {
     openTrading()
     const input = screen.getByLabelText(/market units per devy point/i) as HTMLInputElement
     expect(input.value).toBe('')
-    expect(screen.getByText(/mixed devy\/NFL trades are reported as ungradeable/i)).toBeTruthy()
+    expect(screen.getByText(/mixed devy\/NFL trades are priced at their measured option value/i)).toBeTruthy()
   })
 
   it('shows an existing rate the league already saved', () => {
@@ -103,7 +103,7 @@ describe('the exchange rate card', () => {
     render(<DevyLeagueSettingsHub ctx={ctx(DEVY_CFG())} />)
     openTrading()
     expect(screen.getByText(/house rule rather than/i)).toBeTruthy()
-    expect(screen.getByText(/no such exchange rate has ever been measured/i)).toBeTruthy()
+    expect(screen.getByText(/the same number the grade uses/i)).toBeTruthy()
   })
 
   it('is read-only for a manager who is not the commissioner', () => {

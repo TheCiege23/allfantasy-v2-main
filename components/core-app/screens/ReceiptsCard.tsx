@@ -247,7 +247,24 @@ function AfRecord({ r, language }: { r: LedgerRecordView; language: string }) {
   )
 }
 
-export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null; help?: ReactNode }) {
+/**
+ * The card's link to the full log (owner, 2026-11-28): the summary above stays free; the log at
+ * /core/decisions is AF Pro + AF Supreme (`decision_log_history`). The link always goes there — the
+ * screen draws its own lock from the server's paywall read — and, when the server said locked, the link
+ * itself says which plan opens it, so the tap is not a surprise. `fullLog` null (unread) shows the plain
+ * link; the destination still locks.
+ */
+export type ReceiptsFullLogAccess = { unlocked: boolean; planName: string } | null
+
+export function ReceiptsCard({
+  data,
+  help,
+  fullLog = null,
+}: {
+  data: DecisionReceiptsData | null
+  help?: ReactNode
+  fullLog?: ReceiptsFullLogAccess
+}) {
   const { language } = useOptionalLanguage()
   const es = spanishFlag(language)
   const m = useMessages(receiptsCardMessages)
@@ -464,6 +481,24 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
           {m.sleeperOnly}
         </p>
       ) : null}
+
+      <p className="af3a-receipt-full-log">
+        <Link
+          href="/core/decisions"
+          data-testid="receipts-full-log-link"
+          data-locked={fullLog && !fullLog.unlocked ? 'true' : undefined}
+        >
+          {fullLog && !fullLog.unlocked ? (
+            <>
+              <span aria-hidden>🔒 </span>
+              {m.fullLogLocked(fullLog.planName)}
+            </>
+          ) : (
+            m.fullLog
+          )}{' '}
+          <span aria-hidden>›</span>
+        </Link>
+      </p>
     </section>
   )
 }

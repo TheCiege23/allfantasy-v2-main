@@ -1,6 +1,13 @@
 /**
  * The exchange rate between devy points and market units — set by a commissioner, never inferred.
  *
+ * ⚠ SINCE 2026-11-28 THIS IS AN OVERRIDE, NOT THE ONLY WAY PAST A REFUSAL. A prospect is now priced
+ * by `lib/devy/devyOptionValue.ts` (measured P(drafted) × measured arrival value, already on the
+ * FantasyCalc dynasty board), so a mixed deal no longer needs a conversion at all and is graded on
+ * that number by default (`lib/devy/devyTradeVerdict.ts`). A commissioner's rate replaces it only
+ * where a caller explicitly opts in, and always with `DEVY_BRIDGE_CAVEAT`. The paragraphs below are
+ * the history of why the bridge was built; their "refused" is the pre-option-value default.
+ *
  * 🛑 THIS DOES NOT MEASURE ANYTHING, AND THAT IS THE ENTIRE DESIGN. `lib/trade-intel/
  * devyOutlook.ts` establishes that nothing prices college players: no vendor sells a devy
  * market, and P(reaches the NFL) has never been observed here. A trade spanning both scales is
@@ -109,7 +116,7 @@ const UNSET: DevyBridgeRefusal = {
   reason: 'unset',
   detail:
     'No devy exchange rate is set for this league, so a trade spanning college and NFL assets ' +
-    'is reported as ungradeable rather than converted.',
+    'prices each prospect at his measured option value — the same number the grade uses.',
 }
 
 /**
@@ -135,7 +142,7 @@ export function resolveDevyBridge(settings: unknown): DevyBridgeOutcome {
     return {
       ok: false,
       reason: 'not_a_number',
-      detail: `The devy exchange rate on this league is not a number (${JSON.stringify(raw)}), so it is ignored and the trade is reported as ungradeable.`,
+      detail: `The devy exchange rate on this league is not a number (${JSON.stringify(raw)}), so it is ignored and each prospect is priced at his measured option value instead.`,
     }
   }
 
@@ -148,7 +155,7 @@ export function resolveDevyBridge(settings: unknown): DevyBridgeOutcome {
         `${DEVY_BRIDGE_MIN}–${DEVY_BRIDGE_MAX}. At ${DEVY_BRIDGE_MAX} the top devy prospect ` +
         `would price level with the most valuable NFL asset in existence, and at ` +
         `${DEVY_BRIDGE_MIN} the entire devy board rounds to noise — so it is ignored rather ` +
-        'than applied.',
+        'than applied, and each prospect is priced at his measured option value instead.',
     }
   }
 

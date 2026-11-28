@@ -1,6 +1,10 @@
 /**
- * What a college player is worth in a trade — in devy points, and only against
+ * What a college player is worth on the devy BOARD — in devy points, and only against
  * other devy assets.
+ *
+ * ⚠ NOT A TRADE VALUE ANY MORE (2026-11-28). Trades price prospects by
+ * `lib/devy/devyOptionValue.ts`, the grade's number; see the retirement note above
+ * `rankDevyPool` below.
  *
  * ⚠ READ devyOutlook.ts FIRST. Nothing prices college players: `DevyAdp` is
  * empty, no NCAAF trade-value source exists, and P(reaches the NFL) has never
@@ -191,110 +195,15 @@ export function devyAssetValue(args: {
 const DEVY_CURVE_GAP =
   'the value curve shape is borrowed from the NFL rookie-pick curve, which was fitted to pro trades — no devy trade has ever tested it'
 
-export type DevyTradeSide = {
-  label: string
-  value: DevyAssetValue
-}
-
-type DevyTradeVerdict = {
-  scale: DevyPointsScale
-  giveTotal: number
-  getTotal: number
-  /** get - give, in devy points. Positive means the viewer gains. */
-  net: number
-  /** Assets we could not price, by side. */
-  giveUnpriced: string[]
-  getUnpriced: string[]
-  /**
-   * False when the unpriced share is large enough that the totals do not
-   * describe the deal. A verdict is withheld rather than qualified.
-   */
-  conclusive: boolean
-  basis: string
-  gaps: string[]
-}
-
-/**
- * Compare two sides of a devy-for-devy trade.
- *
- * ⚠ REFUSES WHEN EITHER SIDE IS ENTIRELY UNPRICED. Summing one ranked player
- * against two unranked ones and reporting a winner would be arithmetic on a
- * number we do not have — the same defect as grading a trade C off zero points
- * (see hasNoSignal in tradeGradeEmail.ts).
- *
- * ⚠ THIS DOES NOT HANDLE MIXED TRADES. A deal containing NFL assets must go
- * through refuseMixedScaleGrade in devyOutlook.ts first; devy points and market
- * values do not share an axis.
+/*
+ * 🛑 `gradeDevyTrade` WAS RETIRED 2026-11-28. It compared the two sides of a devy-for-devy deal in
+ * devy points, while the one grade priced the same prospects by `lib/devy/devyOptionValue.ts` — so a
+ * manager could see a letter from one number and a Chimmy verdict from another. Every trade verdict
+ * now reads the grade's own value (`lib/devy/devyTradeVerdict.ts`). Devy points survive only as the
+ * devy BOARD's ordering (`devyAssetValue` above, `lib/devy/devyValueBoard.ts`) and as the
+ * commissioner bridge's input denomination (`lib/devy/devyMarketBridge.ts`). Do not restore a
+ * devy-points trade verdict.
  */
-export function gradeDevyTrade(args: {
-  give: DevyTradeSide[]
-  get: DevyTradeSide[]
-}): DevyTradeVerdict {
-  const sum = (side: DevyTradeSide[]) =>
-    side.reduce((acc, a) => acc + (a.value.value ?? 0), 0)
-  const unpriced = (side: DevyTradeSide[]) =>
-    side.filter((a) => a.value.value == null).map((a) => a.label)
-
-  const giveTotal = sum(args.give)
-  const getTotal = sum(args.get)
-  const giveUnpriced = unpriced(args.give)
-  const getUnpriced = unpriced(args.get)
-
-  const gaps = [...new Set([...args.give, ...args.get].flatMap((a) => a.value.gaps))]
-
-  /*
-   * A side with assets, none of which could be priced, contributes 0 to a
-   * comparison — which reads as "he gave up nothing" rather than "we cannot
-   * see what he gave up".
-   */
-  const giveBlind = args.give.length > 0 && giveUnpriced.length === args.give.length
-  const getBlind = args.get.length > 0 && getUnpriced.length === args.get.length
-  const conclusive = !giveBlind && !getBlind
-
-  if (!conclusive) {
-    const blindSide = giveBlind ? 'sending' : 'receiving'
-    const names = (giveBlind ? giveUnpriced : getUnpriced).join(', ')
-    return {
-      scale: DEVY_POINTS,
-      giveTotal,
-      getTotal,
-      net: getTotal - giveTotal,
-      giveUnpriced,
-      getUnpriced,
-      conclusive: false,
-      gaps,
-      basis: `No verdict: every player you are ${blindSide} (${names}) is unranked on the devy board, so one side of this deal has no value at all to compare. Treating that as zero would report the other side as a free win.`,
-    }
-  }
-
-  const net = getTotal - giveTotal
-  const partial = giveUnpriced.length + getUnpriced.length
-  const caveat =
-    partial > 0
-      ? ` ${partial} player${partial === 1 ? '' : 's'} in this deal could not be ranked and ${
-          partial === 1 ? 'is' : 'are'
-        } not counted on either total.`
-      : ''
-
-  const direction =
-    net === 0
-      ? 'Both sides come out level in devy points.'
-      : net > 0
-        ? `You gain ${net} devy points.`
-        : `You give up ${Math.abs(net)} devy points.`
-
-  return {
-    scale: DEVY_POINTS,
-    giveTotal,
-    getTotal,
-    net,
-    giveUnpriced,
-    getUnpriced,
-    conclusive: true,
-    gaps,
-    basis: `${direction} You send ${giveTotal} and receive ${getTotal}, counted in devy points, which rank devy assets against each other and do not convert to the values used for NFL players.${caveat}`,
-  }
-}
 
 /**
  * Rank a devy pool by standing, best first.

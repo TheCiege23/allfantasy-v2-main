@@ -7,6 +7,8 @@ import { MockQueueCard, type MockQueueCardState } from '@/components/chimmy/Mock
 import { applyMockQueueProposal, readMockQueueProposal, type MockQueueProposal } from '@/lib/mock-draft/mockChimmyBoard'
 import { CHIMMY_PRO_TOOL_UPGRADE_HREF, proUpsellLine, readProUpsell, type ChimmyProOnlyTool } from '@/lib/chimmy/answerPolish'
 import { postChimmyRequest } from '@/lib/chimmy/postRequest'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
 const QUICK_ACTIONS = [
   { key: 'best-pick', label: 'Best Pick Available', path: '/api/draft/ai/best-pick' },
@@ -101,6 +103,11 @@ export function ChimmyDraftChat({ sessionId, context, mock }: Props) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [autoSuggest, setAutoSuggest] = useState(true)
+  /**
+   * The quick actions are AF Pro / AF Supreme (owner, 2026-11-28). The first plan refusal locks them, turns
+   * auto-suggest off (it would otherwise ask again on every pick) and shows the plan with its link.
+   */
+  const [proLock, setProLock] = useState<PlanRefusal | null>(null)
   const lastAutoForOverallRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -149,8 +156,15 @@ export function ChimmyDraftChat({ sessionId, context, mock }: Props) {
             ...(opts.question ? { question: opts.question } : {}),
           }),
         })
-        const j = (await r.json().catch(() => ({}))) as { result?: unknown; error?: string }
-        if (j.error) {
+        const j = (await r.json().catch(() => ({}))) as { result?: unknown; error?: string; message?: string }
+        const refused = r.ok ? null : readPlanRefusal(r.status, j, { returnTo: currentPathForReturn() })
+        if (refused?.kind === 'plan') {
+          setProLock(refused)
+          setAutoSuggest(false)
+        } else if (refused) {
+          // The daily cap or sign-in: the server's sentence says what to do next.
+          append({ role: 'chimmy', text: refused.message, source: opts.auto ? 'auto' : opts.quickKey ?? 'ask' })
+        } else if (j.error) {
           append({ role: 'chimmy', text: j.error, source: opts.auto ? 'auto' : opts.quickKey ?? 'ask' })
         } else {
           append({
@@ -176,7 +190,7 @@ export function ChimmyDraftChat({ sessionId, context, mock }: Props) {
 
   // Proactive DM: when user is OTC or 1 pick away, fetch best-pick automatically (once per overall).
   useEffect(() => {
-    if (!autoSuggest) return
+    if (!autoSuggest || proLock) return
     if (!state || state.status !== 'active') return
     if (picksUntilUser == null || picksUntilUser > 1) return
     if (lastAutoForOverallRef.current === currentOverall) return
@@ -189,7 +203,7 @@ export function ChimmyDraftChat({ sessionId, context, mock }: Props) {
           : `You're up next (1 pick away) — Chimmy is scouting…`,
     })
     void callAi('/api/draft/ai/best-pick', { auto: true })
-  }, [autoSuggest, state, picksUntilUser, currentOverall, append, callAi])
+  }, [autoSuggest, proLock, state, picksUntilUser, currentOverall, append, callAi])
 
   // Autoscroll to newest.
   useEffect(() => {
@@ -300,12 +314,13 @@ export function ChimmyDraftChat({ sessionId, context, mock }: Props) {
         </label>
       </div>
       <div className="border-b border-white/[0.06] px-2 py-2">
+        {proLock ? <PlanRefusalNotice refusal={proLock} className="mb-2" /> : null}
         <div className="flex flex-wrap gap-1">
           {QUICK_ACTIONS.map((b) => (
             <button
               key={b.path}
               type="button"
-              disabled={loading}
+              disabled={loading || proLock != null}
               onClick={() => void callAi(b.path, { quickKey: b.key })}
               className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-200/90 hover:bg-cyan-500/20 disabled:opacity-50"
               data-testid={`chimmy-quick-${b.key}`}

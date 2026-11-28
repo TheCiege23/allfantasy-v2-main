@@ -17,6 +17,7 @@ import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster
 import { resolveLinkedPlatformUserIds } from '../game-day/UserPlayerExposureService'
 import { collectRosterIds, isForeignIdSpace, stripForeignIds } from '@/lib/core-app/rosterIdSpace'
 import { declaredAvailability } from '@/lib/core-app/declaredAvailability'
+import { declaredBenchOf, declaredSleeperId, toDeclaredSleeperId } from '@/lib/core-app/declaredSleeperId'
 
 export interface ReplacementCandidate {
   playerId: string
@@ -65,6 +66,13 @@ export interface ReplacementOptionsResult {
    * the free-agent list stands, each one's own row hidden by name; absent for every other league.
    */
   unmatchedRostered?: number
+  /**
+   * A pasted Yahoo league only. `starters_not_recorded`: the user's roster records no starter, so its
+   * bench cannot be told apart from its starters and `benchOptions` is empty on purpose.
+   */
+  benchLimitation?: 'starters_not_recorded'
+  /** A pasted Yahoo league only: bench players no Sleeper-id read can see — counted, never listed. */
+  benchUnmatched?: number
 }
 
 const NATIVE_PLATFORMS = new Set(['', 'allfantasy', 'af', 'manual', 'native'])
@@ -212,7 +220,8 @@ export async function resolveReplacementOptions(args: {
         if (!id) continue
         rosteredIds.add(id)
         if (id === affectedPlayerId && typeof p.position === 'string') affectedPosition = p.position
-        if (roster === userRoster && BENCH_SECTIONS.includes(sectionKey)) {
+        // A pasted league's bench is read from its plain roster list below, not from id-only sections.
+        if (!declared && roster === userRoster && BENCH_SECTIONS.includes(sectionKey)) {
           benchRows.push({
             id,
             name: typeof p.name === 'string' ? p.name : null,
@@ -241,6 +250,31 @@ export async function resolveReplacementOptions(args: {
       claimTarget,
       lineupTarget,
       limitation: 'no_user_roster',
+    }
+  }
+
+  /*
+   * A PASTED Yahoo roster: the bench is its plain list minus the recorded starters and IR
+   * (declaredSleeperId.ts `declaredBenchOf`), named and positioned from the `player_metadata` the import
+   * stored under each roster id. Its `lineup_sections` entries are bare ids, which read as position
+   * "UTIL" — so the affected player's position comes from that metadata too, or is left unknown.
+   */
+  let benchLimitation: ReplacementOptionsResult['benchLimitation']
+  let benchUnmatched: number | undefined
+  if (declared) {
+    const raw = rawRosters.find((r) => r.platformUserId === userRoster.platformUserId)?.playerData
+    const meta = metadataOf(raw)
+    const affectedMeta = meta.get(toDeclaredSleeperId(declaredSleeperId(affectedPlayerId) ?? affectedPlayerId))
+    affectedPosition = affectedMeta?.position ?? (affectedPosition === 'UTIL' ? null : affectedPosition)
+    const bench = declaredBenchOf(raw)
+    if (!bench.recorded) {
+      benchLimitation = 'starters_not_recorded'
+    } else {
+      benchUnmatched = bench.unmatched
+      for (const { rosterId, sleeperId } of bench.priced) {
+        const m = meta.get(rosterId)
+        benchRows.push({ id: sleeperId, name: m?.name ?? null, position: m?.position ?? null })
+      }
     }
   }
 
@@ -344,5 +378,21 @@ export async function resolveReplacementOptions(args: {
     lineupTarget,
     limitation: null,
     ...(declared ? { unmatchedRostered: declared.unmatched } : {}),
+    ...(benchLimitation ? { benchLimitation } : {}),
+    ...(benchUnmatched !== undefined ? { benchUnmatched } : {}),
   }
+}
+
+/** A roster's `player_metadata` (written by the import for every id): stored id → name and position. */
+function metadataOf(playerData: unknown): Map<string, { name: string | null; position: string | null }> {
+  const out = new Map<string, { name: string | null; position: string | null }>()
+  const meta = playerData && typeof playerData === 'object' ? (playerData as Record<string, unknown>).player_metadata : null
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return out
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+  for (const [id, row] of Object.entries(meta as Record<string, unknown>)) {
+    if (!row || typeof row !== 'object') continue
+    const r = row as Record<string, unknown>
+    out.set(id, { name: text(r.name), position: text(r.position)?.toUpperCase() ?? null })
+  }
+  return out
 }

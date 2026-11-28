@@ -4,6 +4,7 @@ import { requireVerifiedUser } from "@/lib/auth-guard"
 import { getEntryBracketData } from "@/lib/brackets/getEntryBracketData"
 import { computePickDistribution, computeBracketUniqueness } from "@/lib/brackets/intelligence/data-engine"
 import { openaiChatJson, parseJsonContentFromChatCompletion } from "@/lib/openai-client"
+import { aiWriteUpLimit } from "@/lib/ai-protection/costGate"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -166,52 +167,62 @@ export async function POST(req: Request) {
     summary: string
   } | null = null
 
-  try {
-    const res = await openaiChatJson({
-      messages: [
-        {
-          role: "system",
-          content: [
-            "You are an NCAA bracket analysis assistant.",
-            "You help users understand the strengths, risks, and strategic traits of their bracket.",
-            "You MUST NOT promise wins, guarantees, or 'best' brackets.",
-            "Only describe risk distribution, upset exposure, uniqueness, and alignment with typical outcomes.",
-            "",
-            "You must respond with ONLY a single JSON object with this shape:",
-            '{ "strengths": string[], "risks": string[], "strategyNotes": string[], "summary": string }',
-          ].join("\n"),
-        },
-        {
-          role: "user",
-          content: JSON.stringify(metrics, null, 2),
-        },
-      ],
-      temperature: 0.4,
-      maxTokens: 900,
-    })
+  /*
+   * The AI review is OPT-IN (owner follow-up 2026-11-28): only a request carrying `includeAiReview: true` (the
+   * "Run review" buttons) reaches the model and counts against the daily allowance. A page load gets the
+   * deterministic metrics alone. Capped, the metrics are still the answer, with a note — never a 429.
+   */
+  const includeAiReview = body.includeAiReview === true
+  const aiLimit = includeAiReview ? await aiWriteUpLimit(req, "bracket_review_ai", auth.userId) : null
 
-    if (res.ok) {
-      const parsed = parseJsonContentFromChatCompletion(res.json)
-      if (parsed && typeof parsed === "object") {
-        aiReview = {
-          strengths: Array.isArray(parsed.strengths)
-            ? parsed.strengths.filter((s: any) => typeof s === "string")
-            : [],
-          risks: Array.isArray(parsed.risks)
-            ? parsed.risks.filter((s: any) => typeof s === "string")
-            : [],
-          strategyNotes: Array.isArray(parsed.strategyNotes)
-            ? parsed.strategyNotes.filter((s: any) => typeof s === "string")
-            : [],
-          summary:
-            typeof parsed.summary === "string"
-              ? parsed.summary
-              : "This bracket has a mix of strengths and potential risks worth reviewing.",
+  if (includeAiReview && !aiLimit) {
+    try {
+      const res = await openaiChatJson({
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You are an NCAA bracket analysis assistant.",
+              "You help users understand the strengths, risks, and strategic traits of their bracket.",
+              "You MUST NOT promise wins, guarantees, or 'best' brackets.",
+              "Only describe risk distribution, upset exposure, uniqueness, and alignment with typical outcomes.",
+              "",
+              "You must respond with ONLY a single JSON object with this shape:",
+              '{ "strengths": string[], "risks": string[], "strategyNotes": string[], "summary": string }',
+            ].join("\n"),
+          },
+          {
+            role: "user",
+            content: JSON.stringify(metrics, null, 2),
+          },
+        ],
+        temperature: 0.4,
+        maxTokens: 900,
+      })
+
+      if (res.ok) {
+        const parsed = parseJsonContentFromChatCompletion(res.json)
+        if (parsed && typeof parsed === "object") {
+          aiReview = {
+            strengths: Array.isArray(parsed.strengths)
+              ? parsed.strengths.filter((s: any) => typeof s === "string")
+              : [],
+            risks: Array.isArray(parsed.risks)
+              ? parsed.risks.filter((s: any) => typeof s === "string")
+              : [],
+            strategyNotes: Array.isArray(parsed.strategyNotes)
+              ? parsed.strategyNotes.filter((s: any) => typeof s === "string")
+              : [],
+            summary:
+              typeof parsed.summary === "string"
+                ? parsed.summary
+                : "This bracket has a mix of strengths and potential risks worth reviewing.",
+          }
         }
       }
+    } catch {
+      aiReview = null
     }
-  } catch {
-    aiReview = null
   }
 
   return NextResponse.json({
@@ -219,6 +230,7 @@ export async function POST(req: Request) {
     entryId,
     metrics,
     aiReview,
+    ...(aiLimit ? { aiLimit } : {}),
     note:
       "This analysis highlights bracket strengths, risks, and uniqueness. It is not a guarantee of any outcome.",
   })
