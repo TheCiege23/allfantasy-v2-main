@@ -326,22 +326,22 @@ export function leagueSectionHref(league: UserLeague, view: string) {
  * The tab a league opens on when the URL names none (owner, 2026-11-25):
  * - before and during the draft, the first top tab — Draft (or Keepers while a keeper window is open);
  * - after the draft, the first top tab — Matchup (Chop in a guillotine league).
- * The tab last open in this league still wins (owner, 2026-11-19: "it resets to home"), EXCEPT the
- * League overview and a Draft tab that no longer exists once the draft is done: those fall back to
- * the phase's first tab, so a league that has drafted always opens on its matchup.
- * Switching leagues carries `?view=` in the URL, which never reaches this function.
+ *
+ * 🛑 AFTER THE DRAFT THE MATCHUP ALWAYS WINS (owner, 2026-11-28: "The first screen should be the matchup
+ * screen if the draft happens already. When I opened the league, roster was first"). The tab last open in
+ * a league used to win in every phase (owner, 2026-11-19: "it resets to home"), so a manager who had last
+ * looked at the roster reopened a drafted league on the roster. Now the remembered tab is kept only before
+ * and during the draft; once the league has drafted, every fresh open lands on its matchup.
+ * Switching leagues carries `?view=` in the URL, which never reaches this function, so a deliberate
+ * jump to another league's roster still opens the roster.
  */
 export function nativeLeagueLandingTab(input: {
   remembered: string | null
   firstTopTabId: string | null
   draftDone: boolean
 }): string | null {
+  if (input.draftDone) return input.firstTopTabId
   const remembered = input.remembered?.trim() || null
-  const stale =
-    !remembered ||
-    remembered === 'native_home' ||
-    remembered === 'home' ||
-    remembered === 'decide' ||
-    (input.draftDone && remembered === 'draft')
+  const stale = !remembered || remembered === 'native_home' || remembered === 'home' || remembered === 'decide'
   return stale ? input.firstTopTabId : remembered
 }
