@@ -29,3 +29,23 @@ describe('1. AF Intelligence (Chimmy Intelligence) stays AF Commissioner + AF Pr
     for (const key of readers) expect([key, await tiersFor(CORE_DEPTH[key as keyof typeof CORE_DEPTH].featureId)]).toEqual([key, AF_INTELLIGENCE_TIERS])
   })
 })
+
+describe('2. the draft-room AI pick explanation is AF Pro + AF Legacy + AF Supreme', () => {
+  it('draft_room_ai_explanation opens for exactly pro, legacy and supreme', async () => {
+    expect(await tiersFor('draft_room_ai_explanation')).toEqual(['pro', 'legacy', 'supreme'])
+  })
+
+  it('the draft-room surfaces read it: the route and both lock cards', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync('app/api/draft/recommend/route.ts', 'utf8')).toMatch(/^\s*featureId: 'draft_room_ai_explanation',$/m)
+    for (const file of ['components/app/draft-room/DraftHelperPanel.tsx', 'components/app/draft-room/DraftHelperRedraftLayout.tsx']) {
+      const src = readFileSync(file, 'utf8')
+      expect([file, src.includes('featureId="draft_room_ai_explanation"')]).toEqual([file, true])
+      expect([file, src.includes('featureId="draft_prep"')]).toEqual([file, false])
+    }
+  })
+
+  it('draft_prep (now only the War Room card) is unchanged: AF Legacy, and Supreme through it', async () => {
+    expect(await tiersFor('draft_prep')).toEqual(['legacy', 'supreme'])
+  })
+})

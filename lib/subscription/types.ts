@@ -27,6 +27,8 @@ export type SubscriptionFeatureId =
   | 'commissioner_automation'
   | 'draft_strategy_build'
   | 'draft_prep'
+  /** The draft room's Chimmy pick explanation (POST /api/draft/recommend with includeAIExplanation; DraftHelperPanel, DraftHelperRedraftLayout). AF Pro, AF Legacy or AF Supreme (owner, 2026-11-28). The War Room's draft-planning card keeps `draft_prep` (AF Legacy). */
+  | 'draft_room_ai_explanation'
   | 'future_planning'
   | 'multi_year_strategy'
   | 'draft_board_intelligence'
