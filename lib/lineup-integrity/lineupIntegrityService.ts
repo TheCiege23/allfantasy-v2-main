@@ -12,6 +12,7 @@ import { loadNativeLineupCards } from '@/lib/integrity/nativeLineupCards'
 import { auditLineups, describeFinding, isFlagged, type TeamSeasonSummary, type TeamWeekFinding, type WeeklyStarterRow } from './lineupIntegrity'
 import { readLineupLockSnapshots } from '@/lib/integrity/lineupLockStore'
 import { buildLineupReportText, summarizeTeamScores, type TeamScoreSummary } from '@/lib/integrity/lineupIntegrityScore'
+import { isYahooSnapshotYahooSettings } from '@/lib/league-import/yahoo/snapshot/yahooSnapshotModel'
 
 /**
  * Lineup-integrity monitor — reads. Rules in ./lineupIntegrity.
@@ -52,7 +53,7 @@ type LeagueRow = {
 }
 
 export type LineupIntegrityReport =
-  | { supported: false; reason: 'unsupported_platform' | 'not_nfl' | 'best_ball' | 'no_lineup_rules' }
+  | { supported: false; reason: 'unsupported_platform' | 'pasted_no_matchups' | 'not_nfl' | 'best_ball' | 'no_lineup_rules' }
   | {
       supported: true
       season: number
@@ -120,9 +121,24 @@ function sourceOf(league: LeagueRow): LineupSource | null {
   return null
 }
 
+/**
+ * 🛑 A PASTED YAHOO LEAGUE HAS NO WEEKLY MATCHUPS, SO THERE IS NOTHING TO SCAN — SAID, NOT GUESSED.
+ * The paste carries settings, standings, the draft and each roster as it stood that day
+ * (yahooSnapshotModel.ts `buildYahooSnapshotPayload` writes `schedule: []`): no week's starters, no
+ * week's scores, no matchup. Every lineup audit and the tanking scan
+ * (lib/integrity/scanImportedTanking.ts) needs exactly those, so a pasted league gets its own reason
+ * rather than the generic platform one — its `sleeper:` ids would price a roster, but a roster is not a
+ * lineup someone set for a week. Recognised by the stamp the paste leaves in `settings.yahoo_settings`.
+ */
+function isPastedYahooLeague(league: LeagueRow): boolean {
+  if (String(league.platform ?? '').toLowerCase() !== 'yahoo') return false
+  const s = (league.settings ?? {}) as Record<string, unknown>
+  return isYahooSnapshotYahooSettings(s.yahoo_settings)
+}
+
 function unsupported(league: LeagueRow): LineupIntegrityReport | null {
   const source = sourceOf(league)
-  if (!source) return { supported: false, reason: 'unsupported_platform' }
+  if (!source) return { supported: false, reason: isPastedYahooLeague(league) ? 'pasted_no_matchups' : 'unsupported_platform' }
   if (String(league.sport ?? 'NFL').toUpperCase() !== 'NFL') return { supported: false, reason: 'not_nfl' }
   const s = (league.settings ?? {}) as Record<string, unknown>
   if (league.bestBallMode || String(league.leagueType ?? '').toLowerCase() === 'best_ball' || s.best_ball || s.bestBall) {

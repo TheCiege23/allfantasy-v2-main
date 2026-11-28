@@ -50,6 +50,12 @@ export type TradeAssetInput =
        */
       liveBoardOverall?: number
       draftSide?: C2CDraftSide
+      /**
+       * A pick in this league's DEVY (college-player) draft, not its NFL rookie draft — a native
+       * `devy_pick` item. It buys a prospect, so the grade prices it as the expected option value of the
+       * prospect taken at that slot (`devyDraftPickValue`), never as an NFL rookie pick's chart row.
+       */
+      pool?: 'devy'
       tier?: 'early' | 'mid' | 'late'
       label?: string
       /**

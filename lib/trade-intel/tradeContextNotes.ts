@@ -197,8 +197,8 @@ export async function buildTradeContextNotes(args: {
    */
   bestPlayerGoesTo?: 'me' | 'them' | null
   /** The console's own priced lines, for unpriced exposure. */
-  pricedGive?: Array<{ name: string; marketValue: number | null }>
-  pricedGet?: Array<{ name: string; marketValue: number | null }>
+  pricedGive?: Array<{ name: string; marketValue: number | null; devy?: boolean }>
+  pricedGet?: Array<{ name: string; marketValue: number | null; devy?: boolean }>
   /** The console's own one-sidedness figure, used only for the veto warning. */
   percentDiff?: number | null
 }): Promise<TradeContextNotes> {
@@ -527,6 +527,7 @@ export async function buildTradeContextNotes(args: {
     futureLean: (args.picksToMe?.length ?? 0) - (args.picksToThem?.length ?? 0),
     pricedGive: args.pricedGive ?? [],
     pricedGet: args.pricedGet ?? [],
+    otherAssets: (args.picksToMe?.length ?? 0) + (args.picksToThem?.length ?? 0) > 0,
   }).catch(() => [])
 
   const formatNotes = await buildFormatNotes({
@@ -1064,10 +1065,12 @@ async function buildScaleNotes(args: {
   incoming: number
   outgoing: number
   futureLean: number
-  pricedGive: Array<{ name: string; marketValue: number | null }>
-  pricedGet: Array<{ name: string; marketValue: number | null }>
+  pricedGive: Array<{ name: string; marketValue: number | null; devy?: boolean }>
+  pricedGet: Array<{ name: string; marketValue: number | null; devy?: boolean }>
   /** The season being played, so a devy asset's wait can be priced. */
   season: number
+  /** True when the deal also carries picks, which the priced lines do not — devy totals would be partial. */
+  otherAssets?: boolean
 }): Promise<string[]> {
   const notes: string[] = []
 
@@ -1107,10 +1110,16 @@ async function buildScaleNotes(args: {
    * own terms, leaving that note to speak only about players it is actually
    * right about.
    */
+  /*
+   * 🛑 ONE DEVY NUMBER (2026-11-28): the league grade's rule — a prospect THIS league holds, at his
+   * option value — so the note cannot tell a different story from the letter beside it.
+   */
   const devy = await identifyDevyAssets({
     give: args.pricedGive,
     get: args.pricedGet,
     season: args.season,
+    leagueId: args.leagueId,
+    otherAssets: args.otherAssets,
   }).catch(() => null)
 
   const devyNames = new Set(devy?.matched.map((m) => m.name.toLowerCase()) ?? [])

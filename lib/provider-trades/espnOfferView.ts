@@ -45,6 +45,26 @@ export type EspnOfferView = {
   get: GradeInputs
   /** The viewer's own conditional drops — part of what they give up. */
   giveDrops: GradeInputs
+  /**
+   * The viewer's side in SLEEPER ids, for the lineup maths (the canonical world holds an ESPN
+   * roster translated into Sleeper ids). `null` when any player the viewer gives, gets or drops has
+   * no single resolved Sleeper id: then there is no lineup impact, never a guess.
+   */
+  impactIds: { give: string[]; get: string[]; releases: string[] } | null
+  /** The conditional drops, for display: the viewer's own, and the partner's. */
+  drops: { viewer: PendingTradeAsset[]; partner: PendingTradeAsset[] }
+}
+
+/** PURE. Every id → its resolved Sleeper id, or null if any one has none. */
+export function sleeperIdsFor(ids: readonly string[], found: ReadonlyMap<string, ResolvedTradePlayer>): string[] | null {
+  const out: string[] = []
+  for (const id of ids) {
+    const p = found.get(id)
+    const sleeperId = p?.ok ? p.sleeperId?.trim() : null
+    if (!sleeperId) return null
+    out.push(sleeperId)
+  }
+  return out
 }
 
 function inputsFor(ids: readonly string[], found: ReadonlyMap<string, ResolvedTradePlayer>): GradeInputs {
@@ -107,6 +127,16 @@ export function buildEspnOfferViews(args: {
       give: inputsFor(split.givePlayerIds, args.found),
       get: inputsFor(split.getPlayerIds, args.found),
       giveDrops: inputsFor(split.viewerDropIds, args.found),
+      drops: {
+        viewer: split.viewerDropIds.map((id) => displayFor(id, args.found)),
+        partner: split.partnerDropIds.map((id) => displayFor(id, args.found)),
+      },
+      impactIds: (() => {
+        const give = sleeperIdsFor(split.givePlayerIds, args.found)
+        const get = sleeperIdsFor(split.getPlayerIds, args.found)
+        const releases = sleeperIdsFor(split.viewerDropIds, args.found)
+        return give && get && releases ? { give, get, releases } : null
+      })(),
     })
   }
   return out

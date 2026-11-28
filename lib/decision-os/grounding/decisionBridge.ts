@@ -12,6 +12,7 @@ import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
 import { loadWaiverCalibrationForLeague } from '../waiver/calibrationStore'
 import { createCommissionerOsLoaders } from '../commissioner-os'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 // The inactive flag's graded record — the one loader the hub's flag also reads, so the two never disagree.
 import { loadInactiveFlagRecord } from '@/lib/commissioner-hub/inactiveFlagRecord'
 import { waiverEngineInputFrom } from '../waiver/engineInput'
@@ -109,6 +110,40 @@ function describeCommissionerAssessment(a: CommissionerHealthAssessment): string
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
+/**
+ * 🛑 LEAGUE HEALTH IS PART OF AF COMMISSIONER (owner's decision 2026-11-28). Being the commissioner earns the
+ * VIEW; the plan earns the DEPTH, exactly as on the Commissioner OS pages (lib/commissioner-ui/commissionerOsDepth.ts
+ * reads the same `commissioner_depth`: AF Commissioner, or AF Supreme which includes it). Before this, the role
+ * alone opened it in Chimmy while the same health page drew a lock.
+ *
+ * A plan lock is its own `not_entitled` gap, told apart by `isLeagueHealthPlanLock`, because what Chimmy must
+ * SAY differs: a non-commissioner is told to ask their commissioner; a commissioner without the plan is told it
+ * is part of AF Commissioner or AF Supreme — never silence.
+ */
+export const LEAGUE_HEALTH_PLAN_LOCK_DETAIL =
+  "League health is part of AF Commissioner or AF Supreme, and this commissioner's plan does not include it."
+export const LEAGUE_HEALTH_UPGRADE_PATH = '/upgrade?plan=commissioner'
+
+export function isLeagueHealthPlanLock(gap: { reason?: string; detail?: string } | null | undefined): boolean {
+  return gap?.reason === 'not_entitled' && gap.detail === LEAGUE_HEALTH_PLAN_LOCK_DETAIL
+}
+
+function planLocked(): GroundedSlice<DecisionFact> {
+  return {
+    present: false,
+    value: null,
+    asOf: null,
+    servedFrom: null,
+    confidence: null,
+    conclusive: { ok: true },
+    gap: {
+      reason: 'not_entitled',
+      detail: LEAGUE_HEALTH_PLAN_LOCK_DETAIL,
+      remedy: `Upgrade to AF Commissioner or AF Supreme (${LEAGUE_HEALTH_UPGRADE_PATH}).`,
+    },
+  }
+}
+
 /** A slice that is absent because this user may not see it. Distinct from "we could not compute it". */
 function notEntitled(): GroundedSlice<DecisionFact> {
   return {
@@ -173,6 +208,11 @@ export async function loadCommissionerHealthDecisionSlice(
   try {
     const access = await assertLeagueCommissioner(leagueId, userId, 'view')
     if (!access?.ok) return notEntitled()
+
+    // The plan, after the role and before any read (owner, 2026-11-28). Fails closed after launch, like every
+    // /core depth: a plan that cannot be resolved is no plan.
+    const depth = await resolveCoreDepth(userId, 'commissioner_depth').catch(() => null)
+    if (!depth?.unlocked) return planLocked()
 
     /*
      * Through Commissioner OS (2026-11-20): the same snapshot the hub builds — `getCommissionerHubHealthForUser`

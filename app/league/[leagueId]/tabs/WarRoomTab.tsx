@@ -26,6 +26,8 @@ import { BestBallWarRoomPanel } from './best-ball/BestBallWarRoomPanel'
 import { GuillotineWarRoomPanel } from './guillotine/GuillotineWarRoomPanel'
 import { ZombieWarRoomShortcuts } from '@/components/zombie/ZombieWarRoomShortcuts'
 import { FeatureGate } from '@/components/subscription/FeatureGate'
+import { useMessages } from '@/components/i18n/useMessages'
+import { warRoomDraftPlanningMessages } from '@/lib/league/warRoomDraftPlanningMessages'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
@@ -93,6 +95,7 @@ function GatedToolCard({ tool }: { tool: GatedTool }) {
 }
 
 export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTabProps) {
+  const draftPlanning = useMessages(warRoomDraftPlanningMessages)
   const resolved = normalizeToSupportedSport(sport ?? league.sport) ?? 'NFL'
   const sportU = resolved.toUpperCase()
   // Redraft (non-dynasty) leagues mount the data-grounded Redraft AF War Room panel.
@@ -200,10 +203,12 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       },
       {
         featureId: 'draft_prep',
-        title: 'Draft planning',
-        description: 'Pick explanations and prep flows tied to your draft.',
+        // Only what draft_prep unlocks: the War Room prep flows (owner, 2026-11-28). The pick explanation is
+        // AF Pro + AF Legacy + AF Supreme on its own key, so it is not promised here.
+        title: draftPlanning.title,
+        description: draftPlanning.description,
         href: '/mock-draft-simulator',
-        cta: 'Start planning',
+        cta: draftPlanning.cta,
       },
       {
         featureId: 'future_planning',
@@ -248,7 +253,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         cta: 'Analyze pipeline',
       },
     ],
-    [sportQs],
+    [sportQs, draftPlanning],
   )
 
   return (

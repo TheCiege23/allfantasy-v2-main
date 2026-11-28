@@ -100,11 +100,12 @@ export default function BracketEntryActionsCard({ leagueId, tournamentId, entryI
       const res = await fetch("/api/bracket/intelligence/review", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ entryId }),
+        // An explicit request: the only kind that reaches the model and counts (owner follow-up 2026-11-28).
+        body: JSON.stringify({ entryId, includeAiReview: true }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        setReviewError(data?.error || t("bracket.intel.review.error"))
+        setReviewError(data?.message || data?.error || t("bracket.intel.review.error"))
         return
       }
       const m = data.metrics || {}
@@ -133,7 +134,13 @@ export default function BracketEntryActionsCard({ leagueId, tournamentId, entryI
         strategyNotes: Array.isArray(data.aiReview?.strategyNotes)
           ? data.aiReview.strategyNotes
           : [],
-        summary: typeof data.aiReview?.summary === "string" ? data.aiReview.summary : "",
+        // Capped: the metrics still show, and the summary line says the AI write-up limit was reached.
+        summary:
+          typeof data.aiReview?.summary === "string"
+            ? data.aiReview.summary
+            : typeof data.aiLimit?.message === "string"
+              ? data.aiLimit.message
+              : "",
       })
     } catch {
       setReviewError(t("bracket.intel.review.error"))

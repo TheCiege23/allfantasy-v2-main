@@ -27,6 +27,10 @@ export type SubscriptionFeatureId =
   | 'commissioner_automation'
   | 'draft_strategy_build'
   | 'draft_prep'
+  /** The draft room's Chimmy pick explanation (POST /api/draft/recommend with includeAIExplanation; DraftHelperPanel, DraftHelperRedraftLayout). AF Pro, AF Legacy or AF Supreme (owner, 2026-11-28). The War Room's draft-planning card keeps `draft_prep` (AF Legacy). */
+  | 'draft_room_ai_explanation'
+  /** The AF Legacy Player Finder (POST /api/legacy/player-finder, ~20 model calls a search). AF Pro + AF Legacy + AF Supreme (owner, 2026-11-28). */
+  | 'player_finder_stock_ai'
   | 'future_planning'
   | 'multi_year_strategy'
   | 'draft_board_intelligence'
@@ -102,6 +106,8 @@ export type SubscriptionFeatureId =
   | 'legacy_league_transfer'
   /** /af-legacy community insights: Chimmy's news summary (GET /api/legacy/community-insights?summarize=true). AF Legacy, 2026-11-27. */
   | 'legacy_community_insights'
+  /** /af-legacy "Portfolio Over Time" chart (GET /api/legacy/portfolio/history): sign-in, then AF Legacy (Supreme inherits it). Owner, 2026-11-28. */
+  | 'legacy_portfolio_history'
 
 /** Plan slugs returned by entitlements API; used for hasAccess. */
 export type SubscriptionPlanId =

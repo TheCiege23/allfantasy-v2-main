@@ -301,4 +301,21 @@ describe('rosterImpact on the canonical evaluation', () => {
     expect(withImpact.grade).toBe(without.grade)
     expect(withImpact.action).toBe(without.action)
   })
+
+  /*
+   * An ESPN conditional drop. Only wr9 comes in (nobody leaves by trade); rb2 (12) is RELEASED by the
+   * viewer and received by nobody. Before 87. After: QB20 RB15 RB(rb3)6 WR25 WR14 TE9 FLEX(wr2)11 = 100.
+   * Without the release the same trade is 106: the drop costs exactly the 6 points rb3 replaces him by.
+   */
+  it('counts a viewer release as leaving the lineup, without valuing it', async () => {
+    const plain = await run({ includeRosterImpact: true, assets: [ASSETS[1]!] })
+    const released = await run({ includeRosterImpact: true, assets: [ASSETS[1]!], viewerReleasedPlayerIds: ['rb2'] })
+    expect(plain.rosterImpact?.startingPointsDelta).toBe(19)
+    expect(released.rosterImpact?.startingPointsBefore).toBe(87)
+    expect(released.rosterImpact?.startingPointsAfter).toBe(100)
+    expect(released.rosterImpact?.startingPointsDelta).toBe(13)
+    // Lineup only: the value verdict is the same trade.
+    expect(released.grade).toBe(plain.grade)
+    expect(released.valueGiven).toBe(plain.valueGiven)
+  })
 })

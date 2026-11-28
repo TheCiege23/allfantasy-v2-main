@@ -91,15 +91,15 @@ describe("Settings page — subscription & billing section", () => {
 })
 
 describe("Chimmy route — admin cap tier resolution (Part 6)", () => {
-  it("resolveCapTier is defined in chimmy route and uses supreme → admin", () => {
-    expect(CHIMMY_ROUTE_SRC).toContain("resolveCapTier")
-    expect(CHIMMY_ROUTE_SRC).toContain("plans.includes('supreme')")
-    expect(CHIMMY_ROUTE_SRC).toContain("return 'admin'")
-  })
-
-  it("checkDailyCap in chimmy route uses capTier not resolvedTier", () => {
-    expect(CHIMMY_ROUTE_SRC).toContain("const capTier = resolveCapTier(")
-    expect(CHIMMY_ROUTE_SRC).toContain("checkDailyCap('chimmy', userId, capTier)")
+  /*
+   * 2026-11-28: the `/api/chimmy` alias no longer runs a model itself, so it no longer carries its own
+   * cap. Every non-tournament request is forwarded to `/api/chat/chimmy`, whose daily allowance is the
+   * one limit. These assert the alias cannot charge or cap a second time.
+   */
+  it("the /api/chimmy alias carries no cap of its own — it forwards", () => {
+    expect(CHIMMY_ROUTE_SRC).not.toContain("checkDailyCap(")
+    expect(CHIMMY_ROUTE_SRC).not.toContain("takeChimmyPlanAllowance(")
+    expect(CHIMMY_ROUTE_SRC).toMatch(/postChatChimmy\(buildForwardedRequest\(req, parseResult\.data, commissionerGrounding\)/)
   })
 
   it("admin cap is higher than pro cap", () => {
@@ -116,10 +116,10 @@ describe("Chimmy daily cap 429 — upgrade signal", () => {
     expect(freeCap).toBe(0) // default: commissioner_brain is not available for free users
   })
 
-  it("chimmy route 429 response includes upgradeRequired and upgradePath", () => {
-    // Static check: the route must inject upgradeRequired:true when cap is exceeded.
-    expect(CHIMMY_ROUTE_SRC).toContain("upgradeRequired: true")
-    expect(CHIMMY_ROUTE_SRC).toContain("upgradePath: capResult.upgradePath")
+  it("chimmy route passes a premium-gate response through with upgradeRequired and upgradePath", () => {
+    // Static check: the alias normalises the forwarded handler's gate into the upgrade signal.
+    expect(CHIMMY_ROUTE_SRC).toContain("isChimmyPremiumGateResponse({")
+    expect(CHIMMY_ROUTE_SRC).toContain("resolveChimmyUpgradePath(record.upgradePath)")
   })
 
   it("checkDailyCap returns upgradePath='/pricing' for a zero-limit tier (sync smoke)", async () => {

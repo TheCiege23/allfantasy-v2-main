@@ -255,7 +255,7 @@ const AF_LOCK_LABEL: Record<string, string> = {
   lock_chimmy_recall_past_chats: 'Chimmy: past chats',
   lock_chimmy_get_draft_pick_outlook: 'Chimmy: who goes before your pick',
   lock_chimmy_get_manager_record: "Chimmy: a leaguemate's record",
-  af_intelligence_all: 'All AF Intelligence locks',
+  af_intelligence_all: 'All Chimmy Intelligence locks',
 }
 
 /** "lock_player_depth" → "Player depth lock", for the few sources we know; the raw tag otherwise. */

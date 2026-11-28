@@ -222,6 +222,7 @@ function deps(over: Partial<EspnOfferSyncDeps> & { stored?: Array<{ providerTrad
       calls.notified.push(a.offers)
       return a.offers.length
     }),
+    dm: vi.fn(async () => 0),
     ...over,
   }
   return { d, calls }
@@ -243,8 +244,14 @@ describe('lifecycle', () => {
   it('a known offer is not notified again, and the proposer is never notified of their own offer', async () => {
     const known = deps({ team: '2', stored: [{ providerTradeId: OFFER_ID, expiresAt: EXPIRES }] })
     expect((await syncEspnTradeOffersForLeague(LEAGUE, { now: BEFORE_EXPIRY, deps: known.d })).notified).toBe(0)
+    /*
+     * The proposer's own sweep now hands the new offer to the notifier too — the OTHER manager may be
+     * waiting on it — and the notifier decides per manager, never telling the proposer
+     * (__tests__/provider-trades/espn-offer-extras.test.ts pins that with the real notifier).
+     */
     const own = deps({ team: '7' })
-    expect((await syncEspnTradeOffersForLeague(LEAGUE, { now: BEFORE_EXPIRY, deps: own.d })).notified).toBe(0)
+    await syncEspnTradeOffersForLeague(LEAGUE, { now: BEFORE_EXPIRY, deps: own.d })
+    expect(own.calls.notified.map((o) => o.map((x) => x.providerTradeId))).toEqual([[OFFER_ID]])
     expect(offerNeedsViewer(realOffer(), '7', BEFORE_EXPIRY)).toBe(false)
     expect(offerNeedsViewer(realOffer(), '2', BEFORE_EXPIRY)).toBe(true)
     expect(offerNeedsViewer(realOffer(), '2', AFTER_EXPIRY)).toBe(false)

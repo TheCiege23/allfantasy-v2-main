@@ -39,3 +39,22 @@ endpoints:
       - teamSourceId is the ESPN team id (Duke = 150, the same id contracts/espn uses).
       - dateOfBirth was null for every player in both captures.
       - position is a word ("Forward", "Guard"), not a letter.
+
+  # ── UNVERIFIED — no fixture. Do not write a parser or ingestion against this entry (GAPS B-04). ──
+  recruiting_players:
+    path: /recruiting/players          # BELIEVED, not captured
+    params: { year: "recruiting class year (assumed: high-school graduating class)" }
+    confidence: none
+    status: unverified
+    fixture: null                      # capture with: ./scripts/probe.sh recruiting <YEAR>
+    fields: unknown
+    why_this_path:
+      - CFBD (football) serves recruits at /recruiting/players?year=Y (lib/cfb-player-data.ts getCFBRecruits,
+        scripts/devy-draft-rate-backfill.ts), and CBBD mirrors CFBD's layout for /draft/picks and /teams/roster.
+      - That is the ONLY evidence. No CBBD document, client or response in this repo names a recruiting path.
+    unknowns:
+      - whether the path exists at all on api.collegebasketballdata.com (a 404 settles it as "no")
+      - the field names, including whether a row carries CBBD's athleteId (the id /draft/picks uses) — the
+        measurement's join needs an id; it must not fall back to names (B-01)
+      - whether `year` is the graduating class or the season, and how many recruits a class holds (ranked only?)
+      - the position vocabulary (the draft feed uses G / F / C) and what national rank field, if any, exists

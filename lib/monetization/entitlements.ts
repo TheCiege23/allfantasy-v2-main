@@ -341,6 +341,39 @@ export const ENTITLEMENTS = {
     upgradeUrl: '/pro',
     upgradeLabel: 'Get AF Pro',
   },
+  /*
+   * The draft room's Chimmy pick explanation (owner's decision 2026-11-28). It was `draft_prep` (AF Legacy;
+   * Supreme inherits Legacy since 2026-11-27), which locked AF Pro out of an explanation of a redraft pick.
+   * Legacy-only payers keep it; AF Pro gains it; AF Commissioner alone does not. Read by
+   * POST /api/draft/recommend (includeAIExplanation, token fallback `ai_draft_pick_explanation` passed
+   * explicitly at the call site) and the draft-room lock cards. Not in the plan matrix on purpose — the
+   * matrix accepts exactly one plan.
+   */
+  draft_room_ai_explanation: {
+    key: 'draft_room_ai_explanation',
+    label: 'Draft-room pick explanation',
+    description:
+      "Chimmy's explanation of the draft room's recommended pick. Included with AF Pro, AF Legacy and AF Supreme.",
+    requiredPlan: ['af_pro', 'af_war_room', 'af_supreme'],
+    upgradeUrl: '/pro',
+    upgradeLabel: 'Get AF Pro',
+  },
+  /*
+   * The AF Legacy Player Finder (POST /api/legacy/player-finder), owner's decision 2026-11-28. One search fans
+   * out to ~20 model calls (a buy/sell signal per owned player), so it is an expensive player tool with a daily
+   * cap (AI_COST_GATES.player_finder_ai). It is an AF Legacy tool, so AF Legacy keeps it (owner follow-up, same
+   * day): AF Pro + AF Legacy + AF Supreme, the shape of `draft_room_ai_explanation`. AF Commissioner alone and
+   * Free stay locked. No existing key fit — `pro_draft_ai` is draft help and `af_intelligence` includes AF
+   * Commissioner. Not in the plan matrix (one plan per row).
+   */
+  player_finder_stock_ai: {
+    key: 'player_finder_stock_ai',
+    label: 'Player Finder',
+    description: "Find every league where you own a player, with Chimmy's buy/sell signal. Included with AF Pro, AF Legacy and AF Supreme.",
+    requiredPlan: ['af_pro', 'af_war_room', 'af_supreme'],
+    upgradeUrl: '/upgrade?plan=pro',
+    upgradeLabel: 'Get AF Pro',
+  },
   war_room_dynasty_projections: {
     key: 'war_room_dynasty_projections',
     label: 'Dynasty Projections',

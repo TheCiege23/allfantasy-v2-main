@@ -235,7 +235,7 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
       <div className="border-b border-white/8 px-2 py-2">
         <InContextMonetizationCard
           title="Draft prep access"
-          featureId="draft_prep"
+          featureId="draft_room_ai_explanation"
           tokenRuleCodes={['ai_draft_pick_explanation']}
           className="mb-2"
           testIdPrefix="draft-prep-monetization"

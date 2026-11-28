@@ -9,7 +9,13 @@
  */
 
 import React from "react"
-import { FOREIGN_IDS_UNREADABLE, availabilityUnverifiedSentence, unmatchedRosteredNote } from "@/lib/core-app/foreignIdSpaceCopy"
+import {
+  FOREIGN_IDS_UNREADABLE,
+  PASTED_BENCH_UNREADABLE,
+  availabilityUnverifiedSentence,
+  benchUnmatchedNote,
+  unmatchedRosteredNote,
+} from "@/lib/core-app/foreignIdSpaceCopy"
 
 type UrgencyLevel = "critical" | "high" | "medium" | "low" | "none"
 
@@ -105,6 +111,10 @@ interface ReplacementsResponse {
   limitation?: string | null
   /** A pasted Yahoo league only: rostered players we could not match. */
   unmatchedRostered?: number
+  /** A pasted Yahoo league whose roster records no starter: the bench cannot be told apart. */
+  benchLimitation?: "starters_not_recorded"
+  /** A pasted Yahoo league only: bench players we could not match (counted, never listed). */
+  benchUnmatched?: number
 }
 
 const URGENCY_STYLES: Record<UrgencyLevel, string> = {
@@ -291,6 +301,15 @@ function ReplacementPanel({
         <div className="mt-2 text-[11px] text-white/35">Week {reps.projectionWeek} projections</div>
       )}
       <CandidateRow label="Best on your bench" options={reps.benchOptions ?? []} claimTarget={reps.lineupTarget} />
+      {reps.benchLimitation === "starters_not_recorded" ? (
+        <div className="mt-1.5 text-[11px] text-white/40" data-testid="replacements-bench-unreadable">
+          {PASTED_BENCH_UNREADABLE}
+        </div>
+      ) : reps.benchUnmatched ? (
+        <div className="mt-1.5 text-[11px] text-white/40" data-testid="replacements-bench-unmatched">
+          {benchUnmatchedNote(reps.benchUnmatched)}
+        </div>
+      ) : null}
       <CandidateRow label="Best available" options={reps.freeAgentOptions ?? []} claimTarget={reps.claimTarget} />
       {reps.unmatchedRostered ? (
         <div className="mt-1.5 text-[11px] text-white/40" data-testid="replacements-unmatched">

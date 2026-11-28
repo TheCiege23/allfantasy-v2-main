@@ -77,7 +77,8 @@ describe('reading metadata back (untrusted JSON)', () => {
     expect(readTradeOffer({ tradeOffer: { tradeId: 'x' } })).toBeNull()
     expect(readTradeOffer({ tradeOffer: 'nope' })).toBeNull()
     expect(readTradeOffer(null)).toBeNull()
-    expect(readTradeOffer({ tradeOffer: { ...CARD, source: 'espn' } })).toBeNull()
+    // 'espn' became a real source (ESPN offer DMs, 2026-11-28); an unknown one is still refused.
+    expect(readTradeOffer({ tradeOffer: { ...CARD, source: 'fleaflicker' } })).toBeNull()
   })
 
   it('🛑 only same-origin paths survive as links', () => {

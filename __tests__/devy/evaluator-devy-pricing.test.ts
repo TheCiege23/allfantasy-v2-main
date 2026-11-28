@@ -110,7 +110,7 @@ describe('the trade-evaluator route', () => {
     const refusal = route.indexOf("error: 'DEVY_SCALE'")
     expect(devyPass).toBeGreaterThan(0)
     expect(refusal).toBeGreaterThan(devyPass)
-    expect(route).toMatch(/const senderPlayerPrices = senderDevyPass\?\.prices \?\? rawSenderPlayerPrices/)
+    expect(route).toMatch(/let senderPlayerPrices = senderDevyPass\?\.prices \?\? rawSenderPlayerPrices/)
     // One membership-checked resolution, shared by the devy pass and the grade.
     expect(route.match(/resolveEvaluationLeagueId\(/g)).toHaveLength(1)
     expect(route).toMatch(/const evaluationLeagueId = await resolveEvaluationLeagueId\(/)

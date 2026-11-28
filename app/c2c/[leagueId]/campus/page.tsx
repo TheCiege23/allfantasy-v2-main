@@ -22,7 +22,7 @@ export default async function C2CCampusPage({ params }: { params: Promise<{ leag
       <C2CRosterClient
         leagueId={leagueId}
         userId={session.user.id}
-        hasAfSub={plans.commissioner}
+        hasAfSub={plans.pro || plans.commissioner}
         initialViewMode="campus"
       />
     </C2CPageFrame>

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 
 export const runtime = "nodejs"
 
@@ -102,6 +103,10 @@ export async function POST(req: Request) {
     }
 
     const prompt = promptBuilder(ctx)
+
+    // Owner, 2026-11-28: every model call is signed in and capped. The daily cap, immediately before the call.
+    const gated = await aiCostGate(req, "ai_feature_insight", session.user.id)
+    if (gated) return gated
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",

@@ -177,7 +177,8 @@ export function buildTradeMarketOverlay(args: {
        * those players already carry their own trade-market moves (`moveBoardPlayerValues`, applied before the
        * mean). Moving it again by a rookie-slot market would count a second, unrelated market against it.
        */
-      const pickMove = args.learned && l.pricedSource === 'pick' && l.dataSource !== 'draft_board'
+      // A devy-draft pick (`devy-pick`) is priced as the prospect it selects — a rookie-slot market is not its market either.
+      const pickMove = args.learned && l.pricedSource === 'pick' && l.dataSource !== 'draft_board' && l.dataSource !== 'devy-pick'
         ? learnedPickAdjustment(args.learned, bookKey(args.book), l.name, args.teams ?? null, args.now ?? new Date())
         : null
       if (pickMove) picksMoved++

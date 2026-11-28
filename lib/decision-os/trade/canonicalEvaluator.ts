@@ -67,6 +67,16 @@ export interface EvaluateCanonicalTradeArgs {
    * notices is whichever surface gets slow first.
    */
   includeRosterImpact?: boolean
+  /**
+   * Players the VIEWER releases when the trade executes, without anyone receiving them — an ESPN
+   * conditional drop (`contracts/espn/GAPS.md` T-03). They leave the viewer's lineup exactly as an
+   * outgoing player does, so the lineup maths counts them as outgoing.
+   *
+   * ⚠ LINEUP ONLY. They are not movements: no roster receives them, so they add nothing to either
+   * side's value and are never priced here. A grade that must count a drop does so itself
+   * (`gradeDeal`'s `giveDrops`). Ids must be in the world's id space, like every other id here.
+   */
+  viewerReleasedPlayerIds?: readonly string[]
 }
 
 export interface CanonicalTradeEvaluatorDeps {
@@ -188,6 +198,9 @@ export async function evaluateCanonicalTrade(
       if (!pid) continue
       if (m.toRosterId === viewerRosterId) incomingIds.push(pid)
       else if (m.fromRosterId === viewerRosterId) outgoingPlayerIds.push(pid)
+    }
+    for (const pid of args.viewerReleasedPlayerIds ?? []) {
+      if (pid && !outgoingPlayerIds.includes(pid)) outgoingPlayerIds.push(pid)
     }
 
     /*

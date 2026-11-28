@@ -74,7 +74,7 @@ export function gradeInputsOf(assets: readonly LoadedTradeAsset[]): GradeInputs 
       a.kind === 'player'
         ? gradePlayerFromRoster({ id: a.playerId, name: a.name, position: a.position, space: a.idSpace, identity: a.identity })
         : a.kind === 'pick'
-          ? { kind: 'pick' as const, year: a.season, round: a.round, label: a.label, ...(a.draftSide ? { draftSide: a.draftSide } : {}) }
+          ? { kind: 'pick' as const, year: a.season, round: a.round, label: a.label, ...(a.draftSide ? { draftSide: a.draftSide } : {}), ...(a.pool ? { pool: a.pool } : {}) }
           : { kind: 'faab' as const, amount: a.amount },
     ),
     unpriceable: [],

@@ -676,12 +676,12 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: "ai_draft_pick_explanation",
     lockedReason: "Draft planning is part of AF Legacy.",
-    backendEnforcement: "requireFeatureEntitlement(draft_prep) with allowTokenFallback.",
-    frontendGateBehavior: "InContextMonetizationCard + upgrade/token CTA.",
+    backendEnforcement: "None since 2026-11-28: the draft-room pick explanation (POST /api/draft/recommend) moved to the ENTITLEMENTS key draft_room_ai_explanation (AF Pro, AF Legacy, AF Supreme). This key remains the War Room's draft-planning card.",
+    frontendGateBehavior: "WarRoomTab gated tool card.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
-      routes: ["/league/[leagueId]/draft"],
-      components: ["DraftHelperPanel"],
+      routes: ["/league/[leagueId]"],
+      components: ["WarRoomTab"],
     },
   },
   {
@@ -908,6 +908,21 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     surfaceHints: {
       routes: ["/af-legacy?tab=trade"],
       components: ["TradeAlternatives"],
+    },
+  },
+  {
+    key: "legacy_portfolio_history",
+    title: "Portfolio over time",
+    accessType: "subscription_only",
+    requiredPlanId: "war_room",
+    tokenRuleCode: null,
+    lockedReason: "Your trade portfolio over time is part of AF Legacy.",
+    backendEnforcement: "Server (2026-11-28): GET /api/legacy/portfolio/history needs a session (401 sign_in_required), then requireFeatureEntitlement(legacy_portfolio_history) (403 feature_not_entitled) before any Sleeper read or grading.",
+    frontendGateBehavior: "PortfolioChart shows the server's plan sentence with a sign-in or upgrade link in place of the chart.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/af-legacy"],
+      components: ["PortfolioChart"],
     },
   },
   {

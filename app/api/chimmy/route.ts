@@ -30,48 +30,29 @@ import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
  * `app/components/ChimmyChat.tsx` (the dashboard's left chat panel and /legacy) and
  * `components/chimmy/ChimmyChatShell.tsx` (/chimmy/chat). Money rules here therefore reach real
  * users — which is why the AF Pro allowance below had to be applied here as well as there.
+ *
+ * ⚠ 2026-11-28: there is no "allowance below" any more. The `feature_chimmy_anthropic` branch that
+ * ran `runAgentPipeline` here (and carried its own copy of the allowance, token gate and daily cap)
+ * is gone; every non-tournament request is forwarded to `postChatChimmy`, which owns all of that.
+ * See the comment at the forward in `paidToolPost`.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
 import { answerSeasonAssistant, loadSeasonAssistantContext, seasonAssistantTopics } from '@/lib/tournament/seasonAssistantContext'
 import { resolveChimmyCommissionerGrounding } from '@/lib/intelligence/chimmy/resolveChimmyGrounding'
-import { resolveLeagueIntelligenceGrounding } from '@/lib/intelligence/chimmy/leagueIntelligenceGrounding'
-import { resolvePortfolioGrounding } from '@/lib/intelligence/chimmy/portfolioGrounding'
 import { z } from 'zod'
 
 import { readDeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
 import { POST as postChatChimmy } from '@/app/api/chat/chimmy/route'
-import {
-  runAgentPipeline,
-  streamAgentPipeline,
-  isAnthropicPipelineAvailable,
-  type UserContext,
-} from '@/lib/agents/anthropic-pipeline'
 import { runAiProtection } from '@/lib/ai-protection'
 import { authOptions } from '@/lib/auth'
-import { isAnthropicChimmyEnabled } from '@/lib/feature-toggle'
 import {
-  CHIMMY_DEFAULT_UPGRADE_PATH,
   CHIMMY_GENERIC_ERROR_MESSAGE,
   CHIMMY_PREMIUM_FEATURE_MESSAGE,
   isChimmyPremiumGateResponse,
   resolveChimmyUpgradePath,
 } from '@/lib/chimmy-chat/response-copy'
-import { buildChimmyResponseStructure } from '@/lib/chimmy-chat/presentation'
-import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
-import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
-import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
-import { checkDailyCap, incrementDailyCap } from '@/lib/ai/dailyCaps'
-import {
-  readChimmyAnswerAllowance,
-  releaseChimmyPlanAllowance,
-  takeChimmyPlanAllowance,
-  type ChimmyPlanAllowanceState,
-} from '@/lib/chimmy/planAllowance'
-import { tryDeterministicAnswer, DETERMINISTIC_SOURCE } from '@/lib/ai/deterministic'
-import { resolveLanguage } from '@/lib/i18n/constants'
 
 const MAX_MESSAGE_CHARS = 4_000
 const MAX_CONVERSATION_TURNS = 20
@@ -81,12 +62,6 @@ const SSE_HEADERS = {
   'Cache-Control': 'no-cache, no-transform',
   Connection: 'keep-alive',
 } as const
-const SUPPORTED_ANTHROPIC_IMAGE_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-] as const)
 
 const ConversationTurnSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -154,15 +129,6 @@ const ChimmyJsonRequestSchema = z.object({
 
 function shouldTreatAsJson(req: Request): boolean {
   return req.headers.get('content-type')?.toLowerCase().includes('application/json') === true
-}
-
-function resolveServerTier(plans: readonly string[]): UserContext['tier'] {
-  return plans.length > 0 ? 'pro' : 'free'
-}
-
-function resolveCapTier(plans: readonly string[]): 'free' | 'pro' | 'admin' {
-  if (plans.includes('supreme')) return 'admin'
-  return plans.length > 0 ? 'pro' : 'free'
 }
 
 function buildCompatibilityPayload(body: unknown, status: number) {
@@ -245,150 +211,6 @@ async function toCompatibilityResponse(response: Response): Promise<NextResponse
     status: response.status,
     headers,
   })
-}
-
-function buildAnthropicSuccessPayload(
-  body: Awaited<ReturnType<typeof runAgentPipeline>>,
-  sessionId?: string
-) {
-  const upgradeRequired = body.upgradeRequired === true
-  const recommendedTool =
-    body.intent === 'trade_evaluation'
-      ? 'trade_analyzer'
-      : body.intent === 'waiver_wire'
-        ? 'waiver_wire'
-        : body.intent === 'draft_help'
-          ? 'draft_assistant'
-          : body.intent === 'matchup_simulator'
-            ? 'matchup_simulator'
-            : body.intent === 'player_comparison'
-              ? 'player_comparison'
-              : undefined
-
-  return {
-    ...body,
-    response: body.result,
-    result: body.result,
-    sessionId,
-    meta: {
-      responseStructure: buildChimmyResponseStructure(body.result),
-      recommendedTool,
-    },
-    upgradeRequired,
-    upgradePath: upgradeRequired
-      ? resolveChimmyUpgradePath(body.upgradePath ?? CHIMMY_DEFAULT_UPGRADE_PATH)
-      : undefined,
-  }
-}
-
-function normalizeAnthropicMemory(
-  memory: z.infer<typeof ChimmyJsonRequestSchema>['userContext']['memory']
-): UserContext['memory'] {
-  if (!memory) return undefined
-
-  const tone =
-    memory.tone === 'strategic' || memory.tone === 'casual' || memory.tone === 'analytical'
-      ? memory.tone
-      : undefined
-  const detailLevel =
-    memory.detailLevel === 'concise' ||
-    memory.detailLevel === 'standard' ||
-    memory.detailLevel === 'detailed'
-      ? memory.detailLevel
-      : undefined
-  const riskMode =
-    memory.riskMode === 'conservative' ||
-    memory.riskMode === 'balanced' ||
-    memory.riskMode === 'aggressive'
-      ? memory.riskMode
-      : undefined
-
-  if (!tone && !detailLevel && !riskMode) {
-    return undefined
-  }
-
-  return {
-    tone,
-    detailLevel,
-    riskMode,
-  }
-}
-
-function buildAnthropicUserContext(
-  payload: z.infer<typeof ChimmyJsonRequestSchema>,
-  userId: string,
-  tier: UserContext['tier'],
-  language: string,
-  image?: UserContext['image']
-): UserContext {
-  return {
-    userId,
-    tier,
-    sport: payload.userContext.sport?.toUpperCase() as UserContext['sport'],
-    leagueFormat: payload.userContext.leagueFormat as UserContext['leagueFormat'],
-    scoring: payload.userContext.scoring ?? null,
-    leagueId: payload.userContext.leagueId ?? null,
-    insightType: payload.userContext.insightType ?? null,
-    teamId: payload.userContext.teamId ?? null,
-    season: payload.userContext.season ?? null,
-    week: payload.userContext.week ?? null,
-    source: payload.userContext.source ?? null,
-    language,
-    conversation: payload.conversation ?? [],
-    memory: normalizeAnthropicMemory(payload.userContext.memory),
-    image: image ?? null,
-  }
-}
-
-function normalizeAnthropicImagePayload(
-  image?: z.infer<typeof ChimmyImageSchema>
-): UserContext['image'] {
-  if (!image) return null
-
-  const match = image.dataUrl.match(/^data:([^;,]+);base64,(.+)$/)
-  if (!match) return null
-
-  const [, mimeTypeFromUrl, base64Payload] = match
-  const resolvedMediaType = (image.type?.trim() || mimeTypeFromUrl).toLowerCase()
-  if (!SUPPORTED_ANTHROPIC_IMAGE_TYPES.has(resolvedMediaType as NonNullable<UserContext['image']>['mediaType'])) {
-    return null
-  }
-
-  return {
-    data: base64Payload,
-    mediaType: resolvedMediaType as NonNullable<UserContext['image']>['mediaType'],
-    name: image.name?.trim() || null,
-  }
-}
-
-function isAnthropicSupportedRequest(
-  payload: z.infer<typeof ChimmyJsonRequestSchema>,
-  normalizedImage: UserContext['image']
-): boolean {
-  return !payload.image || Boolean(normalizedImage)
-}
-
-async function refundAnthropicTokenFallbackIfNeeded(args: {
-  tokenSpendId: string | null
-  userId: string
-  leagueId?: string
-}) {
-  if (!args.tokenSpendId) return
-
-  await new TokenSpendService()
-    .refundSpendByLedger({
-      userId: args.userId,
-      spendLedgerId: args.tokenSpendId,
-      refundRuleCode: 'feature_execution_failed',
-      sourceType: 'anthropic_chimmy_refund',
-      sourceId: args.tokenSpendId,
-      idempotencyKey: `refund:anthropic_chimmy:${args.tokenSpendId}`,
-      description: 'Auto refund after failed Anthropic Chimmy request.',
-      metadata: {
-        leagueId: args.leagueId ?? null,
-      },
-    })
-    .catch(() => null)
 }
 
 function encodeSseEvent(event: string, data: unknown) {
@@ -585,16 +407,6 @@ async function paidToolPost(req: NextRequest) {
     )
   }
 
-  let cookieStore: Awaited<ReturnType<typeof cookies>> | null = null
-  try {
-    cookieStore = await cookies()
-  } catch {
-    // cookies() unavailable in this context; default to 'en'
-  }
-  const afLang = resolveLanguage(cookieStore?.get('af_lang')?.value)
-  const wantsStream = parseResult.data.stream === true
-
-  const anthropicImage = normalizeAnthropicImagePayload(parseResult.data.image)
   const leagueGroundingRequired = requiresLeagueGrounding({
     message: parseResult.data.message,
     source: parseResult.data.userContext.source,
@@ -616,301 +428,25 @@ async function paidToolPost(req: NextRequest) {
     )
   }
 
-  const useAnthropicPath =
-    (await isAnthropicChimmyEnabled()) &&
-    isAnthropicPipelineAvailable() &&
-    isAnthropicSupportedRequest(parseResult.data, anthropicImage)
-
-  if (!useAnthropicPath) {
-    // G15.10 — best-effort commissioner grounding (gated inside; returns null if not applicable).
-    const commissionerGrounding = await resolveChimmyCommissionerGrounding({
-      leagueId: parseResult.data.userContext.leagueId,
-      question: parseResult.data.message,
-    })
-    const delegatedResponse = await postChatChimmy(buildForwardedRequest(req, parseResult.data, commissionerGrounding) as any)
-    return toCompatibilityResponse(delegatedResponse)
-  }
-
-  const session = (await getServerSession(authOptions as any)) as {
-    user?: { id?: string; email?: string | null }
-  } | null
-  const userId = session?.user?.id ?? null
-
-  const limitRes = await runAiProtection(req, {
-    action: 'chimmy',
-    getUserId: async () => userId,
-  })
-  if (limitRes) {
-    return toCompatibilityResponse(limitRes)
-  }
-  if (!userId) {
-    return NextResponse.json(buildCompatibilityPayload({ error: 'Unauthorized' }, 401), { status: 401 })
-  }
-
-  const earlyDeterministicAnswer = await tryDeterministicAnswer(parseResult.data.message, afLang)
-  if (earlyDeterministicAnswer !== null) {
-    const deterministicPayload = buildCompatibilityPayload(
-      { response: earlyDeterministicAnswer, result: earlyDeterministicAnswer, source: DETERMINISTIC_SOURCE },
-      200
-    )
-    if (wantsStream) {
-      const encoder = new TextEncoder()
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(encoder.encode(encodeSseEvent('chunk', { delta: earlyDeterministicAnswer, response: earlyDeterministicAnswer })))
-          controller.enqueue(encoder.encode(encodeSseEvent('done', deterministicPayload)))
-          controller.close()
-        },
-      })
-      return new Response(stream, { status: 200, headers: SSE_HEADERS })
-    }
-    return NextResponse.json(deterministicPayload, { status: 200 })
-  }
-
   /*
-   * ── AF PRO INCLUDES CHIMMY, 100 ANSWERS A DAY — HERE TOO ─────────────────────────────────────────
-   * This route still serves the dashboard's chat panel, /legacy and the /chimmy/chat shell (via
-   * `ChimmyChatService`) — see the correction in the header. It gated plan holders free, then HARD-STOPPED
-   * them at `DAILY_CAP_LIMITS.chimmy.pro` (30) with a 429 telling a paying subscriber to "upgrade".
-   * It now uses the same allowance as /api/chat/chimmy: answers left are included and counted; none
-   * left sends the plan holder down the token path a free account takes (`forceTokenFallback`).
+   * 🛑 EVERY PANEL GETS `/api/chat/chimmy`, WHATEVER `feature_chimmy_anthropic` SAYS (2026-11-28).
+   *
+   * This route used to run `runAgentPipeline` directly when `isAnthropicChimmyEnabled()` was true.
+   * That path had no Decision OS grounding packet, no tool loop and no `decisionAnswerCheck`, so a
+   * caller reaching it answered with less than the CommsDrawer did — and which one a user got turned
+   * on a platformConfig row nobody here can see. The flag is no longer read on this route.
+   *
+   * Money: this route charges NOTHING on this path. The daily allowance, the token gate, the AI
+   * protection limiter and the refunds all live in `postChatChimmy`, so a request is counted exactly
+   * once — there — and none skips it. Do not add a gate here without removing it there.
    */
-  let planState: ChimmyPlanAllowanceState
-  try {
-    planState = await readChimmyAnswerAllowance({ userId, email: session?.user?.email })
-  } catch {
-    return NextResponse.json({ error: 'Unable to check your included Chimmy answers. Please try again.',
-      code: 'chimmy_allowance_unavailable' }, { status: 503 })
-  }
-
-  const gate = planState.remaining > 0 ? {
-    ok: true as const,
-    decision: await new FeatureGateService().evaluateUserFeatureAccess(userId, 'ai_chat', session?.user?.email),
-    tokenSpend: null,
-    tokenPreview: null,
-  } : await requireFeatureEntitlement({
-    userId,
-    userEmail: session?.user?.email,
-    featureId: 'ai_chat',
-    allowTokenFallback: true,
-    forceTokenFallback: Boolean(planState && planState.remaining <= 0),
-    confirmTokenSpend: Boolean(parseResult.data.confirmTokenSpend),
-    tokenRuleCode: 'ai_chimmy_chat_message',
-    tokenSourceType: 'anthropic_chimmy_chat',
-    tokenSourceId: `${parseResult.data.userContext.leagueId ?? 'no-league'}:${Date.now()}`,
-    tokenDescription: 'Anthropic Chimmy chat message',
-    tokenMetadata: {
-      leagueId: parseResult.data.userContext.leagueId ?? null,
-      sport: parseResult.data.userContext.sport ?? null,
-      source: parseResult.data.userContext.source ?? 'api_chimmy_json',
-    },
-  })
-  if (!gate.ok) {
-    return toCompatibilityResponse(gate.response)
-  }
-
-  const resolvedTier = planState.remaining > 0 || gate.tokenSpend
-    ? 'pro' : resolveServerTier(gate.decision.entitlement.plans)
-  const anthropicContext = buildAnthropicUserContext(parseResult.data, userId, resolvedTier, afLang, anthropicImage)
-  // G15.10 — attach commissioner grounding (gated inside; null if not a commissioner/intent miss).
-  anthropicContext.commissionerGrounding = await resolveChimmyCommissionerGrounding({
-    userId,
+  // G15.10 — best-effort commissioner grounding (gated inside; returns null if not applicable).
+  const commissionerGrounding = await resolveChimmyCommissionerGrounding({
     leagueId: parseResult.data.userContext.leagueId,
     question: parseResult.data.message,
   })
-  // League-intelligence grounding: the chosen league's own synced engines
-  // (context envelope, format-correct market values incl. picks + FAAB
-  // heuristic, graded trades, H2H records). Access-checked + timeout-bounded
-  // inside; null on any miss so the chat never stalls.
-  anthropicContext.leagueIntelligenceGrounding = await resolveLeagueIntelligenceGrounding({
-    userId,
-    leagueId: parseResult.data.userContext.leagueId,
-  })
-  // No league attached → dashboard-level portfolio grounding instead (the same
-  // Command Center payload the dashboard renders, so chat and UI agree).
-  if (!anthropicContext.leagueIntelligenceGrounding && !parseResult.data.userContext.leagueId) {
-    // A timeout and an empty portfolio both mean "no text for the prompt" HERE — this route has no
-    // gap channel to carry the difference into. The packet's grading is where the distinction is
-    // acted on; see `PortfolioGroundingOutcome`.
-    const portfolio = await resolvePortfolioGrounding({ userId })
-    anthropicContext.leagueIntelligenceGrounding =
-      portfolio.status === 'ok' ? portfolio.text : null
-  }
-  const tokenSpendId = gate.tokenSpend?.id ?? null
-
-  /*
-   * ── Daily cap check ──────────────────────────────────────────────────────────
-   * For a PLAN HOLDER the allowance above is the limit, and past it tokens are — so the hard cap
-   * applies only to accounts without the plan, exactly as before.
-   */
-  let planIncluded: ChimmyPlanAllowanceState | null = null
-  if (planState && !tokenSpendId) {
-    try {
-      planIncluded = await takeChimmyPlanAllowance({ userId, state: planState })
-    } catch {
-      return NextResponse.json({ error: 'Unable to reserve your included Chimmy answer. Please try again.',
-        code: 'chimmy_allowance_unavailable' }, { status: 503 })
-    }
-    if (!planIncluded) {
-      /* Another request took the last included answer since the read above. The next send pays tokens. */
-      return NextResponse.json(
-        buildCompatibilityPayload(
-          {
-            error: `Today's ${planState.limit} included ${planState.planName} Chimmy answers are used. Send again to continue with tokens, or come back after midnight UTC.`,
-          },
-          429
-        ),
-        { status: 429 }
-      )
-    }
-  }
-  /** Refund the tokens, or hand back the included answer — whichever this turn used. */
-  const refundTurn = async () => {
-    await refundAnthropicTokenFallbackIfNeeded({
-      tokenSpendId,
-      userId,
-      leagueId: parseResult.data.userContext.leagueId ?? undefined,
-    })
-    if (planIncluded) await releaseChimmyPlanAllowance({ userId, state: planIncluded })
-  }
-  const capTier = resolveCapTier(gate.decision.entitlement.plans)
-  const capResult = planState ? null : await checkDailyCap('chimmy', userId, capTier)
-  if (capResult && !capResult.allowed) {
-    await refundAnthropicTokenFallbackIfNeeded({
-      tokenSpendId,
-      userId,
-      leagueId: parseResult.data.userContext.leagueId ?? undefined,
-    })
-    return NextResponse.json(
-      buildCompatibilityPayload(
-        { error: capResult.message, upgradeRequired: true, upgradePath: capResult.upgradePath },
-        429
-      ),
-      { status: 429 }
-    )
-  }
-
-  // ── Deterministic shortcut (saves provider credits) ──────────────────────────
-  const deterministicAnswer = await tryDeterministicAnswer(parseResult.data.message, afLang)
-  if (deterministicAnswer !== null) {
-    await refundTurn()
-    const deterministicPayload = buildCompatibilityPayload(
-      { response: deterministicAnswer, result: deterministicAnswer, source: DETERMINISTIC_SOURCE },
-      200
-    )
-    if (wantsStream) {
-      const encoder = new TextEncoder()
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(encoder.encode(encodeSseEvent('chunk', { delta: deterministicAnswer, response: deterministicAnswer })))
-          controller.enqueue(encoder.encode(encodeSseEvent('done', deterministicPayload)))
-          controller.close()
-        },
-      })
-      return new Response(stream, { status: 200, headers: SSE_HEADERS })
-    }
-    return NextResponse.json(deterministicPayload, { status: 200 })
-  }
-
-  try {
-    if (wantsStream) {
-      const encoder = new TextEncoder()
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          const push = (event: string, data: unknown) => {
-            controller.enqueue(encoder.encode(encodeSseEvent(event, data)))
-          }
-
-          void (async () => {
-            try {
-              const result = await streamAgentPipeline(
-                parseResult.data.message,
-                anthropicContext,
-                (delta, snapshot) => {
-                  push('chunk', { delta, response: snapshot })
-                }
-              )
-
-              if (result.upgradeRequired) {
-                await refundTurn()
-                push('done', buildAnthropicSuccessPayload(result, parseResult.data.userContext.sessionId))
-                controller.close()
-                return
-              }
-
-              // Count the successful streaming AI call against the user's daily cap.
-              incrementDailyCap('chimmy', userId, resolvedTier).catch(() => {})
-              push('done', buildAnthropicSuccessPayload(result, parseResult.data.userContext.sessionId))
-              controller.close()
-            } catch (error) {
-              await refundTurn()
-
-              console.error('[api/chimmy] Anthropic pipeline stream failed:', {
-                userId,
-                leagueId: parseResult.data.userContext.leagueId ?? null,
-                source: parseResult.data.userContext.source ?? 'api_chimmy_json',
-                error:
-                  error instanceof Error
-                    ? {
-                        message: error.message,
-                        stack: error.stack,
-                      }
-                    : error,
-              })
-
-              push('error', {
-                error: error instanceof Error ? error.message : 'Agent pipeline failed',
-              })
-              controller.close()
-            }
-          })()
-        },
-      })
-
-      return new Response(stream, {
-        status: 200,
-        headers: SSE_HEADERS,
-      })
-    }
-
-    const result = await runAgentPipeline(parseResult.data.message, anthropicContext)
-
-    if (result.upgradeRequired) {
-      await refundTurn()
-      return NextResponse.json(
-        buildAnthropicSuccessPayload(result, parseResult.data.userContext.sessionId),
-        { status: 200 }
-      )
-    }
-
-    // Count the successful AI call against the user's daily cap.
-    incrementDailyCap('chimmy', userId, resolvedTier).catch(() => {})
-    return NextResponse.json(
-      buildAnthropicSuccessPayload(result, parseResult.data.userContext.sessionId),
-      { status: 200 }
-    )
-  } catch (error) {
-    await refundTurn()
-
-    console.error('[api/chimmy] Anthropic pipeline execution failed:', {
-      userId,
-      leagueId: parseResult.data.userContext.leagueId ?? null,
-      source: parseResult.data.userContext.source ?? 'api_chimmy_json',
-      error:
-        error instanceof Error
-          ? {
-              message: error.message,
-              stack: error.stack,
-            }
-          : error,
-    })
-
-    const message = error instanceof Error ? error.message : 'Agent pipeline failed'
-    return NextResponse.json(
-      buildCompatibilityPayload({ error: message }, 500),
-      { status: 500 }
-    )
-  }
+  const delegatedResponse = await postChatChimmy(buildForwardedRequest(req, parseResult.data, commissionerGrounding) as any)
+  return toCompatibilityResponse(delegatedResponse)
 }
 
 export const dynamic = 'force-dynamic'

@@ -121,6 +121,13 @@ describe('scanImportedLeagueForTanking', () => {
     expect(deps.claim).not.toHaveBeenCalled()
   })
 
+  it('a pasted Yahoo league: no scan, and the result says why — it has no weekly matchups', async () => {
+    deps.report.mockResolvedValue({ supported: false, reason: 'pasted_no_matchups' })
+    expect(await run()).toEqual({ outcome: 'unsupported', reason: 'pasted_no_matchups', flagged: 0 })
+    expect(deps.claim).not.toHaveBeenCalled()
+    expect(deps.createFlag).not.toHaveBeenCalled()
+  })
+
   it('a scan that throws releases its marker so the next pass retries', async () => {
     deps.createFlag.mockRejectedValue(new Error('db down'))
     await expect(run()).rejects.toThrow('db down')

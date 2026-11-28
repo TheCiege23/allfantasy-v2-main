@@ -251,7 +251,13 @@ export default function ReputationPanel({ leagueId }: LeagueTabProps) {
       ])
       const explainData = await explainRes.json().catch(() => ({}))
       const evidenceData = await evidenceRes.json().catch(() => ({}))
-      setExplainNarrative(explainData?.narrative ?? explainData?.error ?? 'No explanation available.')
+      // A daily-cap (429) or sign-in refusal carries a sentence saying what to do next; prefer it to the bare error.
+      setExplainNarrative(
+        // Capped (2026-11-28): the reputation engine's sentence, plus the note that the AI limit was reached.
+        [explainData?.narrative ?? explainData?.message ?? explainData?.error ?? 'No explanation available.', explainData?.aiLimit?.message]
+          .filter(Boolean)
+          .join('\n\n'),
+      )
       setEvidenceRows(Array.isArray(evidenceData?.evidence) ? evidenceData.evidence : [])
     } catch {
       setExplainNarrative('Failed to load explanation.')

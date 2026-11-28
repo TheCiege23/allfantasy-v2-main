@@ -89,6 +89,9 @@ export const receiptsCardMessages = defineMessages({
     tradeRecord: 'Trade grades, against what the players scored since (redraft, PPR per week):',
     tradeLetter: (letter: string, netPerWeek: number, n: number) => `${letter} ${signed(netPerWeek)} (${n} deals)`,
     sleeperOnly: 'Receipts cover your Sleeper leagues for now.',
+    // The card's link to the full log, /core/decisions (AF Pro, AF Supreme — `decision_log_history`).
+    fullLog: 'See all your decisions',
+    fullLogLocked: (planName: string) => `${planName} — see all your decisions`,
     // The "AllFantasy saved me" share card (components/core-app/screens/AfSavedShare.tsx).
     savedShare: 'Share',
     savedHeadline: (margin: string) => `AllFantasy saved me +${margin} pts`,
@@ -164,6 +167,8 @@ export const receiptsCardMessages = defineMessages({
     tradeRecord: 'Notas de intercambio, frente a lo que anotaron los jugadores desde entonces (redraft, PPR por semana):',
     tradeLetter: (letter, netPerWeek, n) => `${letter} ${signed(netPerWeek)} (${n} ${n === 1 ? 'intercambio' : 'intercambios'})`,
     sleeperOnly: 'Por ahora, estos resultados cubren tus ligas de Sleeper.',
+    fullLog: 'Ver todas tus decisiones',
+    fullLogLocked: (planName) => `${planName} — ver todas tus decisiones`,
     savedShare: 'Compartir',
     savedHeadline: (margin) => `AllFantasy me salvó +${margin} pts`,
     savedDetail: (recommended, recommendedPts, instead, insteadPts) => `${recommended} ${recommendedPts} vs ${instead} ${insteadPts}`,

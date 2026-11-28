@@ -19,6 +19,7 @@ import {
 } from '@/lib/merged-devy-c2c/ai/C2CAIContext'
 import { buildC2CAIPrompt } from '@/lib/merged-devy-c2c/ai/C2CAIPrompts'
 import { openaiChatText } from '@/lib/openai-client'
+import { requireMemberPlayerAi } from '@/lib/subscription/memberPlayerAiGate'
 import { withOfficialTimeUserMessage } from '@/lib/time-engine/chimmyPromptPrefix'
 
 export const dynamic = 'force-dynamic'
@@ -45,6 +46,12 @@ export async function POST(
 
   const isC2C = await isC2CLeague(leagueId)
   if (!isC2C) return NextResponse.json({ error: 'Not a C2C league' }, { status: 404 })
+
+  // OpenAI per call. Every type is player-level advice to a manager about their own roster, so it is Chimmy
+  // Intelligence (`af_intelligence`: AF Pro, AF Commissioner, AF Supreme) plus the member daily cap, the same
+  // gate and the same place as its devy sibling (owner, 2026-11-28): before any context read or model call.
+  const gated = await requireMemberPlayerAi(req)
+  if (typeof gated !== 'string') return gated
 
   const body = await req.json().catch(() => ({}))
   const type = (body.type as C2CAIType) ?? 'pipeline_advisor'

@@ -8,6 +8,7 @@ import { DEFAULT_SPORT, normalizeToSupportedSport } from "@/lib/sport-scope"
 import { runUnifiedOrchestration } from "@/lib/ai-orchestration"
 import { buildEnvelopeForTool, formatToolResult, validateToolOutput } from "@/lib/ai-tool-layer"
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
+import { aiWriteUpLimit } from '@/lib/ai-protection/costGate'
 
 export const dynamic = "force-dynamic"
 
@@ -88,6 +89,24 @@ export async function POST(
       userMessage:
         "Explain this legacy score in 3-5 concise sentences. Mention strongest dimensions, one weaker dimension, and one practical improvement path.",
     })
+    // Owner, 2026-11-28: every model call is signed in and capped. The consensus orchestration below runs
+    // several models; the daily cap is taken immediately before it. Capped, the legacy engine's own sentence
+    // is the answer, with a note — never a 429 (owner follow-up, same day).
+    const aiLimit = await aiWriteUpLimit(req, 'legacy_score_explain_ai', gate.userId)
+    if (aiLimit) {
+      return NextResponse.json({
+        leagueId,
+        entityType,
+        entityId,
+        narrative: fallback,
+        source: 'legacy_score_engine',
+        verdict: null,
+        aiLimit,
+        overallLegacyScore: record.overallLegacyScore,
+        breakdown: context.breakdown,
+      })
+    }
+
     const orchestration = await runUnifiedOrchestration({
       envelope,
       mode: "consensus",

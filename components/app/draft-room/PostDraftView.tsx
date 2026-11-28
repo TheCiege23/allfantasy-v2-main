@@ -407,9 +407,18 @@ export function PostDraftView({
         if (includeAiExplanation && typeof data.recap === 'string') {
           setRecap(data.recap)
         }
+        // Capped: the deterministic recap above is the answer, and the note says the AI limit was reached.
+        if (includeAiExplanation && typeof data?.aiLimit?.message === 'string') {
+          setRecapError(data.aiLimit.message)
+        }
         setRecapExecutionMode(typeof data?.execution?.mode === 'string' ? data.execution.mode : null)
       } else if (includeAiExplanation) {
-        setRecapError(data.error ?? 'Failed to load recap')
+        // The daily cap (429) says when it resets and which plan raises it; prefer that sentence.
+        setRecapError(
+          (data?.code === 'daily_limit_reached' && typeof data.message === 'string' ? data.message : null) ??
+            data.error ??
+            'Failed to load recap',
+        )
       } else {
         setRecapSectionsError(data.error ?? 'Deterministic recap unavailable')
       }

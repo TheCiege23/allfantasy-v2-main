@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueAccess, requireSleeper } from '@/lib/ai/league-settings-ai/access'
 import { callClaudeJson } from '@/lib/ai/league-settings-ai/claude'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { fetchSleeperLeagueBundle, readSleeperStateWeek } from '@/lib/ai/league-settings-ai/sleeper'
 import {
   buildAiCacheKey,
@@ -135,6 +136,11 @@ Tone: clear, inclusive, no insults.`
         data: smokeResult,
       })
     }
+
+    // Owner, 2026-11-28: every model call is signed in and capped. After the cache (a hit costs nothing),
+    // immediately before the model call.
+    const gated = await aiCostGate(req, 'commish_note', userId)
+    if (gated) return gated
 
     const raw = await callClaudeJson({ system, user: userPayload, userId })
 

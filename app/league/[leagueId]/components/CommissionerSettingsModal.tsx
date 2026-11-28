@@ -162,7 +162,7 @@ export function CommissionerSettingsModal({
 
   const { confirm: confirmMidSeason, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const { status, save, debouncedSave, savedLabel } = useAutosave(leagueId, { confirmMidSeason })
-  const { hasCommissioner } = useEntitlements()
+  const { hasCommissioner, canUse } = useEntitlements()
 
   useEffect(() => {
     if (!isOpen) return
@@ -356,6 +356,9 @@ export function CommissionerSettingsModal({
   const canEditArea = (area: CoCommissionerScope) => canEdit && scopes.includes(area)
   const limitedCoCommissioner = canEdit && payload?.userRole === 'co_commissioner' && scopes.length < CO_COMMISSIONER_SCOPES.length
   const hasSub = hasCommissioner || (payload?.hasAfCommissionerSub ?? false)
+  // Devy / C2C player-level Chimmy actions are Chimmy Intelligence (AF Pro, AF Commissioner, AF Supreme) since
+  // 2026-11-28 — the same `af_intelligence` the server checks. League tools stay on hasSub.
+  const hasPlayerAi = hasSub || canUse('af_intelligence')
   const initialData = payload?.league as CommissionerSettingsFormData | undefined
   // IDP defensive scoring and survivor-guillotine capped scoring still read the override rows.
   const usesOverrideScoring =
@@ -701,7 +704,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'devy_import' ? (
             <DevyImportPanel leagueId={leagueId} />
           ) : activeTab === 'devy_ai' ? (
-            <DevyAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={canEdit} />
+            <DevyAIPanel leagueId={leagueId} hasAfSub={hasSub} hasPlayerAi={hasPlayerAi} isCommissioner={canEdit} />
           ) : activeTab === 'native_devy' ? (
             <div className="px-6 py-6" data-testid="native-devy-settings">
               <DevySettingsPanel leagueId={leagueId} isCommissioner={canEdit} />
@@ -727,7 +730,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'c2c_drafts' ? (
             <C2CDraftsPanel config={c2cConfig} leagueId={leagueId} canEdit={canEdit} onSaved={setC2cConfig} />
           ) : activeTab === 'c2c_ai' ? (
-            <C2CAIPanel leagueId={leagueId} hasAfSub={hasSub} c2cConfig={c2cConfig} isCommissioner={canEdit} />
+            <C2CAIPanel leagueId={leagueId} hasAfSub={hasSub} hasPlayerAi={hasPlayerAi} c2cConfig={c2cConfig} isCommissioner={canEdit} />
           ) : (
             <PlaceholderPanel title="Settings" />
           )}

@@ -196,7 +196,7 @@ function CompletedTradeView({ card, dynasty = false }: { card: TradeCard; dynast
   )
 }
 
-const PROVIDER_LABEL = { sleeper: 'Sleeper', yahoo: 'Yahoo' } as const
+const PROVIDER_LABEL = { sleeper: 'Sleeper', yahoo: 'Yahoo', espn: 'ESPN' } as const
 
 function assetLines(assets: TradeOfferAsset[]): string[] {
   if (assets.length === 0) return ['nothing']

@@ -189,7 +189,14 @@ describe('⚠ the inbox never claims an empty league it did not read', () => {
 
   it('⚠ offers no accept, reject or counter — the provider has no write endpoint', () => {
     // A control AllFantasy cannot honour is a lie with a button on it.
-    expect(INBOX).not.toContain("method: 'POST'")
+    /*
+     * The ONE write in the inbox is the ESPN action route, and its buttons render only from the
+     * server's `actions` list — which is empty until an ESPN write is captured (GAPS.md T-03e;
+     * pinned in __tests__/provider-trades/espn-offer-extras.test.ts). No other POST may appear.
+     */
+    expect(INBOX.split("method: 'POST'").length - 1).toBe(1)
+    expect(INBOX).toContain("fetch('/api/league/espn-trade-offers/action'")
+    expect(INBOX).toContain('(o.actions ?? []).map(')
     expect(INBOX).toContain('Act on it in Sleeper')
   })
 

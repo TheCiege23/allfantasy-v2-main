@@ -22,7 +22,7 @@ export default async function C2CCantonPage({ params }: { params: Promise<{ leag
       <C2CRosterClient
         leagueId={leagueId}
         userId={session.user.id}
-        hasAfSub={plans.commissioner}
+        hasAfSub={plans.pro || plans.commissioner}
         initialViewMode="canton"
       />
     </C2CPageFrame>

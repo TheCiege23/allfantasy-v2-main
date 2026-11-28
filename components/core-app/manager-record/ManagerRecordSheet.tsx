@@ -35,6 +35,8 @@ type Loaded =
   | { state: 'error'; message: string }
   | { state: 'locked'; access: CoreDepthAccess }
   | { state: 'ready'; record: ManagerRecord }
+  /** The `managerRecords` kill switch is off (2026-11-28) — a calm notice, not an error and not an empty record. */
+  | { state: 'unavailable' }
 
 
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -136,10 +138,11 @@ export function ManagerRecordSheet(props: {
     })
       .then(async (res) => {
         const body = (await res.json().catch(() => null)) as
-          | { locked?: boolean; access?: CoreDepthAccess; record?: ManagerRecord; error?: string }
+          | { locked?: boolean; unavailable?: boolean; access?: CoreDepthAccess; record?: ManagerRecord; error?: string }
           | null
         if (ctrl.signal.aborted) return
-        if (res.ok && body?.locked && body.access) setLoaded({ state: 'locked', access: body.access })
+        if (res.ok && body?.unavailable) setLoaded({ state: 'unavailable' })
+        else if (res.ok && body?.locked && body.access) setLoaded({ state: 'locked', access: body.access })
         else if (res.ok && body?.record) setLoaded({ state: 'ready', record: body.record })
         else setLoaded({ state: 'error', message: body?.error ?? '' })
       })
@@ -169,6 +172,11 @@ export function ManagerRecordSheet(props: {
         {loaded.state === 'error' ? (
           <p className="af-mr-reason" role="alert">
             {loaded.message ? coreUiCopy(loaded.message, language) : c.failed}
+          </p>
+        ) : null}
+        {loaded.state === 'unavailable' ? (
+          <p className="af-mr-note" data-testid="manager-record-unavailable">
+            {c.unavailable}
           </p>
         ) : null}
         {loaded.state === 'locked' ? <CoreDepthLock access={loaded.access} what={lockSubjectText(c.subject, language)} lang={language} /> : null}

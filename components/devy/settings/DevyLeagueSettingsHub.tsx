@@ -282,10 +282,10 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
  * The devy/NFL exchange rate — the one setting in this hub that changes whether a trade can be
  * graded at all.
  *
- * 🛑 THE DEFAULT IS "NOT SET", AND THE CARD SAYS WHAT THAT MEANS. Nothing prices college
- * players, so a trade spanning devy and NFL assets is reported ungradeable. That is the honest
- * state and most leagues should stay in it; this control exists for a commissioner who would
- * rather his league used a stated house rule than got no answer.
+ * 🛑 THE DEFAULT IS "NOT SET", AND THE CARD SAYS WHAT THAT MEANS. Since 2026-11-28 a prospect in
+ * a trade is priced at his measured option value (`lib/devy/devyOptionValue.ts`), the same number
+ * the grade uses, so a mixed deal needs no conversion. Most leagues should stay unset; this control
+ * is the explicit override for a commissioner who prefers a stated house rule.
  *
  * ⚠ IT SHOWS THE CONSEQUENCE, NOT JUST THE NUMBER. A rate is an abstraction — "3.5" tells a
  * commissioner nothing. "Your best prospect becomes 3,500" is the thing he can actually judge

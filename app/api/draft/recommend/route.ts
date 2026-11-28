@@ -58,7 +58,8 @@ async function paidToolPost(req: NextRequest) {
     const gate = await requireFeatureEntitlement({
       userId: session.user.id,
       userEmail: session.user.email,
-      featureId: 'draft_prep',
+      // AF Pro, AF Legacy or AF Supreme (owner, 2026-11-28). Was `draft_prep` (AF Legacy only).
+      featureId: 'draft_room_ai_explanation',
       allowTokenFallback: true,
       confirmTokenSpend: Boolean(body.confirmTokenSpend),
       tokenRuleCode: 'ai_draft_pick_explanation',

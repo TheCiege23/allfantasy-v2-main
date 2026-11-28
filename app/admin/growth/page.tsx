@@ -120,9 +120,9 @@ export default async function GrowthRevenuePage(props: { searchParams?: Promise<
               const af = afIntelligenceConversion(data.growth.whatSells)
               const row = (r: typeof af.total) => [entrySourceLabel(r.entrySource), fmt(r.viewed), fmt(r.clicked), formatRate(rateOf(r.clicked, r.viewed)), fmt(r.checkouts), fmt(r.paid), formatRate(rateOf(r.paid, r.checkouts))]
               return (
-                <Section title="AF Intelligence locks" hint="The paywall on AF projections, AF ADP, the full trade grade and Chimmy's paid answers: who saw each lock, clicked it, and paid. A lock many people see but few click needs better copy; one that is clicked but not bought needs a better plan page.">
+                <Section title="Chimmy Intelligence locks" hint="The paywall on AF projections, AF ADP, the full trade grade and Chimmy's paid answers: who saw each lock, clicked it, and paid. A lock many people see but few click needs better copy; one that is clicked but not bought needs a better plan page.">
                   {af.rows.length === 0 ? (
-                    <p className="text-sm text-white/55">No AF Intelligence lock has been seen in this window yet.</p>
+                    <p className="text-sm text-white/55">No Chimmy Intelligence lock has been seen in this window yet.</p>
                   ) : (
                     <Table head={["Lock", "Saw it", "Clicked", "Saw → clicked", "Started checkout", "Paid", "Checkout → paid"]} rows={[row(af.total), ...af.rows.map(row)]} />
                   )}

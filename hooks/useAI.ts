@@ -29,7 +29,14 @@ export function useAI<T = any>() {
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.error || options?.errorMessage || 'Chimmy request failed');
+          // A plan, sign-in or daily-cap refusal carries a full sentence saying what to do next (wait until
+          // tomorrow, or upgrade); show that rather than its bare error word.
+          const refusalSentence =
+            typeof data?.message === 'string' &&
+            ['daily_limit_reached', 'feature_not_entitled', 'sign_in_required'].includes(data?.code)
+              ? data.message
+              : null;
+          throw new Error(refusalSentence || data.error || options?.errorMessage || 'Chimmy request failed');
         }
 
         if (options?.successMessage) {

@@ -83,6 +83,16 @@ describe('readLineupIntegrity', () => {
     expect(await readLineupIntegrity('L1', { fullSeason: true })).toEqual({ supported: false, reason: 'no_lineup_rules' })
   })
 
+  it('a PASTED Yahoo league says it has no weekly matchups to scan, not merely "unsupported platform"', async () => {
+    // The paste stores settings, standings, draft and rosters — no schedule, no weekly scores
+    // (yahooSnapshotModel.ts `buildYahooSnapshotPayload`: `schedule: []`).
+    state.league = { ...sleeper, platform: 'yahoo', platformLeagueId: '987654', settings: { yahoo_settings: { source: 'yahoo_paste_snapshot' } } }
+    expect(await readLineupIntegrity('L1', { fullSeason: true })).toEqual({ supported: false, reason: 'pasted_no_matchups' })
+    // A Yahoo league imported any other way keeps the platform reason.
+    state.league = { ...sleeper, platform: 'yahoo', platformLeagueId: '987654', settings: { yahoo_settings: { scoring_type: 'head' } } }
+    expect(await readLineupIntegrity('L1', { fullSeason: true })).toEqual({ supported: false, reason: 'unsupported_platform' })
+  })
+
   it('free view: the latest finished week only', async () => {
     const rep = await readLineupIntegrity('L1', { fullSeason: false })
     if (!rep?.supported) throw new Error('unsupported')

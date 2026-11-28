@@ -95,10 +95,10 @@ describe('the context notes see an unpriced player as unpriced', () => {
       pricedGet: Array<{ name: string; marketValue: number | null }>
     }
     expect(args.pricedGive).toEqual([
-      { name: 'Philadelphia Eagles', marketValue: null },
-      { name: 'Brock Purdy', marketValue: 5100 },
+      { name: 'Philadelphia Eagles', marketValue: null, devy: false },
+      { name: 'Brock Purdy', marketValue: 5100, devy: false },
     ])
-    expect(args.pricedGet).toEqual([{ name: 'DK Metcalf', marketValue: 2004 }])
+    expect(args.pricedGet).toEqual([{ name: 'DK Metcalf', marketValue: 2004, devy: false }])
   })
 
   it('[control] the response itself still carries the engine line, flag and all', async () => {

@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
 function cx(...classes: (string | false | null | undefined)[]) {
   return classes.filter(Boolean).join(' ')
@@ -117,6 +119,7 @@ function FeatureCard({
   const [loading, setLoading] = useState(false)
   const [insight, setInsight] = useState<string | null>(null)
   const [error, setError] = useState(false)
+  const [refusal, setRefusal] = useState<PlanRefusal | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 100 + index * 80)
@@ -127,6 +130,7 @@ function FeatureCard({
     if (insight || loading) return
     setLoading(true)
     setError(false)
+    setRefusal(null)
     try {
       const res = await fetch('/api/ai-features', {
         method: 'POST',
@@ -135,7 +139,10 @@ function FeatureCard({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(true)
+        // The daily cap (429) and sign-in (401) say what to do next (owner, 2026-11-28).
+        const refused = readPlanRefusal(res.status, data, { returnTo: currentPathForReturn() })
+        if (refused) setRefusal(refused)
+        else setError(true)
         return
       }
       setInsight(data.insight || 'Chimmy insight unavailable.')
@@ -203,6 +210,7 @@ function FeatureCard({
                 <span className="text-[11px] text-white/40">Generating personalized insight...</span>
               </div>
             )}
+            {refusal && <PlanRefusalNotice refusal={refusal} />}
             {error && (
               <div className="text-[11px] text-red-300/70 py-1">
                 Could not load Chimmy insight. Try again later.

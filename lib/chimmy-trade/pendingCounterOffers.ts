@@ -51,7 +51,7 @@ export function toConsoleInput(a: LoadedTradeAsset): TradeAssetInput {
       ...(sleeperId ? { providerIdentity: { provider: 'sleeper' as const, id: sleeperId, ...(a.position ? { position: a.position } : {}) } } : {}),
     }
   }
-  if (a.kind === 'pick') return { kind: 'pick', year: a.season, round: a.round, label: a.label, ...(a.draftSide ? { draftSide: a.draftSide } : {}) }
+  if (a.kind === 'pick') return { kind: 'pick', year: a.season, round: a.round, label: a.label, ...(a.draftSide ? { draftSide: a.draftSide } : {}), ...(a.pool ? { pool: a.pool } : {}) }
   return { kind: 'faab', amount: a.amount }
 }
 

@@ -42,3 +42,15 @@ export function unmatchedRosteredNote(unmatched: number): string {
 export function leagueUnverifiedClause(unmatched: number): string {
   return `${players(unmatched)} on its rosters couldn't be matched to ours`
 }
+
+/*
+ * A PASTED YAHOO LEAGUE's bench ("Best on your bench"). The paste records who starts; when a roster
+ * carries no starter at all, its bench cannot be told apart from its starters, and the screen says so
+ * rather than listing the whole roster as a bench.
+ */
+export const PASTED_BENCH_UNREADABLE = "Your bench can't be told apart from your starters in a pasted league."
+
+/** Bench players no Sleeper-id read can see: counted, never listed. */
+export function benchUnmatchedNote(unmatched: number): string {
+  return `${players(unmatched)} on your bench couldn't be matched to ours.`
+}

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
+import { FeatureGate } from '@/components/subscription/FeatureGate'
 
 type NflModalPayload = {
   kind: 'nfl'
@@ -36,18 +37,16 @@ export function DevyPlayerModal({
   onClose,
   payload,
   leagueId,
-  hasAfSub = false,
 }: {
   open: boolean
   onClose: () => void
   payload: DevyPlayerModalPayload | null
   leagueId?: string
-  hasAfSub?: boolean
 }) {
   const [evalBusy, setEvalBusy] = useState(false)
   const [evalErr, setEvalErr] = useState<string | null>(null)
   const [evalText, setEvalText] = useState<string | null>(null)
-  const { handleApiResponse } = useAfSubGate('commissioner_devy_scouting')
+  const { handleApiResponse } = useAfSubGate('af_intelligence')
 
   if (!open || !payload) return null
 
@@ -120,7 +119,12 @@ export function DevyPlayerModal({
               <p className="font-semibold text-[var(--text)]">Rights panel</p>
               <p className="mt-1">Acquired: {payload.acquiredAt ?? '—'} via {payload.acquiredVia ?? '—'}</p>
             </section>
-            {hasAfSub && leagueId ? (
+            {/*
+             * A member's read on their own prospect: AF Intelligence (AF Pro, AF Commissioner, AF Supreme;
+             * owner, 2026-11-28). FeatureGate draws the lock from the same rule POST /api/devy/ai enforces.
+             */}
+            {leagueId ? (
+              <FeatureGate featureId="af_intelligence" featureNameOverride="Chimmy prospect evaluation">
               <div className="space-y-2">
                 <button
                   type="button"
@@ -172,7 +176,7 @@ export function DevyPlayerModal({
                   className="w-full rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] py-2.5 text-[12px] font-semibold text-[var(--accent)] min-h-[44px] disabled:opacity-50"
                   data-testid="devy-ai-evaluate-prospect"
                 >
-                  {evalBusy ? 'Analyzing…' : 'Chimmy evaluation (Chimmy)'}
+                  {evalBusy ? 'Analyzing…' : 'Chimmy evaluation'}
                 </button>
                 {evalErr ? <p className="text-[11px] text-[var(--devy-amber)]">{evalErr}</p> : null}
                 {evalText ? (
@@ -181,9 +185,8 @@ export function DevyPlayerModal({
                   </pre>
                 ) : null}
               </div>
-            ) : (
-              <p className="text-[11px] text-[var(--faint)]">Chimmy prospect evaluation requires AF Commissioner.</p>
-            )}
+              </FeatureGate>
+            ) : null}
             {payload.hasEnteredNfl ? (
               <section className="rounded-xl border border-[var(--good)] bg-[var(--good-soft)] p-3 text-[12px]">
                 <p className="font-semibold text-[var(--good)]">Entered NFL {payload.nflEntryYear ?? ''}</p>
