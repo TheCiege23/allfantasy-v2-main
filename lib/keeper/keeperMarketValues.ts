@@ -23,8 +23,9 @@ import { isBoardValueSport, loadLeagueValueBoard, type LeagueValueBoard, type Le
  * 🛑 SLEEPER IDS ARE PER SPORT (NFL 1466 Kelce, NBA 1466 McGee). The FantasyCalc chart is NFL players, so it
  * is read for an NFL league only; a board sport's ids resolve on that sport's board only.
  *
- * The missed-deadline rule does NOT pass `includeBoardSports` (it runs inside the keeper lock's transaction,
- * and it writes keepers), so AF's automatic keeps stay NFL-only for now; what it keeps by is still this rank.
+ * The missed-deadline rule passes `includeBoardSports` too (owner 2026-11-28), so AF's automatic keeps in a
+ * board sport are the players the card and the Keepers tab call the best value. It loads the ranks BEFORE the
+ * keeper lock's transaction (`preloadMissedDeadlineRanks`) and passes them in; a board never loads inside it.
  */
 
 export type MarketRankLookup = (player: { playerId: string; name: string | null | undefined; position: string | null | undefined }) => number | null

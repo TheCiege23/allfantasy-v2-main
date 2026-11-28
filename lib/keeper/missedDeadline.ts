@@ -7,8 +7,9 @@
  *                     value beats the pick they would cost by the most — up to the league's keeper
  *                     count, and only players who are worth more than their pick.
  *
- * "Worth more than their pick" is measured, not guessed: a player's market rank (FantasyCalc's
- * redraft overall rank, from the DB-first chart) against the overall pick his keeper round uses
+ * "Worth more than their pick" is measured, not guessed: a player's market rank (./keeperMarketValues:
+ * FantasyCalc's redraft overall rank for NFL, the league's own value board for NBA · MLB · NHL · NCAAB ·
+ * SOCCER — the rank the player card and the Keepers tab show) against the overall pick his keeper round uses
  * (the middle of that round). A first-round talent costing a 9th is +large; a 9th-round talent
  * costing a 3rd is negative and is never kept. A player with no market rank is never auto-kept:
  * AF does not keep someone it cannot price.
