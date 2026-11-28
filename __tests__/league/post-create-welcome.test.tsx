@@ -1,6 +1,7 @@
 /**
- * Post-create welcome (2026-10-13): one intro, then the "your league is ready" sheet with the
- * invite (QR, share sheet, text, WhatsApp, copy), with the handoff flags cleared after one read.
+ * Post-create welcome (2026-10-13): one intro, with the handoff flags cleared after one read.
+ * The "your league is ready" share sheet after it was removed 2026-11-28 (owner): the invite is at
+ * the top of the Draft tab instead — see __tests__/league/predraft-draft-home.test.tsx.
  */
 import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -29,7 +30,6 @@ import {
 } from '@/lib/league/league-invite-link'
 import { buildPostCreateLeagueHomeHref } from '@/lib/league/post-create-navigation'
 import { LeagueInviteShare, copyInviteText } from '@/components/league/invite/LeagueInviteShare'
-import { PostCreateWelcomeSheet, formatWelcomeDraftDate, type PostCreateWelcomeLeague } from '@/components/league/post-create/PostCreateWelcomeSheet'
 import { LeagueConceptIntroGate } from '@/components/league/LeagueConceptIntroGate'
 import { ConceptIntroVideoOverlay } from '@/components/league/ConceptIntroVideoOverlay'
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
@@ -112,7 +112,7 @@ describe('exactly one intro', () => {
     expect(firstEntryIntroStorageKey('guillotine', 'L1', 'u1')).toBe('guillotine_intro_seen_L1')
   })
 
-  it('a format intro closing hands over to the welcome sheet', () => {
+  it('a format intro closing ends the welcome', () => {
     const onClose = vi.fn()
     render(<SurvivorFirstEntryModal leagueId="L2" userId="u1" enabled onClose={onClose} />)
     fireEvent.click(screen.getByTestId('survivor-intro-continue'))
@@ -253,49 +253,5 @@ describe('one invite link, every way to send it', () => {
     document.body.appendChild(field)
     expect(await copyInviteText(field.value, field)).toBe('copied')
     expect(document.execCommand).toHaveBeenCalledWith('copy')
-  })
-})
-
-describe('"your league is ready"', () => {
-  const league: PostCreateWelcomeLeague = {
-    id: 'L1',
-    name: 'Tight End Club',
-    sport: 'NFL',
-    formatLabel: 'Redraft',
-    teamCount: 12,
-    claimedSeats: 1,
-    scoringLabel: 'Full PPR',
-    tePremiumPoints: 0.5,
-    draftDateIso: null,
-    timezone: 'America/Chicago',
-    privacy: 'private',
-  }
-
-  it('is just the invite and a way out — no settings rows, no listing card, no setup steps', () => {
-    const onClose = vi.fn()
-    render(<PostCreateWelcomeSheet league={league} inviteUrl="https://x.test/join?code=A" onClose={onClose} onOpenSettings={vi.fn()} />)
-    expect(screen.getByRole('dialog', { name: 'Tight End Club is ready' })).toBeTruthy()
-    expect(screen.getByTestId('post-create-welcome-invite-line').textContent).toBe('Invite 11 more managers to fill the league.')
-    expect(screen.getByTestId('post-create-invite-qr')).toBeTruthy()
-    expect(screen.queryByTestId('post-create-welcome-info')).toBeNull()
-    expect(screen.queryByTestId('post-create-welcome-set-draft')).toBeNull()
-    expect(screen.queryByTestId('find-league-listing-toggle')).toBeNull()
-    fireEvent.click(screen.getByTestId('post-create-welcome-done'))
-    expect(onClose).toHaveBeenCalledTimes(1)
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(onClose).toHaveBeenCalledTimes(2)
-  })
-
-  it('says the league is full when every seat is taken, and shows no link without one', () => {
-    render(<PostCreateWelcomeSheet league={{ ...league, claimedSeats: 12 }} inviteUrl="" onClose={vi.fn()} onOpenSettings={vi.fn()} />)
-    expect(screen.getByTestId('post-create-welcome-invite-line').textContent).toBe('Every seat is filled.')
-    expect(screen.getByTestId('post-create-invite-no-link')).toBeTruthy()
-  })
-
-
-  it('formats the draft date in the league zone, and survives a bad zone', () => {
-    expect(formatWelcomeDraftDate('2026-11-09T02:00:00.000Z', 'America/Chicago', 'en-US')).toMatch(/Sun, Nov 8, 8:00\s?PM CST/)
-    expect(formatWelcomeDraftDate('2026-11-09T02:00:00.000Z', 'Not/AZone', 'en-US')).toBeTruthy()
-    expect(formatWelcomeDraftDate(null, 'America/Chicago')).toBeNull()
   })
 })

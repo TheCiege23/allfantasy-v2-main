@@ -35,7 +35,6 @@ describe('League shell layout and waivers integration', () => {
 
   it('sets predraft default center tab to Draft/Draft Setup (draft or home)', () => {
     expect(leagueShell).toContain("const isPredraftLifecycle = useMemo(() =>")
-    expect(leagueShell).toContain('Draft setup')
     // A paired college + pro league wraps the screen in its one-league note (CollegeProOneLeague); the predraft fallback is still what renders.
     expect(leagueShell).toMatch(/if \(isPredraftLifecycle\) return (?:\w+\([^\n]*)?renderPredraftDraftSetup\(\)/)
   })
@@ -44,13 +43,6 @@ describe('League shell layout and waivers integration', () => {
     expect(leagueShell).toContain('data-testid="league-command-center-surface"')
     expect(leagueShell).toContain('data-testid="league-command-center-header"')
     expect(leagueShell).toContain('data-testid="league-command-center-tabs"')
-    expect(leagueShell).toContain('data-testid="league-command-center-card"')
-    // The card's diagonal gradient through the shell's dark #050814, whatever the accent: 9468582a7
-    // (2026-08-08, "Broadcast Deck") moved the accent from cyan to #ff3d81, and pinning the exact
-    // colour class turned a restyle into a red test.
-    expect(leagueShell).toMatch(
-      /className="[^"]*bg-gradient-to-br[^"]*via-\[#050814\][^"]*"\s*data-testid="league-command-center-card"/,
-    )
   })
 
   it('includes waivers in league tab definitions and nfl redraft core tabs', () => {

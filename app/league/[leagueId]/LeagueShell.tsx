@@ -3,7 +3,6 @@
 import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
 
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
-import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
@@ -132,6 +131,8 @@ import {
 } from './LeagueTabs'
 import { isNflRedraftCoreDashboardFromUserLeague, isNflRedraftCoreDashboardLeague, leagueWeekIsOnSeasonRow } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { DraftTab } from './tabs/DraftTab'
+import { PredraftDraftHome } from '@/components/league/draft-home/PredraftDraftHome'
+import { formatScoringMode } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { TeamTab } from './tabs/TeamTab'
 import { LeagueTab } from './tabs/LeagueTab'
 import { PlayersTab } from './tabs/PlayersTab'
@@ -222,7 +223,6 @@ import { PostCreateSetupGuideBanner } from '@/components/league/PostCreateSetupG
 import { CommissionerSetupChecklist } from '@/components/league/CommissionerSetupChecklist'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { LeagueConceptIntroGate } from '@/components/league/LeagueConceptIntroGate'
-import { PostCreateWelcomeSheet, type PostCreateWelcomeLeague } from '@/components/league/post-create/PostCreateWelcomeSheet'
 import {
   chooseWelcomeIntro,
   firstEntryIntroKinds,
@@ -231,9 +231,7 @@ import {
   stripPostCreateHandoff,
   type FirstEntryIntroKind,
 } from '@/lib/league/post-create-welcome'
-import { countClaimedSeats, leagueJoinUrl, nativeLeagueInviteCode } from '@/lib/league/league-invite-link'
-import { getLeagueTypeMedia, resolveLeagueConceptIntroKey } from '@/lib/league-media/leagueTypeMedia'
-import { findScoringPresetRule } from '@/lib/league-creation-preset/scoring-presets'
+import { leagueJoinUrl } from '@/lib/league/league-invite-link'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { SpecialtyLeagueAtmosphere } from '@/components/league-atmosphere/SpecialtyLeagueAtmosphere'
 import { useGuillotineAtmosphere } from '@/components/league-atmosphere/useGuillotineAtmosphere'
@@ -1135,7 +1133,7 @@ export function LeagueShell({
   const [welcomeFlowUsed] = useState(() =>
     shouldStartPostCreateWelcome({ createdFromLeagueCreate, isCommissioner, defaultShowInvite, shouldPlayIntro, embedMode }),
   )
-  const [welcomeStage, setWelcomeStage] = useState<'intro' | 'ready' | 'done'>(() => (welcomeFlowUsed ? 'intro' : 'done'))
+  const [welcomeStage, setWelcomeStage] = useState<'intro' | 'done'>(() => (welcomeFlowUsed ? 'intro' : 'done'))
   const firstEntryKinds = useMemo(
     () => firstEntryIntroKinds({ leagueVariant: league.leagueVariant, leagueType: league.leagueType, guillotineMode: league.guillotineMode }),
     [league.leagueVariant, league.leagueType, league.guillotineMode],
@@ -1148,14 +1146,21 @@ export function LeagueShell({
     // Decided once, on arrival: a modal marking itself seen mid-flow must not re-route the flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [welcomeFlowUsed])
+  /*
+   * The intro is the whole welcome now. The "your league is ready" share sheet that followed it is
+   * gone for every league (owner, 2026-11-28: "that big rectangle with all that information is not
+   * needed"): the league opens on its Draft tab, and the invite sits at the top of it.
+   */
+  const finishWelcomeRef = useRef<() => void>(() => {})
   const advanceWelcomeFromIntro = useCallback(() => {
-    setWelcomeStage((stage) => (stage === 'intro' ? 'ready' : stage))
+    finishWelcomeRef.current()
   }, [])
   const finishWelcome = useCallback(() => {
     // Mark every format intro seen BEFORE they are re-enabled, so none pops up after the sheet.
     markFirstEntryIntrosSeen(firstEntryKinds, league.id, userId)
     setWelcomeStage('done')
   }, [firstEntryKinds, league.id, userId])
+  finishWelcomeRef.current = finishWelcome
   const firstEntryIntroEnabled = (kind: FirstEntryIntroKind): boolean =>
     !welcomeFlowUsed || welcomeStage === 'done' || (welcomeStage === 'intro' && welcomeIntroKind === kind)
 
@@ -1497,34 +1502,6 @@ export function LeagueShell({
     closeLeagueSettingsModal()
     toast.error(settingsLoadFailedMessage)
   }, [settingsOpen, settingsLoadFailed, closeLeagueSettingsModal])
-
-  const welcomeLeague = useMemo<PostCreateWelcomeLeague>(() => {
-    const settings =
-      league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
-        ? (league.settings as Record<string, unknown>)
-        : {}
-    const conceptKey = resolveLeagueConceptIntroKey({
-      leagueType: league.leagueType,
-      leagueVariant: league.leagueVariant,
-      settings: league.settings,
-      isDynasty: league.isDynasty,
-      guillotineMode: league.guillotineMode,
-      bestBallMode: league.bestBallMode,
-    })
-    return {
-      id: league.id,
-      name: league.name ?? 'Your league',
-      sport: String(league.sport ?? ''),
-      formatLabel: getLeagueTypeMedia(conceptKey).label,
-      teamCount: league.leagueSize ?? league.teams.length,
-      claimedSeats: countClaimedSeats(league.teams),
-      scoringLabel: (league.scoringPresetId ? findScoringPresetRule(league.scoringPresetId)?.label : null) ?? league.scoring ?? null,
-      tePremiumPoints: typeof settings.te_premium_points === 'number' ? settings.te_premium_points : null,
-      draftDateIso,
-      timezone: league.timezone ?? null,
-      privacy: leagueAudience(settings),
-    }
-  }, [league, draftDateIso])
 
   const blockConceptIntroForInvitePrefill =
     defaultShowInvite && inviteAutoOpenedForLeague.current !== league.id
@@ -2302,21 +2279,6 @@ export function LeagueShell({
           )
         : null}
 
-      {portalMounted && welcomeStage === 'ready'
-        ? createPortal(
-            <PostCreateWelcomeSheet
-              league={welcomeLeague}
-              inviteUrl={leagueJoinUrl(nativeLeagueInviteCode(league.settings, league.invites))}
-              onClose={finishWelcome}
-              onOpenSettings={(panel) => {
-                finishWelcome()
-                openLeagueSettingsModal(panel)
-              }}
-            />,
-            document.body,
-          )
-        : null}
-
       {portalMounted && (zombieLeague || league.leagueVariant === 'survivor')
         ? createPortal(
             <LeagueClipOverlayHost
@@ -2493,8 +2455,6 @@ function LeagueTabRouter({
 
   const renderPredraftDraftSetup = () => {
     const teamCount = selectedLeague.teamCount ?? teamSlots.length
-    const joinedTeams = countAssignedManagers(teamSlots)
-    const openManagerSlots = Math.max(0, teamCount - joinedTeams)
     const settings =
       selectedLeague.settings && typeof selectedLeague.settings === 'object' && !Array.isArray(selectedLeague.settings)
         ? (selectedLeague.settings as Record<string, unknown>)
@@ -2532,116 +2492,62 @@ function LeagueTabRouter({
       nestedDraftSettings.engineCore,
     ) ?? 'snake'
     const rounds = draftSetupSession?.rounds ?? readNumber(settings.draft_rounds, nestedDraftSettings.rounds) ?? (sport === 'NCAAF' ? 20 : 15)
-    const timerLabel = draftSetupSession
-      ? draftSetupSession.timerSeconds == null || draftSetupSession.timerSeconds <= 0
-        ? 'Untimed'
-        : `${draftSetupSession.timerSeconds}s`
-      : 'Set in draft room'
-    const draftDateLabel = draftDateIso
-      ? new Date(draftDateIso).toLocaleString(undefined, {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-        })
-      : 'Optional - set when ready'
-    const mockDraftHref = `/mock-draft?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(
-      String(sport).toLowerCase(),
-    )}`
+    const allowInviteLink =
+      typeof settings.league_allow_invite_link === 'boolean'
+        ? settings.league_allow_invite_link
+        : typeof settings.allow_invite_link === 'boolean'
+          ? settings.allow_invite_link
+          : true
+    const inviteCode = (typeof settings.inviteCode === 'string' && settings.inviteCode.trim()) || inviteToken?.trim() || ''
+    const canInvite = (isOwner || isCommissioner) && allowInviteLink && inviteCode.length > 0
+    const scoringMode = formatScoringMode(settings)
+    const scoringName = typeof selectedLeague.scoring === 'string' ? selectedLeague.scoring.trim() : ''
+    const scoringLabel =
+      scoringMode === 'Points' && scoringName
+        ? `${scoringName.charAt(0).toUpperCase()}${scoringName.slice(1)} points`
+        : scoringMode
 
+    // One Draft home for every pre-draft league, whatever the sport, size or draft type (owner, 2026-11-28).
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6">
-        <section
-          className="af-league-draft-card relative overflow-hidden rounded-2xl border border-[#ff3d81]/[0.15] bg-gradient-to-br from-[#ff3d81]/[0.07] via-[#050814] to-violet-500/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]"
-          data-testid="league-command-center-card"
-        >
-          <div
-            aria-hidden
-            className="af-league-draft-glow pointer-events-none absolute inset-x-0 top-0 h-32 opacity-70"
-            style={{
-              background:
-                'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(255,61,129,0.16) 0%, transparent 70%)',
-            }}
-          />
-          <div className="relative flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <p className="af-league-eyebrow text-[11px] font-bold uppercase tracking-widest text-[#ff3d81]/60">Draft setup</p>
-              <h2 className="text-[26px] font-black leading-tight tracking-tight text-white sm:text-[30px]">
-                {isZombieLeague ? 'Prepare for draft day' : 'Draft setup is ready'}
-              </h2>
-              <p className="max-w-2xl text-[13px] leading-relaxed text-white/55">
-                {isZombieLeague ? 'Build your team for the outbreak. Review the board, invite your managers, and set your draft when the league is ready.' : 'The league has a draft shell. Open the room to review the board, set order, invite managers, or start when the commissioner is ready.'}
-              </p>
-            </div>
-            <div className="af-league-draft-fill rounded-2xl border border-[#ff3d81]/30 bg-gradient-to-br from-[#ff3d81]/[0.12] via-[#ff3d81]/[0.06] to-transparent px-4 py-3 text-right shadow-[0_0_20px_rgba(255,61,129,0.08)]">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">Managers assigned</p>
-              <p className="mt-1 text-lg font-bold text-white">
-                {joinedTeams}/{teamCount}
-              </p>
-              <p className="mt-1 text-xs">
-                {openManagerSlots > 0
-                  ? `${openManagerSlots} open ${openManagerSlots === 1 ? 'slot' : 'slots'}`
-                  : 'All slots assigned'}
-              </p>
-            </div>
-          </div>
-
-          <div className="af-league-draft-facts relative mt-5 grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Draft date</p>
-              <p className="mt-1 text-sm font-semibold text-white">{draftDateLabel}</p>
-            </div>
-            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Draft type</p>
-              <p className="mt-1 text-sm font-semibold text-white">{formatDraftTypeLabel(draftType)}</p>
-            </div>
-            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Rounds / timer</p>
-              <p className="mt-1 text-sm font-semibold text-white">
-                {rounds} rounds / {timerLabel}
-              </p>
-            </div>
-          </div>
-
-          <div className="af-league-draft-actions relative mt-3 flex flex-wrap gap-2">
-            <Link
-              href={`/league/${leagueId}/draft`}
-              data-testid="predraft-open-draft-room"
-              className="touch-manipulation inline-flex min-h-[40px] items-center justify-center rounded-xl border border-[#ff3d81]/30 bg-[#ff3d81]/10 px-3 py-2 text-[12px] font-semibold text-[#ffb8d1] transition hover:bg-[#ff3d81]/20 active:bg-[#ff3d81]/25"
-            >
-              Open Live Draft Room
-            </Link>
-            {isCommissioner ? (
-              <button
-                type="button"
-                onClick={() => onOpenLeagueSettingsModal('draft')}
-                data-testid="predraft-open-draft-settings"
-                className="touch-manipulation inline-flex min-h-[40px] items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2 text-[12px] font-semibold text-white/70 transition hover:border-white/30 hover:bg-white/[0.04] active:bg-white/10"
-              >
-                Draft settings
-              </button>
-            ) : null}
-            <Link
-              href={mockDraftHref}
-              data-testid="predraft-start-mock-draft"
-              className="touch-manipulation inline-flex min-h-[40px] items-center justify-center rounded-xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-[12px] font-semibold text-violet-100 transition hover:bg-violet-500/20 active:bg-violet-500/25"
-            >
-              Start mock draft
-            </Link>
-            <Link
-              href={`/league/${leagueId}?view=league`}
-              className="touch-manipulation inline-flex min-h-[40px] items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2 text-[12px] font-semibold text-white/70 transition hover:border-white/30 hover:bg-white/[0.04] active:bg-white/10"
-            >
-              Go to {isCommissioner ? 'Commissioner Hub' : 'League'} tab
-            </Link>
-          </div>
-          {isZombieLeague && <div className="nl-zombie-draft-links">
-            {tabDefs.some(tab => tab.id === 'zombie') && <button type="button" onClick={() => onSelectTab('zombie')}>Explore Zombie rules <span aria-hidden>→</span></button>}
-            {tabDefs.some(tab => tab.id === 'league_chat') && <button type="button" onClick={() => onSelectTab('league_chat')}>Talk with your league <span aria-hidden>→</span></button>}
-          </div>}
-        </section>
+        <PredraftDraftHome
+          leagueId={leagueId}
+          leagueName={selectedLeague.name}
+          sport={String(sport)}
+          teamCount={teamCount}
+          teams={teamSlots.map((team) => ({
+            id: team.id,
+            teamName: team.teamName,
+            ownerName: team.ownerName,
+            avatarUrl: team.avatarUrl,
+            draftPosition: team.draftPosition,
+            filled: countAssignedManagers([team]) === 1,
+          }))}
+          draftTypeLabel={formatDraftTypeLabel(draftType) ?? 'Snake'}
+          rounds={rounds}
+          timerSeconds={draftSetupSession ? (draftSetupSession.timerSeconds ?? 0) : null}
+          draftDateIso={draftDateIso}
+          scoringLabel={scoringLabel}
+          inviteUrl={canInvite ? leagueJoinUrl(inviteCode) : ''}
+          isCommissioner={isCommissioner}
+          onOpenSettings={onOpenLeagueSettingsModal}
+          extra={
+            isZombieLeague ? (
+              <div className="nl-zombie-draft-links">
+                {tabDefs.some((tab) => tab.id === 'zombie') && (
+                  <button type="button" onClick={() => onSelectTab('zombie')}>
+                    Explore Zombie rules <span aria-hidden>→</span>
+                  </button>
+                )}
+                {tabDefs.some((tab) => tab.id === 'league_chat') && (
+                  <button type="button" onClick={() => onSelectTab('league_chat')}>
+                    Talk with your league <span aria-hidden>→</span>
+                  </button>
+                )}
+              </div>
+            ) : null
+          }
+        />
       </div>
     )
   }
