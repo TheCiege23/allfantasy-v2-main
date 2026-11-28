@@ -68,44 +68,67 @@ describe('G32 NFL redraft league home dashboard', () => {
     entitlements.hasCommissioner = false
   })
 
-  it('shows the free manager Draft HQ with a locked Manager Intelligence preview', () => {
-    renderHome()
-
-    expect(screen.getAllByRole('heading', { name: 'Draft HQ' })[0]).toBeInTheDocument()
-    expect(screen.getByTestId('g32-manager-intelligence-section')).toHaveTextContent('Locked Manager Intelligence preview')
-    expect(screen.getByText('AF Pro preview')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Ask Chimmy' })).toBeInTheDocument()
-    expect(screen.getByText('League helper')).toBeInTheDocument()
+  it('pre-draft: one Draft card, a short row list, and Manager Intelligence locked to the plans page', () => {
+    const onOpenTab = vi.fn()
+    render(
+      <NflRedraftLeagueHomeDashboard league={league} leagueId="league-g32" teamSlots={teams} userTeamName="User Team" isCommissioner={false}
+        draftDateIso={null} hasActiveRedraftSeason={false} onOpenSettings={vi.fn()} onOpenTab={onOpenTab} />,
+    )
+    expect(screen.getByTestId('g32-home-status')).toHaveTextContent('Pre-draft')
+    expect(screen.getByRole('heading', { name: 'Draft' })).toBeInTheDocument()
+    expect(screen.getByText('Draft time has not been set')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('g32-home-next-action'))
+    expect(onOpenTab).toHaveBeenLastCalledWith('draft')
+    expect(screen.getByTestId('g32-home-row-intelligence')).toHaveTextContent('AF Pro')
+    expect(screen.getByTestId('g32-home-row-intelligence').getAttribute('href')).toBe('/pricing')
+    // No invite row for a member, no standings before the draft, no checklist.
+    expect(screen.queryByTestId('g32-home-row-invite')).toBeNull()
+    expect(screen.queryByTestId('g32-home-row-standings')).toBeNull()
+    expect(screen.queryByText('Suggested checklist')).toBeNull()
   })
 
   it('unlocks Manager Intelligence for AF Pro users', () => {
     entitlements.hasPro = true
-
-    renderHome()
-
-    expect(screen.getAllByRole('heading', { name: 'Manager Intelligence' })[0]).toBeInTheDocument()
-    expect(screen.getByTestId('g32-manager-intelligence-section')).toHaveTextContent('Unlocked')
-    expect(screen.getByText(/Personal Intelligence panel/)).toBeInTheDocument()
-  })
-
-  it('shows commissioner HQ and premium Commissioner Intelligence preview for free commissioners', () => {
-    renderHome({ commissioner: true })
-
-    expect(screen.getByRole('heading', { name: 'Commissioner HQ' })).toBeInTheDocument()
-    expect(screen.getByTestId('g32-commissioner-intelligence-section')).toHaveTextContent(
-      'Locked Commissioner Intelligence preview',
+    const onOpenTab = vi.fn()
+    render(
+      <NflRedraftLeagueHomeDashboard league={league} leagueId="league-g32" teamSlots={teams} isCommissioner={false}
+        draftDateIso={null} hasActiveRedraftSeason={false} onOpenSettings={vi.fn()} onOpenTab={onOpenTab} />,
     )
-    expect(screen.getByText('AF Commissioner preview')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('g32-home-row-intelligence'))
+    expect(onOpenTab).toHaveBeenLastCalledWith('decide')
   })
 
-  it('unlocks the command center for AF Commissioner or Supreme users', () => {
+  it('commissioner pre-draft: Invite managers shows the seats and goes to the Draft tab, where the invite is', () => {
+    const onOpenTab = vi.fn()
+    render(
+      <NflRedraftLeagueHomeDashboard league={league} leagueId="league-g32" teamSlots={teams} isCommissioner
+        draftDateIso={null} hasActiveRedraftSeason={false} onOpenSettings={vi.fn()} onOpenTab={onOpenTab} />,
+    )
+    expect(screen.getByTestId('g32-home-row-invite')).toHaveTextContent('8/12')
+    fireEvent.click(screen.getByTestId('g32-home-row-invite'))
+    expect(onOpenTab).toHaveBeenLastCalledWith('draft')
+    expect(screen.getByTestId('g32-home-row-intelligence')).toHaveTextContent('AF Commissioner')
+  })
+
+  it('in season: the next card is the matchup, standings appear, and the invite row is gone', () => {
     entitlements.hasSupreme = true
+    const onOpenTab = vi.fn()
+    render(
+      <NflRedraftLeagueHomeDashboard league={{ ...league, currentWeek: 5 } as UserLeague} leagueId="league-g32" teamSlots={teams} isCommissioner
+        draftDateIso={null} hasActiveRedraftSeason onOpenSettings={vi.fn()} onOpenTab={onOpenTab} />,
+    )
+    expect(screen.getByTestId('g32-home-status')).toHaveTextContent('Week 5')
+    fireEvent.click(screen.getByTestId('g32-home-next-action'))
+    expect(onOpenTab).toHaveBeenLastCalledWith('matchups')
+    expect(screen.getByTestId('g32-home-row-standings')).toBeInTheDocument()
+    expect(screen.queryByTestId('g32-home-row-invite')).toBeNull()
+    expect(screen.getByTestId('g32-home-row-intelligence').getAttribute('href')).toBe('/league/league-g32/intelligence')
+  })
 
+  it('announcements stay available but folded until asked for', () => {
     renderHome({ commissioner: true })
-
-    expect(screen.getByRole('heading', { name: 'Commissioner Command Center' })).toBeInTheDocument()
-    expect(screen.getByTestId('g32-commissioner-intelligence-section')).toHaveTextContent('League Intelligence')
-    expect(screen.getByText('Weekly League Report')).toBeInTheDocument()
+    expect(screen.queryByTestId('g42-communication-panel')).toBeNull()
+    expect(screen.getByTestId('g32-home-announcements-toggle')).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('dispatches scoped replay intro events from League Home', () => {

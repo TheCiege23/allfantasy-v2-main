@@ -5,7 +5,7 @@ import '@/components/league/league-overview.css'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Activity, CalendarClock, ClipboardList, HeartPulse, Lock, MessageSquare, ShieldCheck, Users, type LucideIcon } from 'lucide-react'
+import { BarChart3, Bell, ChevronDown, ChevronRight, ClipboardList, HeartPulse, Lock, MessageSquare, Settings2, Sparkles, UserPlus, type LucideIcon } from 'lucide-react'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { RedraftCommunicationPanel } from '@/components/redraft/RedraftCommunicationPanel'
@@ -53,91 +53,73 @@ type NflRedraftLeagueHomeDashboardProps = {
   onOpenTab: (tabId: string) => void
 }
 
-type Tile = {
-  title: string
-  body: string
-  meta?: string
+function formatDraftDate(draftDateIso: string | null): string | null {
+  if (!draftDateIso) return null
+  const parsed = new Date(draftDateIso)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+type Row = {
+  id: string
+  icon: LucideIcon
+  label: string
+  /** Short right-hand value, e.g. "1/12" or a lock badge. */
+  value?: string
   locked?: boolean
-  cta?: string
   onClick?: () => void
   href?: string
 }
 
-function formatDraftDate(draftDateIso: string | null): string {
-  if (!draftDateIso) return 'Set when the commissioner is ready'
-  const parsed = new Date(draftDateIso)
-  if (Number.isNaN(parsed.getTime())) return 'Set when the commissioner is ready'
-  return parsed.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
+const card = 'rounded-2xl border border-white/[0.08] bg-white/[0.03]'
 
-function Card({
-  tile,
-  testId,
-}: {
-  tile: Tile
-  testId: string
-}) {
-  const content = (
-    <div className="af-overview-card flex h-full flex-col rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4 text-left transition hover:border-violet-400/30 hover:bg-white/[0.055]">
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="text-sm font-black text-white">{tile.title}</h3>
-        {tile.locked ? <Lock className="h-4 w-4 shrink-0 text-amber-300" aria-hidden /> : null}
-      </div>
-      <p className="mt-2 flex-1 text-xs leading-5 text-white/55">{tile.body}</p>
-      {tile.meta ? <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.14em] text-violet-200/80">{tile.meta}</p> : null}
-      {tile.cta ? <p className="mt-3 text-xs font-bold text-[#ffb8d1]">{tile.cta}</p> : null}
-    </div>
+function RowItem({ row }: { row: Row }) {
+  const Icon = row.icon
+  const inner = (
+    <>
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[0.07] text-white/80">
+        <Icon className="h-4 w-4" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-semibold text-white">{row.label}</span>
+        {row.locked && row.value ? <span className="block truncate text-xs text-white/50">Included with {row.value}</span> : null}
+      </span>
+      {row.locked ? (
+        <Lock className="h-4 w-4 shrink-0 text-white/45" aria-label="Locked" />
+      ) : row.value ? (
+        <span className="max-w-[45%] shrink-0 truncate text-sm font-semibold tabular-nums text-white/55">{row.value}</span>
+      ) : null}
+      <ChevronRight className="h-4 w-4 shrink-0 text-white/35" aria-hidden />
+    </>
   )
-
-  if (tile.href) {
+  const cls = 'flex min-h-14 w-full touch-manipulation items-center gap-3 px-4 text-left transition hover:bg-white/[0.03] active:bg-white/[0.05]'
+  const testId = `g32-home-row-${row.id}`
+  if (row.href) {
     return (
-      <Link href={tile.href} data-testid={testId} className="block h-full">
-        {content}
+      <Link href={row.href} className={cls} data-testid={testId}>
+        {inner}
       </Link>
     )
   }
-
-  if (tile.onClick) {
-    return (
-      <button type="button" onClick={tile.onClick} data-testid={testId} className="block h-full">
-        {content}
-      </button>
-    )
-  }
-
   return (
-    <div data-testid={testId} className="h-full">
-      {content}
-    </div>
+    <button type="button" onClick={row.onClick} className={cls} data-testid={testId}>
+      {inner}
+    </button>
   )
 }
 
-function Metric({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: LucideIcon
-  label: string
-  value: string
-}) {
-  return (
-    <div className="af-overview-metric rounded-2xl border border-white/[0.08] bg-black/20 p-3">
-      <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">
-        <Icon className="h-3.5 w-3.5 text-violet-300" aria-hidden />
-        {label}
-      </div>
-      <p className="mt-2 text-sm font-black text-white">{value}</p>
-    </div>
-  )
-}
-
+/**
+ * Football redraft League home (owner, 2026-11-28: "simple like Sleeper… I don't like busy and the
+ * customers don't like busy"). It used to stack a hero header, four action tiles, a "Suggested
+ * checklist", a card explaining where chat is, three Intelligence tiles and an always-open
+ * communication panel. Now, top to bottom:
+ *   1. one status line (pre-draft or this week) and a small Replay intro link
+ *   2. this week's score bug, in season
+ *   3. ONE "next up" card: the draft before it, the matchup after
+ *   4. a short list of rows, each one tap to where the job is done
+ *   5. Announcements, folded behind one row
+ * Keep it that way: a tile grid or checklist coming back is the busy screen coming back.
+ */
 export function NflRedraftLeagueHomeDashboard({
   league,
   leagueId,
@@ -152,357 +134,126 @@ export function NflRedraftLeagueHomeDashboard({
   const entitlements = useEntitlements()
   const hasManagerIntelligence = entitlements.hasPro || entitlements.hasSupreme
   const hasCommissionerIntelligence = entitlements.hasCommissioner || entitlements.hasSupreme
-  // `claimedByUserId` is set only when a real manager has claimed the slot (the
-  // commissioner's own slot is claimed at creation); `Boolean(team.id)` counted every
-  // auto-materialized placeholder team, which reported the league as "full" before
-  // anyone but the commissioner had joined.
+  // `claimedByUserId` is set only when a real manager has claimed the slot; placeholder teams
+  // created with the league must not count as joined.
   const joinedTeams = teamSlots.filter((team) => Boolean(team.claimedByUserId)).length
   const teamCount = league.teamCount ?? teamSlots.length
   const draftDate = formatDraftDate(draftDateIso)
-  const teamLabel = userTeamName || 'Roster opens after draft'
+  const currentWeek = league.currentWeek ?? null
+  const redraft = resolveRedraftIdentity(league)
+  const countdown = !hasActiveRedraftSeason ? draftCountdown(draftDateIso, Date.now()) : null
+  const [announcementsOpen, setAnnouncementsOpen] = useState(false)
+
   const replayIntro = () => {
     window.dispatchEvent(new CustomEvent('af:replay-league-intro', { detail: { leagueId } }))
   }
 
-  const currentWeek = league.currentWeek ?? null
-  // Redraft identity (batch A1): the sport's own name, this week's score bug, a draft countdown.
-  // Null for anything that is not a native redraft league, which keeps the default look below.
-  const redraft = resolveRedraftIdentity(league)
-  const countdown = redraft && !hasActiveRedraftSeason ? draftCountdown(draftDateIso, Date.now()) : null
+  const sportLabel = redraft?.sportLabel ?? String(league.sport ?? 'NFL')
+  const status = hasActiveRedraftSeason
+    ? `${sportLabel} redraft · ${currentWeek != null ? `Week ${currentWeek}` : 'In season'}`
+    : `${sportLabel} redraft · Pre-draft`
 
-  const baseTiles: Tile[] = isCommissioner
-    ? hasActiveRedraftSeason
-      ? [
-          {
-            title: 'This week',
-            body: 'Jump to this week\'s matchups, live scoring, and lineup checks across the league.',
-            meta: currentWeek != null ? `Week ${currentWeek}` : 'In season',
-            cta: 'Open Matchups',
-            onClick: () => onOpenTab('matchups'),
-          },
-          {
-            title: 'League standings',
-            body: 'Review records, points for/against, and playoff positioning.',
-            meta: `${teamCount} teams`,
-            cta: 'Open Standings',
-            onClick: () => onOpenTab('standings'),
-          },
-          {
-            title: 'League rules summary',
-            body: 'Review roster, scoring, waiver, trade, and playoff rules for this season.',
-            cta: 'Open settings',
-            onClick: () => onOpenSettings(null),
-          },
-          {
-            title: 'Announcements',
-            body: 'Keep league chat visible for weekly recaps, waiver reminders, and rule clarifications.',
-            cta: 'Open League Chat',
-            onClick: () => onOpenTab('league_chat'),
-          },
-        ]
-      : [
-          {
-            title: 'Draft setup',
-            body: 'Set draft date, order, timer, auto-pick, and mock draft access before managers arrive.',
-            meta: draftDate,
-            cta: 'Open draft settings',
-            onClick: () => onOpenSettings('draft'),
-          },
-          {
-            title: 'Invite managers',
-            body: 'Fill the league, review member readiness, and keep setup moving from one place.',
-            meta: `${joinedTeams}/${teamCount} teams joined`,
-            cta: 'Open members',
-            onClick: () => onOpenSettings('members-commish'),
-          },
-          {
-            title: 'League rules summary',
-            body: 'Review roster, scoring, waiver, trade, and playoff rules before the season starts.',
-            cta: 'Open settings',
-            onClick: () => onOpenSettings(null),
-          },
-          {
-            title: 'Announcements',
-            body: 'Keep league chat visible while you post draft reminders, setup notes, and rule clarifications.',
-            cta: 'Open League Chat',
-            onClick: () => onOpenTab('league_chat'),
-          },
-        ]
-    : hasActiveRedraftSeason
-      ? [
-          {
-            title: "This week's matchup",
-            body: 'Check your matchup, live scoring, and start/sit calls for the current week.',
-            meta: currentWeek != null ? `Week ${currentWeek}` : 'In season',
-            cta: 'Open Matchups',
-            onClick: () => onOpenTab('matchups'),
-          },
-          {
-            title: 'Your roster',
-            body: 'Set your lineup, check bye weeks and injuries, and manage your bench.',
-            meta: teamLabel,
-            cta: 'Open Roster',
-            onClick: () => onOpenTab('roster'),
-          },
-          {
-            title: 'League rules summary',
-            body: 'View scoring, waivers, trade review, roster limits, playoffs, and permissions.',
-            cta: 'View rules',
-            onClick: () => onOpenSettings(null),
-          },
-          {
-            title: 'League Chat',
-            body: 'Coordinate with your league — trades, waivers, and weekly trash talk.',
-            cta: 'Open League Chat',
-            onClick: () => onOpenTab('league_chat'),
-          },
-        ]
-      : [
-          {
-            title: 'Draft HQ',
-            body: 'Open the draft room, check the countdown, and get ready for your board.',
-            meta: draftDate,
-            cta: 'Open Draft',
-            onClick: () => onOpenTab('draft'),
-          },
-          {
-            title: 'Roster prep',
-            body: 'Your roster view is ready for draft results and lineup prep once players are assigned.',
-            meta: teamLabel,
-            cta: 'Open Roster',
-            onClick: () => onOpenTab('roster'),
-          },
-          {
-            title: 'League rules summary',
-            body: 'View scoring, waivers, trade review, roster limits, playoffs, and permissions.',
-            cta: 'View rules',
-            onClick: () => onOpenSettings(null),
-          },
-          {
-            title: 'League Chat',
-            body: 'Chat stays available by default so managers can coordinate draft night.',
-            cta: 'Open League Chat',
-            onClick: () => onOpenTab('league_chat'),
-          },
-        ]
-
-  const managerTiles: Tile[] = [
-    {
-      title: 'Manager Intelligence',
-      body: hasManagerIntelligence
-        ? 'Draft prep insights, roster guidance, waiver watchlist, trade outlook, and matchup prep are available for your team.'
-        : 'AF Pro unlocks Manager Intelligence, personalized insight views, and smarter prep workflows.',
-      meta: hasManagerIntelligence ? 'Unlocked' : 'AF Pro preview',
-      locked: !hasManagerIntelligence,
-      // Real destination: the Decision OS tab for THIS league (league-pulse +
-      // manager-intelligence engines) — no longer a dead marketing tile.
-      cta: hasManagerIntelligence ? 'Open Decision OS' : undefined,
-      onClick: hasManagerIntelligence ? () => onOpenTab('decide') : undefined,
-    },
-    {
-      title: 'Personal Intelligence panel',
-      body: hasManagerIntelligence
-        ? 'Your personal recommendations stay tied to league settings and your roster context.'
-        : 'Preview the shape of smart recommendations without changing the normal league experience.',
-      locked: !hasManagerIntelligence,
-      cta: hasManagerIntelligence ? 'Open recommendations' : undefined,
-      onClick: hasManagerIntelligence ? () => onOpenTab('decide') : undefined,
-    },
-    {
-      title: 'Ask Chimmy',
-      body: 'Use Chimmy as a league guide or draft guide when you need rule help or quick context.',
-      meta: 'League helper',
-      cta: 'Ask Chimmy',
-      onClick: () => {
-        if (typeof window !== 'undefined') window.dispatchEvent(new Event('af-dashboard-open-mobile-left'))
-      },
-    },
-  ]
-
-  const commissionerTiles: Tile[] = [
-    {
-      title: 'League Intelligence',
-      body: hasCommissionerIntelligence
-        ? 'Monitor league health, trade health, waiver activity, draft readiness, and manager engagement.'
-        : 'AF Commissioner unlocks League Intelligence, smart recommendations, and workload shortcuts.',
-      meta: hasCommissionerIntelligence ? 'Unlocked' : 'AF Commissioner preview',
-      locked: !hasCommissionerIntelligence,
-      // The real CommissionerIntelligenceHub route existed but nothing on the
-      // home view linked to it — now it does.
-      cta: hasCommissionerIntelligence ? 'Open Intelligence Hub' : undefined,
-      onClick: hasCommissionerIntelligence
-        ? () => { if (typeof window !== 'undefined') window.location.assign(`/league/${leagueId}/intelligence`) }
-        : undefined,
-    },
-    {
-      title: 'Fair Play Monitoring',
-      body: 'Review inactive manager detection, anti-tanking, anti-collusion, and advanced trade review controls.',
-      locked: !hasCommissionerIntelligence,
-      cta: hasCommissionerIntelligence ? 'Open League Helper settings' : undefined,
-      onClick: hasCommissionerIntelligence ? () => onOpenSettings('ai-chimmy-setup') : undefined,
-    },
-    {
-      title: 'Weekly League Report',
-      body: 'Prepare summaries, manager engagement prompts, rivalry/storyline prompts, and commissioner shortcuts.',
-      locked: !hasCommissionerIntelligence,
-      cta: hasCommissionerIntelligence ? 'Open Legacy engines' : undefined,
-      onClick: hasCommissionerIntelligence ? () => onOpenTab('legacy') : undefined,
-    },
-  ]
-
-  const headline = isCommissioner
-    ? hasCommissionerIntelligence
-      ? 'Commissioner Command Center'
-      : 'Commissioner HQ'
-    : hasManagerIntelligence
-      ? 'Manager Intelligence'
-      : hasActiveRedraftSeason
-        ? 'Season Hub'
-        : 'Draft HQ'
-
-  const subtitle = hasActiveRedraftSeason
-    ? isCommissioner
-      ? 'Track this week\'s matchups, standings, league rules, and chat from a focused command surface.'
-      : 'Check this week\'s matchup, manage your roster, and keep league chat nearby.'
-    : isCommissioner
-      ? 'Run draft setup, member readiness, league rules, chat, and settings from a focused command surface.'
-      : 'Get ready for draft night, keep league chat nearby, and track the next steps before kickoff.'
+  const rows: Row[] = []
+  if (!hasActiveRedraftSeason && isCommissioner && joinedTeams < teamCount) {
+    // The invite lives at the top of the Draft tab.
+    rows.push({ id: 'invite', icon: UserPlus, label: 'Invite managers', value: `${joinedTeams}/${teamCount}`, onClick: () => onOpenTab('draft') })
+  }
+  rows.push({ id: 'roster', icon: ClipboardList, label: 'My roster', value: userTeamName ?? undefined, onClick: () => onOpenTab('roster') })
+  if (hasActiveRedraftSeason) rows.push({ id: 'standings', icon: BarChart3, label: 'Standings', onClick: () => onOpenTab('standings') })
+  rows.push({ id: 'chat', icon: MessageSquare, label: 'League chat', onClick: () => onOpenTab('league_chat') })
+  rows.push({ id: 'settings', icon: Settings2, label: isCommissioner ? 'League settings' : 'League rules', onClick: () => onOpenSettings(null) })
+  // One Intelligence row instead of three upsell tiles. Locked rows go to the plans page, never nowhere.
+  if (isCommissioner) {
+    rows.push(
+      hasCommissionerIntelligence
+        ? { id: 'intelligence', icon: HeartPulse, label: 'League Intelligence', href: `/league/${leagueId}/intelligence` }
+        : { id: 'intelligence', icon: HeartPulse, label: 'League Intelligence', value: 'AF Commissioner', locked: true, href: '/pricing' },
+    )
+  } else {
+    rows.push(
+      hasManagerIntelligence
+        ? { id: 'intelligence', icon: Sparkles, label: 'Manager Intelligence', onClick: () => onOpenTab('decide') }
+        : { id: 'intelligence', icon: Sparkles, label: 'Manager Intelligence', value: 'AF Pro', locked: true, href: '/pricing' },
+    )
+  }
 
   return (
     <div className={`af-core af-league-overview flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6${redraft ? ' rdh-football-home' : ''}`} data-testid="g32-nfl-redraft-home">
-      <section className="af-overview-header relative overflow-hidden rounded-3xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.12] via-[#050814] to-[#ff3d81]/[0.06] p-5 shadow-[0_18px_70px_rgba(0,0,0,0.32)]">
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-violet-200/75">
-              {redraft ? `${redraft.sportLabel} redraft · League home` : 'NFL Redraft League Home'}
-            </p>
-            <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">{headline}</h2>
-            <p className="mt-2 text-sm leading-6 text-white/58">{subtitle}</p>
-            <button
-              type="button"
-              onClick={replayIntro}
-              className="mt-4 inline-flex min-h-9 items-center rounded-xl border border-white/12 bg-white/[0.06] px-3 text-xs font-bold text-white/80 hover:border-[#ff9ec0]/40 hover:bg-white/[0.09]"
-              data-testid="g32-replay-intro"
-            >
-              Replay intro
-            </button>
-          </div>
-          <div className="grid min-w-[min(100%,420px)] grid-cols-2 gap-2">
-            <Metric icon={Users} label="Managers" value={`${joinedTeams}/${teamCount}`} />
-            {hasActiveRedraftSeason ? (
-              <Metric icon={CalendarClock} label="Week" value={currentWeek != null ? `Week ${currentWeek}` : 'In season'} />
-            ) : (
-              <Metric icon={CalendarClock} label="Draft" value={countdown ? `${draftDate} · in ${countdown.label}` : draftDate} />
-            )}
-          </div>
-        </div>
-      </section>
-
-      {redraft && hasActiveRedraftSeason ? (
-        <RedraftHomeScoreBug leagueId={leagueId} week={typeof currentWeek === 'number' ? currentWeek : null} sport={String(league.sport)} onOpen={() => onOpenTab('matchups')} />
-      ) : null}
-
-      <section className="af-overview-grid mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="League home actions">
-        {baseTiles.map((tile) => (
-          <Card key={tile.title} tile={tile} testId={`g32-home-card-${tile.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} />
-        ))}
-      </section>
-
-      <section className="af-overview-grid mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]">
-        <div className="af-overview-card rounded-3xl border border-white/[0.08] bg-white/[0.035] p-4">
-          <div className="flex items-center gap-2">
-            {isCommissioner ? <ShieldCheck className="h-5 w-5 text-violet-200" aria-hidden /> : <ClipboardList className="h-5 w-5 text-violet-200" aria-hidden />}
-            <h3 className="text-base font-black text-white">{isCommissioner ? 'Suggested checklist' : 'Suggested reminders'}</h3>
-          </div>
-          {/* Honesty Pack 1A: these items previously rendered with green CheckCircle2 icons,
-              implying each was verified complete when nothing was checked. No real backing
-              signal exists for them at this level, so they render as neutral SUGGESTIONS —
-              no completion state is claimed. Wire real signals before restoring any check. */}
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {(hasActiveRedraftSeason
-              ? [
-                  isCommissioner ? 'Review standings' : 'Set your lineup for this week',
-                  isCommissioner ? 'Review pending waivers' : 'Check the waiver wire',
-                  'Review league rules',
-                  isCommissioner ? 'Post a league chat announcement' : 'Open league chat',
-                ]
-              : [
-                  isCommissioner ? 'Review draft setup' : 'Check the draft date',
-                  isCommissioner ? 'Invite remaining managers' : 'Review your roster tab',
-                  'Review league rules',
-                  isCommissioner ? 'Post a league chat announcement' : 'Open league chat',
-                ]
-            ).map((item) => (
-              <div key={item} className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-black/20 px-3 py-2 text-xs text-white/65">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/30" aria-hidden />
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="af-overview-card rounded-3xl border border-white/[0.08] bg-white/[0.035] p-4" data-testid="g32-chat-visibility-card">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-[#ffb8d1]" aria-hidden />
-            <h3 className="text-base font-black text-white">League chat</h3>
-          </div>
-          <p className="mt-2 text-sm leading-6 text-white/55">
-            Chat is visible by default on desktop and opens from the mobile chat button. Use it for draft coordination,
-            announcements, and league guide questions.
-          </p>
-          <button
-            type="button"
-            onClick={() => onOpenTab('league_chat')}
-            className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-[#ff3d81]/30 bg-[#ff3d81]/10 px-3 text-xs font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/15"
-          >
-            Open League Chat
+      <div className="mx-auto w-full max-w-2xl space-y-5 pb-8">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-white/50" data-testid="g32-home-status">{status}</p>
+          <button type="button" onClick={replayIntro} className="min-h-11 shrink-0 px-1 text-xs font-semibold text-white/50 hover:text-white" data-testid="g32-replay-intro">
+            Replay intro
           </button>
         </div>
-      </section>
 
-      {isCommissioner ? (
-        <section className="mt-5" data-testid="g32-commissioner-intelligence-section">
-          <div className="mb-3 flex items-center gap-2">
-            <HeartPulse className="h-5 w-5 text-violet-200" aria-hidden />
-            <h3 className="text-base font-black text-white">
-              {hasCommissionerIntelligence ? 'League Intelligence' : 'Locked Commissioner Intelligence preview'}
-            </h3>
-          </div>
-          <div className="af-overview-grid grid gap-3 md:grid-cols-3">
-            {commissionerTiles.map((tile) => (
-              <Card key={tile.title} tile={tile} testId={`g32-commissioner-card-${tile.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} />
-            ))}
-          </div>
-        </section>
-      ) : (
-        <section className="mt-5" data-testid="g32-manager-intelligence-section">
-          <div className="mb-3 flex items-center gap-2">
-            <Activity className="h-5 w-5 text-violet-200" aria-hidden />
-            <h3 className="text-base font-black text-white">
-              {hasManagerIntelligence ? 'Manager Intelligence' : 'Locked Manager Intelligence preview'}
-            </h3>
-          </div>
-          <div className="af-overview-grid grid gap-3 md:grid-cols-3">
-            {managerTiles.map((tile) => (
-              <Card key={tile.title} tile={tile} testId={`g32-manager-card-${tile.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} />
-            ))}
-          </div>
-        </section>
-      )}
+        {hasActiveRedraftSeason ? (
+          <RedraftHomeScoreBug leagueId={leagueId} week={typeof currentWeek === 'number' ? currentWeek : null} sport={String(league.sport)} onOpen={() => onOpenTab('matchups')} />
+        ) : null}
 
-      {/* Phase 20 — read-only, display-only replay-backed Trade Impact Insights
-          for this manager/team. Renders nothing unless
-          MANAGER_REPLAY_INSIGHTS_DASHBOARD_ENABLED=true; historical observations,
-          not recommendations. */}
-      <div className="mt-5">
+        <section className={`${card} p-4`} data-testid="g32-home-next">
+          {hasActiveRedraftSeason ? (
+            <>
+              <h2 className="text-[17px] font-bold text-white">This week&apos;s matchup</h2>
+              <p className="mt-0.5 text-sm text-white/55">{currentWeek != null ? `Week ${currentWeek}` : 'In season'} · set your lineup before kickoff</p>
+              <button
+                type="button"
+                onClick={() => onOpenTab('matchups')}
+                className="mt-4 flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-[#ff3d81] text-sm font-black uppercase tracking-[0.1em] text-[#ffffff]"
+                data-testid="g32-home-next-action"
+              >
+                Open matchup
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 className="text-[17px] font-bold text-white">Draft</h2>
+              <p className="mt-0.5 text-sm text-white/55">
+                {draftDate ? (countdown ? `${draftDate} · in ${countdown.label}` : draftDate) : 'Draft time has not been set'}
+              </p>
+              <button
+                type="button"
+                onClick={() => onOpenTab('draft')}
+                className="mt-4 flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-[#ff3d81] text-sm font-black uppercase tracking-[0.1em] text-[#ffffff]"
+                data-testid="g32-home-next-action"
+              >
+                Go to draft
+              </button>
+            </>
+          )}
+        </section>
+
+        <nav aria-label="League home" className={`${card} divide-y divide-white/[0.06] overflow-hidden`} data-testid="g32-home-rows">
+          {rows.map((row) => (
+            <RowItem key={row.id} row={row} />
+          ))}
+        </nav>
+
+        {/* Announcements and notifications: kept, but folded — it was an always-open panel with two inputs. */}
+        <section className={`${card} overflow-hidden`}>
+          <button
+            type="button"
+            onClick={() => setAnnouncementsOpen((v) => !v)}
+            aria-expanded={announcementsOpen}
+            className="flex min-h-14 w-full touch-manipulation items-center gap-3 px-4 text-left"
+            data-testid="g32-home-announcements-toggle"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[0.07] text-white/80">
+              <Bell className="h-4 w-4" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1 text-[15px] font-semibold text-white">{isCommissioner ? 'Announcements' : 'League updates'}</span>
+            <ChevronDown className={`h-4 w-4 shrink-0 text-white/35 transition ${announcementsOpen ? 'rotate-180' : ''}`} aria-hidden />
+          </button>
+          {announcementsOpen ? (
+            <div className="border-t border-white/[0.06] px-2 pb-2">
+              <RedraftCommunicationPanel leagueId={leagueId} isCommissioner={isCommissioner} onOpenChat={() => onOpenTab('league_chat')} />
+            </div>
+          ) : null}
+        </section>
+
+        {/* Renders nothing unless MANAGER_REPLAY_INSIGHTS_DASHBOARD_ENABLED=true. */}
         <ManagerReplayInsightsCard leagueId={leagueId} />
       </div>
-
-      <RedraftCommunicationPanel
-        leagueId={leagueId}
-        isCommissioner={isCommissioner}
-        onOpenChat={() => onOpenTab('league_chat')}
-      />
     </div>
   )
 }

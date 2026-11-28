@@ -44,8 +44,8 @@ describe('static checklist no longer claims completion', () => {
     expect(src).not.toContain('Standings up to date')
     expect(src).not.toContain('Waivers reviewed')
     expect(src).not.toContain('Basic issue checklist')
-    // The suggested list renders neutral dots, not CheckCircle2 rows mapped over static strings.
-    expect(src).toContain('Suggested checklist')
+    // 2026-11-28: the checklist itself is gone from the simplified League home.
+    expect(src).not.toContain('Suggested checklist')
   })
 })
 

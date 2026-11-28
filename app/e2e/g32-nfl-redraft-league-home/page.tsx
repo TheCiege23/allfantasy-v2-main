@@ -115,7 +115,8 @@ export default function G32NflRedraftLeagueHomeHarness() {
           userTeamName={commissioner ? 'Commissioner Alpha' : 'Manager 2'}
           isCommissioner={commissioner}
           draftDateIso={league.draftDate ?? null}
-          onOpenSettings={setSettingsPanel}
+          // The real shell opens Settings on its first panel for null; here null would mean closed.
+          onOpenSettings={(panel) => setSettingsPanel(panel ?? 'general')}
           onOpenTab={setActiveTab}
         />
 
