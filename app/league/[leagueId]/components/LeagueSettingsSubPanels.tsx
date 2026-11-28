@@ -33,6 +33,7 @@ import { DiscordLeagueSyncPanel } from './DiscordLeagueSyncPanel'
 import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '@/components/league-settings/TournamentLeagueNotes'
 import { PlayoffSettingsEditor as PlayoffSettingsEditorLazy } from '@/components/league-settings/PlayoffSettingsEditor'
 import { RosterSettingsEditor as RosterSettingsEditorLazy } from '@/components/league-settings/RosterSettingsEditor'
+import { PositionEligibilityPanel } from '@/components/league-settings/PositionEligibilityPanel'
 import { detectScoringFlavor, getDivisionCount, getDraftIdFromSettings, getScoringSettings, getSleeperLikeBundle, getSettingsRecord, groupRosterSlotCounts, initialsFromName, sleeperAvatarUrl, waiverTypeText } from './league-settings-modal-utils'
 import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
@@ -783,6 +784,13 @@ export function SettingsSubPanelBody({
           {(ctx.league.sport === 'NFL' || ctx.league.sport === 'NBA' || ctx.league.sport === 'NCAAB' || ctx.league.sport === 'MLB' || ctx.league.sport === 'NCAAF' || ctx.league.sport === 'NHL' || ctx.league.sport === 'SOCCER') && (
             <div className="mt-6">
               <RosterSettingsEditorLazy leagueId={ctx.league.id} />
+            </div>
+          )}
+          {/* Native NBA leagues: commissioner add/remove of positions, with a log every member reads.
+              An imported league's lineups are set on its host, so the tool would change nothing there. */}
+          {ctx.league.sport === 'NBA' && isNativePlatform(ctx.league.platform) && (
+            <div className="mt-6">
+              <PositionEligibilityPanel leagueId={ctx.league.id} />
             </div>
           )}
         </>

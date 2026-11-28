@@ -314,6 +314,22 @@ export async function GET(req: NextRequest) {
     // (lib/player-media/fillStoredHeadshots.ts). The NFL already carries its Sleeper headshot.
     unifiedRoster = await fillStoredHeadshots(leagueSport, unifiedRoster)
 
+    // NBA: a commissioner's position changes (lib/league-eligibility). "PG,SF" seats him at either;
+    // the lineup save re-checks the same log server-side. A log that cannot be read leaves positions as listed.
+    if (String(leagueSport).toUpperCase() === 'NBA' && unifiedRoster.length > 0) {
+      try {
+        const { loadEffectivePositionStrings } = await import('@/lib/league-eligibility/positionEligibilityStore')
+        const effective = await loadEffectivePositionStrings(
+          leagueId,
+          unifiedRoster.map((p) => p.id),
+          new Map(unifiedRoster.map((p) => [p.id, p.position ?? null])),
+        )
+        if (effective.size) unifiedRoster = unifiedRoster.map((p) => (effective.has(p.id) ? { ...p, position: effective.get(p.id)! } : p))
+      } catch {
+        // Non-fatal, like the other roster enrichments above.
+      }
+    }
+
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
     // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the
     // roster tab renders no section at all; a load failure also degrades to null

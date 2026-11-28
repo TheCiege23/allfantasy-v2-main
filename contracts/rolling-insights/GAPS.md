@@ -650,3 +650,28 @@ morning-skate and beat-reporter news. Whether to buy one (and which) is the owne
 then do not probe any provider for a "starters" endpoint. If a feed is added, its fixture is
 committed in the same change, and `goalieStarts.ts` should take it as `status: 'confirmed'` ahead of
 the projection, never mixed into it.
+
+## 📌 2026-11-28 — R-NBA-POS: NBA `/live` lists ONE position per player per game; no minutes-by-position
+
+**What the fixture shows** (`fixtures/live.NBA.json`, 2026-03-15, 145 player lines): every player line
+carries exactly one `position` (PG/SG/SF/PF/C), bench players included (OKC lists 2 PF and 2 C; Wiggins
+`PF` for 5:32), and there is no `starter` flag. So it is a roster LABEL per game, not a lineup slot and
+not a minutes-by-position split like Basketball-Reference's play-by-play estimate. Some labels are
+current rather than historical (Caruso `SF`, Flagg `PG`).
+
+**What is unknown — and must not be probed:**
+1. Does the label change during a season (re-labelled per game, or only when RI updates its roster)? One
+   slate cannot say. If it never changes mid-season, counting games per label is a weak signal.
+2. Does any RI endpoint give minutes or possessions by position (lineup data)? Nothing in
+   `ENDPOINTS.yaml` documents it. `play_by_play` NBA has substitutions in principle, but on-floor
+   POSITION is not in it either.
+3. `minutes` arrives as `"MM:SS"` and `rollingInsightsGameLogs.ts` does not store it for NBA (only NHL's
+   `time_on_ice` is parsed), so `player_game_stats` has games, not minutes.
+
+**What ships meanwhile.** The commissioner position-eligibility tool
+(`lib/league-eligibility/`, docs/audits/nba-position-eligibility-2026-11.md) shows "games this season
+by box-score position" from `player_game_stats` as EVIDENCE beside a human decision, labelled as box-score
+position. It never grants eligibility on its own.
+
+**Open — ask the vendor (owner).** Questions 1 and 2 above, by email. Automatic usage-based eligibility
+waits on the answer.

@@ -27,6 +27,7 @@ import { checkTaxiSave, logTaxiPromotions, type TaxiSaveCheck } from '@/lib/taxi
 import { checkCampusSave } from '@/lib/c2c/campusLineupCheck'
 import { BEST_BALL_LINEUP_CODE, BEST_BALL_LINEUP_MESSAGE, lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { lineupVersionOf } from '@/lib/roster/lineupVersion'
+import { withEffectivePositions } from '@/lib/league-eligibility/nbaPositionEligibility'
 import { collegeLineupSport as collegeLineupSportFor } from '@/lib/c2c/collegeLineupLeague'
 
 /**
@@ -253,7 +254,11 @@ async function runRosterLineupWithEngine(
     taxiYearsExpById: await loadNewTaxiYearsExp(league, roster.playerData, input.nextPlayerData),
   }
 
-  const validation = validateCanonicalRosterPayload(input.nextPlayerData, ctx)
+  // NBA: check each starter against the commissioner's position log, not the string the client sent.
+  const validation = validateCanonicalRosterPayload(
+    await withCommissionerPositions(league.id, sport, input.nextPlayerData),
+    ctx,
+  )
   if (!validation.ok) {
     return {
       ok: false,
@@ -534,4 +539,23 @@ async function loadNewTaxiYearsExp(
   const added = [...new Set(taxiPlayerIds(next).filter((id) => !already.has(id)))]
   if (added.length === 0) return undefined
   return loadKnownYearsExp([String(league.sport ?? 'NFL')], added)
+}
+
+/**
+ * The payload to VALIDATE for an NBA league with commissioner position changes (the saved payload is
+ * unchanged). Fails open to the payload as sent: a log that cannot be read must not block every lineup
+ * save in the league, and with no log the old single-position rule is exactly what applied before.
+ */
+async function withCommissionerPositions(leagueId: string, sport: string, playerData: unknown): Promise<unknown> {
+  if (String(sport).toUpperCase() !== 'NBA') return playerData
+  try {
+    const { loadEffectivePositionStrings } = await import('@/lib/league-eligibility/positionEligibilityStore')
+    const sections = getNormalizedLineupSections(playerData)
+    const rows = Object.values(sections).flat()
+    const ids = [...new Set(rows.map((r) => String(r.id ?? '')).filter(Boolean))]
+    const rowPosition = new Map(rows.map((r) => [String(r.id ?? ''), typeof r.position === 'string' ? r.position : null]))
+    return withEffectivePositions(playerData, await loadEffectivePositionStrings(leagueId, ids, rowPosition))
+  } catch {
+    return playerData
+  }
 }

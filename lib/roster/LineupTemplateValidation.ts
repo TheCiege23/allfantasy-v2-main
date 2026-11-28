@@ -172,10 +172,15 @@ export function collectTemplateSectionIssues(
   const starterAllowed = getStarterAllowedSet(template)
   if (starterAllowed.size > 0 && !starterAllowed.has('*')) {
     for (const starter of sections.starters) {
-      const normalizedPosition = normalizePositionForStarterEligibility(String(starter.position ?? ''))
+      // "PG,SF" is one player at two positions (lib/league/lineup-swap.ts playerPositionTokens); any one fits.
+      const tokens = String(starter.position ?? '')
+        .split(',')
+        .map((p) => normalizePositionForStarterEligibility(p))
+        .filter(Boolean)
+      const normalizedPosition = tokens.join(',')
       const id = String((starter as Record<string, unknown>).id ?? '')
       if (!normalizedPosition) continue
-      if (!starterAllowed.has(normalizedPosition)) {
+      if (!tokens.some((t) => starterAllowed.has(t))) {
         issues.push({
           code: 'STARTER_POSITION_INELIGIBLE',
           message: `Starter position ${normalizedPosition} is not eligible for this league template.`,
