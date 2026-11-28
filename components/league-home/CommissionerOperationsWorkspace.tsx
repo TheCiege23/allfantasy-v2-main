@@ -23,7 +23,7 @@ import { RedraftCommishHealth } from '@/components/decide/RedraftCommishHealth'
 import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
-import { MAKE_NATIVE_LABEL, makeNativeLeagueHref } from '@/lib/league/makeNativeLeague'
+import { MAKE_NATIVE_LABEL, NATIVE_SWITCH_ANCHOR } from '@/lib/league/makeNativeLeague'
 import { NativeReadinessCard } from '@/components/league-home/NativeReadinessCard'
 import { NativeUndoCard } from '@/components/league-home/NativeUndoCard'
 
@@ -187,7 +187,8 @@ export function CommissionerOperationsWorkspace({
           ) : null}
           {!isNativePlatform(league.platform) ? (
             <a
-              href={makeNativeLeagueHref(leagueId)}
+              // Same page: jump to the switch card below (the readiness card carries the button).
+              href={`#${NATIVE_SWITCH_ANCHOR}`}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-[12px] font-extrabold transition"
               data-testid="commissioner-make-native"
             >
