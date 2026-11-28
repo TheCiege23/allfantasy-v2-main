@@ -6,6 +6,7 @@ import type { PlayerCardData } from '@/lib/core-app/playerCard'
 import type { PlayerCardMore } from '@/lib/core-app/playerCardMore'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-card.css'
+import { harnessGameLog } from '@/app/e2e/_shared/gameLogFixture'
 
 const NO = (reason: string) => ({ available: false as const, reason })
 const OK = <T,>(data: T) => ({ available: true as const, data })
@@ -50,7 +51,7 @@ const FIXTURES: Record<string, Fixture> = {
     },
   },
   NBA: {
-    player: { externalId: 'ri:4396907', sleeperId: null, sport: 'NBA', name: 'Darius Garland', position: 'PG', team: 'LAC', number: 10, imageUrl: 'https://a.espncdn.com/i/headshots/nba/players/full/4396907.png' },
+    player: { externalId: 'ri:4396907', source: 'rolling_insights', sleeperId: null, sport: 'NBA', name: 'Darius Garland', position: 'PG', team: 'LAC', number: 10, imageUrl: 'https://a.espncdn.com/i/headshots/nba/players/full/4396907.png' },
     bio: { age: 26, height: '6\'1"', weight: '192 lb', yearsExp: 7, college: 'Vanderbilt' },
     rank: 95, posRank: 32, perGame: 18.8, weekly: 56.4, rest: 1090.4, owner: 'TheCiege24',
     news: [
@@ -71,7 +72,7 @@ const FIXTURES: Record<string, Fixture> = {
     },
   },
   MLB: {
-    player: { externalId: 'ri:33192', sleeperId: null, sport: 'MLB', name: 'Aaron Judge', position: 'OF', team: 'NYY', number: 99, imageUrl: 'https://a.espncdn.com/i/headshots/mlb/players/full/33192.png' },
+    player: { externalId: 'ri:33192', source: 'rolling_insights', sleeperId: null, sport: 'MLB', name: 'Aaron Judge', position: 'OF', team: 'NYY', number: 99, imageUrl: 'https://a.espncdn.com/i/headshots/mlb/players/full/33192.png' },
     bio: { age: 34, height: '6\'7"', weight: '282 lb', yearsExp: 10, college: 'Fresno State' },
     rank: 3, posRank: 1, perGame: 4.1, weekly: null, rest: null, owner: 'TheCiege24',
     news: [{ title: 'Judge named AL MVP for a third time', source: 'MLB.com' }],
@@ -84,6 +85,41 @@ const FIXTURES: Record<string, Fixture> = {
       depthChart: null,
     },
   },
+  // The daily sports' per-game box log (2026-11-28) shows on every one of these through the fetch stub below.
+  NHL: {
+    player: { externalId: 'ri:3895074', source: 'rolling_insights', sleeperId: null, sport: 'NHL', name: 'Connor McDavid', position: 'C', team: 'EDM', number: 97, imageUrl: null },
+    bio: { age: 29, height: '6\'1"', weight: '194 lb', yearsExp: 11, college: null },
+    rank: 1, posRank: 1, perGame: 4.4, weekly: 13.2, rest: 260.0, owner: 'TheCiege24',
+    news: [{ title: 'McDavid extends point streak to 12 games', source: 'NHL.com' }],
+    more: { gameLog: [], career: [], depthChart: null },
+  },
+  NCAAB: {
+    player: { externalId: 'ri:201', source: 'rolling_insights', sleeperId: null, sport: 'NCAAB', name: 'Cooper Flagg', position: 'F', team: 'DUKE', number: 2, imageUrl: null },
+    bio: { age: 19, height: '6\'9"', weight: '205 lb', yearsExp: 1, college: 'Duke' },
+    rank: 4, posRank: 2, perGame: 31.2, weekly: 62.4, rest: 640.0, owner: 'TheCiege24',
+    news: [{ title: 'Flagg posts double-double in ACC opener', source: 'ESPN' }],
+    more: { gameLog: [], career: [], depthChart: null },
+  },
+}
+
+/**
+ * Answers the card's own reads with no database: the box-score game log (sample rows, real columns)
+ * and the table-layout preference as signed out (401 → this browser's storage). Everything else
+ * goes to the real fetch, which the card already treats as optional.
+ */
+function installHarnessFetch(sport: string) {
+  const w = window as unknown as { __pcHarnessSport?: string; __pcHarnessFetch?: boolean; fetch: typeof fetch }
+  w.__pcHarnessSport = sport
+  if (w.__pcHarnessFetch) return
+  w.__pcHarnessFetch = true
+  const real = w.fetch.bind(window)
+  w.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+    if (url.startsWith('/api/players/game-log')) return json(harnessGameLog(w.__pcHarnessSport ?? sport))
+    if (url.startsWith('/api/user/table-layout')) return json({ error: 'Unauthorized' }, 401)
+    return real(input, init)
+  }
 }
 
 function cardFor(sport: string, who: 'mine' | 'fa' | 'theirs'): { data: PlayerCardData; more: PlayerCardMore } {
@@ -126,6 +162,7 @@ function cardFor(sport: string, who: 'mine' | 'fa' | 'theirs'): { data: PlayerCa
 
 export default function PlayerCardHarnessClient({ sport, who, confirm }: { sport: string; who: 'mine' | 'fa' | 'theirs'; confirm: boolean }) {
   const { data, more } = cardFor(sport, who)
+  if (typeof window !== 'undefined') installHarnessFetch(sport)
   const [open, setOpen] = useState(true)
   useEffect(() => {
     if (!confirm) return
