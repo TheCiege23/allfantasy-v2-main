@@ -939,6 +939,7 @@ const ES: Record<string, string> = {
   'Points per yard.': 'Puntos por yarda.',
   'Enter a number between -100 and 100.': 'Escribe un número entre -100 y 100.',
   'Confirm and save': 'Confirmar y guardar',
+  'Custom daily waivers are off. Turn them on to set a processing time.': 'Los reclamos diarios personalizados están desactivados. Actívalos para fijar una hora de proceso.',
   'Choose a date and a time.': 'Elige una fecha y una hora.',
   'That date or time does not exist.': 'Esa fecha u hora no existe.',
   'Choose a time in the future.': 'Elige una hora futura.',

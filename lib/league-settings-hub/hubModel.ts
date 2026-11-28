@@ -17,6 +17,7 @@ import { readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules
 import { copyLeagueAvailable, readCopyLeague } from '@/lib/league/copyLeague'
 import { describeByePlan, isNaturalByePlan, naturalByePlan, parseStoredByePlan } from '@/lib/playoff-brackets/byePlan'
 import { maxPlayoffStartWeekForSport } from '@/lib/redraft/regularSeasonCap'
+import { readDailyWaiverScheduleFromSettings, type DailyWaiverSchedule } from '@/lib/waivers/dailyWaiverSchedule'
 import { resolveHubSport, scoringCategories, scoringCategoryFor, sportCopy, sportDisplayName, sportFamily, SPORT_SLOT_NAMES, statLabel } from './sportProfile'
 
 export type HubKind =
@@ -121,6 +122,29 @@ function choicesWith(current: string | number | null, choices: HubRowChoice[], l
 }
 
 const HOUR_CHOICES = [0, 12, 24, 48, 72]
+
+/**
+ * The hub field for the custom daily waiver run's hour (Processing Time, 2026-11-28). Not a column: the
+ * container saves it as the whole `dailyWaiverSchedule` with only `processHour` changed, which is what
+ * the full editor sends, and the settings PATCH derives the UTC run time from it.
+ */
+export const DAILY_WAIVER_HOUR_FIELD = 'dailyWaiverProcessHour'
+
+/**
+ * The stored daily schedule with only its run hour changed, or null when there is no ENABLED schedule to
+ * change (the hour then means nothing, and saving a disabled schedule would not move the run).
+ */
+export function dailyScheduleWithHour(settingsSnapshot: unknown, hour: number): DailyWaiverSchedule | null {
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null
+  const schedule = readDailyWaiverScheduleFromSettings(settingsSnapshot)
+  return schedule?.enabled ? { ...schedule, days: { ...schedule.days }, processHour: hour } : null
+}
+
+/** A local hour on a 12-hour clock: 0 → "12:00 AM", 14 → "2:00 PM". */
+export function clockHourLabel(h: number): string {
+  const hour = ((h % 24) + 24) % 24
+  return `${hour % 12 === 0 ? 12 : hour % 12}:00 ${hour < 12 ? 'AM' : 'PM'}`
+}
 function hoursEdit(field: string, current: number | null): HubRowEdit {
   return {
     field,
@@ -501,7 +525,23 @@ export function buildWaiverGroups(p: HubSettingsPayload, kind: HubKind): HubGrou
     { key: 'custom', label: 'Allow Custom Daily Waivers', description: 'Players lock on waivers when their game starts', value: yesNo(custom), toggle: custom == null ? undefined : { field: 'customDailyWaivers', on: custom } },
   ]
   if (custom) {
-    right.push({ key: 'process', label: 'Processing Time', description: `Time shown in ${str(l.timezone) ?? 'league time'}`, value: str(l.waiverProcessTime), indent: true })
+    /*
+     * The hour lives on the daily schedule, in LEAGUE time. `League.waiverProcessTime` is the UTC run time
+     * derived from it, so showing that column here under "Time shown in <zone>" printed 07:00 for a 2 AM
+     * Eastern run. It is only the fallback for a league whose schedule cannot be read, and is then not editable.
+     */
+    const daily = readDailyWaiverScheduleFromSettings(p.settingsSnapshot ?? null)
+    const hour = daily?.enabled ? daily.processHour : null
+    right.push({
+      key: 'process',
+      label: 'Processing Time',
+      description: `Time shown in ${str(l.timezone) ?? 'league time'}`,
+      value: hour != null ? clockHourLabel(hour) : str(l.waiverProcessTime),
+      indent: true,
+      edit: hour != null
+        ? { field: DAILY_WAIVER_HOUR_FIELD, current: hour, choices: Array.from({ length: 24 }, (_, h) => ({ value: h, label: clockHourLabel(h) })) }
+        : undefined,
+    })
     const schedule = readWaiverSchedule(l.waiverSchedule)
     right.push({ key: 'schedule', label: 'Daily Waiver Schedule', value: schedule.length ? null : 'Not set', indent: true, schedule: schedule.length ? schedule : undefined })
   }
