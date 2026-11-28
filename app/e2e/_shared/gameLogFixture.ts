@@ -52,7 +52,28 @@ function rowValues(sport: GameLogSport, group: string, r: () => number) {
   return { values: v, ratioInputs: ratio }
 }
 
-export function harnessGameLog(sport: string, group?: string, games = 12) {
+/** Sample points, roughly the sport's default weights — enough to draw the column and its marks. */
+function samplePoints(values: Record<string, GameLogValue>): number {
+  const n = (k: string) => (typeof values[k] === 'number' ? (values[k] as number) : 0)
+  const pts =
+    n('g') * 3 + n('a') * 2 + n('sog') * 0.3 + n('blks') * 0.3 + n('hits') * 0.2 + n('ppp') * 0.5 +
+    n('g_sv') * 0.2 - n('g_ga') + (values.dec === 'W' ? 5 : 0) + n('g_so') * 5 +
+    n('pts') * (n('min') ? 1 : 0) + n('reb') * 1.2 + n('ast') * 1.5 + n('stl') * 3 + n('blk') * 3 - n('to') +
+    n('r') + n('h') + n('hr') * 4 + n('rbi') + n('bb') + n('sb') * 2 + n('so') * 1 - n('er') * 2 + n('ip') * 3 +
+    n('goals') * 6 + n('assists') * 3 + n('shots_on_target')
+  return Math.round(pts * 10) / 10
+}
+
+function withPoints(line: { values: Record<string, GameLogValue>; ratioInputs: Record<string, number> }, played: boolean) {
+  return { ...line, fantasyPoints: played ? samplePoints(line.values) : null }
+}
+
+export function harnessGameLog(
+  sport: string,
+  group?: string,
+  games = 12,
+  scoring: { kind: 'league'; leagueName: string | null } | { kind: 'default' } = { kind: 'default' },
+) {
   const s = sport.toUpperCase() as GameLogSport
   const g = group ?? (s === 'NHL' ? 'skaters' : s === 'MLB' ? 'batting' : s === 'SOCCER' ? 'fielders' : 'all')
   const r = rng(s.length * 17 + g.length)
@@ -75,7 +96,7 @@ export function harnessGameLog(sport: string, group?: string, games = 12) {
       result: teamScore > oppScore ? 'W' : teamScore < oppScore ? 'L' : s === 'SOCCER' ? 'T' : null,
       postseason: false,
       played,
-      ...rowValues(s, g, r),
+      ...withPoints(rowValues(s, g, r), played),
     }
   })
   return {
@@ -84,5 +105,6 @@ export function harnessGameLog(sport: string, group?: string, games = 12) {
     season: 2026,
     seasons: [2026, 2025],
     groups: [{ group: g, label: GROUP_LABELS[g] ?? g, columns: gameLogColumns(s, g), rows }],
+    scoring,
   }
 }

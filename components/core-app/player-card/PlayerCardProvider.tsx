@@ -244,7 +244,7 @@ export default function PlayerCardProvider({
   return (
     <Ctx.Provider value={value}>
       {children}
-      {ref ? <PlayerCardSheet subject={ref} data={data} status={status} onClose={close} onOpen={open} more={more} nav={nav} /> : null}
+      {ref ? <PlayerCardSheet subject={ref} data={data} status={status} onClose={close} onOpen={open} more={more} nav={nav} leagueId={ref.leagueId ?? leagueId} /> : null}
     </Ctx.Provider>
   )
 }

@@ -315,6 +315,7 @@ export default function PlayerCardSheet({
   onOpen,
   more = null,
   nav = null,
+  leagueId: scopeLeagueId = null,
 }: {
   subject: PlayerCardRef
   data: PlayerCardData | null
@@ -325,6 +326,8 @@ export default function PlayerCardSheet({
   more?: PlayerCardMore | null
   /** The list the card was opened from — previous / next player. Null: a lone card, no arrows. */
   nav?: PlayerCardNav | null
+  /** The league the card was opened in (the subject's own, else the provider's) — scores the game log. */
+  leagueId?: string | null
 }) {
   const { language } = useOptionalLanguage()
   const c = playerCardCopy(language)
@@ -437,13 +440,18 @@ export default function PlayerCardSheet({
     p && gameLogSupported(p.sport) && (p.source === 'rolling_insights' || p.sleeperId)
       ? { externalId: p.externalId, source: p.source ?? null, sleeperId: p.sleeperId }
       : null
-  const boxLogId = boxLogKey && p ? `${p.sport}|${boxLogKey.source ?? ''}|${boxLogKey.externalId}|${boxLogKey.sleeperId ?? ''}` : null
+  // Opened from a league: each game is scored on that league's settings (the route checks membership).
+  const boxLogScoring = { leagueId: subject.leagueId ?? scopeLeagueId ?? null, position: p?.position ?? subject.position ?? null }
+  const boxLogId =
+    boxLogKey && p
+      ? `${p.sport}|${boxLogKey.source ?? ''}|${boxLogKey.externalId}|${boxLogKey.sleeperId ?? ''}|${boxLogScoring.leagueId ?? ''}|${boxLogScoring.position ?? ''}`
+      : null
   // Fetched up front, like `more`: a tab is hidden, never empty, so the card must know there are games.
   const [boxLog, setBoxLog] = useState<{ id: string; log: PlayerGameLogPayload | null } | null>(null)
   useEffect(() => {
     if (!boxLogId || !boxLogKey || !p) return
     let alive = true
-    fetchPlayerGameLog(p.sport, boxLogKey).then((log) => {
+    fetchPlayerGameLog(p.sport, boxLogKey, boxLogScoring).then((log) => {
       if (alive) setBoxLog({ id: boxLogId, log })
     })
     return () => {
@@ -884,6 +892,7 @@ export default function PlayerCardSheet({
                       playerName={p.name}
                       playerKey={boxLogKey}
                       prefetched={boxLogData}
+                      scoringContext={boxLogScoring}
                     />
                   ) : null}
 

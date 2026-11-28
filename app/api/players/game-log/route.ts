@@ -4,6 +4,9 @@ import { identityMapSleeperWhere } from '@/lib/player-identity/identityMapSleepe
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { isGameLogSport } from '@/lib/player-game-log/gameLogColumns'
 import { loadPlayerGameLog } from '@/lib/player-game-log/loadPlayerGameLog'
+import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
+import { resolvePlatformUser } from '@/lib/platform/current-user'
+import { resolveLeagueAccess } from '@/lib/league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +21,12 @@ export const dynamic = 'force-dynamic'
  *     daily sports IS `PlayerIdentityMap.rollingInsightsId`. Any other source is refused: an id names
  *     a player only together with its feed (SOCCER `1100` is two different men);
  *   - `sleeperId` — through the sport's own Sleeper column (`identityMapSleeperWhere`).
+ *
+ * Each game carries `fantasyPoints`. With `leagueId` (a league the signed-in user is a member of, in
+ * this sport) it is scored on THAT league's settings — the scorer the weekly matchup engine uses on
+ * the same line; otherwise on the sport's default scoring. `scoring` says which, so the screen never
+ * shows default points labelled as the league's. `position` is the player's, for position-weighted
+ * scoring (soccer).
  *
  * Football is not served here (its per-game history is weekly and lives elsewhere); the response
  * says `supported: false` and the caller keeps its football view.
@@ -58,13 +67,42 @@ export async function GET(req: Request) {
       return NextResponse.json({ supported: true, sport, resolved: false, season: null, seasons: [], groups: [] })
     }
 
-    const log = await loadPlayerGameLog({ identityId: resolvedId, sport, season })
+    const leagueId = url.searchParams.get('leagueId')?.trim() || null
+    const position = url.searchParams.get('position')?.trim().slice(0, 12) || null
+    const scoring = await resolveGameLogScoring(sport, leagueId)
+    const log = await loadPlayerGameLog({ identityId: resolvedId, sport, season, scorer: scoring.scorer, position })
     return NextResponse.json(
-      { supported: true, resolved: true, ...log },
+      { supported: true, resolved: true, ...log, scoring: scoring.info },
       { headers: { 'Cache-Control': 'private, max-age=60' } },
     )
   } catch (e) {
     console.error('[players/game-log]', e instanceof Error ? e.message : 'unknown error')
     return NextResponse.json({ error: 'Game log unavailable' }, { status: 500 })
   }
+}
+
+type ScoringInfo = { kind: 'league'; leagueName: string | null } | { kind: 'default' } | { kind: 'none' }
+
+/**
+ * The league's own scoring when the caller may read it, else the sport's defaults. A league the user
+ * is not in, or one in another sport, silently falls back to defaults — and `scoring.kind` says so.
+ */
+async function resolveGameLogScoring(sport: string, leagueId: string | null) {
+  if (leagueId) {
+    try {
+      const user = await resolvePlatformUser()
+      const access = user.appUserId ? await resolveLeagueAccess(leagueId, user.appUserId) : null
+      if (access?.isMember) {
+        const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, name: true } })
+        if (league && normalizeToSupportedSport(league.sport) === sport) {
+          const scorer = buildLeagueStatScorer({ sport: league.sport, settings: league.settings })
+          if (scorer) return { scorer, info: { kind: 'league', leagueName: league.name ?? null } as ScoringInfo }
+        }
+      }
+    } catch {
+      /* fall through to the sport's defaults */
+    }
+  }
+  const scorer = buildLeagueStatScorer({ sport, settings: null })
+  return { scorer, info: (scorer ? { kind: 'default' } : { kind: 'none' }) as ScoringInfo }
 }
