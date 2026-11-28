@@ -1133,7 +1133,7 @@ export async function executeChimmyTool(
         if (!(await resolveDecisionOsFeedFlags()).enabled('commissionerHealthDecision')) {
           return 'League health is switched off right now, so nothing was read. Say you cannot check it at the moment; do not say anyone is or is not inactive. The Commissioner Hub shows it.'
         }
-        const [{ loadCommissionerHealthDecisionSlice }, { renderDecisionFactForPrompt }] = await Promise.all([
+        const [{ loadCommissionerHealthDecisionSlice, isLeagueHealthPlanLock, LEAGUE_HEALTH_UPGRADE_PATH }, { renderDecisionFactForPrompt }] = await Promise.all([
           import('@/lib/decision-os/grounding/decisionBridge'),
           import('@/lib/decision-os/grounding/serialize'),
         ])
@@ -1143,6 +1143,10 @@ export async function executeChimmyTool(
             "LEAGUE HEALTH — the Commissioner Hub's health engine, for this league (commissioner view):",
             ...renderDecisionFactForPrompt(slice.value),
           ].join('\n')
+        }
+        // The commissioner's plan, not their role (owner, 2026-11-28): league health is AF Commissioner depth.
+        if (isLeagueHealthPlanLock(slice.gap)) {
+          return `League health is part of AF Commissioner or AF Supreme, and this commissioner's plan does not include it, so NOTHING was read. Tell them plainly that league health is part of AF Commissioner or AF Supreme and that they can upgrade at ${LEAGUE_HEALTH_UPGRADE_PATH}. Do not stay silent about it, and do not say whether anyone is inactive or how healthy the league is.`
         }
         if (slice.gap?.reason === 'not_entitled') {
           return "League health is a commissioner view, and this user is not this league's commissioner or a co-commissioner, so NOTHING was read. Say so plainly and suggest they ask their commissioner. Do not say whether anyone is inactive or how healthy the league is."
