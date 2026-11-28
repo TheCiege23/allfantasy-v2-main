@@ -9,6 +9,7 @@
  */
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import './league-settings-hub.css'
 import {
   CalendarDays, ChevronRight, ClipboardList, Coins, Crown, Flame, Lock, LockKeyhole, Network, Scale, Settings2, Sparkles, Trophy, UserCog, Users, type LucideIcon,
@@ -115,6 +116,18 @@ export type HubSlots = { rivalryWeek?: ReactNode; storyline?: ReactNode; copyLea
 
 export type HubCallbacks = {
   onToggleSetting: (field: string, next: boolean) => void
+  /**
+   * One setting chosen from its picker (a row's `edit`): saves that one field. Resolves to the
+   * server's refusal, or null once saved. Optional: without it the rows stay read-only values.
+   */
+  onSetSetting?: (field: string, value: string | number) => Promise<string | null>
+  /**
+   * One scoring stat's points, from its own editor (2026-11-28). `confirmMidSeason` is sent only after the
+   * commissioner has read the server's mid-season warning and chosen to go ahead; it is never set first.
+   */
+  onSetScoringRule?: (statKey: string, points: number, confirmMidSeason: boolean) => Promise<ScoringSaveResult>
+  /** One roster slot's count (2026-11-28). Same mid-season contract as scoring: confirm only from the sheet. */
+  onSetRosterSlot?: (slotKey: string, count: number, confirmMidSeason: boolean) => Promise<ScoringSaveResult>
   onSaveTeamName: (name: string) => Promise<string | null>
   /** Commissioner notes, stored in `League.settings.commissioner_notes`. */
   onSaveNote: (text: string) => Promise<string | null>
@@ -135,6 +148,8 @@ export type HubCallbacks = {
  * `t` swaps in Spanish for strings lib/league-settings-hub/hubI18n knows and leaves data — names,
  * presets, numbers — untouched.
  */
+export type ScoringSaveResult = { error: string | null; needsConfirm?: boolean }
+
 type HubTr = { t: (s: string) => string; tStat: (s: string) => string; tMode: (s: string) => string; lang: string }
 const HubT = createContext<HubTr>({ t: (s) => s, tStat: (s) => s, tMode: (s) => s, lang: 'en' })
 const useT = () => useContext(HubT)
@@ -408,26 +423,51 @@ function Face({ name, src }: { name: string; src?: string | null }) {
   return <span className="af-lsh-face" aria-hidden>{src ? <img src={src} alt="" /> : initials(name)}</span>
 }
 
-function RowView({ row, canEdit, busyField, onToggle }: { row: HubRow; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void }) {
+type OnSetSetting = (field: string, value: string | number) => Promise<string | null>
+
+function RowView({ row, canEdit, busyField, onToggle, onSet }: { row: HubRow; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void; onSet?: OnSetSetting }) {
   const { t, tMode } = useT()
+  const [picking, setPicking] = useState(false)
+  const value = <span className="af-lsh-value" data-empty={row.value == null ? 'true' : undefined}>{row.value == null ? '—' : translateValue(t, row.value)}</span>
+  const pickable = Boolean(row.edit && onSet && canEdit && !row.toggle)
   return (
     <>
-      <div className="af-lsh-row" data-indent={row.indent ? 'true' : undefined}>
-        <div className="af-lsh-row-copy">
-          <span>{t(row.label)}</span>
-          {row.description ? <span>{t(row.description)}</span> : null}
+      {pickable ? (
+        /*
+         * Sleeper's settings row (owner request, 2026-11-28): the whole row is the button, the value sits
+         * beside a chevron, and the choices open in a sheet that saves the one setting.
+         */
+        <button
+          type="button"
+          className="af-lsh-row af-lsh-pickrow"
+          data-indent={row.indent ? 'true' : undefined}
+          onClick={() => setPicking(true)}
+          data-testid={`setting-row-${row.edit!.field}`}
+          aria-haspopup="dialog"
+        >
+          <span className="af-lsh-row-copy">
+            <span>{t(row.label)}</span>
+            {row.description ? <span>{t(row.description)}</span> : null}
+          </span>
+          {value}
+          <ChevronRight className="af-lsh-nav-chevron" size={18} aria-hidden />
+        </button>
+      ) : (
+        <div className="af-lsh-row" data-indent={row.indent ? 'true' : undefined}>
+          <div className="af-lsh-row-copy">
+            <span>{t(row.label)}</span>
+            {row.description ? <span>{t(row.description)}</span> : null}
+          </div>
+          {row.toggle && onToggle ? (
+            <Switch
+              on={row.toggle.on}
+              label={t(row.label)}
+              disabled={!canEdit || busyField === row.toggle.field}
+              onChange={(next) => onToggle(row.toggle!.field, next)}
+            />
+          ) : row.schedule ? null : value}
         </div>
-        {row.toggle && onToggle ? (
-          <Switch
-            on={row.toggle.on}
-            label={t(row.label)}
-            disabled={!canEdit || busyField === row.toggle.field}
-            onChange={(next) => onToggle(row.toggle!.field, next)}
-          />
-        ) : row.schedule ? null : (
-          <span className="af-lsh-value" data-empty={row.value == null ? 'true' : undefined}>{row.value == null ? '—' : translateValue(t, row.value)}</span>
-        )}
-      </div>
+      )}
       {row.schedule ? (
         <div className="af-lsh-schedule">
           {row.schedule.map((d) => (
@@ -435,8 +475,80 @@ function RowView({ row, canEdit, busyField, onToggle }: { row: HubRow; canEdit: 
           ))}
         </div>
       ) : null}
+      {picking && row.edit && onSet ? <SettingPicker row={row} onSet={onSet} onClose={() => setPicking(false)} /> : null}
     </>
   )
+}
+
+/**
+ * The picker for one setting: its choices as a list, the current one marked. Choosing saves at once —
+ * no separate Save button, as in Sleeper — and the sheet closes when the server accepts it. A refusal
+ * (a playoff field the season cannot fit, a week past the cap) stays in the sheet, in the server's words.
+ */
+function SettingPicker({ row, onSet, onClose }: { row: HubRow; onSet: OnSetSetting; onClose: () => void }) {
+  const { t } = useT()
+  const edit = row.edit!
+  const [saving, setSaving] = useState<string | number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    // Start on the current choice, so a long list of weeks opens where the league is.
+    listRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.scrollIntoView?.({ block: 'center' })
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const choose = async (value: string | number) => {
+    if (saving != null) return
+    if (value === edit.current) { onClose(); return }
+    setSaving(value)
+    setError(null)
+    const refusal = await onSet(edit.field, value)
+    setSaving(null)
+    if (refusal) setError(refusal)
+    else onClose()
+  }
+  /*
+   * Portalled to <body>: `.af-lsh` is a size container, and containment makes it the containing block of
+   * a fixed-position child, so an in-place sheet would be clipped to the settings panel.
+   */
+  const sheet = (
+    <div className="af-lsh-sheet-backdrop" onClick={onClose} data-testid="setting-picker">
+      <div className="af-lsh-sheet" role="dialog" aria-modal="true" aria-label={t(row.label)} onClick={(e) => e.stopPropagation()}>
+        <div className="af-lsh-sheet-grab" aria-hidden />
+        <div className="af-lsh-sheet-head">
+          <strong>{t(row.label)}</strong>
+          <button type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" onClick={onClose}>{t('Done')}</button>
+        </div>
+        {row.description ? <p className="af-lsh-sheet-sub">{t(row.description)}</p> : null}
+        {error ? <p className="af-lsh-sheet-error" role="alert">{error}</p> : null}
+        <div className="af-lsh-sheet-list" role="radiogroup" aria-label={t(row.label)} ref={listRef}>
+          {edit.choices.map((c) => {
+            const on = c.value === edit.current
+            return (
+              <button
+                key={String(c.value)}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                className="af-lsh-choice"
+                disabled={saving != null}
+                onClick={() => void choose(c.value)}
+                data-testid={`setting-choice-${String(c.value)}`}
+              >
+                <span className="af-lsh-choice-copy">
+                  <span>{t(c.label)}</span>
+                  {c.note ? <span>{t(c.note)}</span> : null}
+                </span>
+                <span className="af-lsh-choice-mark" aria-hidden>{saving === c.value ? '…' : on ? '✓' : ''}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+  return typeof document === 'undefined' ? sheet : createPortal(sheet, document.body)
 }
 
 /** A row value: whole-string first, then a comma list ("Out, Doubtful, NA") item by item. */
@@ -447,7 +559,7 @@ function translateValue(t: (s: string) => string, value: string): string {
 }
 
 /** Groups flow into two columns at tablet width and up, balanced by row count. */
-function GroupGrid({ groups, canEdit, busyField, onToggle }: { groups: HubGroup[]; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void }) {
+function GroupGrid({ groups, canEdit, busyField, onToggle, onSet }: { groups: HubGroup[]; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void; onSet?: OnSetSetting }) {
   const { t } = useT()
   const cols = useMemo(() => {
     const left: HubGroup[] = []
@@ -467,7 +579,7 @@ function GroupGrid({ groups, canEdit, busyField, onToggle }: { groups: HubGroup[
           {col.map((g) => (
             <div key={g.key}>
               {g.label ? <div className="af-lsh-group-label">{t(g.label)}</div> : null}
-              {g.rows.map((r) => <RowView key={r.key} row={r} canEdit={canEdit} busyField={busyField} onToggle={onToggle} />)}
+              {g.rows.map((r) => <RowView key={r.key} row={r} canEdit={canEdit} busyField={busyField} onToggle={onToggle} onSet={onSet} />)}
             </div>
           ))}
         </div>
@@ -980,11 +1092,11 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
             </span>
           </div>
         </div>
-        {data.general === undefined ? <Loading lines={5} /> : <GroupGrid groups={data.general} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
+        {data.general === undefined ? <Loading lines={5} /> : <GroupGrid groups={data.general} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} onSet={cb.onSetSetting} />}
       </Card>
 
       <Card id="waivers" fold="closed" title={data.kind === 'zombie' ? 'Free Agency' : 'Waiver Settings'} action={<EditButton show={edit} onClick={() => cb.onOpenEditor('waivers')} />}>
-        {data.waivers === undefined ? <Loading /> : <GroupGrid groups={data.waivers} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
+        {data.waivers === undefined ? <Loading /> : <GroupGrid groups={data.waivers} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} onSet={cb.onSetSetting} />}
       </Card>
 
       {data.typeRules === undefined || data.typeRules.length ? (
@@ -1005,7 +1117,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
         {data.roster === undefined ? <Loading lines={4} /> : data.roster === null || data.roster.length === 0 ? (
           <p className="af-lsh-empty">{t('Roster positions aren’t available for this league yet.')}</p>
         ) : (
-          <RosterList items={data.roster} />
+          <RosterList items={data.roster} onSetSlot={edit ? cb.onSetRosterSlot : undefined} />
         )}
       </Card>
 
@@ -1023,13 +1135,13 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
                 <button key={c.key} type="button" className="af-lsh-pill" aria-pressed={c.key === activeCat.key} onClick={() => setCat(c.key)}>{t(c.label)}</button>
               ))}
             </div>
-            <ScoringRows rows={activeCat.rows} label={activeCat.label} />
+            <ScoringRows rows={activeCat.rows} label={activeCat.label} onSetRule={edit ? cb.onSetScoringRule : undefined} />
           </>
         )}
       </Card>
 
       <Card id="draft" fold="closed" title="Draft Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('draft')} />}>
-        {data.draft === undefined ? <Loading lines={4} /> : <GroupGrid groups={data.draft} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
+        {data.draft === undefined ? <Loading lines={4} /> : <GroupGrid groups={data.draft} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} onSet={cb.onSetSetting} />}
         <div className="af-lsh-card-body" style={{ paddingTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <strong style={{ fontSize: 15 }}>{t('Draft Order')}</strong>
@@ -1070,8 +1182,12 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
 }
 
 /** Sleeper lays scoring out in two columns: first half left, second half right. */
-function ScoringRows({ rows, label }: { rows: HubScoringCategory['rows']; label: string }) {
+type ScoringRow = HubScoringCategory['rows'][number]
+type OnSetScoringRule = NonNullable<HubCallbacks['onSetScoringRule']>
+
+function ScoringRows({ rows, label, onSetRule }: { rows: HubScoringCategory['rows']; label: string; onSetRule?: OnSetScoringRule }) {
   const { t, tStat } = useT()
+  const [editing, setEditing] = useState<ScoringRow | null>(null)
   const half = Math.ceil(rows.length / 2)
   const cols = [rows.slice(0, half), rows.slice(half)].filter((c) => c.length)
   return (
@@ -1080,20 +1196,128 @@ function ScoringRows({ rows, label }: { rows: HubScoringCategory['rows']; label:
       <div className="af-lsh-grid" style={{ borderTop: 0 }}>
         {cols.map((col, i) => (
           <div className="af-lsh-col" key={i}>
-            {col.map((r) => (
-              <div className="af-lsh-row" key={r.key}>
-                <div className="af-lsh-row-copy">
-                  <span>{tStat(r.label)}</span>
-                  {r.perUnit ? <span>{t(r.perUnit)}</span> : null}
-                </div>
-                <span className="af-lsh-points">{r.value}</span>
-              </div>
-            ))}
+            {col.map((r) => {
+              const copy = (
+                <>
+                  <span className="af-lsh-row-copy">
+                    <span>{tStat(r.label)}</span>
+                    {r.perUnit ? <span>{t(r.perUnit)}</span> : null}
+                  </span>
+                  <span className="af-lsh-points">{r.value}</span>
+                </>
+              )
+              // A commissioner taps a stat to change its points (Sleeper's scoring screen); others read it.
+              return onSetRule && r.points != null ? (
+                <button key={r.key} type="button" className="af-lsh-row af-lsh-pickrow" onClick={() => setEditing(r)} data-testid={`scoring-row-${r.key}`} aria-haspopup="dialog">
+                  {copy}
+                  <ChevronRight className="af-lsh-nav-chevron" size={18} aria-hidden />
+                </button>
+              ) : (
+                <div className="af-lsh-row" key={r.key}>{copy}</div>
+              )
+            })}
           </div>
         ))}
       </div>
+      {editing && onSetRule ? <ScoringRuleSheet row={editing} onSave={onSetRule} onClose={() => setEditing(null)} /> : null}
     </>
   )
+}
+
+/** Sensible values to tap, per kind of stat: per-yard rates read as "1 point every N yards". */
+function scoringQuickValues(row: ScoringRow): number[] {
+  if (row.perYard) return [0.1, 0.05, 0.04]
+  return [-2, -1, 0.5, 1, 2, 3, 4, 6]
+}
+const roundPts = (n: number) => Math.round(n * 1000) / 1000
+
+/**
+ * One stat's points: minus / value / plus, a row of common values, and Save. 0 turns the stat off.
+ * A mid-season league answers with a warning first: the sheet shows it in the server's words and asks
+ * the commissioner to confirm; the confirmation is only ever sent from that button.
+ */
+function ScoringRuleSheet({ row, onSave, onClose }: { row: ScoringRow; onSave: OnSetScoringRule; onClose: () => void }) {
+  const { t, tStat } = useT()
+  const start = row.points ?? 0
+  const step = row.perYard ? 0.01 : 0.5
+  const [text, setText] = useState(String(start))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState<string | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const value = Number(text)
+  const valid = text.trim() !== '' && Number.isFinite(value) && Math.abs(value) <= 100
+  const bump = (d: number) => setText(String(roundPts((Number.isFinite(value) ? value : start) + d)))
+  const save = async (confirmMidSeason: boolean) => {
+    if (!valid || saving) return
+    if (!confirmMidSeason && roundPts(value) === roundPts(start)) { onClose(); return }
+    setSaving(true)
+    setError(null)
+    const r = await onSave(row.key, roundPts(value), confirmMidSeason)
+    setSaving(false)
+    if (r.needsConfirm) { setConfirm(r.error); return }
+    if (r.error) { setError(r.error); return }
+    onClose()
+  }
+  const sheet = (
+    <div className="af-lsh-sheet-backdrop" onClick={onClose} data-testid="scoring-editor">
+      <div className="af-lsh-sheet" role="dialog" aria-modal="true" aria-label={tStat(row.label)} onClick={(e) => e.stopPropagation()}>
+        <div className="af-lsh-sheet-grab" aria-hidden />
+        <div className="af-lsh-sheet-head">
+          <strong>{tStat(row.label)}</strong>
+          <button type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" onClick={onClose}>{t('Cancel')}</button>
+        </div>
+        <p className="af-lsh-sheet-sub">
+          {row.perYard
+            ? valid && value !== 0 ? t(`1 point every ${Math.round(1 / Math.abs(value))} yards`) : t('Points per yard.')
+            : t('Points each time it happens. 0 turns it off.')}
+        </p>
+        <div className="af-lsh-stepper">
+          <button type="button" className="af-lsh-step" aria-label={t('Less')} onClick={() => bump(-step)} disabled={saving}>−</button>
+          <input
+            className="af-lsh-step-input"
+            type="number"
+            inputMode="decimal"
+            step={step}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            aria-label={t('Points')}
+            data-testid="scoring-value"
+          />
+          <button type="button" className="af-lsh-step" aria-label={t('More')} onClick={() => bump(step)} disabled={saving}>+</button>
+        </div>
+        <div className="af-lsh-quick" role="group" aria-label={t('Common values')}>
+          {scoringQuickValues(row).map((v) => (
+            <button key={v} type="button" className="af-lsh-pill" aria-pressed={valid && roundPts(value) === v} onClick={() => setText(String(v))}>
+              {/* The value it SETS, never "+4": a plus reads as "add 4" beside the − / + buttons. */}
+              {row.perYard ? `1 / ${Math.round(1 / v)} yd` : String(v)}
+            </button>
+          ))}
+        </div>
+        {!valid ? <p className="af-lsh-sheet-error" role="alert">{t('Enter a number between -100 and 100.')}</p> : null}
+        {error ? <p className="af-lsh-sheet-error" role="alert">{error}</p> : null}
+        {confirm ? (
+          <div className="af-lsh-sheet-confirm" role="alert">
+            <p>{confirm}</p>
+            <button type="button" className="af-lsh-btn" data-variant="primary" onClick={() => void save(true)} disabled={saving} data-testid="scoring-confirm">
+              {t('Confirm and save')}
+            </button>
+          </div>
+        ) : (
+          <div className="af-lsh-sheet-actions">
+            <button type="button" className="af-lsh-btn" data-variant="primary" onClick={() => void save(false)} disabled={!valid || saving} data-testid="scoring-save">
+              {saving ? t('Saving…') : t('Save')}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+  return typeof document === 'undefined' ? sheet : createPortal(sheet, document.body)
 }
 
 function NotesCard({ note, edit, onSave }: { note: string | null | undefined; edit: boolean; onSave: (text: string) => Promise<string | null> }) {
@@ -1136,8 +1360,11 @@ function NotesCard({ note, edit, onSave }: { note: string | null | undefined; ed
   )
 }
 
-function RosterList({ items }: { items: HubRosterItem[] }) {
+type OnSetRosterSlot = NonNullable<HubCallbacks['onSetRosterSlot']>
+
+function RosterList({ items, onSetSlot }: { items: HubRosterItem[]; onSetSlot?: OnSetRosterSlot }) {
   const { t } = useT()
+  const [editing, setEditing] = useState<HubRosterItem | null>(null)
   const sections = useMemo(() => {
     const map = new Map<string, HubRosterItem[]>()
     for (const it of items) map.set(it.section, [...(map.get(it.section) ?? []), it])
@@ -1153,22 +1380,97 @@ function RosterList({ items }: { items: HubRosterItem[] }) {
             <div className="af-lsh-grid">
               {[list.slice(0, half), list.slice(half)].filter((c) => c.length).map((col, i) => (
                 <div className="af-lsh-col" key={i}>
-                  {col.map((it) => (
-                    <div className="af-lsh-slot" key={it.key}>
-                      <span className="af-lsh-dot" style={{ background: it.color }} aria-hidden />
-                      <strong>{t(it.name)}</strong>
-                      <small>{it.abbr}</small>
-                      <b data-zero={it.count === 0 ? 'true' : undefined}>{it.count}</b>
-                    </div>
-                  ))}
+                  {col.map((it) => {
+                    const body = (
+                      <>
+                        <span className="af-lsh-dot" style={{ background: it.color }} aria-hidden />
+                        <strong>{t(it.name)}</strong>
+                        <small>{it.abbr}</small>
+                        <b data-zero={it.count === 0 ? 'true' : undefined}>{it.count}</b>
+                      </>
+                    )
+                    // A commissioner taps a slot to change how many the league has (Sleeper's roster screen).
+                    return onSetSlot && it.slotKey ? (
+                      <button key={it.key} type="button" className="af-lsh-slot af-lsh-slot-btn" onClick={() => setEditing(it)} data-testid={`roster-slot-${it.slotKey}`} aria-haspopup="dialog">
+                        {body}
+                        <ChevronRight className="af-lsh-nav-chevron" size={16} aria-hidden />
+                      </button>
+                    ) : (
+                      <div className="af-lsh-slot" key={it.key}>{body}</div>
+                    )
+                  })}
                 </div>
               ))}
             </div>
           </div>
         )
       })}
+      {editing && onSetSlot ? <RosterSlotSheet item={editing} onSave={onSetSlot} onClose={() => setEditing(null)} /> : null}
     </>
   )
+}
+
+/**
+ * One roster slot: minus / count / plus inside the sport's own bounds, and Save. Mid-season the server's
+ * warning comes first and the confirmation is sent only from "Confirm and save", as for scoring.
+ */
+function RosterSlotSheet({ item, onSave, onClose }: { item: HubRosterItem; onSave: OnSetRosterSlot; onClose: () => void }) {
+  const { t } = useT()
+  const min = item.min ?? 0
+  const max = item.max ?? 20
+  const [count, setCount] = useState(item.count)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState<string | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const save = async (confirmMidSeason: boolean) => {
+    if (saving) return
+    if (!confirmMidSeason && count === item.count) { onClose(); return }
+    setSaving(true)
+    setError(null)
+    const r = await onSave(item.slotKey!, count, confirmMidSeason)
+    setSaving(false)
+    if (r.needsConfirm) { setConfirm(r.error); return }
+    if (r.error) { setError(r.error); return }
+    onClose()
+  }
+  const sheet = (
+    <div className="af-lsh-sheet-backdrop" onClick={onClose} data-testid="roster-slot-editor">
+      <div className="af-lsh-sheet" role="dialog" aria-modal="true" aria-label={t(item.name)} onClick={(e) => e.stopPropagation()}>
+        <div className="af-lsh-sheet-grab" aria-hidden />
+        <div className="af-lsh-sheet-head">
+          <strong>{t(item.name)} <small style={{ color: item.color }}>{item.abbr}</small></strong>
+          <button type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" onClick={onClose}>{t('Cancel')}</button>
+        </div>
+        <p className="af-lsh-sheet-sub">{t(`How many ${item.abbr} spots every team has.`)} {t(`${min} to ${max}.`)}</p>
+        <div className="af-lsh-stepper">
+          <button type="button" className="af-lsh-step" aria-label={t('Less')} onClick={() => setCount((c) => Math.max(min, c - 1))} disabled={saving || count <= min}>−</button>
+          <output className="af-lsh-step-input af-lsh-step-count" aria-live="polite" data-testid="roster-slot-count">{count}</output>
+          <button type="button" className="af-lsh-step" aria-label={t('More')} onClick={() => setCount((c) => Math.min(max, c + 1))} disabled={saving || count >= max}>+</button>
+        </div>
+        {error ? <p className="af-lsh-sheet-error" role="alert">{error}</p> : null}
+        {confirm ? (
+          <div className="af-lsh-sheet-confirm" role="alert">
+            <p>{confirm}</p>
+            <button type="button" className="af-lsh-btn" data-variant="primary" onClick={() => void save(true)} disabled={saving} data-testid="roster-slot-confirm">
+              {t('Confirm and save')}
+            </button>
+          </div>
+        ) : (
+          <div className="af-lsh-sheet-actions">
+            <button type="button" className="af-lsh-btn" data-variant="primary" onClick={() => void save(false)} disabled={saving} data-testid="roster-slot-save">
+              {saving ? t('Saving…') : t('Save')}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+  return typeof document === 'undefined' ? sheet : createPortal(sheet, document.body)
 }
 
 /* ----------------------------------------------------------- Members tab */
