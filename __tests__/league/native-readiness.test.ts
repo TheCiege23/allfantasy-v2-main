@@ -81,6 +81,20 @@ describe('checkNativeReadiness', () => {
     expect(report?.items[0]?.title).toBe('2 other copies of this league are on AllFantasy')
   })
 
+  it("does not block a team whose Sleeper lineup has an empty starter slot (\"0\")", async () => {
+    const report = await checkNativeReadiness(db({
+      rosters: [roster(1, ['a'], { starters: ['a', '0'] }), roster(2, ['b'], { starters: ['0', 'b'] })],
+    }) as never, 'L', NOW)
+    expect(report?.status).toBe('ready')
+    expect(codes(report)).toEqual([])
+    // Control: a starter who really is missing from the roster still blocks.
+    const stray = await checkNativeReadiness(db({
+      rosters: [roster(1, ['a'], { starters: ['a', '0', 'zz'] }), roster(2, ['b'])],
+    }) as never, 'L', NOW)
+    expect(codes(stray)).toEqual(['lineup_player_missing'])
+    expect(stray?.items[0]?.names).toEqual(['Team 1'])
+  })
+
   it('names unmatched players by the name the provider gave them, and caps the list', async () => {
     const ids = Array.from({ length: 11 }, (_, i) => `p${i}`)
     const metadata = Object.fromEntries(ids.map((id) => [id, { name: `Rookie ${id}` }]))
