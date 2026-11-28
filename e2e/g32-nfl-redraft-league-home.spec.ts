@@ -43,11 +43,10 @@ test.describe('@g32 @nfl-redraft league home overhaul', () => {
     await expect(page.getByText('AI Coaching')).toHaveCount(0)
     await expect(page.getByText('Chimmy Coaching')).toHaveCount(0)
 
-    await expect(page.getByRole('heading', { name: 'Commissioner Command Center' })).toBeVisible()
-    await expect(page.getByTestId('g32-commissioner-intelligence-section')).toContainText('League Intelligence')
-    await expect(page.getByTestId('g32-commissioner-intelligence-section')).toContainText('Weekly League Report')
+    await expect(page.getByTestId('g32-home-row-intelligence')).toContainText('League Intelligence')
+    await expect(page.getByTestId('g32-home-row-intelligence')).toHaveAttribute('href', /\/intelligence$/)
 
-    await page.getByTestId('g32-home-card-draft-setup').click()
+    await page.getByTestId('g32-home-row-settings').click()
     await expect(page.getByTestId('g32-settings-modal')).toBeVisible()
     for (const label of ['General', 'Draft', 'Roster', 'Scoring', 'Waivers', 'Trades', 'Playoffs', 'Members', 'Notifications', 'Permissions']) {
       await expect(page.getByTestId('g32-settings-modal')).toContainText(label)
@@ -57,7 +56,7 @@ test.describe('@g32 @nfl-redraft league home overhaul', () => {
     }
     await page.getByRole('button', { name: 'Close' }).click()
 
-    await page.getByTestId('g32-chat-visibility-card').getByRole('button', { name: 'Open League Chat' }).click()
+    await page.getByTestId('g32-home-row-chat').click()
     await expect(page.getByTestId('g32-active-tab')).toContainText('league_chat')
   })
 
@@ -68,10 +67,10 @@ test.describe('@g32 @nfl-redraft league home overhaul', () => {
 
     await expect(page.getByTestId('g32-nfl-redraft-home')).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'G32 league tabs' }).getByRole('button', { name: 'Commissioner' })).toHaveCount(0)
-    await expect(page.getByRole('heading', { name: 'Draft HQ' }).first()).toBeVisible()
-    await expect(page.getByTestId('g32-manager-intelligence-section')).toContainText('Locked Manager Intelligence preview')
-    await expect(page.getByTestId('g32-manager-intelligence-section')).toContainText('AF Pro preview')
-    await expect(page.getByTestId('g32-chat-visibility-card')).toBeVisible()
+    await expect(page.getByTestId('g32-home-next').getByRole('heading', { name: 'Draft', exact: true })).toBeVisible()
+    await expect(page.getByTestId('g32-home-row-intelligence')).toContainText('AF Pro')
+    await expect(page.getByTestId('g32-home-row-intelligence')).toHaveAttribute('href', '/pricing')
+    await expect(page.getByTestId('g32-home-row-chat')).toBeVisible()
   })
 
   test('AF Pro manager light-mode view unlocks Manager Intelligence and keeps tabs usable', async ({ page }) => {
@@ -79,8 +78,8 @@ test.describe('@g32 @nfl-redraft league home overhaul', () => {
     await gotoHarness(page, '?role=manager&mode=light')
 
     await expect(page.locator('main[data-mode="light"]')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Manager Intelligence' }).first()).toBeVisible()
-    await expect(page.getByTestId('g32-manager-intelligence-section')).toContainText('Unlocked')
+    await expect(page.getByTestId('g32-home-row-intelligence')).toContainText('Manager Intelligence')
+    await expect(page.getByTestId('g32-home-row-intelligence')).not.toContainText('AF Pro')
 
     const tabNav = page.getByRole('navigation', { name: 'G32 league tabs' })
     for (const tab of ['Draft', 'Roster', 'Matchups', 'Waivers', 'Trades', 'Standings', 'League Chat']) {
