@@ -30,6 +30,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   const team = req.nextUrl.searchParams.get('team')?.trim().slice(0, 120)
   if (!leagueId || !team) return NextResponse.json({ error: 'Name the team.' }, { status: 400, headers: NO_STORE })
 
+  /*
+   * The packet's `managerRecords` kill switch turns the screen off too (2026-11-28), exactly as it turns off the
+   * packet slice and Chimmy's `get_manager_record` tool (chimmyTools.ts). Before this, killing the feed left the
+   * card reading the same history — a switch that only two-thirds switched.
+   *
+   * ⚠ 200 WITH `unavailable`, NOT AN ERROR STATUS. An operator's choice is a state the sheet draws calmly; a 503
+   * would read as a fault, and an empty record would read as "this manager has done nothing". Checked before the
+   * plan, so a switched-off feed reads no plan and no history at all. The flag read fails open by design.
+   */
+  const { resolveDecisionOsFeedFlags } = await import('@/lib/decision-os/flags')
+  if (!(await resolveDecisionOsFeedFlags()).enabled('managerRecords')) {
+    return NextResponse.json({ unavailable: true }, { headers: NO_STORE })
+  }
+
   const access = await resolveCoreDepth(userId, 'competitive_edge').catch(() => null)
   if (!access) return NextResponse.json({ error: 'Your plan could not be checked just now.' }, { status: 503, headers: NO_STORE })
   if (!access.unlocked) return NextResponse.json({ locked: true, access }, { headers: NO_STORE })
