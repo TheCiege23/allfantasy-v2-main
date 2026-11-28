@@ -313,3 +313,56 @@
   /* Room for the floating chat buttons under the last row. */
   .af-lsh-stack > :last-child { margin-bottom: 88px; }
 }
+
+/* ── Sleeper-style setting rows and their picker sheet (2026-11-28) ─────────────────────────────────
+ * A setting with choices is one tappable row (value · chevron); its choices open in a bottom sheet on a
+ * phone and a centred card on a wide screen; choosing saves that one setting. */
+.af-lsh-row.af-lsh-pickrow { width: 100%; border: 0; border-bottom: 1px solid rgba(255,255,255,.045); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; gap: 10px; -webkit-tap-highlight-color: transparent; }
+.af-lsh-row.af-lsh-pickrow > .af-lsh-row-copy { flex: 1 1 auto; }
+.af-lsh-row.af-lsh-pickrow:hover, .af-lsh-row.af-lsh-pickrow:focus-visible { background: rgba(255,255,255,.04); }
+.af-lsh-row.af-lsh-pickrow:active { background: rgba(255,255,255,.07); }
+.af-lsh-row.af-lsh-pickrow > .af-lsh-value { color: var(--lsh-accent); }
+
+.af-lsh-sheet-backdrop { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; justify-content: center; background: rgba(2, 4, 12, .66); }
+.af-lsh-sheet { display: flex; flex-direction: column; width: 100%; max-width: 520px; max-height: 78vh; padding: 6px 0 calc(12px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; border: 1px solid rgba(255,255,255,.12); border-bottom: 0; background: var(--lsh-card, #0a1228); color: var(--lsh-text, #eef5ff); box-shadow: 0 -20px 60px rgba(0,0,0,.5); }
+.af-lsh-sheet-grab { align-self: center; width: 40px; height: 4px; margin: 4px 0 8px; border-radius: 2px; background: rgba(255,255,255,.22); }
+.af-lsh-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 18px 8px; }
+.af-lsh-sheet-head strong { font-size: 17px; font-weight: 800; }
+.af-lsh-sheet-sub { margin: 0; padding: 0 18px 8px; font-size: 13px; line-height: 1.4; color: var(--lsh-muted, #9fb2c9); }
+.af-lsh-sheet-error { margin: 0 18px 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(239,68,68,.45); background: rgba(239,68,68,.1); color: #fca5a5; font-size: 13px; line-height: 1.4; }
+.af-lsh-sheet-list { overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid rgba(255,255,255,.06); }
+.af-lsh-choice { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 18px; border: 0; border-bottom: 1px solid rgba(255,255,255,.045); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.af-lsh-choice:hover, .af-lsh-choice:focus-visible { background: rgba(255,255,255,.04); }
+.af-lsh-choice:disabled { cursor: progress; }
+.af-lsh-choice[aria-checked=true] { color: var(--lsh-accent, #22d3ee); }
+.af-lsh-choice-copy { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.af-lsh-choice-copy > span:first-child { font-size: 15px; font-weight: 650; }
+.af-lsh-choice-copy > span + span { font-size: 12px; color: var(--lsh-muted, #9fb2c9); }
+.af-lsh-choice-mark { flex: none; width: 20px; text-align: center; font-size: 16px; font-weight: 800; }
+@media (min-width: 721px) {
+  .af-lsh-sheet-backdrop { align-items: center; padding: 24px; }
+  .af-lsh-sheet { border-radius: 18px; border-bottom: 1px solid rgba(255,255,255,.12); }
+  .af-lsh-sheet-grab { display: none; }
+}
+/* The sheet is portalled out of `.af-lsh`, so it restates the two base rules it no longer inherits. */
+.af-lsh-sheet-backdrop, .af-lsh-sheet-backdrop * { box-sizing: border-box; }
+.af-lsh-sheet { font-family: inherit; font-size: 14px; --lsh-accent: #22d3ee; --lsh-text: #eef5ff; --lsh-muted: #9fb2c9; --lsh-card: #0a1228; --lsh-line: rgba(34, 211, 238, .38); }
+
+/* One scoring stat's editor (2026-11-28): minus / value / plus, common values, Save. */
+.af-lsh-stepper { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; gap: 10px; padding: 8px 18px; }
+.af-lsh-step { min-height: 52px; border-radius: 14px; border: 1px solid rgba(255,255,255,.16); background: #12163e; color: var(--lsh-text, #eef5ff); font-size: 24px; font-weight: 700; cursor: pointer; }
+.af-lsh-step:disabled { opacity: .5; }
+.af-lsh-step-input { min-height: 52px; width: 100%; border-radius: 14px; border: 1px solid var(--lsh-line, rgba(34,211,238,.38)); background: #070d20; color: var(--lsh-text, #eef5ff); font: 800 24px/1 'JetBrains Mono', ui-monospace, monospace; text-align: center; -moz-appearance: textfield; }
+.af-lsh-step-input::-webkit-outer-spin-button, .af-lsh-step-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.af-lsh-quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 18px 4px; }
+.af-lsh-quick .af-lsh-pill[aria-pressed=true] { background: var(--lsh-accent, #22d3ee); border-color: var(--lsh-accent, #22d3ee); color: #04202a; }
+.af-lsh-sheet-actions { padding: 12px 18px 4px; }
+.af-lsh-sheet-actions .af-lsh-btn, .af-lsh-sheet-confirm .af-lsh-btn { width: 100%; min-height: 48px; font-size: 14px; }
+.af-lsh-sheet-confirm { margin: 10px 18px 4px; padding: 12px; border-radius: 12px; border: 1px solid rgba(245,158,11,.45); background: rgba(245,158,11,.08); }
+.af-lsh-sheet-confirm p { margin: 0 0 10px; font-size: 13px; line-height: 1.45; color: #fcd34d; }
+
+/* A roster slot a commissioner can change (2026-11-28): the same row, as a button, with a chevron. */
+.af-lsh-slot.af-lsh-slot-btn { width: 100%; border: 0; border-bottom: 1px solid rgba(255,255,255,.045); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.af-lsh-slot.af-lsh-slot-btn:hover, .af-lsh-slot.af-lsh-slot-btn:focus-visible { background: rgba(255,255,255,.04); }
+.af-lsh-slot.af-lsh-slot-btn b { color: var(--lsh-accent); }
+.af-lsh-step-count { display: grid; place-items: center; }
