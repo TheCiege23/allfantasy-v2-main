@@ -196,9 +196,13 @@ describe('the card itself', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[1]!)
     await waitFor(() => expect(screen.queryByTestId('player-card-drop-confirm')).toBeNull())
 
-    // No roster write happened at any point: the only request is the card's own read.
+    // No roster write happened at any point: the only requests are the card's own reads (its tabs,
+    // and the daily sports' per-game box log — both GETs).
     const calls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
-    expect(calls.every(([url]) => String(url).startsWith('/api/core/player-card/more'))).toBe(true)
+    const reads = ['/api/core/player-card/more', '/api/players/game-log?']
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls.every(([url, init]) =>
+      reads.some((r) => String(url).startsWith(r)) && !(init as RequestInit | undefined)?.method)).toBe(true)
   })
 
   it('shows Add on a free agent and Propose trade on another manager\'s player — never Drop', () => {

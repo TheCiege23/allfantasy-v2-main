@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import type { PlayerCardData } from '@/lib/core-app/playerCard'
 import type { PlayerCardMore } from '@/lib/core-app/playerCardMore'
 import PlayerCardSheet from './PlayerCardSheet'
+import { collectPlayerCardList, type PlayerCardList } from './playerCardSiblings'
 import '@/components/core-app/af-player-card.css'
 
 /**
@@ -38,8 +39,22 @@ export type PlayerCardRef = {
   leagueId?: string | null
 }
 
+export type PlayerCardOpenOptions = {
+  /** The control that was tapped. Its screen's other player names become the swipe list. */
+  origin?: Element | null
+}
+
+/** Moving between the players of the list the card was opened from. */
+export type PlayerCardNav = {
+  index: number
+  total: number
+  prev: PlayerCardRef | null
+  next: PlayerCardRef | null
+  go: (step: -1 | 1) => void
+}
+
 type PlayerCardState = {
-  open: (ref: PlayerCardRef) => void
+  open: (ref: PlayerCardRef, opts?: PlayerCardOpenOptions) => void
   close: () => void
   isOpen: boolean
 }
@@ -100,6 +115,13 @@ export default function PlayerCardProvider({
   const [data, setData] = useState<PlayerCardData | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [more, setMore] = useState<PlayerCardMore | null>(null)
+  const [list, setListState] = useState<PlayerCardList | null>(null)
+  // Mirrored in a ref so a step reads the CURRENT list without a side effect inside a state updater.
+  const listRef = useRef<PlayerCardList | null>(null)
+  const setList = useCallback((next: PlayerCardList | null) => {
+    listRef.current = next
+    setListState(next)
+  }, [])
 
   /*
    * ⚠ EVERY FETCH IS SEQUENCED AND A STALE ONE IS DISCARDED. Clicking two names
@@ -115,9 +137,10 @@ export default function PlayerCardProvider({
     setData(null)
     setMore(null)
     setStatus('idle')
-  }, [])
+    setList(null)
+  }, [setList])
 
-  const open = useCallback(
+  const load = useCallback(
     (next: PlayerCardRef) => {
       const mine = ++seq.current
       setRef(next)
@@ -162,6 +185,45 @@ export default function PlayerCardProvider({
   )
 
   /*
+   * A tap on a name: load him, and take the screen's other names as the swipe list. A card opened
+   * from inside the card (a comp, a trade row) passes no origin and so drops the list — a side trip
+   * is not a step through the roster.
+   */
+  const open = useCallback(
+    (next: PlayerCardRef, opts?: PlayerCardOpenOptions) => {
+      setList(collectPlayerCardList(opts?.origin ?? null, next))
+      load(next)
+    },
+    [load, setList]
+  )
+
+  const go = useCallback(
+    (step: -1 | 1) => {
+      const cur = listRef.current
+      if (!cur) return
+      const index = cur.index + step
+      if (index < 0 || index >= cur.refs.length) return
+      setList({ refs: cur.refs, index })
+      load(cur.refs[index])
+    },
+    [load, setList]
+  )
+
+  const nav = useMemo<PlayerCardNav | null>(
+    () =>
+      list
+        ? {
+            index: list.index,
+            total: list.refs.length,
+            prev: list.refs[list.index - 1] ?? null,
+            next: list.refs[list.index + 1] ?? null,
+            go,
+          }
+        : null,
+    [list, go]
+  )
+
+  /*
    * Escape, the background scroll lock and focus restoration all moved into
    * `useOverlayContainment`, which PlayerCardSheet calls.
    *
@@ -182,7 +244,7 @@ export default function PlayerCardProvider({
   return (
     <Ctx.Provider value={value}>
       {children}
-      {ref ? <PlayerCardSheet subject={ref} data={data} status={status} onClose={close} onOpen={open} more={more} /> : null}
+      {ref ? <PlayerCardSheet subject={ref} data={data} status={status} onClose={close} onOpen={open} more={more} nav={nav} /> : null}
     </Ctx.Provider>
   )
 }

@@ -38,6 +38,29 @@ export type CommsOpenDetail = {
    * that league's and not whichever the drawer was last left on.
    */
   leagueId?: string
+  /**
+   * Start (or reopen) a direct message with this person: the drawer lands on the DMs tab and runs the
+   * same start the people picker does (`/api/shared/chat/dm/start`), which finds an existing thread
+   * rather than making a second one. Nothing is sent.
+   */
+  dmWith?: { username: string }
+}
+
+/**
+ * Set on <html> while a `CommsDock` is mounted, so a "Message" button knows the drawer is there to
+ * receive `COMMS_OPEN_EVENT`. Without one (an embedded page) the button goes to /messages instead.
+ */
+export const COMMS_DOCK_ATTR = 'data-af-comms-dock'
+
+/** "Message @username": the chat drawer when this page has one, else the messages page. */
+export function openDirectMessage(username: string): void {
+  const u = username.trim().replace(/^@+/, '')
+  if (!u || typeof window === 'undefined') return
+  if (document.documentElement.hasAttribute(COMMS_DOCK_ATTR)) {
+    window.dispatchEvent(new CustomEvent<CommsOpenDetail>(COMMS_OPEN_EVENT, { detail: { tab: 'dms', dmWith: { username: u } } }))
+  } else {
+    window.location.assign(`/messages?start=${encodeURIComponent(u)}`)
+  }
 }
 
 /** Opens the support modal. */

@@ -22,6 +22,7 @@ vi.mock('@/lib/events', () => ({ getPlatformEvents: () => ({ emit: vi.fn(async (
 vi.mock('@/lib/sports-evidence/gates', () => ({ isSportsDataEnabled: () => false }))
 
 import { loadDailyLineupView } from '@/lib/redraft/dailyLineupView'
+import { weekByPlayer } from '@/lib/league/native/weekByPlayer'
 import { scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
 
 const DAILY_ON = { sportConfig: { lineupLockType: 'daily', dailyLineupsEnabled: true } }
@@ -76,6 +77,24 @@ describe('loadDailyLineupView', () => {
     expect(thu.slots.tatum).toBe('bench')
     expect(thu.starterPoints).toBe(0)
     expect(Object.keys(view.startedPoints).sort()).toEqual(['butler', 'tatum'])
+  })
+
+  it('week-by-player rows add up to the matchup total, and a bench day is not counted', async () => {
+    const now = new Date('2026-10-23T16:00:00Z')
+    const view = (await loadDailyLineupView(db as never, { leagueId: 'L1', redraftRosterId: 'r1', season: 2026, week: 1, now }))!
+    const matchup = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'r1', week: 1, seasonYear: 2026 })
+    // Each day's counted ids are exactly the lines its starterPoints summed.
+    for (const d of view.days) {
+      const sum = (d.startedIds ?? []).reduce((s, id) => s + (d.points[id] ?? 0), 0)
+      expect(Math.round(sum * 100) / 100).toBe(d.starterPoints)
+    }
+    const wbp = weekByPlayer(view)!
+    expect(wbp.total).toBe(matchup.points)
+    const tatum = wbp.rows.find((r) => r.playerId === 'tatum')!
+    const thu = tatum.cells[2]
+    expect(thu.pts).toBeGreaterThan(0)
+    expect(thu.counted).toBe(false)
+    expect(tatum.bench).toBeGreaterThanOrEqual(thu.pts!)
   })
 
   it('is null for a league that is not on daily lineups', async () => {

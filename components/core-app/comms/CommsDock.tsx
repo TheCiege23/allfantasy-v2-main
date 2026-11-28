@@ -18,7 +18,7 @@ const SupportModal = dynamic(() => import('@/components/core-app/support/Support
 import { useDraggableLauncher } from './useDraggableLauncher'
 import { useChatBadge } from './useChatBadge'
 import { useCommsTabCounts } from './useCommsTabCounts'
-import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
+import { COMMS_DOCK_ATTR, COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
 import { readCommsUi, writeCommsUi } from './commsUiMemory'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -130,6 +130,7 @@ export function CommsDock({
     seq: number
     tab: CommsTab | null
     leagueId: string | null
+    dmWith: string | null
   } | null>(null)
   const [supportOpen, setSupportOpen] = useState(false)
   const [wide, setWide] = useState(false)
@@ -162,13 +163,17 @@ export function CommsDock({
         seq: (prev?.seq ?? 0) + 1,
         tab: detail?.tab ?? null,
         leagueId: detail?.leagueId ?? null,
+        dmWith: detail?.dmWith?.username?.trim() || null,
       }))
       setOpen(true)
     }
     const openSupport = () => setSupportOpen(true)
+    // Tells a "Message" button the drawer is here to receive the event (commsEvents.openDirectMessage).
+    document.documentElement.setAttribute(COMMS_DOCK_ATTR, '')
     window.addEventListener(COMMS_OPEN_EVENT, openComms)
     window.addEventListener(SUPPORT_OPEN_EVENT, openSupport)
     return () => {
+      document.documentElement.removeAttribute(COMMS_DOCK_ATTR)
       window.removeEventListener(COMMS_OPEN_EVENT, openComms)
       window.removeEventListener(SUPPORT_OPEN_EVENT, openSupport)
     }

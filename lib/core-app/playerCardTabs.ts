@@ -9,7 +9,12 @@ import type { CardTabId } from '@/lib/core-app/playerCardLayoutCopy'
  * league with no trades — each loses its tab rather than printing why there is nothing in it.
  * `news` is the phone-only tab: on a wide screen the same content sits in the side column.
  */
-export function playerCardTabs(data: PlayerCardData | null, more: PlayerCardMore | null): CardTabId[] {
+export function playerCardTabs(
+  data: PlayerCardData | null,
+  more: PlayerCardMore | null,
+  /** The card renders the per-game box log (daily sports) — it loads its own rows, so the tab shows. */
+  opts: { boxScoreLog?: boolean } = {},
+): CardTabId[] {
   if (!data) return []
   const league = data.league
   const tabs: CardTabId[] = []
@@ -22,7 +27,7 @@ export function playerCardTabs(data: PlayerCardData | null, more: PlayerCardMore
       data.ownership.available,
   )
   if (hasOutlook) tabs.push('outlook')
-  if (more?.gameLog.length) tabs.push('gamelog')
+  if (more?.gameLog.length || opts.boxScoreLog) tabs.push('gamelog')
   if (more?.career.length) tabs.push('career')
   if (more?.depthChart) tabs.push('depth')
   if (data.schedule.available || league?.playoffSchedule.available) tabs.push('schedule')

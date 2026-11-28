@@ -13,6 +13,7 @@ import type { NativeBoardGame } from '@/lib/matchup-center/nativeMatchupModel'
 import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
 import { GuillotineMatchupScreen } from './NativeGuillotineScreens'
 import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
+import { MessageManagerButton, useLeagueManagerContacts } from './MessageManagerButton'
 import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, PlayerNameButton, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
 import { slotGameState } from '@/lib/league-media/redraftScreens'
@@ -82,7 +83,11 @@ function SlotCell({ p, side, sport }: { p: MatchupPlayerSlot | null; side: 'left
         {media ? <span className="nls-mavatar"><PlayerAvatar name={p.name} headshotUrl={p.headshotUrl} teamLogoUrl={o?.teamLogoUrl} team={p.team} sport={sport} /></span> : null}
         <span className="nls-pl-text">
           <strong title={p.name}>
-            <PlayerNameButton name={p.name} onOpen={() => openCard({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl })}>
+            <PlayerNameButton
+              name={p.name}
+              refAttrs={openCard.refAttrs({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl })}
+              onOpen={(el) => openCard({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl }, el)}
+            >
               <span className="nls-long">{p.name}</span>
               <span className="nls-short">{shortPlayerName(p.name)}</span>
             </PlayerNameButton>
@@ -396,6 +401,9 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
   const prob = payload?.winProbabilityLeft
   const left = payload?.left
   const right = payload?.right
+  // Your opponent's manager, to message from the matchup. Your own team is never in the contacts.
+  const contactFor = useLeagueManagerContacts(league.id)
+  const opponentContact = left && right ? contactFor(right.rosterId) ?? contactFor(left.rosterId) : null
   const leftLeads = left && right ? left.totalPoints >= right.totalPoints : true
   const insight = payload ? (payload.insights.startSit || payload.insights.matchupEdge || '').trim() : ''
 
@@ -530,6 +538,11 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
 
       {/* Redraft: the broadcast score bug (same payload, same numbers). Every other format: the score card. */}
       {payload && left && right && rd && !noGame ? <RedraftScoreBug payload={payload} week={week} /> : null}
+      {payload && left && right && !noGame && opponentContact ? (
+        <div className="nls-msg-row" data-testid="matchup-message-opponent">
+          <MessageManagerButton contact={opponentContact} variant="label" />
+        </div>
+      ) : null}
       {payload && left && right && !rd && !noGame ? (
         <section className="nls-card nls-card-flush" aria-label="Score">
           {payload.conceptOverlay ? <p className="nls-overlay">{payload.conceptOverlay}</p> : null}

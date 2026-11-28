@@ -5,7 +5,8 @@ import { ordinal, positionTone, slotPillLabel } from '@/lib/league/native/native
 import { matchupTone, type OpponentRank, type RosterGameWeather } from '@/lib/redraft/nflRosterOutlookModel'
 import { redraftPositionTone } from '@/lib/league-media/redraftScreens'
 import { useRedraftScreenContext } from './RedraftScreenParts'
-import { usePlayerCard } from '@/components/core-app/player-card/PlayerCardProvider'
+import { usePlayerCard, type PlayerCardRef } from '@/components/core-app/player-card/PlayerCardProvider'
+import { PC_REF_ATTR, encodePlayerRef } from '@/components/core-app/player-card/playerCardSiblings'
 import { teamLogoUrl as teamCrestUrl } from '@/lib/core-app/teamLogo'
 import './native-screens.css'
 
@@ -15,27 +16,60 @@ import './native-screens.css'
  * alone (a unit test) still works. NFL ids on these screens are Sleeper ids; other sports carry
  * the feed's own id.
  */
-export function useNativePlayerCard(sport: string | null | undefined) {
-  const card = usePlayerCard()
-  return (p: { id?: string | null; name?: string | null; position?: string | null; team?: string | null; imageUrl?: string | null } | null | undefined) => {
-    const id = String(p?.id ?? '').trim()
-    if (!id || !p?.name) return
-    const s = String(sport ?? 'NFL').toUpperCase()
-    card.open({
-      sport: s,
-      ...(s === 'NFL' ? { sleeperId: id } : { externalId: id }),
-      name: p.name,
-      position: p.position ?? null,
-      team: p.team ?? null,
-      imageUrl: p.imageUrl ?? null,
-    })
+type NativeCardPlayer = { id?: string | null; name?: string | null; position?: string | null; team?: string | null; imageUrl?: string | null } | null | undefined
+
+function nativeCardRef(sport: string | null | undefined, p: NativeCardPlayer): PlayerCardRef | null {
+  const id = String(p?.id ?? '').trim()
+  if (!id || !p?.name) return null
+  const s = String(sport ?? 'NFL').toUpperCase()
+  return {
+    sport: s,
+    ...(s === 'NFL' ? { sleeperId: id } : { externalId: id }),
+    name: p.name,
+    position: p.position ?? null,
+    team: p.team ?? null,
+    imageUrl: p.imageUrl ?? null,
   }
 }
 
+/**
+ * `open(player, origin?)` opens his card; pass the tapped element as `origin` so the card can swipe
+ * through the screen's other players. `open.refAttrs(player)` is the attribute that puts a control in
+ * that swipe list — spread it on whatever is tapped (`PlayerNameButton` takes it as `refAttrs`).
+ */
+export function useNativePlayerCard(sport: string | null | undefined) {
+  const card = usePlayerCard()
+  const open = (p: NativeCardPlayer, origin?: Element | null) => {
+    const ref = nativeCardRef(sport, p)
+    if (!ref) return
+    // No origin, no second argument: a plain open stays exactly the call it always was.
+    if (origin) card.open(ref, { origin })
+    else card.open(ref)
+  }
+  return Object.assign(open, {
+    refAttrs: (p: NativeCardPlayer): Record<string, string> => {
+      const ref = nativeCardRef(sport, p)
+      return ref ? { [PC_REF_ATTR]: encodePlayerRef(ref) } : {}
+    },
+  })
+}
+
 /** A player's name as the button that opens his card. Looks like the text it replaces. */
-export function PlayerNameButton({ name, onOpen, children }: { name: string; onOpen: () => void; children: ReactNode }) {
+export function PlayerNameButton({
+  name,
+  onOpen,
+  refAttrs,
+  children,
+}: {
+  name: string
+  /** Receives the button, to hand to the card as the swipe origin. */
+  onOpen: (origin: HTMLElement) => void
+  /** `useNativePlayerCard(...).refAttrs(player)` — joins this name to the card's swipe list. */
+  refAttrs?: Record<string, string>
+  children: ReactNode
+}) {
   return (
-    <button type="button" className="nls-namebtn" onClick={onOpen} aria-label={`Open ${name} player card`} data-testid="player-card-open">
+    <button type="button" className="nls-namebtn" onClick={(e) => onOpen(e.currentTarget)} aria-label={`Open ${name} player card`} data-testid="player-card-open" {...refAttrs}>
       {children}
     </button>
   )

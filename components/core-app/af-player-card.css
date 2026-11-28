@@ -142,6 +142,42 @@
   padding: 6px 8px;
   color: var(--faint);
 }
+/* Previous / next player (swipe between players). Tap targets stay 40px on a phone. */
+.af-pc-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.af-pc-nav-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--muted);
+  font: 700 22px/1 'Archivo', system-ui, sans-serif;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 8px;
+}
+.af-pc-nav-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+.af-pc-nav-btn:disabled {
+  color: var(--faint);
+  opacity: 0.4;
+  cursor: default;
+}
+.af-pc-nav-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-pc-nav-pos {
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--faint);
+  min-width: 44px;
+  text-align: center;
+}
+
 .af-pc-back:focus-visible,
 .af-pc-x:focus-visible {
   outline: 2px solid var(--accent);

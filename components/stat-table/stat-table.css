@@ -1,0 +1,111 @@
+/* The Columns menu (ColumnsMenu.tsx). Reads the app's tokens, with the profile page's dark fallbacks. */
+.af-cols {
+  --c-text: var(--text, rgba(255, 255, 255, 0.92));
+  --c-muted: var(--muted, rgba(255, 255, 255, 0.6));
+  --c-faint: var(--faint, rgba(255, 255, 255, 0.4));
+  --c-line: var(--line, rgba(255, 255, 255, 0.1));
+  --c-bg: var(--surface, #0b1020);
+  --c-accent: var(--accent, #22d3ee);
+  position: relative;
+}
+.af-cols-btn {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font: 700 12px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.af-cols-btn[aria-expanded='true'] {
+  color: var(--c-text);
+  border-color: var(--c-accent);
+}
+.af-cols-panel {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: 500 13px/1.3 system-ui, sans-serif;
+}
+.af-cols-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.af-cols-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--c-line);
+}
+.af-cols-item[data-hidden] b {
+  color: var(--c-faint);
+}
+.af-cols-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.af-cols-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--c-accent);
+}
+.af-cols-check small {
+  color: var(--c-faint);
+  font-size: 12px;
+}
+.af-cols-move {
+  display: inline-flex;
+  gap: 2px;
+}
+.af-cols-move button {
+  min-width: 40px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.af-cols-move button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.af-cols-move button:focus-visible,
+.af-cols-btn:focus-visible,
+.af-cols-reset:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+.af-cols-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+}
+.af-cols-reset {
+  min-height: 40px;
+  border: 0;
+  background: none;
+  color: var(--c-accent);
+  font: 700 12px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.af-cols-reset:disabled {
+  color: var(--c-faint);
+  cursor: default;
+}

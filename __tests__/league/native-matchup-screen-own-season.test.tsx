@@ -84,7 +84,9 @@ describe('NativeMatchupScreen on the league’s own season', () => {
     })
     render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
     expect(await screen.findByRole('heading', { name: 'Week 7' })).toBeTruthy()
-    expect(calls.length).toBe(2)
+    // The two week reads (the screen also asks who manages each team, which has no week in it).
+    const weekReads = calls.filter((u) => u.includes('/matchup-center') || u.includes('/scoring/matchups'))
+    expect(weekReads.length).toBe(2)
     expect(calls.every((u) => !u.includes('week='))).toBe(true)
 
     // One line per game; a game not started draws a dash, not 0.0.

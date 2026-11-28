@@ -593,3 +593,66 @@
   .nls-lp-avatar { width: 36px; height: 36px; font-size: 12px; }
   .nls-lp-score strong { font-size: 20px; }
 }
+
+/* Week by player (WeekByPlayerCard): days scroll sideways under a pinned name column. */
+.nls-wbp .nls-card-head { padding: 16px 18px 0; margin-bottom: 10px; }
+.nls-wbp-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.nls-wbp-table { width: 100%; border-collapse: separate; border-spacing: 0; font: 600 12px/1.25 var(--nl-mono); color: var(--text); font-variant-numeric: tabular-nums; }
+.nls-wbp-table th, .nls-wbp-table td { padding: 8px 6px; text-align: right; white-space: nowrap; border-top: 1px solid var(--line); }
+.nls-wbp-table thead th { border-top: 0; color: var(--faint); font: 700 11px/1.15 var(--nl-mono); letter-spacing: .04em; text-transform: uppercase; }
+.nls-wbp-table thead th[data-today] { color: var(--accent); }
+.nls-wbp-dow, .nls-wbp-date { display: block; }
+.nls-wbp-pin { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left !important; min-width: 120px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; padding-left: 18px !important; border-right: 1px solid var(--line); font-family: inherit; }
+.nls-wbp-total { color: var(--text); font-weight: 800; }
+.nls-wbp-bench { color: var(--faint); }
+.nls-wbp-bn { margin-left: 3px; font-size: 11px; letter-spacing: .04em; }
+.nls-wbp-none, .nls-wbp-off { color: var(--faint); }
+.nls-wbp-off { background: color-mix(in srgb, var(--text) 3%, transparent); }
+.nls-wbp-table tfoot th, .nls-wbp-table tfoot td { border-top: 2px solid var(--line2); color: var(--text2); }
+.nls-wbp-note { padding: 10px 18px 14px; font-size: 12px !important; }
+.nls-wbp-split { border-right: 1px solid var(--line); padding-right: 10px !important; }
+
+/* Message a team's manager (MessageManagerButton). 40px tap target; the icon alone in a table row. */
+.nls-msg-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 40px; min-height: 40px; margin-left: auto; padding: 0 8px; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; font: 600 13px/1 inherit; }
+.nls-msg-btn:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.nls-msg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nls-msg-icon { width: 16px; height: 16px; flex: none; }
+.nls-msg-btn--label { margin-left: 0; padding: 0 14px; border: 1px solid var(--line2); color: var(--text2); }
+.nls-msg-row { display: flex; justify-content: flex-end; }
+
+/* Games this week (WeekPlannerCard) and the "games left" chip on a waiver row. */
+.nls-wp-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; }
+.nls-wp-toggle { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 40px; justify-content: center; }
+.nls-wp-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.nls-wp-toggle .nls-label { margin: 0; }
+.nls-wp-sub { color: var(--muted); font-size: 12px; }
+.nls-wp-weeks { display: inline-flex; gap: 4px; }
+.nls-wp-weeks button { min-height: 36px; padding: 0 12px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--text2); font: 600 12px/1 inherit; cursor: pointer; }
+.nls-wp-weeks button[aria-pressed=true] { border-color: var(--accent); color: var(--text); }
+.nls-wp-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-top: 1px solid var(--line); }
+.nls-wp-table { width: 100%; border-collapse: separate; border-spacing: 0; font: 600 12px/1.25 var(--nl-mono); color: var(--text); font-variant-numeric: tabular-nums; }
+.nls-wp-table th, .nls-wp-table td { padding: 7px 6px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.nls-wp-table thead th { color: var(--faint); font: 700 11px/1.15 var(--nl-mono); text-transform: uppercase; letter-spacing: .04em; }
+.nls-wp-table thead th[data-today] { color: var(--accent); }
+.nls-wp-table [data-light] { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.nls-wp-table td[data-done] { color: var(--faint); }
+.nls-wp-dow, .nls-wp-n { display: block; }
+.nls-wp-pin { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left !important; padding-left: 16px !important; border-right: 1px solid var(--line); }
+.nls-wp-left { font-weight: 800; }
+.nls-wp-of { color: var(--faint); font-weight: 600; }
+.nls-wp-table tr[data-mine] .nls-wp-pin { color: var(--accent); }
+.nls-wp-note { padding: 10px 16px 14px; font-size: 12px !important; }
+.nls-gl-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 6px; border: 1px solid var(--line2); border-radius: 999px; color: var(--text2); font: 700 11px/1.4 var(--nl-mono); white-space: nowrap; }
+.nls-gl-chip[data-none] { color: var(--faint); }
+.nls-gl-light { color: var(--accent); }
+
+/* Compact tables (the Columns menu's "Compact tables", saved per account): tighter rows, 11px floor. */
+.nls-wbp[data-density=compact] .nls-wbp-table th, .nls-wbp[data-density=compact] .nls-wbp-table td,
+.nls-wp[data-density=compact] .nls-wp-table th, .nls-wp[data-density=compact] .nls-wp-table td { padding: 3px 5px; font-size: 11px; }
+.nls-wbp[data-density=compact] .nls-wbp-dow, .nls-wp[data-density=compact] .nls-wp-dow { display: inline; margin-right: 3px; }
+
+/* A goalie's next start (GoalieStartChip): projected until his game is on. Not red/green — a tone, a word. */
+.nls-goalie-chip { display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 7px; border: 1px solid var(--line2); border-radius: 999px; color: var(--text2); font: 700 11px/1.4 var(--nl-mono); white-space: nowrap; vertical-align: middle; }
+.nls-goalie-chip[data-tone=in], .nls-goalie-chip[data-tone=start] { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); }
+.nls-goalie-chip[data-tone=lean] { border-style: dashed; }
+.nls-goalie-chip[data-tone=bench] { color: var(--faint); }
