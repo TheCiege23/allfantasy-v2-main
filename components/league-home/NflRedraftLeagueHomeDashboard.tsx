@@ -16,6 +16,7 @@ import { loadYourWeekWithMatchup } from '@/components/league/native/LeagueYourWe
 import { RedraftScoreBug } from '@/components/league/native/redraft/RedraftScoreBug'
 import '@/components/league/native/redraft-home.css'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
+import { getLeagueTypeMedia, resolveLeagueConceptIntroKey } from '@/lib/league-media/leagueTypeMedia'
 
 /**
  * This week's score bug on the football Home — the same `matchup-center` load League home's strip
@@ -56,6 +57,15 @@ type NflRedraftLeagueHomeDashboardProps = {
   availableTabIds?: readonly string[]
   /** League rules popup + "What changed" card (LeagueRulesHomeHost) on League home. Replaces the members' rules row. */
   rulesSlot?: ReactNode
+  /** Dynasty / specialty formats: one row per format tab (Picks, Taxi, Keepers, Chop, Zombie…), after the next-up card. */
+  formatRows?: readonly { id: string; label: string }[]
+  /** A format's one stakes card (Guillotine's chop line, Big Brother's week), above the rows. */
+  formatSlot?: ReactNode
+  /**
+   * Replaces the built-in next-up card. Dynasty and specialty formats pass their "What's next?" panel: it
+   * knows engine turns (HOH, council, chop) and opens the format walkthrough once after create.
+   */
+  nextSlot?: ReactNode
 }
 
 function formatDraftDate(draftDateIso: string | null): string | null {
@@ -137,6 +147,9 @@ export function NflRedraftLeagueHomeDashboard({
   onOpenTab,
   availableTabIds,
   rulesSlot,
+  formatRows = [],
+  formatSlot,
+  nextSlot,
 }: NflRedraftLeagueHomeDashboardProps) {
   const entitlements = useEntitlements()
   const hasManagerIntelligence = entitlements.hasPro || entitlements.hasSupreme
@@ -166,12 +179,24 @@ export function NflRedraftLeagueHomeDashboard({
     window.dispatchEvent(new CustomEvent('af:replay-league-intro', { detail: { leagueId } }))
   }
 
-  const sportLabel = redraft?.sportLabel ?? String(league.sport ?? 'NFL')
+  // "MLB redraft" for redraft; "NFL · Dynasty", "NBA · Guillotine"… for every other format.
+  const formatKey = resolveLeagueConceptIntroKey({
+    leagueType: league.leagueType,
+    leagueVariant: league.leagueVariant,
+    settings: league.settings,
+    isDynasty: league.isDynasty,
+    guillotineMode: league.guillotineMode,
+    bestBallMode: league.bestBallMode,
+  })
+  const sportLabel =
+    formatKey === 'redraft'
+      ? `${redraft?.sportLabel ?? String(league.sport ?? 'NFL')} redraft`
+      : `${String(league.sport ?? '')} · ${getLeagueTypeMedia(formatKey).label}`
   const status = offseason
-    ? `${sportLabel} redraft · Season complete`
+    ? `${sportLabel} · Season complete`
     : seasonStarted
-      ? `${sportLabel} redraft · ${phase === 'Playoffs' ? 'Playoffs' : currentWeek != null ? `Week ${currentWeek}` : 'In season'}`
-      : `${sportLabel} redraft · Pre-draft`
+      ? `${sportLabel} · ${phase === 'Playoffs' ? 'Playoffs' : currentWeek != null ? `Week ${currentWeek}` : 'In season'}`
+      : `${sportLabel} · Pre-draft`
 
   const rows: (Row | null)[] = []
   if (!seasonStarted && isCommissioner && joinedTeams < teamCount) {
@@ -217,7 +242,7 @@ export function NflRedraftLeagueHomeDashboard({
 
         {rulesSlot}
 
-        <section className={`${card} p-4`} data-testid="g32-home-next">
+        {nextSlot ?? <section className={`${card} p-4`} data-testid="g32-home-next">
           {offseason ? (
             <>
               <h2 className="text-[17px] font-bold text-white">Season complete</h2>
@@ -260,7 +285,17 @@ export function NflRedraftLeagueHomeDashboard({
               </button>
             </>
           )}
-        </section>
+        </section>}
+
+        {formatSlot}
+
+        {formatRows.length ? (
+          <nav aria-label="League format" className={`${card} divide-y divide-white/[0.06] overflow-hidden`} data-testid="g32-home-format-rows">
+            {formatRows.map((row) => (
+              <RowItem key={row.id} row={{ id: `format-${row.id}`, icon: Sparkles, label: row.label, onClick: () => onOpenTab(row.id) }} />
+            ))}
+          </nav>
+        ) : null}
 
         <nav aria-label="League home" className={`${card} divide-y divide-white/[0.06] overflow-hidden`} data-testid="g32-home-rows">
           {rows.filter((row): row is Row => row != null).map((row) => (
