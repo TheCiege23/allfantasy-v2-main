@@ -49,3 +49,19 @@ describe('nativeScreenFor', () => {
     }
   })
 })
+
+describe("Soccer's tab names open the same new screens (2026-11-28)", () => {
+  it.each([
+    ['fixtures', 'matchup'],
+    ['transfers', 'trades'],
+    ['table', 'standings'],
+  ] as const)('%s opens the %s screen, hosted or imported in the workspace', (tab, screen) => {
+    expect(nativeScreenFor(tab, hosted)).toBe(screen)
+    expect(nativeScreenFor(tab, imported)).toBe(screen)
+  })
+
+  it('[control] an import embedded in the dashboard keeps the classic Soccer tabs, and Big Brother keeps its table', () => {
+    for (const tab of ['fixtures', 'transfers', 'table']) expect(nativeScreenFor(tab, embeddedImport)).toBeNull()
+    expect(nativeScreenFor('table', { ...hosted, leagueVariant: 'big_brother' })).toBeNull()
+  })
+})

@@ -17,6 +17,16 @@ const PLATFORM_PRESET_FOR_SCORING_ID: Readonly<Record<string, NflScoringPresetKe
 /** The TE-premium amounts offered as one-tap choices: extra points per tight-end catch. */
 export const TE_PREMIUM_POINT_OPTIONS = [0.25, 0.5, 0.75, 1, 1.5, 2] as const
 
+/**
+ * The sports a new league can choose TE premium for: the two football sports. NCAAF scoring has its
+ * own TE reception bonus rule (lib/ncaaf-scoring, `te_premium`), which lib/redraft/leagueScoringRules.ts
+ * scores for NCAAF; until 2026-11-28 the create form offered TE premium to NFL only.
+ */
+export function sportOffersTePremium(sport: string | null | undefined): boolean {
+  const s = String(sport ?? '').toUpperCase()
+  return s === 'NFL' || s === 'NCAAF'
+}
+
 /** A custom amount can be any decimal above 0, up to this cap. */
 export const TE_PREMIUM_MAX_POINTS = 5
 

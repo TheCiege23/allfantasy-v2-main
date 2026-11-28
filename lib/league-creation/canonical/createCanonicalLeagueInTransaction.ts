@@ -52,6 +52,7 @@ import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
 import { planStartupDrafts, STARTUP_COLLEGE_DRAFT_SETTINGS_KEY, supportsSeparateStartupDrafts } from '@/lib/draft-defaults/startupCollegeDraft'
 import { dailyLineupTablesExist, defaultsToDailyLineups, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
 import { DEVY_COLLEGE_SCORING_KEY } from '@/lib/c2c/collegeLineupLeague'
+import { sportOffersTePremium } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 
 type Tx = Prisma.TransactionClient
 
@@ -503,9 +504,9 @@ export async function createCanonicalLeagueInTransaction(
   const inviteToken = randomUUID()
   mergedSettings.league_privacy_visibility = leagueVisibility
   mergedSettings.inviteCode = inviteToken
-  // TE premium (NFL): extra points per tight-end catch. The bootstrap seeds it into the scoring
-  // store and turns the engine's TE_PREMIUM toggle on; validateCreatePayload already checked it.
-  if (sport === 'NFL' && typeof conceptSetupForPrivacy.tePremiumPoints === 'number') {
+  // TE premium (NFL, NCAAF): extra points per tight-end catch. The bootstrap seeds it into the sport's
+  // scoring store and turns the engine's TE_PREMIUM toggle on; validateCreatePayload already checked it.
+  if (sportOffersTePremium(sport) && typeof conceptSetupForPrivacy.tePremiumPoints === 'number') {
     mergedSettings.te_premium_points = conceptSetupForPrivacy.tePremiumPoints
   }
   // Waivers clear at a time in the LEAGUE'S zone (owner, 2026-11-25), daylight saving included

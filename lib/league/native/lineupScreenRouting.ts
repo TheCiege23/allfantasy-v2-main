@@ -36,8 +36,12 @@ export function nativeScreenFor(tab: string, league: {
 }): NativeScreen | null {
   if (!league.hosted && !league.inWorkspace) return null
   switch (tab) {
+    // Soccer names three of the same tabs differently (LeagueTabs SOCCER_TABS: fixtures, transfers,
+    // table). The nav already folds them into Matchup, Trade and League (nativeLeagueNavigation), but
+    // they opened the classic tab components, so a Soccer league got old screens under the new tabs.
     case 'matchups':
     case 'matchup':
+    case 'fixtures':
       return 'matchup'
     case 'team':
     case 'roster':
@@ -46,8 +50,10 @@ export function nativeScreenFor(tab: string, league: {
     case 'waivers':
       return 'waivers'
     case 'trades':
+    case 'transfers':
       return 'trades'
     case 'standings':
+    case 'table':
       return league.leagueVariant === 'big_brother' ? null : 'standings'
     default:
       return null

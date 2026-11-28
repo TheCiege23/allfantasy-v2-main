@@ -30,6 +30,7 @@ import { toUtc } from '@/lib/timezone'
 import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
 import { checkNewBestBallLeaguePool, type BestBallPoolCheck } from '@/lib/bestball/poolCapacity'
 import { checkNewLeaguePlayerSupply, type PlayerSupplyCheck } from '@/lib/league-creation/playerSupply'
+import { sportOffersTePremium } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 
 export type CreateLeagueCompletionIssue = {
   code: string
@@ -180,7 +181,7 @@ export function analyzeCreateLeagueCompletion(
   }
 
   // TE premium turned on must say how much: the commissioner picks the per-catch amount.
-  if (state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints !== 'number') {
+  if (sportOffersTePremium(state.sport) && state.tePremium === true && typeof state.tePremiumPoints !== 'number') {
     issues.push({ code: 'te_premium_points_required', message: 'Choose how many extra points a tight end gets per catch, or turn TE premium off.' })
   }
 

@@ -16,7 +16,7 @@ import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 import { z } from 'zod'
 import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
-import { TE_PREMIUM_MAX_POINTS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
+import { TE_PREMIUM_MAX_POINTS, isValidTePremiumPoints, sportOffersTePremium } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import type { LeagueSport } from '@prisma/client'
 import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { isImportedTeamCountAllowed } from '@/lib/league-creation/importedTeamCount'
@@ -414,9 +414,9 @@ export function validateCreatePayload(
 
   const tePremiumPoints = data.conceptSetup?.tePremiumPoints
   if (tePremiumPoints !== undefined && tePremiumPoints !== null) {
-    if (sport !== 'NFL' || !isValidTePremiumPoints(tePremiumPoints)) {
-      const message = sport !== 'NFL'
-        ? 'TE premium is available for NFL leagues'
+    if (!sportOffersTePremium(sport) || !isValidTePremiumPoints(tePremiumPoints)) {
+      const message = !sportOffersTePremium(sport)
+        ? 'TE premium is available for NFL and college football leagues'
         : `TE premium must be more than 0 and at most ${TE_PREMIUM_MAX_POINTS} points per catch, to two decimals`
       return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.tePremiumPoints', message }] }
     }

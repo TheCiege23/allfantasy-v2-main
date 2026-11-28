@@ -178,7 +178,10 @@ export async function runLeagueBootstrap(
   if (leagueSport === 'NCAAF') {
     try {
       const { applyDefaultNcaafScoringOnCreate } = await import('@/lib/ncaaf-scoring')
-      await applyDefaultNcaafScoringOnCreate(leagueId, receptionPoints)
+      const { normalizeTePremiumPoints } = await import('@/lib/nfl-scoring')
+      const ncaafTePremium = normalizeTePremiumPoints(settings.te_premium_points)
+      await applyDefaultNcaafScoringOnCreate(leagueId, receptionPoints, ncaafTePremium)
+      nflTePremium = ncaafTePremium !== null
     } catch { /* non-fatal */ }
   }
   if (leagueSport === 'NCAAB') {
