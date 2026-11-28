@@ -47,7 +47,16 @@ export interface GameLogRow {
   played: boolean
   values: Record<string, GameLogValue>
   ratioInputs: Record<string, number>
+  /**
+   * Fantasy points for this game under the scoring the caller passed (a league's own settings, or the
+   * sport's defaults). Null when he did not play or the line has no scorable stat — never a 0 that
+   * reads as "played and scored nothing".
+   */
+  fantasyPoints: number | null
 }
+
+/** Stat line (the daily normalizer's output, as the weekly scorer reads it) and position to points. */
+export type GameLogScorer = (stats: Record<string, number>, position?: string | null) => number
 
 export interface GameLogGroup {
   group: string
@@ -77,6 +86,13 @@ export async function loadPlayerGameLog(opts: {
   identityId: string
   sport: GameLogSport
   season?: number | null
+  /**
+   * Scores each game. Pass `buildLeagueStatScorer(league)` (lib/redraft/scoringEngine.ts) — the same
+   * scorer the weekly matchup engine applies to the same normalized line, so a game here and that
+   * game's share of the matchup agree.
+   */
+  scorer?: GameLogScorer | null
+  position?: string | null
 }): Promise<PlayerGameLog> {
   const { identityId, sport } = opts
   const empty: PlayerGameLog = { sport, season: null, seasons: [], groups: [] }
@@ -140,6 +156,13 @@ export async function loadPlayerGameLog(opts: {
     const result =
       teamScore == null || oppScore == null ? null : teamScore > oppScore ? 'W' : teamScore < oppScore ? 'L' : sport === 'SOCCER' ? 'T' : null
 
+    const played = gameLogLinePlayed(sport, group, inputs)
+    let fantasyPoints: number | null = null
+    if (opts.scorer && played && Object.keys(stats).length > 0) {
+      const pts = opts.scorer(stats, opts.position ?? null)
+      fantasyPoints = Number.isFinite(pts) ? Math.round(pts * 100) / 100 : null
+    }
+
     const row: GameLogRow = {
       gameId: r.gameId,
       date: dayKey(r.gameDate),
@@ -150,9 +173,10 @@ export async function loadPlayerGameLog(opts: {
       oppScore,
       result,
       postseason: map.seasonType === 'post',
-      played: gameLogLinePlayed(sport, group, inputs),
+      played,
       values,
       ratioInputs: ratioInputsFor(sport, group, stats),
+      fantasyPoints,
     }
     const list = byGroup.get(group) ?? []
     list.push(row)

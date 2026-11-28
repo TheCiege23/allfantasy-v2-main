@@ -108,7 +108,7 @@ function installFixtureFetch(sport: HarnessSport, stage: HarnessStage) {
     if (path.endsWith('/week-planner')) return json(weekPlannerResponse(s, new URL(url, window.location.origin).searchParams.get('offset') === '1' ? 1 : 0))
     if (path === '/api/nhl/goalie-starts') return json(goalieStartsResponse())
     if (path === '/api/user/table-layout') return json({ error: 'Unauthorized' }, 401)
-    if (path === '/api/players/game-log') return json(harnessGameLog(s))
+    if (path === '/api/players/game-log') return json(harnessGameLog(s, undefined, 12, { kind: 'league', leagueName: 'Sunday Night Redraft' }))
     return json({ error: 'not in harness' }, 404)
   }
 }

@@ -22,7 +22,11 @@ import './af-game-log.css'
  *   - columns are fixed per box group (skater / goalie, batting / pitching …) — never reordered by
  *     position — and time on ice / minutes is the first stat;
  *   - Last 5 / Last 10 / Season averages sit above the games (recent form without filtering);
- *   - no red/green cell colouring. A result is a letter, not a paint job.
+ *   - no red/green cell colouring. A result is a letter, not a paint job;
+ *   - fantasy points per game sit right after the score, scored on the manager's LEAGUE settings
+ *     when the card is opened from a league (the route says which scoring it used). Only a game far
+ *     from his own average is marked, with an arrow and words — never colour alone;
+ *   - the header row stays frozen while the games scroll under it.
  */
 
 type Row = {
@@ -37,7 +41,10 @@ type Row = {
   played: boolean
   values: Record<string, GameLogValue>
   ratioInputs: Record<string, number>
+  fantasyPoints?: number | null
 }
+
+export type GameLogScoring = { kind: 'league'; leagueName: string | null } | { kind: 'default' } | { kind: 'none' }
 
 type Group = { group: string; label: string; columns: GameLogColumn[]; rows: Row[] }
 
@@ -47,6 +54,7 @@ export type PlayerGameLogPayload = {
   season: number | null
   seasons: number[]
   groups: Group[]
+  scoring?: GameLogScoring
 }
 type Payload = PlayerGameLogPayload
 
@@ -55,11 +63,14 @@ export type PlayerGameLogKey =
   | { externalId: string; source?: string | null; sleeperId?: string | null }
   | { sleeperId: string }
 
+/** Whose scoring the points use: a league's (the card was opened from one) and the player's position. */
+export type GameLogScoringContext = { leagueId?: string | null; position?: string | null }
+
 export function gameLogSupported(sport: string | null | undefined): boolean {
   return isGameLogSport(String(sport ?? '').toUpperCase())
 }
 
-function gameLogQuery(sport: string, playerKey: PlayerGameLogKey, season: number | null): string {
+function gameLogQuery(sport: string, playerKey: PlayerGameLogKey, season: number | null, ctx?: GameLogScoringContext): string {
   const p = new URLSearchParams({ sport: sport.toUpperCase() })
   if ('identityId' in playerKey) p.set('identityId', playerKey.identityId)
   if ('externalId' in playerKey && playerKey.externalId) {
@@ -68,6 +79,8 @@ function gameLogQuery(sport: string, playerKey: PlayerGameLogKey, season: number
   }
   if ('sleeperId' in playerKey && playerKey.sleeperId) p.set('sleeperId', playerKey.sleeperId)
   if (season != null) p.set('season', String(season))
+  if (ctx?.leagueId) p.set('leagueId', ctx.leagueId)
+  if (ctx?.position) p.set('position', ctx.position)
   return p.toString()
 }
 
@@ -82,6 +95,7 @@ function asPayload(d: unknown): Payload | null {
     season: typeof o.season === 'number' ? o.season : null,
     seasons: Array.isArray(o.seasons) ? o.seasons : [],
     groups: o.groups.filter((g) => g && Array.isArray(g.rows) && Array.isArray(g.columns)),
+    scoring: o.scoring && typeof o.scoring === 'object' && 'kind' in o.scoring ? o.scoring : undefined,
   }
 }
 
@@ -90,9 +104,13 @@ function asPayload(d: unknown): Payload | null {
  * place for it (the player card hides an empty tab). Null on any failure. Hand the result to the
  * table as `prefetched` so it is not requested twice.
  */
-export async function fetchPlayerGameLog(sport: string, playerKey: PlayerGameLogKey): Promise<PlayerGameLogPayload | null> {
+export async function fetchPlayerGameLog(
+  sport: string,
+  playerKey: PlayerGameLogKey,
+  ctx?: GameLogScoringContext,
+): Promise<PlayerGameLogPayload | null> {
   try {
-    const r = await fetch(`/api/players/game-log?${gameLogQuery(sport, playerKey, null)}`)
+    const r = await fetch(`/api/players/game-log?${gameLogQuery(sport, playerKey, null, ctx)}`)
     if (!r.ok) return null
     return asPayload(await r.json())
   } catch {
@@ -113,15 +131,40 @@ function seasonLabel(sport: string, season: number): string {
 
 const COMPACT_ROWS = 10
 
+/** Points, trimmed: 12.5 not 12.50, 3 not 3.00. */
+function formatPoints(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  return String(Math.round(v * 10) / 10)
+}
+
+/**
+ * Far from his OWN average, in either direction. Deliberately rare: a mark on every cell is the
+ * wall of red and green managers mocked. Needs five scored games before any game is called unusual.
+ */
+export function pointsMark(value: number | null | undefined, seasonAvg: number | null, scoredGames: number): 'high' | 'low' | null {
+  if (value == null || seasonAvg == null || scoredGames < 5 || seasonAvg <= 0) return null
+  if (value >= seasonAvg * 1.75 && value - seasonAvg >= 1) return 'high'
+  if (value <= seasonAvg * 0.25) return 'low'
+  return null
+}
+
+function scoringLabel(scoring: GameLogScoring | undefined): string {
+  if (scoring?.kind === 'league') return scoring.leagueName ? `${scoring.leagueName} scoring` : 'your league’s scoring'
+  return 'default scoring'
+}
+
 export default function PlayerGameLogTable({
   sport,
   playerKey,
   compact = false,
   playerName,
   prefetched,
+  scoringContext,
 }: {
   sport: string
   playerKey: PlayerGameLogKey
+  /** Score each game on this league's settings (members only; the route falls back to defaults). */
+  scoringContext?: GameLogScoringContext
   /** Player-card mode: core columns only and the last ten games, with a toggle for the rest. */
   compact?: boolean
   playerName?: string
@@ -135,7 +178,12 @@ export default function PlayerGameLogTable({
   const [groupKey, setGroupKey] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
 
-  const query = useMemo(() => gameLogQuery(sport, playerKey, season), [sport, playerKey, season])
+  const leagueId = scoringContext?.leagueId ?? null
+  const position = scoringContext?.position ?? null
+  const query = useMemo(
+    () => gameLogQuery(sport, playerKey, season, { leagueId, position }),
+    [sport, playerKey, season, leagueId, position],
+  )
 
   useEffect(() => {
     // The caller already holds the current season; only a season switch needs a request.
@@ -179,15 +227,22 @@ export default function PlayerGameLogTable({
     [group, compact, expanded, customLayout, savedLayout],
   )
 
+  const showPoints = !!group && group.rows.some((r) => r.fantasyPoints != null)
+  const avgPoints = (rows: Row[]): number | null => {
+    const pts = rows.map((r) => r.fantasyPoints).filter((v): v is number => v != null && Number.isFinite(v))
+    return pts.length ? pts.reduce((a, b) => a + b, 0) / pts.length : null
+  }
   const summaries = useMemo(() => {
     if (!group) return []
     const played = group.rows.filter((r) => r.played)
-    const out: Array<{ label: string; values: Record<string, GameLogValue>; games: number }> = []
-    if (played.length > 5) out.push({ label: 'Last 5', values: summarizeGameLog(group.columns, played.slice(0, 5)), games: 5 })
-    if (played.length > 10) out.push({ label: 'Last 10', values: summarizeGameLog(group.columns, played.slice(0, 10)), games: 10 })
-    if (played.length > 0) out.push({ label: 'Season', values: summarizeGameLog(group.columns, played), games: played.length })
+    const out: Array<{ label: string; values: Record<string, GameLogValue>; games: number; points: number | null }> = []
+    if (played.length > 5) out.push({ label: 'Last 5', values: summarizeGameLog(group.columns, played.slice(0, 5)), games: 5, points: avgPoints(played.slice(0, 5)) })
+    if (played.length > 10) out.push({ label: 'Last 10', values: summarizeGameLog(group.columns, played.slice(0, 10)), games: 10, points: avgPoints(played.slice(0, 10)) })
+    if (played.length > 0) out.push({ label: 'Season', values: summarizeGameLog(group.columns, played), games: played.length, points: avgPoints(played) })
     return out
   }, [group])
+  const seasonAvgPoints = group ? avgPoints(group.rows.filter((r) => r.played)) : null
+  const scoredGames = group ? group.rows.filter((r) => r.played && r.fantasyPoints != null).length : 0
 
   if (loading && !data) {
     return (
@@ -247,6 +302,11 @@ export default function PlayerGameLogTable({
           )}
           {tableId ? <ColumnsMenu tableId={tableId} columns={group.columns} /> : null}
       </div>
+      {showPoints ? (
+        <p className="af-gl-note" data-testid="af-game-log-scoring">
+          FPts: {scoringLabel(data.scoring)}. <span aria-hidden="true">▲▼</span> marks a game far from his average.
+        </p>
+      ) : null}
 
       <div className="af-gl-scroll">
         <table className="af-gl-table">
@@ -255,6 +315,11 @@ export default function PlayerGameLogTable({
               <th scope="col" className="af-gl-pin">
                 {data.season != null ? seasonLabel(sportUpper, data.season) : 'Game'}
               </th>
+              {showPoints ? (
+                <th scope="col" className="af-gl-fpts" title={`Fantasy points, ${scoringLabel(data.scoring)}`}>
+                  <abbr title={`Fantasy points, ${scoringLabel(data.scoring)}`}>FPts</abbr>
+                </th>
+              ) : null}
               {columns.map((c) => (
                 <th key={c.key} scope="col" title={c.title}>
                   <abbr title={c.title}>{c.label}</abbr>
@@ -269,6 +334,7 @@ export default function PlayerGameLogTable({
                   <th scope="row" className="af-gl-pin">
                     {s.label} <span className="af-gl-sub">avg</span>
                   </th>
+                  {showPoints ? <td className="af-gl-fpts">{formatPoints(s.points)}</td> : null}
                   {columns.map((c) => (
                     <td key={c.key}>{formatGameLogValue(c, s.values[c.key] ?? null, true)}</td>
                   ))}
@@ -291,10 +357,11 @@ export default function PlayerGameLogTable({
                     </span>
                   ) : null}
                 </th>
+                {r.played && showPoints ? <PointsCell value={r.fantasyPoints} mark={pointsMark(r.fantasyPoints, seasonAvgPoints, scoredGames)} /> : null}
                 {r.played ? (
                   columns.map((c) => <td key={c.key}>{formatGameLogValue(c, r.values[c.key] ?? null)}</td>)
                 ) : (
-                  <td colSpan={columns.length} className="af-gl-dnp-cell">
+                  <td colSpan={columns.length + (showPoints ? 1 : 0)} className="af-gl-dnp-cell">
                     Did not play
                   </td>
                 )}
@@ -310,5 +377,16 @@ export default function PlayerGameLogTable({
         </button>
       )}
     </div>
+  )
+}
+
+function PointsCell({ value, mark }: { value: number | null | undefined; mark: 'high' | 'low' | null }) {
+  return (
+    <td className="af-gl-fpts" data-mark={mark ?? undefined}>
+      {mark === 'high' ? <span className="af-gl-mark" aria-hidden="true">▲</span> : null}
+      {mark === 'low' ? <span className="af-gl-mark" aria-hidden="true">▼</span> : null}
+      {formatPoints(value)}
+      {mark ? <span className="af-gl-sr">{mark === 'high' ? ' (well above his average)' : ' (well below his average)'}</span> : null}
+    </td>
   )
 }

@@ -68,3 +68,58 @@ describe('PlayerGameLogTable', () => {
     expect(await screen.findByText(/not linked this player/)).toBeTruthy()
   })
 })
+
+describe('PlayerGameLogTable — fantasy points per game', () => {
+  const pts = [3.2, 2.9, 5.5, 12.1, 3.0, 0, 3.1, 2.8, 3.3, 2.7, 3.0, 3.2]
+  const scored = {
+    ...payload,
+    scoring: { kind: 'league', leagueName: 'Sunday Night Redraft' },
+    groups: [{ ...payload.groups[0], rows: payload.groups[0].rows.map((r, i) => ({ ...r, fantasyPoints: pts[i] })) }],
+  }
+
+  it('puts FPts right after the game, says whose scoring it is, and averages it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(scored), { status: 200 })))
+    render(<PlayerGameLogTable sport="NHL" playerKey={{ identityId: 'p1' }} />)
+    const table = await screen.findByRole('table')
+    const headers = within(table).getAllByRole('columnheader').map((h) => h.textContent)
+    expect(headers[1]).toBe('FPts')
+    expect(headers[2]).toBe('TOI')
+    expect(screen.getByTestId('af-game-log-scoring').textContent).toContain('Sunday Night Redraft scoring')
+    // Season average of the twelve games.
+    const avg = Math.round((pts.reduce((a, b) => a + b, 0) / pts.length) * 10) / 10
+    const season = within(table).getByText(/Season/).closest('tr')!
+    expect(within(season).getAllByRole('cell')[0].textContent).toBe(String(avg))
+  })
+
+  it('marks only the games far from his own average, in words as well as arrows', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(scored), { status: 200 })))
+    const { container } = render(<PlayerGameLogTable sport="NHL" playerKey={{ identityId: 'p1' }} />)
+    await screen.findByRole('table')
+    const high = container.querySelectorAll('td.af-gl-fpts[data-mark="high"]')
+    const low = container.querySelectorAll('td.af-gl-fpts[data-mark="low"]')
+    // 5.5 is a good night (about 1.5x his average) but not an unusual one: unmarked.
+    expect(high).toHaveLength(1)
+    expect(high[0].textContent).toContain('12.1')
+    expect(high[0].textContent).toContain('well above his average')
+    expect(low).toHaveLength(1)
+    expect(low[0].textContent).toContain('well below his average')
+  })
+
+  it("asks for the league's scoring and the player's position", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(scored), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PlayerGameLogTable sport="NHL" playerKey={{ identityId: 'p1' }} scoringContext={{ leagueId: 'lg1', position: 'C' }} />)
+    await screen.findByRole('table')
+    const url = String(fetchMock.mock.calls[0][0])
+    expect(url).toContain('leagueId=lg1')
+    expect(url).toContain('position=C')
+  })
+
+  it('no points in the payload, no FPts column', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(payload), { status: 200 })))
+    render(<PlayerGameLogTable sport="NHL" playerKey={{ identityId: 'p1' }} />)
+    const table = await screen.findByRole('table')
+    expect(within(table).queryByText('FPts')).toBeNull()
+    expect(screen.queryByTestId('af-game-log-scoring')).toBeNull()
+  })
+})
