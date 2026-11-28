@@ -32,17 +32,19 @@ describe('which leagues get the simple League home', () => {
     expect(isRedraftFormatUserLeague({ ...base, sport: 'MLB', leagueType: 'dynasty' } as UserLeague)).toBe(false)
   })
 
-  it('the League home button routes every hosted league there, Survivor included; imports after', () => {
+  it('the League home button routes every league there: every format, Survivor and imports included', () => {
     const shell = readFileSync(resolve(__dirname, '../../app/league/[leagueId]/LeagueShell.tsx'), 'utf8')
     const nativeHome = shell.slice(shell.indexOf("case 'native_home': {"), shell.indexOf("case 'home':"))
     const simple = nativeHome.indexOf('<NflRedraftLeagueHomeDashboard')
-    expect(nativeHome).toMatch(/\n\s*if \(!importedWhatsNext\) \{\n\s*const stakesFormat = stakesFormatFor\(selectedLeague\)/)
+    expect(nativeHome).toMatch(/\n\s*const imported = importedWhatsNext != null\n\s*const stakesFormat = imported \? null : stakesFormatFor\(selectedLeague\)/)
+    // An import's "What's next?" (where the league lives, link there) is always its main card.
+    expect(nativeHome).toContain('nextSlot={plainRedraft && !imported ? undefined : whatsNext}')
+    expect(nativeHome).toContain('imported={imported}')
     // Survivor's island is its Island tab; the home no longer mounts the whole board.
     expect(nativeHome).not.toContain('<SurvivorNativeHome')
     expect(shell).toMatch(/SIMPLE_HOME_FORMAT_TABS = new Set\(\[\n\s*'survivor', 'survivor_tribal', 'survivor_challenges', 'survivor_jury'/)
-    expect(simple).toBeLessThan(nativeHome.indexOf('<NativeLeagueHome'))
+    expect(nativeHome).not.toContain('<NativeLeagueHome')
     // Dynasty and specialty formats keep "What's next?" (engine turns, the format walkthrough) as their one card.
-    expect(nativeHome).toContain('nextSlot={plainRedraft ? undefined : whatsNext}')
     expect(nativeHome).toContain('formatRows={tabDefs.filter((item) => SIMPLE_HOME_FORMAT_TABS.has(item.id))}')
   })
 })
@@ -108,6 +110,21 @@ describe('dynasty and specialty formats on the simple home', () => {
     expect(screen.getByTestId('stakes-slot')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('g32-home-row-format-dynasty_picks'))
     expect(onOpenTab).toHaveBeenLastCalledWith('dynasty_picks')
+  })
+})
+
+describe('an imported league on the simple home', () => {
+  it('no Invite row and no announcements; its What\'s next card leads', () => {
+    render(
+      <NflRedraftLeagueHomeDashboard league={{ ...base, platform: 'sleeper', sport: 'NFL', teamCount: 12 } as UserLeague}
+        leagueId="L1" teamSlots={teams} isCommissioner draftDateIso={null} hasActiveRedraftSeason={false}
+        onOpenSettings={vi.fn()} onOpenTab={vi.fn()} availableTabIds={['native_home', 'roster', 'league_chat']}
+        imported nextSlot={<div data-testid="whats-next-slot" />} />,
+    )
+    expect(screen.getByTestId('whats-next-slot')).toBeInTheDocument()
+    expect(screen.queryByTestId('g32-home-row-invite')).toBeNull()
+    expect(screen.queryByTestId('g32-home-announcements-toggle')).toBeNull()
+    expect(screen.getByTestId('g32-home-row-roster')).toBeInTheDocument()
   })
 })
 
