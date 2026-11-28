@@ -112,6 +112,7 @@ import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/L
 import { resolveLegacySettingsPanel, settingsPanelView } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
+import { LeagueRulesHomeHost } from '@/components/league/native/LeagueRulesHomeHost'
 import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
 import type { ImportedLeagueLike } from '@/lib/league/whats-next/adapters'
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
@@ -129,7 +130,7 @@ import {
   localizeLeagueTabs,
   type TabDef,
 } from './LeagueTabs'
-import { isNflRedraftCoreDashboardFromUserLeague, isNflRedraftCoreDashboardLeague, leagueWeekIsOnSeasonRow } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { isNflRedraftCoreDashboardFromUserLeague, isNflRedraftCoreDashboardLeague, isRedraftFormatUserLeague, leagueWeekIsOnSeasonRow } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { DraftTab } from './tabs/DraftTab'
 import { PredraftDraftHome } from '@/components/league/draft-home/PredraftDraftHome'
 import { formatScoringMode } from '@/lib/league-settings-home/buildLeagueSettingsHome'
@@ -2637,6 +2638,29 @@ function LeagueTabRouter({
           imported={importedWhatsNext}
         />
       )
+      /*
+       * Every AllFantasy-hosted redraft league, any sport, gets the one simple League home (owner,
+       * 2026-11-28: "move every sport's league home onto the same screen"). Its next-up card does the
+       * "What's next?" job, so the panel is not stacked above it. Dynasty, Survivor, Guillotine, Best
+       * Ball and imported leagues keep the full home below: their format cards live there.
+       */
+      if (!importedWhatsNext && isRedraftFormatUserLeague(selectedLeague) && guillyTabKind(selectedLeague, true) == null) {
+        return oneLeagueHome(
+          <NflRedraftLeagueHomeDashboard
+            league={selectedLeague}
+            leagueId={leagueId}
+            teamSlots={teamSlots}
+            userTeamName={userTeam?.teamName ?? null}
+            isCommissioner={isCommissioner}
+            draftDateIso={draftDateIso}
+            hasActiveRedraftSeason={hasActiveRedraftSeason}
+            onOpenSettings={onOpenLeagueSettingsModal}
+            onOpenTab={onSelectTab}
+            availableTabIds={tabDefs.map((item) => item.id)}
+            rulesSlot={<LeagueRulesHomeHost leagueId={leagueId} blocked={settingsOpen} />}
+          />,
+        )
+      }
       if (!importedWhatsNext && (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor')) {
         return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
       }

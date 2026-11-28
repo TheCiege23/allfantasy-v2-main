@@ -3,7 +3,7 @@
 import '@/components/core-app/af-core.css'
 import '@/components/league/league-overview.css'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { BarChart3, Bell, ChevronDown, ChevronRight, ClipboardList, HeartPulse, Lock, MessageSquare, Settings2, Sparkles, UserPlus, type LucideIcon } from 'lucide-react'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
@@ -15,6 +15,7 @@ import { buildScoreBug, draftCountdown, type ScoreBug } from '@/lib/league-media
 import { loadYourWeekWithMatchup } from '@/components/league/native/LeagueYourWeekStrip'
 import { RedraftScoreBug } from '@/components/league/native/redraft/RedraftScoreBug'
 import '@/components/league/native/redraft-home.css'
+import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 
 /**
  * This week's score bug on the football Home — the same `matchup-center` load League home's strip
@@ -51,6 +52,10 @@ type NflRedraftLeagueHomeDashboardProps = {
   hasActiveRedraftSeason: boolean
   onOpenSettings: (initialPanel?: string | null) => void
   onOpenTab: (tabId: string) => void
+  /** The league's tab ids. Rows whose tab the league does not have are left out; matchup/roster ids differ by sport. */
+  availableTabIds?: readonly string[]
+  /** League rules popup + "What changed" card (LeagueRulesHomeHost) on League home. Replaces the members' rules row. */
+  rulesSlot?: ReactNode
 }
 
 function formatDraftDate(draftDateIso: string | null): string | null {
@@ -109,7 +114,7 @@ function RowItem({ row }: { row: Row }) {
 }
 
 /**
- * Football redraft League home (owner, 2026-11-28: "simple like Sleeper… I don't like busy and the
+ * THE redraft League home, every sport (owner, 2026-11-28: "simple like Sleeper… I don't like busy and the
  * customers don't like busy"). It used to stack a hero header, four action tiles, a "Suggested
  * checklist", a card explaining where chat is, three Intelligence tiles and an always-open
  * communication panel. Now, top to bottom:
@@ -130,6 +135,8 @@ export function NflRedraftLeagueHomeDashboard({
   hasActiveRedraftSeason,
   onOpenSettings,
   onOpenTab,
+  availableTabIds,
+  rulesSlot,
 }: NflRedraftLeagueHomeDashboardProps) {
   const entitlements = useEntitlements()
   const hasManagerIntelligence = entitlements.hasPro || entitlements.hasSupreme
@@ -141,7 +148,18 @@ export function NflRedraftLeagueHomeDashboard({
   const draftDate = formatDraftDate(draftDateIso)
   const currentWeek = league.currentWeek ?? null
   const redraft = resolveRedraftIdentity(league)
-  const countdown = !hasActiveRedraftSeason ? draftCountdown(draftDateIso, Date.now()) : null
+  // The season row loads after first paint; the league's own phase keeps an in-season league from flashing "Pre-draft".
+  const phase = nativeLeaguePhase(league)
+  const offseason = phase === 'Offseason'
+  const seasonStarted = hasActiveRedraftSeason || phase === 'Regular season' || phase === 'Playoffs' || offseason
+  const countdown = !seasonStarted ? draftCountdown(draftDateIso, Date.now()) : null
+  /** First of `ids` this league has as a tab (every id counts when the list is not given). */
+  const tab = (...ids: string[]): string | null => (availableTabIds ? ids.find((id) => availableTabIds.includes(id)) ?? null : ids[0])
+  const matchupTab = tab('matchups', 'matchup', 'fixtures') ?? 'matchups'
+  const rosterTab = tab('roster', 'team', 'squad')
+  const standingsTab = tab('standings', 'table', 'league')
+  const chatTab = tab('league_chat')
+  const decideTab = tab('decide', 'ai_coaching')
   const [announcementsOpen, setAnnouncementsOpen] = useState(false)
 
   const replayIntro = () => {
@@ -149,19 +167,23 @@ export function NflRedraftLeagueHomeDashboard({
   }
 
   const sportLabel = redraft?.sportLabel ?? String(league.sport ?? 'NFL')
-  const status = hasActiveRedraftSeason
-    ? `${sportLabel} redraft · ${currentWeek != null ? `Week ${currentWeek}` : 'In season'}`
-    : `${sportLabel} redraft · Pre-draft`
+  const status = offseason
+    ? `${sportLabel} redraft · Season complete`
+    : seasonStarted
+      ? `${sportLabel} redraft · ${phase === 'Playoffs' ? 'Playoffs' : currentWeek != null ? `Week ${currentWeek}` : 'In season'}`
+      : `${sportLabel} redraft · Pre-draft`
 
-  const rows: Row[] = []
-  if (!hasActiveRedraftSeason && isCommissioner && joinedTeams < teamCount) {
+  const rows: (Row | null)[] = []
+  if (!seasonStarted && isCommissioner && joinedTeams < teamCount) {
     // The invite lives at the top of the Draft tab.
     rows.push({ id: 'invite', icon: UserPlus, label: 'Invite managers', value: `${joinedTeams}/${teamCount}`, onClick: () => onOpenTab('draft') })
   }
-  rows.push({ id: 'roster', icon: ClipboardList, label: 'My roster', value: userTeamName ?? undefined, onClick: () => onOpenTab('roster') })
-  if (hasActiveRedraftSeason) rows.push({ id: 'standings', icon: BarChart3, label: 'Standings', onClick: () => onOpenTab('standings') })
-  rows.push({ id: 'chat', icon: MessageSquare, label: 'League chat', onClick: () => onOpenTab('league_chat') })
-  rows.push({ id: 'settings', icon: Settings2, label: isCommissioner ? 'League settings' : 'League rules', onClick: () => onOpenSettings(null) })
+  if (rosterTab) rows.push({ id: 'roster', icon: ClipboardList, label: 'My roster', value: userTeamName ?? undefined, onClick: () => onOpenTab(rosterTab) })
+  if (seasonStarted && standingsTab) rows.push({ id: 'standings', icon: BarChart3, label: 'Standings', onClick: () => onOpenTab(standingsTab) })
+  if (chatTab) rows.push({ id: 'chat', icon: MessageSquare, label: 'League chat', onClick: () => onOpenTab(chatTab) })
+  if (isCommissioner || !rulesSlot) {
+    rows.push({ id: 'settings', icon: Settings2, label: isCommissioner ? 'League settings' : 'League rules', onClick: () => onOpenSettings(null) })
+  }
   // One Intelligence row instead of three upsell tiles. Locked rows go to the plans page, never nowhere.
   if (isCommissioner) {
     rows.push(
@@ -172,7 +194,9 @@ export function NflRedraftLeagueHomeDashboard({
   } else {
     rows.push(
       hasManagerIntelligence
-        ? { id: 'intelligence', icon: Sparkles, label: 'Manager Intelligence', onClick: () => onOpenTab('decide') }
+        ? decideTab
+          ? { id: 'intelligence', icon: Sparkles, label: 'Manager Intelligence', onClick: () => onOpenTab(decideTab) }
+          : null
         : { id: 'intelligence', icon: Sparkles, label: 'Manager Intelligence', value: 'AF Pro', locked: true, href: '/pricing' },
     )
   }
@@ -187,18 +211,33 @@ export function NflRedraftLeagueHomeDashboard({
           </button>
         </div>
 
-        {hasActiveRedraftSeason ? (
-          <RedraftHomeScoreBug leagueId={leagueId} week={typeof currentWeek === 'number' ? currentWeek : null} sport={String(league.sport)} onOpen={() => onOpenTab('matchups')} />
+        {seasonStarted && !offseason ? (
+          <RedraftHomeScoreBug leagueId={leagueId} week={typeof currentWeek === 'number' ? currentWeek : null} sport={String(league.sport)} onOpen={() => onOpenTab(matchupTab)} />
         ) : null}
 
+        {rulesSlot}
+
         <section className={`${card} p-4`} data-testid="g32-home-next">
-          {hasActiveRedraftSeason ? (
+          {offseason ? (
+            <>
+              <h2 className="text-[17px] font-bold text-white">Season complete</h2>
+              <p className="mt-0.5 text-sm text-white/55">See how everyone finished.</p>
+              <button
+                type="button"
+                onClick={() => onOpenTab(standingsTab ?? matchupTab)}
+                className="mt-4 flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-[#ff3d81] text-sm font-black uppercase tracking-[0.1em] text-[#ffffff]"
+                data-testid="g32-home-next-action"
+              >
+                Final standings
+              </button>
+            </>
+          ) : seasonStarted ? (
             <>
               <h2 className="text-[17px] font-bold text-white">This week&apos;s matchup</h2>
               <p className="mt-0.5 text-sm text-white/55">{currentWeek != null ? `Week ${currentWeek}` : 'In season'} · set your lineup before kickoff</p>
               <button
                 type="button"
-                onClick={() => onOpenTab('matchups')}
+                onClick={() => onOpenTab(matchupTab)}
                 className="mt-4 flex min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-[#ff3d81] text-sm font-black uppercase tracking-[0.1em] text-[#ffffff]"
                 data-testid="g32-home-next-action"
               >
@@ -224,7 +263,7 @@ export function NflRedraftLeagueHomeDashboard({
         </section>
 
         <nav aria-label="League home" className={`${card} divide-y divide-white/[0.06] overflow-hidden`} data-testid="g32-home-rows">
-          {rows.map((row) => (
+          {rows.filter((row): row is Row => row != null).map((row) => (
             <RowItem key={row.id} row={row} />
           ))}
         </nav>
@@ -246,7 +285,7 @@ export function NflRedraftLeagueHomeDashboard({
           </button>
           {announcementsOpen ? (
             <div className="border-t border-white/[0.06] px-2 pb-2">
-              <RedraftCommunicationPanel leagueId={leagueId} isCommissioner={isCommissioner} onOpenChat={() => onOpenTab('league_chat')} />
+              <RedraftCommunicationPanel leagueId={leagueId} isCommissioner={isCommissioner} onOpenChat={() => onOpenTab(chatTab ?? 'league_chat')} />
             </div>
           ) : null}
         </section>
