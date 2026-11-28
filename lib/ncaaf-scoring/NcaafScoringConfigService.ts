@@ -52,8 +52,14 @@ export async function saveLeagueNcaafScoringConfig(leagueId: string, config: { p
  * Seed a new league's NCAAF scoring. `receptionPoints` is the manager's pick at create (PPR 1,
  * half 0.5, standard 0); without it every NCAAF league was seeded full PPR whatever was chosen.
  */
-export async function applyDefaultNcaafScoringOnCreate(leagueId: string, receptionPoints?: number | null): Promise<void> {
+export async function applyDefaultNcaafScoringOnCreate(
+  leagueId: string,
+  receptionPoints?: number | null,
+  /** The create form's TE premium amount (validated at create); scored through the NCAAF `te_premium` rule. */
+  tePremiumPoints?: number | null,
+): Promise<void> {
   const rules = buildFullNcaafScoringConfig('af_default')
   if (receptionPoints != null && Number.isFinite(receptionPoints)) rules.reception = receptionPoints
+  if (tePremiumPoints != null && Number.isFinite(tePremiumPoints) && tePremiumPoints > 0) rules.te_premium = tePremiumPoints
   await saveLeagueNcaafScoringConfig(leagueId, { presetKey: 'af_default', rules, source: 'AF_DEFAULT' })
 }

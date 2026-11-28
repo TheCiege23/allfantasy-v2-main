@@ -65,7 +65,7 @@ import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/opti
 import { timezoneLabel, timezoneOptions } from '@/lib/create-league-v2/device-timezone'
 import { CheckBox, HelpTip } from '@/components/create-league-v2/WizardControls'
 import { SelectionCheck } from '@/components/ui/selection-check'
-import { TE_PREMIUM_MAX_POINTS, TE_PREMIUM_POINT_OPTIONS, normalizeTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
+import { TE_PREMIUM_MAX_POINTS, TE_PREMIUM_POINT_OPTIONS, normalizeTePremiumPoints, sportOffersTePremium } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 import { ScoringLabel } from '@/components/league-labels/ScoringLabel'
 import { scoringLabelIdForWizard } from '@/lib/league-labels/liveValues'
@@ -1583,8 +1583,8 @@ export function DraftStep({
       {/* Classic Best Ball: how the league competes (lib/create-league-v2/bestBallWizard.ts). */}
       {leagueType === 'best_ball' && !state.idpSelected ? <BestBallSetupPanel state={state} onChange={onChange} /> : null}
 
-      {/* NFL scoring add-ons. TE premium has to say its amount — the commissioner picks it. */}
-      {state.sport === 'NFL' ? (
+      {/* Football scoring add-ons (NFL, NCAAF). TE premium has to say its amount — the commissioner picks it. */}
+      {sportOffersTePremium(state.sport) ? (
         <div
           className={cx(
             'space-y-3 rounded-xl border p-4 transition',

@@ -154,9 +154,11 @@ describe('the wizard asks for the TEP amount', () => {
     expect(onChange).toHaveBeenLastCalledWith({ tePremium: false, tePremiumPoints: null })
   })
 
-  it('is NFL only', () => {
-    render(<DraftStep state={{ ...nflDraft, sport: 'NBA', scoringPresetId: 'nba_points' }} onChange={vi.fn()} fieldErrors={null} />)
+  it('is football only: NFL and college football get it, NBA does not', () => {
+    const view = render(<DraftStep state={{ ...nflDraft, sport: 'NBA', scoringPresetId: 'nba_points' }} onChange={vi.fn()} fieldErrors={null} />)
     expect(screen.queryByTestId('g30-te-premium')).toBeNull()
+    view.rerender(<DraftStep state={{ ...nflDraft, sport: 'NCAAF', scoringPresetId: 'ncaaf_half_ppr' }} onChange={vi.fn()} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-te-premium')).toBeTruthy()
   })
 
   it('cannot finish with TEP on and no amount', () => {
@@ -167,7 +169,7 @@ describe('the wizard asks for the TEP amount', () => {
   })
 })
 
-describe('the server takes the amount, only in range, and only for NFL', () => {
+describe('the server takes the amount, only in range, and only for football (NFL, NCAAF)', () => {
   async function bodyFor(state: CreateLeagueV2State) {
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal('fetch', vi.fn(async (_u: string, init?: RequestInit) => {
@@ -203,6 +205,14 @@ describe('the server takes the amount, only in range, and only for NFL', () => {
     expect(validateCreatePayload({ ...base, sport: 'NBA', scoringPreset: 'nba_points', conceptSetup: { tePremiumPoints: 0.5 } }).ok).toBe(false)
   })
 
+  it('college football sends and accepts the amount too (2026-11-28)', async () => {
+    const body = await bodyFor({ ...nflDraft, sport: 'NCAAF', scoringPresetId: 'ncaaf_half_ppr', tePremium: true, tePremiumPoints: 0.75 })
+    expect((body.conceptSetup as Record<string, unknown>).tePremiumPoints).toBe(0.75)
+    expect(validateCreatePayload(body).ok).toBe(true)
+    const codes = analyzeCreateLeagueCompletion({ ...nflDraft, sport: 'NCAAF', scoringPresetId: 'ncaaf_half_ppr', tePremium: true, tePremiumPoints: null }).map((i) => i.code)
+    expect(codes).toContain('te_premium_points_required')
+  })
+
   it('accepts the ESPN and Sleeper preset ids', () => {
     for (const scoringPreset of ['fb_espn_ppr', 'fb_sleeper_ppr', 'fb_standard']) {
       expect(validateCreatePayload({ concept: 'redraft', sport: 'NFL', scoringPreset, teamCount: 12, draftType: 'snake', leagueName: 'Presets' }).ok).toBe(true)
@@ -215,5 +225,28 @@ describe('copy', () => {
     const keys = ['createLeague.g30.help.tePremium', 'createLeague.g30.tePremium.label', 'createLeague.g30.tePremium.amount', 'createLeague.g30.tePremium.choose', 'createLeague.g30.tePremium.perCatch']
     const t = translations as unknown as Record<string, Record<string, string>>
     for (const lang of ['en', 'es']) for (const key of keys) expect(t[lang][key], `${lang} ${key}`).toBeTruthy()
+  })
+})
+
+describe('NCAAF seeds the TE bonus into its own scoring store (2026-11-28)', () => {
+  it('applyDefaultNcaafScoringOnCreate writes te_premium only when an amount is given', async () => {
+    const writes: Record<string, unknown>[] = []
+    vi.resetModules()
+    vi.doMock('@/lib/prisma', () => ({
+      prisma: {
+        league: {
+          findUnique: vi.fn(async () => ({ settings: {} })),
+          update: vi.fn(async (a: { data: { settings: Record<string, unknown> } }) => { writes.push(a.data.settings) }),
+        },
+      },
+    }))
+    const { applyDefaultNcaafScoringOnCreate } = await import('@/lib/ncaaf-scoring/NcaafScoringConfigService')
+    await applyDefaultNcaafScoringOnCreate('L', 0.5, 0.75)
+    await applyDefaultNcaafScoringOnCreate('L', 0.5, null)
+    const rules = (w: Record<string, unknown>) => ((w.ncaaf_scoring_config as { rules: Record<string, number> }).rules)
+    expect(rules(writes[0]).te_premium).toBe(0.75)
+    expect(rules(writes[0]).reception).toBe(0.5)
+    expect(rules(writes[1]).te_premium ?? 0).toBe(0)
+    vi.doUnmock('@/lib/prisma')
   })
 })

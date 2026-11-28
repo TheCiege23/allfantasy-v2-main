@@ -19,6 +19,7 @@ import { trackMetaEventsFromResponse } from '@/lib/meta-client'
 import { getEnabledPremiumAdvancedSettings } from '@/lib/create-league-v2/simple-create'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
+import { sportOffersTePremium } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 
 /** Execution modes must stay verbatim on the wire so persistence keeps isOffline / isAuto flags. */
 const EXECUTION_DRAFT_IDS = new Set(['offline', 'auto', 'team'])
@@ -75,8 +76,8 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     // A guillotine week has no opponent, so there is no head-to-head game for a median game to
     // double. The wizard hides the box for guillotine; this drops a choice made before switching.
     medianGame: state.medianGame === true && lt !== 'guillotine' && lt !== 'survivor_guillotine',
-    // TE premium: NFL only, and only once the commissioner has chosen the per-catch amount.
-    ...(state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints === 'number'
+    // TE premium: football only (NFL, NCAAF), and only once the commissioner has chosen the per-catch amount.
+    ...(sportOffersTePremium(state.sport) && state.tePremium === true && typeof state.tePremiumPoints === 'number'
       ? { tePremiumPoints: state.tePremiumPoints }
       : {}),
     draftTimezone: state.timezone,
