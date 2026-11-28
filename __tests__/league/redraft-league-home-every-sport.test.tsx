@@ -32,14 +32,14 @@ describe('which leagues get the simple League home', () => {
     expect(isRedraftFormatUserLeague({ ...base, sport: 'MLB', leagueType: 'dynasty' } as UserLeague)).toBe(false)
   })
 
-  it('the League home button routes every hosted league there (Survivor first, imports after)', () => {
+  it('the League home button routes every hosted league there, Survivor included; imports after', () => {
     const shell = readFileSync(resolve(__dirname, '../../app/league/[leagueId]/LeagueShell.tsx'), 'utf8')
     const nativeHome = shell.slice(shell.indexOf("case 'native_home': {"), shell.indexOf("case 'home':"))
-    const survivor = nativeHome.indexOf('<SurvivorNativeHome')
     const simple = nativeHome.indexOf('<NflRedraftLeagueHomeDashboard')
     expect(nativeHome).toMatch(/\n\s*if \(!importedWhatsNext\) \{\n\s*const stakesFormat = stakesFormatFor\(selectedLeague\)/)
-    expect(survivor).toBeGreaterThan(-1)
-    expect(simple).toBeGreaterThan(survivor)
+    // Survivor's island is its Island tab; the home no longer mounts the whole board.
+    expect(nativeHome).not.toContain('<SurvivorNativeHome')
+    expect(shell).toMatch(/SIMPLE_HOME_FORMAT_TABS = new Set\(\[\n\s*'survivor', 'survivor_tribal', 'survivor_challenges', 'survivor_jury'/)
     expect(simple).toBeLessThan(nativeHome.indexOf('<NativeLeagueHome'))
     // Dynasty and specialty formats keep "What's next?" (engine turns, the format walkthrough) as their one card.
     expect(nativeHome).toContain('nextSlot={plainRedraft ? undefined : whatsNext}')

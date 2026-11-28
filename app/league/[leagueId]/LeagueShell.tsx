@@ -200,7 +200,6 @@ import { guillyTabKind } from '@/lib/guillotine/importedGuillyView'
 import { ImportedGuillyChopCard } from '@/components/league/ImportedGuillyChopCard'
 import { DynastyHome } from './tabs/DynastyHome'
 import { SurvivorHome } from '@/components/survivor/SurvivorHome'
-import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
 import { PirateHome } from '@/components/pirate/PirateHome'
 import { SurvivorLeagueDeepLinkPanel } from '@/components/survivor/SurvivorLeagueDeepLinkPanel'
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
@@ -2375,6 +2374,7 @@ export function LeagueShell({
 
 /** Format tabs the simple League home lists as rows, one tap each (dynasty, keeper, specialty formats). */
 const SIMPLE_HOME_FORMAT_TABS = new Set([
+  'survivor', 'survivor_tribal', 'survivor_challenges', 'survivor_jury', 'survivor_command',
   'dynasty', 'dynasty_picks', 'dynasty_taxi', 'keeper', 'bestball', 'guillotine', 'zombie', 'pirate', 'big_brother', 'idp', 'defense_hub',
 ])
 
@@ -2644,16 +2644,14 @@ function LeagueTabRouter({
           imported={importedWhatsNext}
         />
       )
-      if (!importedWhatsNext && (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor')) {
-        return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
-      }
       /*
        * Every AllFantasy-hosted league gets the one simple League home, whatever the sport or format
        * (owner, 2026-11-28: redraft first, then "simplify the dynasty and specialty league homes too").
        * Its next-up card does the "What's next?" job, so the panel is not stacked above it. A format
        * adds only its stakes card (Guillotine, Big Brother) and one row per format tab (Picks, Taxi,
-       * Keepers, Chop…). Survivor keeps its island above (the home IS the game board), and imported
-       * leagues keep the full home below: their data comes from another site.
+       * Keepers, Chop…). Survivor too (owner, same day): its island — tribes, council, idols — is the
+       * Island tab, so the home lists Island / Tribal / Challenges / Jury rows instead of the whole board.
+       * Imported leagues keep the full home below: their data comes from another site.
        */
       if (!importedWhatsNext) {
         const stakesFormat = stakesFormatFor(selectedLeague)
