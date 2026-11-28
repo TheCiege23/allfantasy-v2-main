@@ -1062,7 +1062,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                 <span>{snapshotAgeLabel(offlineSince)}. Changes you make are saved on this device and sent when you reconnect.</span>
               </div>
             ) : null}
-            {lockText ? (
+            {lockText && !predraft ? (
               /*
                * One line, not a paragraph (2026-11-28, Sleeper pass): the lock and the first sentence stay
                * in view; how to move players folds under "How to set your lineup", so the starters are no
@@ -1112,7 +1112,26 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
             {viewDay?.status === 'past' ? (
               renderPastDay(viewDay)
             ) : (
-              lists && slots.length ? (
+              predraft && slots.length ? (
+                /* Before the draft: the slots to fill, read-only. Nothing to move, lock or optimize yet. */
+                <>
+                  <section className="nls-card nls-card-flush" aria-label="Starters" data-testid="lineup-predraft-slots">
+                    <h3 className="nls-label nls-card-head"><span>Starters</span></h3>
+                    <ul className="nls-rows">
+                      {slots.map((s, i) => (
+                        <li key={`pre-${s.label}-${i}`}>
+                          <div className="nls-lrow nls-lrow-empty"><PosPill label={s.label} /><div className="nls-player"><strong>Empty</strong></div></div>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                  {benchCapacity ? (
+                    <section className="nls-card nls-card-flush" aria-label="Bench">
+                      <h3 className="nls-label nls-card-head"><span>Bench</span><span>{benchCapacity} spots</span></h3>
+                    </section>
+                  ) : null}
+                </>
+              ) : lists && slots.length ? (
                 <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragId(null)} accessibility={{ announcements }}>
                   {byeStarters.length ? (
                     <p className="nls-error" role="alert" data-testid="lineup-bye-warning">

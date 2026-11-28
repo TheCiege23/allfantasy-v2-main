@@ -177,6 +177,10 @@ describe('Players tab, Sleeper pass 2 (owner, 2026-11-28)', () => {
     expect(screen.queryByRole('button', { name: 'Trade' })).toBeNull()
     expect(screen.getByTestId('players-search')).toBeTruthy()
     expect(screen.getByTestId('players-claims-toggle')).toBeTruthy()
+    // Claims stay folded until asked for (the aside's own display rule beat the hidden attribute once).
+    expect(screen.getByTestId('players-claims').style.display).toBe('none')
+    fireEvent.click(screen.getByTestId('players-claims-toggle'))
+    expect(screen.getByTestId('players-claims').style.display).toBe('')
     // In season: projection first.
     expect((screen.getByTestId('players-sort') as HTMLSelectElement).value).toBe('projection')
     expect(names()[0]).toContain('Tank Bigsby')
@@ -190,6 +194,10 @@ describe('Players tab, Sleeper pass 2 (owner, 2026-11-28)', () => {
     await screen.findByText('Tank Bigsby')
     expect((screen.getByTestId('players-sort') as HTMLSelectElement).value).toBe('adp')
     expect(names()[0]).toContain("Wan'Dale Robinson")
+    // No waivers exist before the draft: no Claim buttons, no waiver line, no Claims button.
+    expect(screen.queryByRole('button', { name: 'Claim' })).toBeNull()
+    expect(screen.queryByTestId('players-waiver-line')).toBeNull()
+    expect(screen.queryByTestId('players-claims-toggle')).toBeNull()
   })
 
   it('Filters: Rookies narrows the list, Reset brings everyone back', async () => {
