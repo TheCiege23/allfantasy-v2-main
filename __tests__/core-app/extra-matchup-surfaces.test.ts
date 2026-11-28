@@ -131,7 +131,17 @@ describe('results, recap and schedule', () => {
       ],
     })
     expect(text).toContain("My team 120.3 def. Top Dogs 101.5 — extra matchup (Top Dogs: last week's top scorer)")
-    expect(text).toContain('🏆 Top score: My team, 120.3')
+  })
+  it("the extra game's score counts for the week's awards (top score), through the shared awards calculator", async () => {
+    const { nativeH2HSeasonData } = await import('@/lib/league-history/nativeH2HSeason')
+    const { aggregateH2HSeasons } = await import('@/lib/league-history/sleeperH2HService')
+    const teams = [{ id: 'r1', teamName: 'My team', ownerName: null }, { id: 'r2', teamName: 'Top Dogs', ownerName: null }, { id: 'r3', teamName: 'Third team', ownerName: null }]
+    const games = [{ week: 4, homeRosterId: 'r2', awayRosterId: 'r3', homeScore: 101.5, awayScore: 90, status: 'final' }]
+    const withExtra = aggregateH2HSeasons([nativeH2HSeasonData({ season: 2026, games, teams, throughWeek: 4, extraScores: [{ week: 4, rosterId: 'r1', points: 120.25 }] })])
+    expect(withExtra.latestWeekAwards?.topScore).toMatchObject({ ownerId: 'r1', points: 120.25 })
+    // [control] without the extra score the leftover team cannot be named
+    const without = aggregateH2HSeasons([nativeH2HSeasonData({ season: 2026, games, teams, throughWeek: 4 })])
+    expect(without.latestWeekAwards?.topScore).toMatchObject({ ownerId: 'r2' })
   })
   it('the schedule labels the bye row as the extra matchup, with the line', () => {
     const state = buildCanonicalScheduleRuntimeState({
