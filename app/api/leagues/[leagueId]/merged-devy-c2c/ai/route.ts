@@ -19,7 +19,7 @@ import {
 } from '@/lib/merged-devy-c2c/ai/C2CAIContext'
 import { buildC2CAIPrompt } from '@/lib/merged-devy-c2c/ai/C2CAIPrompts'
 import { openaiChatText } from '@/lib/openai-client'
-import { aiCostGate } from '@/lib/ai-protection/costGate'
+import { requireMemberPlayerAi } from '@/lib/subscription/memberPlayerAiGate'
 import { withOfficialTimeUserMessage } from '@/lib/time-engine/chimmyPromptPrefix'
 
 export const dynamic = 'force-dynamic'
@@ -46,6 +46,12 @@ export async function POST(
 
   const isC2C = await isC2CLeague(leagueId)
   if (!isC2C) return NextResponse.json({ error: 'Not a C2C league' }, { status: 404 })
+
+  // OpenAI per call. Every type is player-level advice to a manager about their own roster, so it is Chimmy
+  // Intelligence (`af_intelligence`: AF Pro, AF Commissioner, AF Supreme) plus the member daily cap, the same
+  // gate and the same place as its devy sibling (owner, 2026-11-28): before any context read or model call.
+  const gated = await requireMemberPlayerAi(req)
+  if (typeof gated !== 'string') return gated
 
   const body = await req.json().catch(() => ({}))
   const type = (body.type as C2CAIType) ?? 'pipeline_advisor'
@@ -91,11 +97,6 @@ export async function POST(
       { status: 400 }
     )
   }
-
-  // OpenAI per call, and it had no plan check and no cap. Same gate as its devy and IDP siblings
-  // (league_format_ai), after the request is validated so a bad request costs no allowance.
-  const gated = await aiCostGate(req, 'league_format_ai', userId)
-  if (gated) return gated
 
   const { system, user } = buildC2CAIPrompt(context as any)
   const userWithTime = await withOfficialTimeUserMessage(userId, user)

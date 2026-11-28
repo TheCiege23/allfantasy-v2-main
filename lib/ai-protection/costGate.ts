@@ -89,8 +89,9 @@ export const AI_COST_GATES = {
 
   // ── Commissioner ─────────────────────────────────────────────────────────────
   weekly_recap_ai: { label: 'Chimmy weekly recaps', featureId: 'commissioner_ai_recap', paidFromLaunch: true, perMinute: 5, dailyFree: 5, dailyPaid: 50 },
-  // Matches the sibling /api/{idp,devy}/ai, which require commissioner_ai_tools.
-  league_format_ai: { label: 'devy & IDP analysis', featureId: 'commissioner_ai_tools', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
+  // Matches the sibling /api/idp/ai host tools (commissioner_ai_tools). The devy and C2C [leagueId] routes moved to
+  // member_player_ai (Chimmy Intelligence) on 2026-11-28.
+  league_format_ai: { label: 'IDP analysis', featureId: 'commissioner_ai_tools', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
 
   // ── Free forever, capped ─────────────────────────────────────────────────────
   // (`instant_trade`, the logged-out instant trade check, was removed 2026-09-30: its only caller,
@@ -148,6 +149,11 @@ export const AI_COST_GATES = {
   // draft-recap). One shared allowance for all eight.
   draft_ai_tools: { label: 'Chimmy draft tools', featureId: 'pro_draft_ai', paidFromLaunch: true, perMinute: 10, dailyFree: 0, dailyPaid: 100 },
   // /api/legacy/player-finder — up to ~20 model calls per search, so the allowance is in searches.
+  /*
+   * Member devy / C2C / IDP player advice (lib/subscription/memberPlayerAiGate.ts): Chimmy Intelligence
+   * (`af_intelligence`: AF Pro, AF Commissioner, AF Supreme), required first, then this cap (owner, 2026-11-28).
+   */
+  member_player_ai: { label: 'Chimmy player advice', featureId: 'af_intelligence', paidFromLaunch: true, perMinute: 10, dailyFree: 0, dailyPaid: 100 },
   player_finder_ai: { label: 'Player Finder searches', featureId: 'player_finder_stock_ai', paidFromLaunch: true, perMinute: 3, dailyFree: 0, dailyPaid: 15 },
 } as const satisfies Record<string, AiCostGateConfig>
 

@@ -31,8 +31,19 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 const C2C_AI_CACHE_TTL_MS = 30 * 60 * 1000
 
-/** Actions a league MEMBER runs on their own player (C2CPlayerModal). Gated on `af_intelligence`. */
-const C2C_MEMBER_PLAYER_AI_ACTIONS: ReadonlySet<string> = new Set(['campus_eval'])
+/**
+ * Player-level actions — advice to a manager about their own roster (owner, 2026-11-28): Chimmy Intelligence
+ * (`af_intelligence`) plus the member daily cap. Everything else here administers the league (setup
+ * recommendation, commissioner chat, constitution, weekly recap) and keeps `commissioner_ai_tools`.
+ */
+const C2C_MEMBER_PLAYER_AI_ACTIONS: ReadonlySet<string> = new Set([
+  'campus_eval',
+  'campus_rankings',
+  'breakout_alerts',
+  'roster_balance',
+  'transition_advice',
+  'draft_advice',
+])
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>
@@ -48,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   // The member player-AI action (C2CPlayerModal's campus read) is AF Intelligence — Pro, Commissioner,
   // Supreme (owner, 2026-11-28). Every host/league tool keeps the Commissioner AI gate. Before any model call.
-  const gate = await requireMemberPlayerAiOrHostGate(action, C2C_MEMBER_PLAYER_AI_ACTIONS, requireAfSub)
+  const gate = await requireMemberPlayerAiOrHostGate(action, C2C_MEMBER_PLAYER_AI_ACTIONS, requireAfSub, req)
   if (gate instanceof NextResponse) return gate
   const userId = gate
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId.trim() : ''

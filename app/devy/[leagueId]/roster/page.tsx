@@ -35,7 +35,7 @@ export default async function DevyRosterPage({ params }: { params: Promise<{ lea
       <DevyRosterClient
         leagueId={leagueId}
         userId={session.user.id}
-        hasAfSub={plans.commissioner}
+        hasAfSub={plans.pro || plans.commissioner}
       />
     </div>
   )

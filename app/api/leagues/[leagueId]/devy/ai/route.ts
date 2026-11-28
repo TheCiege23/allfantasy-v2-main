@@ -8,7 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isDevyLeague } from '@/lib/devy'
-import { aiCostGate } from '@/lib/ai-protection/costGate'
+import { requireMemberPlayerAi } from '@/lib/subscription/memberPlayerAiGate'
 import {
   buildDevyScoutContext,
   buildDevyPromotionAdvisorContext,
@@ -40,9 +40,12 @@ export async function POST(
   const isDevy = await isDevyLeague(leagueId)
   if (!isDevy) return NextResponse.json({ error: 'Not a devy league' }, { status: 404 })
 
-  // OpenAI per call. The sibling /api/devy/ai requires commissioner_ai_tools; this matched nothing.
-  const gated = await aiCostGate(req, 'league_format_ai', userId)
-  if (gated) return gated
+  // Every type here is player-level advice to a manager about their own roster (scout, promotion, draft
+  // assistant, class story, trade context, rookie vs devy), so it is Chimmy Intelligence (`af_intelligence`:
+  // AF Pro, AF Commissioner, AF Supreme) plus the member daily cap — owner, 2026-11-28. It was
+  // league_format_ai, the Commissioner AI key.
+  const gated = await requireMemberPlayerAi(req)
+  if (typeof gated !== 'string') return gated
 
   const body = await req.json().catch(() => ({}))
   const type = (body.type as DevyAIType) ?? 'scout'

@@ -454,7 +454,7 @@ describe('A. expensive player tools: AF Pro / AF Supreme, then a daily cap', () 
   })
 })
 
-describe('A. /api/leagues/[leagueId]/merged-devy-c2c/ai matches its devy and IDP siblings (league_format_ai)', () => {
+describe('A. /api/leagues/[leagueId]/merged-devy-c2c/ai: sign-in, plan and cap before the model (D moves the plan to Chimmy Intelligence)', () => {
   const row: Row = {
     name: 'merged-devy-c2c ai',
     path: '@/app/api/leagues/[leagueId]/merged-devy-c2c/ai/route',

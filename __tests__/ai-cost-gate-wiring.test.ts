@@ -243,7 +243,6 @@ describe('every audited paid-model route asks the gate', () => {
     'app/api/ai/weekly-recap/route.ts',
     'app/api/leagues/[leagueId]/ai/start-sit/route.ts',
     'app/api/leagues/[leagueId]/idp/ai/route.ts',
-    'app/api/leagues/[leagueId]/devy/ai/route.ts',
     'server/api-route-modules/legacy/chat/route.ts',
     'app/api/trade-value/analyze/route.ts',
     'app/api/mock-draft/ai-pick/route.ts',
@@ -258,5 +257,13 @@ describe('every audited paid-model route asks the gate', () => {
   it.each(ROUTES)('%s', (rel) => {
     const src = readFileSync(path.join(process.cwd(), rel), 'utf8')
     expect(src).toMatch(/\b(aiCostGate|evaluateAiCostGate)\(/)
+  })
+
+  // Since 2026-11-28 the devy and C2C league routes ask the cap through requireMemberPlayerAi (plan, then
+  // aiCostGate member_player_ai) — behaviour pinned in __tests__/monetization/member-player-ai-split-2026-11-28.test.ts.
+  it.each(['app/api/leagues/[leagueId]/devy/ai/route.ts', 'app/api/leagues/[leagueId]/merged-devy-c2c/ai/route.ts'])('%s', (rel) => {
+    const src = readFileSync(path.join(process.cwd(), rel), 'utf8')
+    expect(src).toMatch(/^\s*const gated = await requireMemberPlayerAi\(req\)$/m)
+    expect(readFileSync(path.join(process.cwd(), 'lib/subscription/memberPlayerAiGate.ts'), 'utf8')).toMatch(/^\s*const capped = await aiCostGate\(req, 'member_player_ai', userId\)$/m)
   })
 })

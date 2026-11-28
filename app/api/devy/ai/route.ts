@@ -19,8 +19,20 @@ const DEVY_CHIMMY_CACHE_TTL_MS = 30 * 60 * 1000
 
 type Body = Record<string, unknown>
 
-/** Actions a league MEMBER runs on their own player (DevyPlayerModal). Gated on `af_intelligence`. */
-const DEVY_MEMBER_PLAYER_AI_ACTIONS: ReadonlySet<string> = new Set(['prospect_eval'])
+/**
+ * Player-level actions — advice to a manager about their own roster (owner, 2026-11-28): Chimmy Intelligence
+ * (`af_intelligence`) plus the member daily cap. Everything else here administers the league (setup,
+ * import matching and summary, commissioner chat, constitution, annual report) and keeps
+ * `commissioner_ai_tools` through requireAfSub.
+ */
+const DEVY_MEMBER_PLAYER_AI_ACTIONS: ReadonlySet<string> = new Set([
+  'prospect_eval',
+  'pipeline_health',
+  'should_promote',
+  'draft_advice',
+  'devy_rankings',
+  'breakout_alerts',
+])
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : ''
@@ -38,7 +50,7 @@ export async function POST(req: NextRequest) {
   // The member player-AI action (DevyPlayerModal's prospect read) is AF Intelligence — Pro, Commissioner,
   // Supreme — with no commissioner requirement (owner, 2026-11-28). Every host/league tool keeps the
   // Commissioner AI gate. Either way the gate runs before any model call.
-  const gate = await requireMemberPlayerAiOrHostGate(action, DEVY_MEMBER_PLAYER_AI_ACTIONS, requireAfSub)
+  const gate = await requireMemberPlayerAiOrHostGate(action, DEVY_MEMBER_PLAYER_AI_ACTIONS, requireAfSub, req)
   if (typeof gate !== 'string') return gate
   const userId = gate
 

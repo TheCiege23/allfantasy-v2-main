@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
   const gate =
     action === 'cap_advice'
       ? await requireEntitlement('commissioner_cap_advice')
-      : await requireMemberPlayerAiOrHostGate(action ?? '', IDP_MEMBER_PLAYER_AI_ACTIONS, requireAfSub)
+      : await requireMemberPlayerAiOrHostGate(action ?? '', IDP_MEMBER_PLAYER_AI_ACTIONS, requireAfSub, req)
   if (typeof gate !== 'string') return gate
   const userId = gate
   const week = typeof body.week === 'number' && Number.isFinite(body.week) ? Math.min(18, Math.max(1, body.week)) : 1

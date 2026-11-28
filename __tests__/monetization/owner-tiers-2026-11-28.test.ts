@@ -59,7 +59,10 @@ describe('3. the smaller items', () => {
   })
   it('c/d. member devy/IDP/C2C player AI and the keeper trade analyzer read af_intelligence = Pro + Commissioner + Supreme', async () => {
     const { readFileSync } = await import('node:fs')
-    expect(readFileSync('lib/subscription/memberPlayerAiGate.ts', 'utf8')).toMatch(/^\s*if \(memberActions\.has\(action\)\) return requireEntitlement\('af_intelligence'\)$/m)
+    // Since item D (2026-11-28) the member path is requireMemberPlayerAi: the plan, then the member daily cap.
+    const gate = readFileSync('lib/subscription/memberPlayerAiGate.ts', 'utf8')
+    expect(gate).toMatch(/^\s*if \(memberActions\.has\(action\)\) return requireMemberPlayerAi\(req\)$/m)
+    expect(gate).toMatch(/^\s*const userId = await requireEntitlement\('af_intelligence'\)$/m)
     expect(readFileSync('app/api/keeper/ai/trade-analysis/route.ts', 'utf8')).toMatch(/^\s*const gate = await requireEntitlement\('af_intelligence'\)$/m)
     expect(await tiersFor('af_intelligence')).toEqual(AF_INTELLIGENCE_TIERS)
   })
