@@ -267,7 +267,7 @@
 
 .af-lsh-task { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 0 14px 10px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.025); }
 .af-lsh-task[data-severity=bad] { border-color: rgba(239,68,68,.4); }
-.af-lsh-task-tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 1px solid; border-radius: 11px; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.af-lsh-task-tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 1px solid; border-radius: 11px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .af-lsh-task-title { font-size: 15px; font-weight: 750; line-height: 1.3; }
 .af-lsh-task-detail { margin: 0; font-size: 13px; line-height: 1.45; color: var(--lsh-muted); }
 .af-lsh-task-detail[data-clamped=true] { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
