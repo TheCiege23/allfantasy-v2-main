@@ -49,9 +49,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
       sport: true,
       settings: true,
       season: true,
+      autoCoachEnabled: true,
     },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  // The commissioner's "Chimmy Auto lineups" switch (League.autoCoachEnabled) turns it off for everyone,
+  // paid plans included — the rule AutoCoachEngine already applies. This route skipped it, so a paid
+  // manager could still apply Chimmy's lineup in a league that had turned it off.
+  if (league.autoCoachEnabled === false) {
+    return NextResponse.json(
+      { error: 'Your commissioner has turned off Chimmy Auto lineups in this league.', code: 'AUTO_COACH_DISABLED_BY_COMMISSIONER' },
+      { status: 403 },
+    )
+  }
 
   // The manager's own team, a named one of several, or a co-owned team (lib/league/viewerTeams.ts).
   const acting = await resolveActingRoster(leagueId, userId, requestedRosterIdFrom(req, body))

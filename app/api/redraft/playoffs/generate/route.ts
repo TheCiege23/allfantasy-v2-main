@@ -1,3 +1,4 @@
+import { refuseOddPlayoffFieldWithoutPlan } from '@/lib/league/oddPlayoffFieldPlanGate'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -48,6 +49,9 @@ export async function POST(req: NextRequest) {
 
   const allowed = await canManageLeague(season.leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const planRefusal = await refuseOddPlayoffFieldWithoutPlan({ leagueId: season.leagueId, userId, playoffTeams: body.playoffTeams })
+  if (planRefusal) return planRefusal
 
   try {
     const result = await generateNflRedraftPlayoffRuntimeBracket({

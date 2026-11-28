@@ -1,3 +1,4 @@
+import { refuseOddPlayoffFieldWithoutPlan } from '@/lib/league/oddPlayoffFieldPlanGate'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -127,6 +128,8 @@ export async function POST(request: Request) {
     if (action === 'generate_bracket' || action === 'regenerate_bracket') {
       const parsedPlayoffTeams = parseOptionalRedraftPositiveInteger(body.playoffTeams, 'playoffTeams')
       if (!parsedPlayoffTeams.ok) return NextResponse.json({ error: parsedPlayoffTeams.error }, { status: 400 })
+      const planRefusal = await refuseOddPlayoffFieldWithoutPlan({ leagueId, userId, playoffTeams: parsedPlayoffTeams.value })
+      if (planRefusal) return planRefusal
       const result = await generateNflRedraftPlayoffRuntimeBracket({
         seasonId,
         playoffTeams: parsedPlayoffTeams.value,

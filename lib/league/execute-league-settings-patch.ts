@@ -896,6 +896,20 @@ export async function executeLeagueSettingsPatch(
   if (merge && typeof merge === 'object' && !Array.isArray(merge) && TIEBREAKER_ORDER_KEY in merge) {
     return jsonError('Set the tiebreaker order with tiebreakerOrder, not settingsMerge.', 400)
   }
+  /*
+   * The same hole for the AF Commissioner waiver settings: `settingsMerge` wrote any key straight into
+   * League.settings, so waiver extras and a day-by-day schedule could be turned on around the plan
+   * checks below (waiverExtras / dailyWaiverSchedule). Each has its own field and is refused here.
+   */
+  if (merge && typeof merge === 'object' && !Array.isArray(merge)) {
+    for (const [key, field] of [
+      [WAIVER_EXTRAS_SETTINGS_KEY, 'waiverExtras'],
+      [DAILY_WAIVER_SCHEDULE_SETTINGS_KEY, 'dailyWaiverSchedule'],
+      [DAILY_WAIVER_PRIOR_PROCESSING_SETTINGS_KEY, 'dailyWaiverSchedule'],
+    ] as const) {
+      if (key in merge) return jsonError(`Set ${key} with ${field}, not settingsMerge.`, 400)
+    }
+  }
   let tiebreakerOrderToStore: { value: TiebreakerKey[] | null } | null = null
   if (body.tiebreakerOrder !== undefined) {
     const parsed = parseTiebreakerOrder(body.tiebreakerOrder)
