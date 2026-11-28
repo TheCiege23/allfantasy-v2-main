@@ -1,0 +1,396 @@
+{
+  "timestamp": "2026-11-28T01:09:17Z",
+  "status": "success",
+  "season": {
+    "year": 2026,
+    "displayName": "2026",
+    "type": 4,
+    "name": "Off Season"
+  },
+  "athletes": [
+    {
+      "position": "Pitchers",
+      "items": [
+        {
+          "id": "38303",
+          "uid": "s:1~l:10~a:38303",
+          "guid": "b8160712-4442-6280-b6ef-67bdf15250c7",
+          "alternateIds": {
+            "sdr": "4195946"
+          },
+          "firstName": "David",
+          "lastName": "Bednar",
+          "fullName": "David Bednar",
+          "displayName": "David Bednar",
+          "nickname": "",
+          "shortName": "D. Bednar",
+          "weight": 250,
+          "displayWeight": "250 lbs",
+          "height": 73,
+          "displayHeight": "6' 1\"",
+          "age": 32,
+          "dateOfBirth": "1994-10-10T07:00Z",
+          "debutYear": 2019,
+          "links": [
+            {
+              "language": "en-US",
+              "rel": [
+                "playercard"
+              ],
+              "href": "https://www.espn.com/mlb/player/_/id/38303",
+              "text": "Player Card",
+              "shortText": "Player Card",
+              "isExternal": false,
+              "isPremium": false
+            }
+          ],
+          "birthPlace": {
+            "city": "Pittsburgh",
+            "state": "PA",
+            "country": "United States",
+            "displayText": "Pittsburgh, PA"
+          },
+          "college": {
+            "id": "322",
+            "guid": "683e6cae-8669-3231-819f-9e9920c83005",
+            "mascot": "Leopards",
+            "name": "Lafayette",
+            "shortName": "Lafayette",
+            "abbrev": "LAF",
+            "logos": [
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/ncaa/500/322.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full"
+                ],
+                "lastUpdated": "2026-07-01T04:35Z"
+              }
+            ]
+          },
+          "slug": "david-bednar",
+          "headshot": {
+            "href": "https://a.espncdn.com/i/headshots/mlb/players/full/38303.png",
+            "alt": "David Bednar"
+          },
+          "jersey": "53",
+          "position": {
+            "id": "0",
+            "name": "Relief Pitcher",
+            "displayName": "Relief Pitcher",
+            "abbreviation": "RP",
+            "leaf": true,
+            "parent": {
+              "id": "1",
+              "name": "Pitcher",
+              "displayName": "Pitcher",
+              "abbreviation": "P",
+              "leaf": false
+            }
+          },
+          "positions": [
+            {
+              "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/positions/0?lang=en&region=us",
+              "id": "0",
+              "name": "Relief Pitcher",
+              "displayName": "Relief Pitcher",
+              "abbreviation": "RP",
+              "leaf": true,
+              "parent": {
+                "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/positions/1?lang=en&region=us"
+              },
+              "statistics": {
+                "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/seasons/2026/types/2/athletes/38303/statistics/128?lang=en&region=us"
+              }
+            }
+          ],
+          "injuries": [],
+          "teams": [
+            {
+              "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/seasons/2026/teams/10?lang=en&region=us"
+            }
+          ],
+          "contracts": [],
+          "experience": {
+            "years": 7
+          },
+          "status": {
+            "id": "1",
+            "name": "Active",
+            "type": "active",
+            "abbreviation": "Active"
+          },
+          "bats": {
+            "type": "LEFT",
+            "abbreviation": "L",
+            "displayValue": "Left"
+          },
+          "throws": {
+            "type": "RIGHT",
+            "abbreviation": "R",
+            "displayValue": "Right"
+          }
+        },
+        {
+          "id": "4717832",
+          "uid": "s:1~l:10~a:4717832",
+          "guid": "94e1137a-e0b8-31c4-8bfc-45b3bc2d8128",
+          "alternateIds": {
+            "sdr": "4717832"
+          },
+          "firstName": "Kervin",
+          "lastName": "Castro",
+          "fullName": "Kervin Castro",
+          "displayName": "Kervin Castro",
+          "shortName": "K. Castro",
+          "weight": 234,
+          "displayWeight": "234 lbs",
+          "height": 70,
+          "displayHeight": "5' 10\"",
+          "age": 27,
+          "dateOfBirth": "1999-02-07T08:00Z",
+          "debutYear": 2021,
+          "links": [
+            {
+              "language": "en-US",
+              "rel": [
+                "playercard"
+              ],
+              "href": "https://www.espn.com/mlb/player/_/id/4717832",
+              "text": "Player Card",
+              "shortText": "Player Card",
+              "isExternal": false,
+              "isPremium": false
+            }
+          ],
+          "birthPlace": {
+            "city": "Maracay",
+            "country": "Venezuela",
+            "displayText": "Maracay, Venezuela"
+          },
+          "slug": "kervin-castro",
+          "headshot": {
+            "href": "https://a.espncdn.com/i/headshots/mlb/players/full/4717832.png",
+            "alt": "Kervin Castro"
+          },
+          "jersey": "74",
+          "position": {
+            "id": "0",
+            "name": "Relief Pitcher",
+            "displayName": "Relief Pitcher",
+            "abbreviation": "RP",
+            "leaf": true,
+            "parent": {
+              "id": "1",
+              "name": "Pitcher",
+              "displayName": "Pitcher",
+              "abbreviation": "P",
+              "leaf": false
+            }
+          },
+          "positions": [
+            {
+              "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/positions/0?lang=en&region=us",
+              "id": "0",
+              "name": "Relief Pitcher",
+              "displayName": "Relief Pitcher",
+              "abbreviation": "RP",
+              "leaf": true,
+              "parent": {
+                "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/positions/1?lang=en&region=us"
+              },
+              "statistics": {
+                "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/seasons/2026/types/2/athletes/4717832/statistics/128?lang=en&region=us"
+              }
+            }
+          ],
+          "injuries": [
+            {
+              "status": "Out",
+              "date": "2026-11-03T05:16Z"
+            }
+          ],
+          "teams": [
+            {
+              "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/seasons/2026/teams/10?lang=en&region=us"
+            }
+          ],
+          "contracts": [],
+          "experience": {
+            "years": 3
+          },
+          "status": {
+            "id": "1",
+            "name": "Active",
+            "type": "active",
+            "abbreviation": "Active"
+          },
+          "bats": {
+            "type": "RIGHT",
+            "abbreviation": "R",
+            "displayValue": "Right"
+          },
+          "throws": {
+            "type": "RIGHT",
+            "abbreviation": "R",
+            "displayValue": "Right"
+          }
+        },
+        {
+          "id": "32081",
+          "uid": "s:1~l:10~a:32081",
+          "guid": "af61347b-c222-7604-92c0-be4da7756430",
+          "alternateIds": {
+            "sdr": "2503181"
+          },
+          "firstName": "Gerrit",
+          "lastName": "Cole",
+          "fullName": "Gerrit Cole",
+          "displayName": "Gerrit Cole",
+          "shortName": "G. Cole",
+          "weight": 220,
+          "displayWeight": "220 lbs",
+          "height": 76,
+          "displayHeight": "6' 4\"",
+          "age": 36,
+          "dateOfBirth": "1990-09-08T07:00Z",
+          "debutYear": 2013,
+          "links": [
+            {
+              "language": "en-US",
+              "rel": [
+                "playercard"
+              ],
+              "href": "https://www.espn.com/mlb/player/_/id/32081",
+              "text": "Player Card",
+              "shortText": "Player Card",
+              "isExternal": false,
+              "isPremium": false
+            }
+          ],
+          "birthPlace": {
+            "city": "Newport Beach",
+            "state": "CA",
+            "country": "United States",
+            "displayText": "Newport Beach, CA"
+          },
+          "college": {
+            "id": "26",
+            "guid": "5da8e04c-d85c-376d-b336-9342e0bfdd7c",
+            "mascot": "Bruins",
+            "name": "UCLA",
+            "shortName": "UCLA",
+            "abbrev": "UCLA",
+            "logos": [
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/ncaa/500/26.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full"
+                ],
+                "lastUpdated": "2025-12-23T01:44Z"
+              }
+            ]
+          },
+          "slug": "gerrit-cole",
+          "headshot": {
+            "href": "https://a.espncdn.com/i/headshots/mlb/players/full/32081.png",
+            "alt": "Gerrit Cole"
+          },
+          "jersey": "45",
+          "position": {
+            "id": "15",
+            "name": "Starting Pitcher",
+            "displayName": "Starting Pitcher",
+            "abbreviation": "SP",
+            "leaf": true,
+            "parent": {
+              "id": "1",
+              "name": "Pitcher",
+              "displayName": "Pitcher",
+              "abbreviation": "P",
+              "leaf": false
+            }
+          },
+          "positions": [
+            {
+              "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/positions/15?lang=en&region=us",
+              "id": "15",
+              "name": "Starting Pitcher",
+              "displayName": "Starting Pitcher",
+              "abbreviation": "SP",
+              "leaf": true,
+              "parent": {
+                "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/positions/1?lang=en&region=us"
+              },
+              "statistics": {
+                "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/seasons/2026/types/2/athletes/32081/statistics/127?lang=en&region=us"
+              }
+            }
+          ],
+          "injuries": [],
+          "teams": [
+            {
+              "$ref": "http://sports.core.api.espn.pvt/v2/sports/baseball/leagues/mlb/seasons/2026/teams/10?lang=en&region=us"
+            }
+          ],
+          "contracts": [
+            {
+              "salary": 531000,
+              "season": {
+                "year": 2015,
+                "startDate": "2015-02-28T08:00Z",
+                "endDate": "2015-11-05T19:59Z"
+              }
+            }
+          ],
+          "experience": {
+            "years": 13
+          },
+          "status": {
+            "id": "1",
+            "name": "Active",
+            "type": "active",
+            "abbreviation": "Active"
+          },
+          "bats": {
+            "type": "RIGHT",
+            "abbreviation": "R",
+            "displayValue": "Right"
+          },
+          "throws": {
+            "type": "RIGHT",
+            "abbreviation": "R",
+            "displayValue": "Right"
+          }
+        }
+      ]
+    }
+  ],
+  "coach": [
+    {
+      "id": "165",
+      "firstName": "Aaron",
+      "lastName": "Boone",
+      "experience": 9
+    }
+  ],
+  "team": {
+    "id": "10",
+    "abbreviation": "NYY",
+    "location": "New York",
+    "name": "Yankees",
+    "displayName": "New York Yankees",
+    "clubhouse": "https://www.espn.com/mlb/team/_/name/nyy/new-york-yankees",
+    "color": "132448",
+    "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/nyy.png",
+    "logoDark": "https://a.espncdn.com/i/teamlogos/mlb/500-dark/nyy.png",
+    "recordSummary": "93-68",
+    "seasonSummary": "2026",
+    "standingSummary": "2nd in AL East"
+  }
+}

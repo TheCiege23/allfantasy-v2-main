@@ -46,12 +46,15 @@ support_matrix:
       captured: 2026-10-31
       fixtures: [fixtures/scoreboard.NBA.20261106.json, fixtures/scoreboard.NBA.20251209.json, fixtures/scoreboard.NBA.20251213.json, fixtures/scoreboard.NBA.20251216.json]
     teams: { status: probed_full, fixture: fixtures/teams.NBA.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+    roster: { status: probed, fixture: fixtures/roster.NBA.team12.json, captured: 2026-11-27, see: roster.measured_2026_11_27 }
   NHL:
     sport_path: hockey/nhl
     teams: { status: probed_full, fixture: fixtures/teams.NHL.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+    roster: { status: probed, fixture: fixtures/roster.NHL.team13.json, captured: 2026-11-27, see: roster.measured_2026_11_27 }
   MLB:
     sport_path: baseball/mlb
     teams: { status: probed_full, fixture: fixtures/teams.MLB.json, captured: 2026-11-19, see: teams.measured_2026_11_19 }
+    roster: { status: probed, fixture: fixtures/roster.MLB.team10.json, captured: 2026-11-27, see: roster.measured_2026_11_27 }
     fantasy_league: { status: probed, fixture: fixtures/fantasy-league.MLB.2026.json, captured: 2026-10-03, see: fantasy_mlb }
   NCAAB:
     sport_path: basketball/mens-college-basketball
@@ -182,6 +185,14 @@ endpoints:
     note: >
       `athletes` is a FLAT array for NCAAB (not grouped by position as some
       ESPN sports are). Do not assume the grouped shape.
+    measured_2026_11_27:
+      # Pro-league current-team headshots (owner OK 2026-11-27, GAPS E-08). One team per sport, full
+      # bodies measured here, then trimmed with contracts/fleaflicker/scripts/trim-fixture.mjs.
+      NBA: { team: "12 LAC", http_status: 200, season: 2027, shape: flat, athletes: 19, with_headshot: 19, with_jersey: 19, full_body_bytes: 171056 }
+      NHL: { team: "13 NYR", http_status: 200, season: 2027, shape: grouped, groups: [Centers, Left Wings, Right Wings, Defense, Goalies], athletes: 34, with_headshot: 34, with_jersey: 34, full_body_bytes: 244126 }
+      MLB: { team: "10 NYY", http_status: 200, season: 2026, shape: grouped, groups: [Pitchers, Catchers, Infielders, Outfielders, Designated Hitter], athletes: 39, with_headshot: 38, with_jersey: 39, full_body_bytes: 377016 }
+      grouped_shape: "athletes: [ { position: <group name>, items: [ <athlete> ] } ] — NHL and MLB. NBA and NCAAB are flat. A parser must accept both."
+      trade_check: "Darius Garland, traded CLE -> LAC, is on the LAC roster: id 4396907, jersey '10', headshot.href https://a.espncdn.com/i/headshots/nba/players/full/4396907.png (TheSportsDB's cutout still shows the Cavaliers jersey)."
     fields:
       athletes[].id: { type: string, note: "ESPN athlete id; equals alternateIds.sdr in every probed row" }
       athletes[].fullName: { type: string }
@@ -228,6 +239,11 @@ endpoints:
 # ============================================================================
 headshot_cdn:
   url: https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/{athlete_id}.png
+  pro_urls:
+    # roster headshot.href, measured 2026-11-27 (roster.measured_2026_11_27)
+    NBA: https://a.espncdn.com/i/headshots/nba/players/full/{athlete_id}.png
+    NHL: https://a.espncdn.com/i/headshots/nhl/players/full/{athlete_id}.png
+    MLB: https://a.espncdn.com/i/headshots/mlb/players/full/{athlete_id}.png
   note: >
     Equal to roster headshot.href whenever that field is present. A 404 returns
     a 1-byte text/html body, so a fetcher must check content-type AND size,

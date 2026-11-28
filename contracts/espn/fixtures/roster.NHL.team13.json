@@ -1,0 +1,221 @@
+{
+  "timestamp": "2026-11-28T01:09:12Z",
+  "status": "success",
+  "season": {
+    "year": 2027,
+    "displayName": "2026-27",
+    "type": 2,
+    "name": "Regular Season"
+  },
+  "athletes": [
+    {
+      "position": "Centers",
+      "items": [
+        {
+          "id": "4996099",
+          "uid": "s:70~l:90~a:4996099",
+          "guid": "32319907-fa60-3b2d-b6fa-e14b7cb0a259",
+          "alternateIds": {
+            "sdr": "4996099"
+          },
+          "alternateId": "4996099",
+          "firstName": "Max",
+          "lastName": "Sasson",
+          "fullName": "Max Sasson",
+          "displayName": "Max Sasson",
+          "shortName": "M. Sasson",
+          "weight": 181,
+          "displayWeight": "181 lbs",
+          "height": 73,
+          "displayHeight": "6' 1\"",
+          "age": 26,
+          "dateOfBirth": "2000-09-05T07:00Z",
+          "links": [
+            {
+              "language": "en-US",
+              "rel": [
+                "playercard"
+              ],
+              "href": "https://www.espn.com/nhl/player/_/id/4996099",
+              "text": "Player Card",
+              "shortText": "Player Card",
+              "isExternal": false,
+              "isPremium": false
+            }
+          ],
+          "birthPlace": {
+            "city": "Birmingham",
+            "state": "MI",
+            "country": "USA",
+            "displayText": "Birmingham, MI"
+          },
+          "birthCountry": {
+            "abbreviation": "USA"
+          },
+          "college": {
+            "id": "2711",
+            "guid": "f96429e4-de05-3168-930b-390084bf89a1",
+            "mascot": "Broncos",
+            "name": "Western Michigan",
+            "shortName": "W Michigan",
+            "abbrev": "WMU",
+            "logos": [
+              {
+                "href": "https://a.espncdn.com/i/teamlogos/ncaa/500/2711.png",
+                "width": 500,
+                "height": 500,
+                "alt": "",
+                "rel": [
+                  "full"
+                ],
+                "lastUpdated": "2025-12-24T20:19Z"
+              }
+            ]
+          },
+          "slug": "max-sasson",
+          "headshot": {
+            "href": "https://a.espncdn.com/i/headshots/nhl/players/full/4996099.png",
+            "alt": "Max Sasson"
+          },
+          "jersey": "63",
+          "hand": {
+            "type": "LEFT",
+            "abbreviation": "L",
+            "displayValue": "Left"
+          },
+          "position": {
+            "id": "1",
+            "name": "Center",
+            "displayName": "Center",
+            "abbreviation": "C",
+            "leaf": true,
+            "parent": {
+              "id": "20",
+              "name": "Forward",
+              "displayName": "Forward",
+              "abbreviation": "F",
+              "leaf": true
+            }
+          },
+          "injuries": [],
+          "contracts": [],
+          "experience": {
+            "years": 3
+          },
+          "status": {
+            "id": "1",
+            "name": "Active",
+            "type": "active",
+            "abbreviation": "Active"
+          }
+        },
+        {
+          "id": "4352804",
+          "uid": "s:70~l:90~a:4352804",
+          "guid": "3db1a92b-c4ee-942a-b636-a86bad3dbecf",
+          "alternateIds": {
+            "sdr": "4352804"
+          },
+          "alternateId": "4352804",
+          "firstName": "Joe",
+          "lastName": "Veleno",
+          "fullName": "Joe Veleno",
+          "displayName": "Joe Veleno",
+          "shortName": "J. Veleno",
+          "weight": 207,
+          "displayWeight": "207 lbs",
+          "height": 73,
+          "displayHeight": "6' 1\"",
+          "age": 26,
+          "dateOfBirth": "2000-01-13T08:00Z",
+          "debutYear": 2018,
+          "links": [
+            {
+              "language": "en-US",
+              "rel": [
+                "playercard"
+              ],
+              "href": "https://www.espn.com/nhl/player/_/id/4352804",
+              "text": "Player Card",
+              "shortText": "Player Card",
+              "isExternal": false,
+              "isPremium": false
+            }
+          ],
+          "birthPlace": {
+            "city": "Montreal",
+            "state": "QC",
+            "country": "CAN",
+            "displayText": "Montreal, CAN"
+          },
+          "birthCountry": {
+            "abbreviation": "CAN"
+          },
+          "slug": "joe-veleno",
+          "headshot": {
+            "href": "https://a.espncdn.com/i/headshots/nhl/players/full/4352804.png",
+            "alt": "Joe Veleno"
+          },
+          "jersey": "90",
+          "hand": {
+            "type": "LEFT",
+            "abbreviation": "L",
+            "displayValue": "Left"
+          },
+          "position": {
+            "id": "1",
+            "name": "Center",
+            "displayName": "Center",
+            "abbreviation": "C",
+            "leaf": true,
+            "parent": {
+              "id": "20",
+              "name": "Forward",
+              "displayName": "Forward",
+              "abbreviation": "F",
+              "leaf": true
+            }
+          },
+          "injuries": [
+            {
+              "status": "Injured Reserve",
+              "date": "2026-11-20T16:23Z"
+            }
+          ],
+          "contracts": [],
+          "experience": {
+            "years": 6
+          },
+          "status": {
+            "id": "1",
+            "name": "Active",
+            "type": "active",
+            "abbreviation": "Active"
+          }
+        }
+      ]
+    }
+  ],
+  "coach": [
+    {
+      "id": "903",
+      "firstName": "Mike",
+      "lastName": "Sullivan",
+      "experience": 9
+    }
+  ],
+  "team": {
+    "id": "13",
+    "abbreviation": "NYR",
+    "location": "New York",
+    "name": "Rangers",
+    "displayName": "New York Rangers",
+    "clubhouse": "https://www.espn.com/nhl/team/_/name/nyr/new-york-rangers",
+    "color": "0056ae",
+    "logo": "https://a.espncdn.com/i/teamlogos/nhl/500/nyr.png",
+    "logoDark": "https://a.espncdn.com/i/teamlogos/nhl/500-dark/nyr.png",
+    "recordSummary": "13-11-1",
+    "seasonSummary": "2026-27",
+    "standingSummary": "4th in Metropolitan Division"
+  }
+}
