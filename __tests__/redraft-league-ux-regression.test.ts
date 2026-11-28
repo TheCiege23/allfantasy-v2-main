@@ -10,6 +10,7 @@ function read(rel: string): string {
 
 describe('post-merge redraft league UX contracts', () => {
   const leagueShell = read('app/league/[leagueId]/LeagueShell.tsx')
+  const draftHome = read('components/league/draft-home/PredraftDraftHome.tsx')
   const leagueTabs = read('app/league/[leagueId]/LeagueTabs.tsx')
   const translations = read('lib/i18n/translations-en.ts')
   const appShell = read('app/components/AppShell.tsx')
@@ -40,15 +41,14 @@ describe('post-merge redraft league UX contracts', () => {
     expect(appShell).toContain('myleagues-rail-expand')
   })
 
-  it('replaces the pre-draft dead end with draft room, settings, and mock draft actions', () => {
-    expect(leagueShell).toContain('Draft setup is ready')
+  it('replaces the pre-draft dead end with the one shared Draft home: enter room, settings, mock draft', () => {
     expect(leagueShell).not.toContain('Draft room is not open yet')
-    expect(leagueShell).toContain('data-testid="predraft-open-draft-room"')
-    expect(leagueShell).toContain('href={`/league/${leagueId}/draft`}')
-    expect(leagueShell).toContain('Open Live Draft Room')
-    expect(leagueShell).toContain("onOpenLeagueSettingsModal('draft')")
-    expect(leagueShell).toContain('data-testid="predraft-start-mock-draft"')
-    expect(leagueShell).toContain('Start mock draft')
+    expect(leagueShell).toContain('<PredraftDraftHome')
+    expect(leagueShell).toContain('onOpenSettings={onOpenLeagueSettingsModal}')
+    expect(draftHome).toContain('data-testid="predraft-open-draft-room"')
+    expect(draftHome).toContain('href={`/league/${leagueId}/draft`}')
+    expect(draftHome).toContain("onOpenSettings('draft')")
+    expect(draftHome).toContain('data-testid="predraft-start-mock-draft"')
   })
 
   it('uses the existing draft service and materializer before entering the draft room', () => {
