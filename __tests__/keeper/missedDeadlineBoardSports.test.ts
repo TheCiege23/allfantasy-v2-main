@@ -19,7 +19,7 @@ const db = vi.hoisted(() => {
     redraftRoster: { findMany: vi.fn(async () => state.rosters), count: vi.fn(async () => state.rosters.length) },
     keeperRecord: {
       findMany: vi.fn(async () => state.records),
-      create: vi.fn(async ({ data }: { data: { rosterId: string; playerId: string } }) => { state.records.push(data); return data }),
+      create: vi.fn(async ({ data }: { data: { rosterId: string; playerId: string; costRound?: number; status?: string; sport?: string } }) => { state.records.push(data); return data }),
     },
     leagueAuditLog: { findMany: vi.fn(async () => []), create: vi.fn(async () => ({})) },
     keeperEligibility: { findMany: vi.fn(async () => state.eligibility) },
