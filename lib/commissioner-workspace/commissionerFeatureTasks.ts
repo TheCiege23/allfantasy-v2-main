@@ -86,25 +86,48 @@ export function detectTradesInReview(leagueId: string, trades: readonly TradeInR
     })
 }
 
+/** "A, B, C and 13 more": a task names a few teams, never a paragraph of sixteen. */
+export function shortTeamList(names: readonly string[], show = 3): string {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]
+  if (names.length <= show) return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  return `${names.slice(0, show).join(', ')} and ${names.length - show} more`
+}
+
 /**
  * Teams manager health calls inactive that nobody has handed to AllFantasy (lib/inactive-manager).
  * One task for the group, as `detectInactiveManagers` does: the commissioner's action is one visit.
+ *
+ * 🛑 AN OPEN SEAT IS NOT AN INACTIVE MANAGER (owner report, 2026-11-28). A 16-team league with three
+ * managers read "16 inactive teams have nobody setting their lineups", followed by every team's name in
+ * one paragraph: thirteen "Open Team N" seats nobody has joined, plus the commissioner's own team. The
+ * seats are now counted as teams with no manager, the caller leaves out the league owner's own team,
+ * and the list stops at three names.
  */
-export function detectInactiveTeamsToManage(leagueId: string, suggested: readonly string[]): WorkspaceTaskCandidate | null {
-  if (suggested.length === 0) return null
-  const named =
-    suggested.length === 1
-      ? suggested[0]
-      : suggested.length === 2
-        ? `${suggested[0]} and ${suggested[1]}`
-        : `${suggested.slice(0, -1).join(', ')} and ${suggested[suggested.length - 1]}`
+export function detectInactiveTeamsToManage(
+  leagueId: string,
+  suggested: readonly string[],
+  openSeats: readonly string[] = [],
+): WorkspaceTaskCandidate | null {
+  if (suggested.length === 0 && openSeats.length === 0) return null
+  const n = suggested.length
+  const o = openSeats.length
+  const title =
+    n && o
+      ? `${n === 1 ? '1 inactive team' : `${n} inactive teams`} and ${o === 1 ? '1 open seat' : `${o} open seats`} need lineups`
+      : n
+        ? n === 1 ? 'An inactive team has nobody setting its lineup' : `${n} inactive teams have nobody setting their lineups`
+        : o === 1 ? 'A team has no manager' : `${o} teams have no manager`
+  const parts: string[] = []
+  if (n) parts.push(`${shortTeamList(suggested)} ${n === 1 ? 'looks' : 'look'} inactive.`)
+  if (o) parts.push(n ? `${o === 1 ? 'One team has' : `${o} teams have`} no manager yet.` : `${shortTeamList(openSeats)} ${o === 1 ? 'has' : 'have'} no manager yet. Invite someone, or`)
+  const them = n + o === 1 ? 'its' : 'their'
+  const offer = `let AllFantasy set ${them} projected-best lineup every week; it stops the moment a manager saves a lineup.`
+  const description = n || !o ? `${parts.join(' ')} You can ${offer}` : `${parts.join(' ')} ${offer}`
   return {
     sourceKey: 'inactive-manager-mode-suggestion:v1',
-    title: suggested.length === 1 ? 'An inactive team has nobody setting its lineup' : `${suggested.length} inactive teams have nobody setting their lineups`,
-    description:
-      `${named} ${suggested.length === 1 ? 'looks' : 'look'} inactive. You can let AllFantasy set ` +
-      `${suggested.length === 1 ? 'its' : 'their'} projected-best lineup every week until the manager comes back; ` +
-      'it stops by itself the moment the manager saves a lineup.',
+    title,
+    description,
     priority: 'standard',
     // AllFantasy suggests; only the commissioner turns it on. Never automated.
     automationCandidate: false,
@@ -210,10 +233,14 @@ export async function readCommissionerFeatureTasks(leagueId: string, now: Date):
     now,
   )
 
-  const suggested = inactive.native
-    ? inactive.teams.filter((t) => t.suggested).map((t) => t.teamName || t.managerName || 'A team')
-    : []
-  const inactiveTask = detectInactiveTeamsToManage(leagueId, suggested)
+  // The league owner's own team is never suggested to them: the commissioner reading this is not absent.
+  const candidates = inactive.native ? inactive.teams.filter((t) => t.suggested && !t.leagueOwnerTeam) : []
+  const label = (t: (typeof candidates)[number]) => t.teamName || t.managerName || 'A team'
+  const inactiveTask = detectInactiveTeamsToManage(
+    leagueId,
+    candidates.filter((t) => !t.emptySeat).map(label),
+    candidates.filter((t) => t.emptySeat).map(label),
+  )
 
   const payoutTask = detectPayoutOvercommitment(leagueId, overcommitment)
   const rolloverTask = detectRolloverDue(leagueId, rollover)

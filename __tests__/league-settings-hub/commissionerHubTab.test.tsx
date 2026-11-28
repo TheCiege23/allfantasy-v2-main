@@ -79,7 +79,9 @@ describe('Needs you', () => {
     render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="hub" />)
     expect(screen.getByText('Needs you · 3')).toBeTruthy()
     const rows = screen.getAllByTestId('hub-task')
-    expect(rows.map((r) => within(r).getAllByText(/./)[0]?.textContent)).toEqual(['Trade waiting on your review', 'Empty starting slot'])
+    expect(rows.map((r) => r.querySelector('.af-lsh-task-title')?.textContent)).toEqual(['Trade waiting on your review', 'Empty starting slot'])
+    // Each card says how urgent it is in words, not only with a coloured dot.
+    expect(rows.map((r) => r.querySelector('.af-lsh-task-tag')?.textContent)).toEqual(['Urgent', 'Soon'])
     expect(within(rows[0]!).getByRole('link', { name: 'Review' }).getAttribute('href')).toBe('/x/a')
     fireEvent.click(screen.getByRole('button', { name: 'Show 1 more' }))
     expect(screen.getAllByTestId('hub-task')).toHaveLength(3)
@@ -169,5 +171,34 @@ describe('Spanish', () => {
     expect(hubText('es', 'Needs you · 3')).toBe('Te necesita · 3')
     expect(hubText('es', 'Show 2 more')).toBe('Ver 2 más')
     expect(hubText('es', 'Commissioner Hub')).toBe('Centro del comisionado')
+  })
+})
+
+describe('the hub reads like an app (2026-11-28)', () => {
+  it('each tool is one tappable row with an icon and a chevron, not a sentence beside an "Open" pill', () => {
+    const onOpenEditor = vi.fn()
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={{ ...cb(), onOpenEditor }} initialTab="hub" />)
+    const row = screen.getByTestId('hub-edit-lineups')
+    expect(row.tagName).toBe('BUTTON')
+    expect(row.textContent).toContain('Edit lineups and records')
+    expect(row.querySelector('.af-lsh-nav-icon svg')).toBeTruthy()
+    expect(row.querySelector('.af-lsh-nav-chevron')).toBeTruthy()
+    fireEvent.click(row)
+    expect(onOpenEditor).toHaveBeenCalledWith('commissioner-tools:edit-lineups')
+  })
+
+  it('folds a long task detail to two lines with Show more', () => {
+    const long = 'Open Team 4, Open Team 5, Open Team 6 and 10 more have no manager yet. Invite someone, or let AllFantasy set their projected-best lineup every week; it stops the moment a manager saves a lineup.'
+    render(
+      <LeagueSettingsHubView
+        data={makeData('redraft', true, { commissionerTasks: { cards: [{ id: 'x', title: '13 teams have no manager', detail: long, severity: 'info', action: { label: 'Open', href: '/x' } }], overflow: [] } as never })}
+        cb={cb()}
+        initialTab="hub"
+      />,
+    )
+    const detail = document.querySelector('.af-lsh-task-detail') as HTMLElement
+    expect(detail.getAttribute('data-clamped')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Show more' }))
+    expect(detail.getAttribute('data-clamped')).toBeNull()
   })
 })

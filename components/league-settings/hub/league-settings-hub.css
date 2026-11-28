@@ -251,3 +251,31 @@
 .af-lsh-subfold > summary::-webkit-details-marker { display: none; }
 .af-lsh-subfold-chev { margin-left: auto; color: var(--lsh-muted); font-size: 14px; transition: rotate 0.15s ease; }
 .af-lsh-subfold[open] .af-lsh-subfold-chev { rotate: 180deg; }
+
+/* ── Commissioner Hub, app pass (2026-11-28) ────────────────────────────────────────────────────────
+ * Tools as tappable rows (icon · name · one muted line · chevron), tasks as small cards with a
+ * severity tag and a real action button. Owner report: the hub "looks like code, not ready for users". */
+.af-lsh-list[data-variant=nav] { gap: 0; }
+.af-lsh-row.af-lsh-nav { width: 100%; justify-content: flex-start; gap: 14px; min-height: 64px; padding: 10px 18px; border: 0; border-bottom: 1px solid rgba(255,255,255,.045); background: transparent; color: inherit; font: inherit; text-align: left; text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.af-lsh-row.af-lsh-nav:last-child { border-bottom: 0; }
+.af-lsh-row.af-lsh-nav:hover, .af-lsh-row.af-lsh-nav:focus-visible { background: rgba(255,255,255,.04); }
+.af-lsh-row.af-lsh-nav:active { background: rgba(255,255,255,.07); }
+.af-lsh-row.af-lsh-nav > .af-lsh-row-copy { flex: 1 1 auto; }
+.af-lsh-row.af-lsh-nav > .af-lsh-row-copy > span + span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-lsh-nav-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--lsh-accent) 14%, transparent); color: var(--lsh-accent); }
+.af-lsh-nav-chevron { flex: none; color: var(--lsh-muted); }
+
+.af-lsh-task { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 0 14px 10px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.025); }
+.af-lsh-task[data-severity=bad] { border-color: rgba(239,68,68,.4); }
+.af-lsh-task-tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 1px solid; border-radius: 11px; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.af-lsh-task-title { font-size: 15px; font-weight: 750; line-height: 1.3; }
+.af-lsh-task-detail { margin: 0; font-size: 13px; line-height: 1.45; color: var(--lsh-muted); }
+.af-lsh-task-detail[data-clamped=true] { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.af-lsh-task-more { padding: 0; border: 0; background: none; color: var(--lsh-accent); font-size: 12px; font-weight: 700; cursor: pointer; }
+.af-lsh-task > .af-lsh-btn { margin-top: 6px; }
+@media (max-width: 720px) {
+  .af-lsh-task > .af-lsh-btn { align-self: stretch; }
+  .af-lsh-row.af-lsh-nav { padding: 10px 14px; }
+  /* Room for the floating chat buttons: the last row is never under them. */
+  [data-testid=league-settings-hub-commissioner] > .af-lsh-card:last-child { margin-bottom: 88px; }
+}
