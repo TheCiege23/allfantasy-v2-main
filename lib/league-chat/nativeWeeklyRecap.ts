@@ -3,8 +3,13 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { postChimmyMoment } from '@/lib/league-chat/chimmyMoments'
 import { describeExtraMatchupReason, extraMatchupResults, readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
-import { buildStorylineFacts, rivalryPairKey, storylineLines } from '@/lib/league-chat/nativeRecapStorylines'
+import { buildStorylineFacts, storylineLines } from '@/lib/league-chat/nativeRecapStorylines'
 import { nativeSeatMap } from '@/lib/redraft/nativePlayerWeeklyScores'
+import { weeklyAwardLines } from '@/lib/league-chat/weeklyRecapMoment'
+import { aggregateH2HSeasons } from '@/lib/league-history/sleeperH2HService'
+import { nativeH2HSeasonData } from '@/lib/league-history/nativeH2HSeason'
+import { loadSeasonRivalryPairKeys } from '@/lib/schedule-runtime/rivalryWeekService'
+import { getSportEmoji } from '@/lib/multi-sport/SportSelectorUIService'
 
 export type NativeRecapGame = {
   home: string
@@ -22,20 +27,23 @@ export function buildNativeWeeklyRecap(input: {
   leagueName: string
   season: number
   week: number
+  /** The league's sport, for the Results heading (it read 🏈 for every sport). */
+  sport?: string | null
   games: NativeRecapGame[]
   leaders: Array<{ name: string; wins: number; losses: number; ties: number }>
+  /**
+   * The week's awards, already worded by `weeklyAwardLines` (lib/league-chat/weeklyRecapMoment.ts) from
+   * `aggregateH2HSeasons` — the same awards and wording as the Sleeper recap. Replaces the recap's own top score.
+   */
+  awardLines?: string[]
   /** The week's storylines (lib/league-chat/nativeRecapStorylines.ts), already worded. */
   storylines?: string[]
 }): string {
   const { games } = input
-  const top = [...games.flatMap((game) => [
-    { name: game.home, score: game.homeScore },
-    { name: game.away, score: game.awayScore },
-  ])].sort((a, b) => b.score - a.score)[0]
   const lines = [
     `📺 Week ${input.week} recap — ${input.leagueName} (${input.season})`,
     '',
-    '🏈 Results',
+    `${getSportEmoji(String(input.sport ?? 'NFL'))} Results`,
     ...games.map((game) => {
       const tag = game.extraReason ? ` — extra matchup (${game.away}: ${game.extraReason})` : ''
       if (game.homeScore === game.awayScore) {
@@ -54,7 +62,7 @@ export function buildNativeWeeklyRecap(input: {
       `${index + 1}. ${r.name} (${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''})`,
     ).join(' · ')}`)
   }
-  if (top) lines.push('', `🏆 Top score: ${top.name}, ${points(top.score)}`)
+  if (input.awardLines && input.awardLines.length > 0) lines.push(...input.awardLines)
   if (input.storylines && input.storylines.length > 0) lines.push('', '📰 Storylines', ...input.storylines)
   lines.push('', 'Every result comes from finalized AllFantasy matchups.')
   return lines.join('\n')
@@ -78,12 +86,12 @@ export async function buildNativeRecapForLeague(input: {
   const season =
     (await prisma.redraftSeason.findUnique({
       where: { leagueId_season: { leagueId: input.leagueId, season: input.seasonYear } },
-      select: { id: true, season: true },
+      select: { id: true, season: true, sport: true },
     })) ??
     (await prisma.redraftSeason.findFirst({
       where: { leagueId: input.leagueId, season: { lt: input.seasonYear } },
       orderBy: [{ season: 'desc' }, { createdAt: 'desc' }],
-      select: { id: true, season: true },
+      select: { id: true, season: true, sport: true },
     }))
   if (!season) return { ok: false, reason: 'no current season' }
 
@@ -138,6 +146,9 @@ export async function buildNativeRecapForLeague(input: {
       })
     }
   }
+  const awardLines = await loadNativeRecapAwardLines({ seasonId: season.id, season: season.season, week: latest.week, extras }).catch(
+    () => [] as string[],
+  )
   const storylines = await loadNativeRecapStorylines({
     leagueId: input.leagueId,
     seasonId: season.id,
@@ -148,6 +159,7 @@ export async function buildNativeRecapForLeague(input: {
     leagueName: input.leagueName,
     season: season.season,
     week: latest.week,
+    sport: season.sport,
     games: [
       ...rows.map((row) => ({
         home: name(row.homeRoster),
@@ -160,9 +172,37 @@ export async function buildNativeRecapForLeague(input: {
     leaders: rosters.map((roster) => ({
       name: name(roster), wins: roster.wins, losses: roster.losses, ties: roster.ties,
     })),
+    awardLines,
     storylines,
   })
   return { ok: true, season: season.season, week: latest.week, text }
+}
+
+/**
+ * The week's awards through the platform's one weekly-awards calculator (`aggregateH2HSeasons`, which the Sleeper
+ * recap and the Legacy tab use), fed this season's finished head-to-head games by `nativeH2HSeasonData`, and worded
+ * by the same `weeklyAwardLines`. Empty when the newest played week is not the week being recapped.
+ */
+async function loadNativeRecapAwardLines(input: {
+  seasonId: string
+  season: number
+  week: number
+  extras: ReadonlyArray<{ leftoverRosterId: string; leftoverScore: number }>
+}): Promise<string[]> {
+  const [games, teams] = await Promise.all([
+    prisma.redraftMatchup.findMany({
+      where: { seasonId: input.seasonId, isMedianMatchup: false, type: 'regular', awayRosterId: { not: null }, week: { lte: input.week } },
+      select: { week: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true, status: true, isMedianMatchup: true },
+    }),
+    prisma.redraftRoster.findMany({ where: { seasonId: input.seasonId }, select: { id: true, teamName: true, ownerName: true } }),
+  ])
+  // This week's extra matchup, if the league plays one: the leftover team's score counts as its week score.
+  const extraScores = input.extras.map((x) => ({ week: input.week, rosterId: x.leftoverRosterId, points: x.leftoverScore }))
+  const seasonData = nativeH2HSeasonData({ season: input.season, games, teams, throughWeek: input.week, extraScores })
+  const awards = aggregateH2HSeasons([seasonData]).latestWeekAwards
+  if (!awards || awards.week !== input.week) return []
+  const nameOf = (id: string | null | undefined) => (id ? seasonData.managers[id]?.name : undefined) ?? 'Open team'
+  return weeklyAwardLines(awards, nameOf)
 }
 
 const WEEK_MS = 7 * 86_400_000
@@ -172,14 +212,13 @@ const WEEK_MS = 7 * 86_400_000
  * the recap: a recap without storylines is still a correct recap.
  */
 async function loadNativeRecapStorylines(input: { leagueId: string; seasonId: string; seasonYear: number; week: number }): Promise<string[]> {
-  const [games, rosters, links, rivalryRecords, rivalryWeekRow, redraftTrades, afTrades] = await Promise.all([
+  const [games, rosters, links, rivalryWeekRow, redraftTrades, afTrades] = await Promise.all([
     prisma.redraftMatchup.findMany({
-      where: { seasonId: input.seasonId, status: 'final', isMedianMatchup: false, type: 'regular', awayRosterId: { not: null }, week: { lte: input.week } },
+      where: { seasonId: input.seasonId, status: 'final', isMedianMatchup: false, type: 'regular', awayRosterId: { not: null }, week: input.week },
       select: { week: true, homeRosterId: true, awayRosterId: true, homeScore: true, awayScore: true },
     }),
-    prisma.redraftRoster.findMany({ where: { seasonId: input.seasonId }, select: { id: true, teamName: true, ownerName: true } }),
+    prisma.redraftRoster.findMany({ where: { seasonId: input.seasonId }, select: { id: true, ownerId: true, teamName: true, ownerName: true } }),
     prisma.roster.findMany({ where: { leagueId: input.leagueId }, select: { id: true, redraftRosterId: true } }),
-    prisma.rivalryRecord.findMany({ where: { leagueId: input.leagueId, rivalryScore: { gt: 0 } }, select: { managerAId: true, managerBId: true } }).catch(() => []),
     prisma.leagueAuditLog.findFirst({ where: { leagueId: input.leagueId, actionType: 'schedule_rivalry_week' }, orderBy: { createdAt: 'desc' }, select: { metadata: true } }).catch(() => null),
     prisma.redraftTradeProposal.findMany({
       where: { seasonId: input.seasonId, status: { in: ['accepted', 'processed'] }, processedAt: { gte: new Date(Date.now() - WEEK_MS) } },
@@ -192,12 +231,9 @@ async function loadNativeRecapStorylines(input: { leagueId: string; seasonId: st
   ])
   const seasonIds = new Set(rosters.map((r) => r.id))
   const toRedraft = new Map(links.filter((l) => l.redraftRosterId && seasonIds.has(l.redraftRosterId)).map((l) => [l.id, l.redraftRosterId!]))
-  const rivalryPairs = new Set<string>()
-  for (const r of rivalryRecords) {
-    const a = toRedraft.get(r.managerAId)
-    const b = toRedraft.get(r.managerBId)
-    if (a && b) rivalryPairs.add(rivalryPairKey(a, b))
-  }
+  // The league's rivalries by the same scores rivalry week pairs from (engine records + the league's own games and
+  // divisions). It read the engine's records alone, so a league that plays here, which has none, named no rivalry.
+  const rivalryPairs = await loadSeasonRivalryPairKeys({ leagueId: input.leagueId, rosters }).catch(() => new Set<string>())
   const rivalryWeekMeta = rivalryWeekRow?.metadata as { week?: unknown } | null | undefined
   const trades = [
     ...redraftTrades.map((t) => ({ aId: t.proposerRosterId, bId: t.receiverRosterId })),
@@ -230,7 +266,7 @@ async function loadNativeRecapStorylines(input: { leagueId: string; seasonId: st
 
   const facts = buildStorylineFacts({
     week: input.week,
-    seasonGames: games.map((g) => ({ week: g.week, homeId: g.homeRosterId, awayId: g.awayRosterId!, homeScore: g.homeScore, awayScore: g.awayScore })),
+    weekGames: games.map((g) => ({ week: g.week, homeId: g.homeRosterId, awayId: g.awayRosterId!, homeScore: g.homeScore, awayScore: g.awayScore })),
     rivalryPairs,
     rivalryWeek: Number(rivalryWeekMeta?.week) === input.week,
     trades,

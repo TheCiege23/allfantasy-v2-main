@@ -79,26 +79,22 @@ type Prepared = {
   gamesPerWeek: number
 }
 
-async function prepare(seasonId: string, week: number, now: Date): Promise<Prepared | Failure> {
-  const season = await prisma.redraftSeason.findUnique({
-    where: { id: seasonId },
-    select: {
-      id: true, leagueId: true, sport: true, season: true, currentWeek: true, playoffStartWeek: true,
-      schedule: { select: { week: true, status: true, homeScore: true, awayScore: true } },
-      rosters: { select: { id: true, ownerId: true, teamName: true, ownerName: true }, orderBy: { id: 'asc' } },
-      league: { select: { settings: true } },
-    },
-  })
-  if (!season) return { ok: false, status: 404, code: 'SEASON_NOT_FOUND', message: 'Season not found.' }
-  const wk = Math.floor(week)
-  if (!Number.isFinite(wk) || wk < 1 || wk >= season.playoffStartWeek) {
-    return { ok: false, status: 400, code: 'NOT_REGULAR_SEASON', message: 'Rivalry week has to be a regular-season week.' }
-  }
-  if (weekHasStarted(wk, { currentWeek: season.currentWeek, sport: season.sport, seasonYear: season.season, now, persisted: season.schedule })) {
-    return { ok: false, status: 409, code: 'WEEK_STARTED', message: `Week ${wk} has already started, so it can no longer become rivalry week.` }
-  }
-  if (season.rosters.length < 2) return { ok: false, status: 409, code: 'NOT_ENOUGH_TEAMS', message: 'Rivalry week needs at least two teams.' }
-
+/**
+ * The season's rivalry scores, one per pair of this season's teams: the rivalry engine's records (mapped from the
+ * league's rosters to this season's teams) first, then the league's own games and divisions
+ * (`scoreNativeRivalries`) for every pair the engine has not scored. This is what rivalry week pairs from, and the
+ * weekly recap names a game a rivalry game by the same scores (lib/league-chat/nativeWeeklyRecap.ts), so the two
+ * never disagree about which teams are rivals.
+ */
+export async function loadSeasonRivalryScores(season: {
+  leagueId: string
+  rosters: ReadonlyArray<{ id: string; ownerId: string }>
+}): Promise<{
+  scores: RivalryPairScore[]
+  recordByPair: Map<string, string>
+  nativeReasons: Map<string, string[]>
+  board: { rows: Array<{ id: string; chips: Array<{ label: string }>; context: string | null }> }
+}> {
   // Rivalries are recorded on the league's rosters (LeagueTeam.externalId = Roster.id); matchups use the season's
   // RedraftRoster, linked from the roster.
   const [records, links, board] = await Promise.all([
@@ -139,6 +135,42 @@ async function prepare(seasonId: string, week: number, now: Date): Promise<Prepa
     scores.push({ a: rivalry.a, b: rivalry.b, score: rivalry.score })
     nativeReasons.set(key, rivalry.reasons)
   }
+  return { scores, recordByPair, nativeReasons, board }
+}
+
+/** The pairs of this season's teams that are rivals (score above 0), as sorted `a|b` keys. */
+export async function loadSeasonRivalryPairKeys(season: {
+  leagueId: string
+  rosters: ReadonlyArray<{ id: string; ownerId: string }>
+}): Promise<Set<string>> {
+  const { scores } = await loadSeasonRivalryScores(season)
+  return new Set(scores.filter((s) => s.score > 0).map((s) => [s.a, s.b].sort().join('|')))
+}
+
+async function prepare(seasonId: string, week: number, now: Date): Promise<Prepared | Failure> {
+  const season = await prisma.redraftSeason.findUnique({
+    where: { id: seasonId },
+    select: {
+      id: true, leagueId: true, sport: true, season: true, currentWeek: true, playoffStartWeek: true,
+      schedule: { select: { week: true, status: true, homeScore: true, awayScore: true } },
+      rosters: { select: { id: true, ownerId: true, teamName: true, ownerName: true }, orderBy: { id: 'asc' } },
+      league: { select: { settings: true } },
+    },
+  })
+  if (!season) return { ok: false, status: 404, code: 'SEASON_NOT_FOUND', message: 'Season not found.' }
+  const wk = Math.floor(week)
+  if (!Number.isFinite(wk) || wk < 1 || wk >= season.playoffStartWeek) {
+    return { ok: false, status: 400, code: 'NOT_REGULAR_SEASON', message: 'Rivalry week has to be a regular-season week.' }
+  }
+  if (weekHasStarted(wk, { currentWeek: season.currentWeek, sport: season.sport, seasonYear: season.season, now, persisted: season.schedule })) {
+    return { ok: false, status: 409, code: 'WEEK_STARTED', message: `Week ${wk} has already started, so it can no longer become rivalry week.` }
+  }
+  if (season.rosters.length < 2) return { ok: false, status: 409, code: 'NOT_ENOUGH_TEAMS', message: 'Rivalry week needs at least two teams.' }
+
+  const { scores, recordByPair, nativeReasons, board } = await loadSeasonRivalryScores({
+    leagueId: season.leagueId,
+    rosters: season.rosters,
+  })
   if (!scores.some((s) => s.score > 0)) {
     return {
       ok: false,

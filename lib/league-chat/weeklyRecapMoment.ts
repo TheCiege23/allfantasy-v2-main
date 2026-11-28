@@ -117,6 +117,27 @@ export function chimmyCall(
  * The recap's text. PURE. `rosters` / `users` / `matchups` are Sleeper's week feed as the cron read
  * it; pass nulls when a read failed and those sections are simply left out.
  */
+/**
+ * The "🏆 Weekly awards" section, worded once for every recap: this Sleeper recap and the native AllFantasy recap
+ * (lib/league-chat/nativeWeeklyRecap.ts) both build `WeeklyAwards` with `aggregateH2HSeasons`
+ * (lib/league-history/sleeperH2HService.ts) and print them here, so a league reads the same awards wherever it plays.
+ * Empty when the week has no award to name.
+ */
+export function weeklyAwardLines(awards: WeeklyAwards, nameOf: (ownerId: string | null | undefined) => string): string[] {
+  const lines: string[] = []
+  if (awards.topScore) lines.push(`  🚀 Boom of the week: ${nameOf(awards.topScore.ownerId)}, ${awards.topScore.points.toFixed(1)}`)
+  if (awards.lowScore) lines.push(`  🥀 Bust of the week: ${nameOf(awards.lowScore.ownerId)}, ${awards.lowScore.points.toFixed(1)}`)
+  if (awards.narrowEscape)
+    lines.push(
+      `  😅 Narrow escape: ${nameOf(awards.narrowEscape.winnerOwnerId)} over ${nameOf(awards.narrowEscape.loserOwnerId)} by ${awards.narrowEscape.margin.toFixed(1)}`,
+    )
+  if (awards.biggestBlowout)
+    lines.push(
+      `  🔨 Hammer of the week: ${nameOf(awards.biggestBlowout.winnerOwnerId)} over ${nameOf(awards.biggestBlowout.loserOwnerId)} by ${awards.biggestBlowout.margin.toFixed(1)}`,
+    )
+  return lines.length > 0 ? ['', '🏆 Weekly awards', ...lines] : []
+}
+
 export function buildWeeklyRecap(input: {
   leagueName: string
   sleeperLeagueId: string
@@ -190,17 +211,7 @@ export function buildWeeklyRecap(input: {
   }
 
   // ── Weekly awards (the same numbers the Legacy tab shows) ──
-  lines.push('', '🏆 Weekly awards')
-  if (awards.topScore) lines.push(`  🚀 Boom of the week: ${nameOf(awards.topScore.ownerId)}, ${awards.topScore.points.toFixed(1)}`)
-  if (awards.lowScore) lines.push(`  🥀 Bust of the week: ${nameOf(awards.lowScore.ownerId)}, ${awards.lowScore.points.toFixed(1)}`)
-  if (awards.narrowEscape)
-    lines.push(
-      `  😅 Narrow escape: ${nameOf(awards.narrowEscape.winnerOwnerId)} over ${nameOf(awards.narrowEscape.loserOwnerId)} by ${awards.narrowEscape.margin.toFixed(1)}`,
-    )
-  if (awards.biggestBlowout)
-    lines.push(
-      `  🔨 Hammer of the week: ${nameOf(awards.biggestBlowout.winnerOwnerId)} over ${nameOf(awards.biggestBlowout.loserOwnerId)} by ${awards.biggestBlowout.margin.toFixed(1)}`,
-    )
+  lines.push(...weeklyAwardLines(awards, nameOf))
 
   // ── All-time records broken THIS week (from the records book) ──
   const r = h2h.records

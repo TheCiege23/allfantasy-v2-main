@@ -63,7 +63,6 @@ const JOB_PATHS = new Set([
   '/api/redraft/score-sync',
   '/api/redraft/waiver-process',
   '/api/keeper/session',
-  '/api/redraft/ai/weekly-recap',
   '/api/redraft/ai/power-rankings',
   '/api/guillotine/ai/storyline',
   '/api/tournament/automation',
