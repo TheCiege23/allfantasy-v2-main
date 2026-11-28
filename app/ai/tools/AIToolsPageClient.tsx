@@ -280,7 +280,7 @@ export default function AIToolsPageClient() {
           <div className="mb-2 flex items-center gap-2">
             <Brain className="h-5 w-5 text-cyan-400" />
             <p className="text-[11px] font-bold uppercase tracking-widest text-cyan-400/70">
-              AF Intelligence Hub
+              Chimmy Intelligence Hub
             </p>
           </div>
           <h1 className="mb-2 text-[26px] font-black leading-tight tracking-tight text-white sm:text-[32px]">

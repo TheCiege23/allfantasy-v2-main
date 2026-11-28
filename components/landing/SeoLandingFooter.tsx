@@ -14,7 +14,7 @@ const FOOTER_SECTIONS = [
       { href: '/dashboard', label: 'Dashboard' },
       { href: '/discover/leagues', label: 'Leagues' },
       { href: '/war-room', label: 'AF Legacy' },
-      { href: '/ai/tools', label: 'AF Intelligence Hub' },
+      { href: '/ai/tools', label: 'Chimmy Intelligence Hub' },
       { href: '/core/rankings', label: 'Rankings' },
       { href: '/find-league', label: 'Find a League' },
     ],

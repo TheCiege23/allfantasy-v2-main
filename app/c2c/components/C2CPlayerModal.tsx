@@ -229,7 +229,7 @@ export function C2CPlayerModal({
               className="mt-2 inline-flex justify-center rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
               data-testid="c2c-player-modal-ai"
             >
-              {aiLoading ? 'Analyzing…' : 'Chimmy Analysis (AF Intelligence)'}
+              {aiLoading ? 'Analyzing…' : 'Chimmy Analysis (Chimmy Intelligence)'}
             </button>
             </FeatureGate>
           ) : (

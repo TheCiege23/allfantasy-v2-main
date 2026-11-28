@@ -84,7 +84,7 @@ describe('C2C user-facing copy', () => {
     const src = readFileSync(path.join(process.cwd(), rel), 'utf8')
     expect(src).not.toMatch(/\(AfSub\)/)
     expect(src).not.toMatch(/PlayerWeeklyScore/)
-    // The modal's campus read is AF Intelligence since 2026-11-28 (owner); the AI panel stays AF Commissioner.
-    expect(src).toContain(rel.endsWith('C2CPlayerModal.tsx') ? '(AF Intelligence)' : '(AF Commissioner)')
+    // The modal's campus read is Chimmy Intelligence (af_intelligence) since 2026-11-28 (owner); the AI panel stays AF Commissioner.
+    expect(src).toContain(rel.endsWith('C2CPlayerModal.tsx') ? '(Chimmy Intelligence)' : '(AF Commissioner)')
   })
 })

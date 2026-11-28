@@ -535,7 +535,7 @@ export function IDPPlayerModal({
               data-testid="idp-player-ai-analysis"
             >
               {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-amber-200/90" />}
-              Chimmy Analysis (AF Intelligence)
+              Chimmy Analysis (Chimmy Intelligence)
             </button>
           </div>
         </DialogContent>

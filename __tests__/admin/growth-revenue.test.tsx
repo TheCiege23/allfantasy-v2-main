@@ -162,7 +162,7 @@ describe('the page', () => {
     expect(screen.getByTestId('admin-growth-funnel').querySelectorAll('li')).toHaveLength(5)
     // In 'What sells' and again in the AF Intelligence locks group (2026-11-22), which also sums them.
     expect(screen.getAllByText('Player depth lock')).toHaveLength(2)
-    expect(screen.getByText('All AF Intelligence locks')).toBeTruthy()
+    expect(screen.getByText('All Chimmy Intelligence locks')).toBeTruthy()
     expect(screen.getByText('$999.00')).toBeTruthy()
     expect(screen.getByText('3 of 4')).toBeTruthy()
     expect(screen.getByTestId('admin-growth-errors').textContent).toContain('Could not read referral weeks')
