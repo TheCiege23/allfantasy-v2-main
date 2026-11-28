@@ -69,7 +69,7 @@ describe('Make it official', () => {
   it("copies the schedule from this week, stamps the league official, switches the commissioner's team and makes the invite link", async () => {
     const out = await makeLeagueOfficial({ leagueId: 'L1', userId: 'commish', now })
 
-    expect(out).toEqual({ ok: true, alreadyOfficial: false, invitePath: '/join/tok-1', scoring: 'converted', matchupsCreated: 70, weeksFinal: 11, switchedTeams: 2 })
+    expect(out).toEqual({ ok: true, alreadyOfficial: false, invitePath: '/join/tok-1', scoring: 'converted', matchupsCreated: 70, weeksFinal: 11, switchedTeams: 2, switchingEnded: false })
     expect(h.copySchedule).toHaveBeenCalledWith('L1', { currentWeek: 12 })
     expect(h.writeRoster).toHaveBeenCalledWith('L1', { templateKey: 'custom', slots: [{ slot: 'QB', count: 1 }] }, { userId: 'commish', auditAction: 'import' })
     const s = written()!
@@ -131,7 +131,7 @@ describe("a manager's Switch to AllFantasy", () => {
   })
 
   it('switches their own team, keeping every other stamp', async () => {
-    expect(await switchTeamToAllFantasy({ leagueId: 'L1', userId: 'mgr-2', now })).toEqual({ ok: true, alreadySwitched: false, leagueOfficial: false, teamName: 'Owls' })
+    expect(await switchTeamToAllFantasy({ leagueId: 'L1', userId: 'mgr-2', now })).toEqual({ ok: true, alreadySwitched: false, leagueOfficial: false, teamName: 'Owls', switchingEnded: false })
     expect(written()!.switching.teams).toEqual({ 'team-9': { at: 'earlier', byUserId: 'mgr-9' }, 'team-2': { at: now.toISOString(), byUserId: 'mgr-2' } })
   })
 

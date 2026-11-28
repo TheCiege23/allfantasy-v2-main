@@ -11,9 +11,10 @@ import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { resolveActingRoster } from '@/lib/league/viewerTeams'
 import { hasTeamSwitched, isOfficialOnAllFantasy, withTeamSwitched } from './switchingLeague'
+import { endSwitchingInTransaction, tellCommissionerSwitchingEnded } from './endSwitching'
 
 export type SwitchTeamResult =
-  | { ok: true; alreadySwitched: boolean; leagueOfficial: boolean; teamName: string }
+  | { ok: true; alreadySwitched: boolean; leagueOfficial: boolean; teamName: string; switchingEnded?: boolean }
   | { ok: false; status: number; reason: string }
 
 const record = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
@@ -39,12 +40,19 @@ export async function switchTeamToAllFantasy(args: {
   if (!team) return { ok: false, status: 404, reason: "We can't find your team in this league yet. Try again after the next sync." }
   const teamName = team.teamName?.trim() || 'Your team'
 
-  return prisma.$transaction(async (tx) => {
+  const stamp = { at: (args.now ?? new Date()).toISOString(), byUserId: args.userId }
+  const result = await prisma.$transaction(async (tx) => {
     const fresh = await tx.league.findUnique({ where: { id: args.leagueId }, select: { settings: true } })
     const leagueOfficial = isOfficialOnAllFantasy(fresh?.settings)
     if (hasTeamSwitched(fresh?.settings, team.id)) return { ok: true as const, alreadySwitched: true, leagueOfficial, teamName }
-    const state = withTeamSwitched(fresh?.settings, team.id, { at: (args.now ?? new Date()).toISOString(), byUserId: args.userId })
+    const state = withTeamSwitched(fresh?.settings, team.id, stamp)
     await tx.league.update({ where: { id: args.leagueId }, data: { settings: { ...record(fresh?.settings), switching: state } as never } })
-    return { ok: true as const, alreadySwitched: false, leagueOfficial, teamName }
+    // The last team to switch ends the switching period by itself (step 5). Only in an official league.
+    const ended = leagueOfficial
+      ? await endSwitchingInTransaction(tx, { leagueId: args.leagueId, stamp, onlyIfEveryoneSwitched: true })
+      : null
+    return { ok: true as const, alreadySwitched: false, leagueOfficial, teamName, switchingEnded: ended != null }
   })
+  if (result.switchingEnded) await tellCommissionerSwitchingEnded(args.leagueId, [])
+  return result
 }

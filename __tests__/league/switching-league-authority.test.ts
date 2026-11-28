@@ -40,7 +40,7 @@ describe('the switching state', () => {
     expect(hasTeamSwitched(officialWithTeam, null)).toBe(false)
     const again = withTeamSwitched(officialWithTeam, 'team-a', { at: 'later', byUserId: 'x' })
     expect(again.teams['team-a']).toEqual({ at: stamp.at, byUserId: 'mgr-a' })
-    expect(readSwitchingState(settingsWith({ official: { at: 1 }, teams: { t: 'junk' } }))).toEqual({ official: null, teams: {} })
+    expect(readSwitchingState(settingsWith({ official: { at: 1 }, teams: { t: 'junk' } }))).toEqual({ official: null, teams: {}, ended: null, leftBehind: [] })
   })
 
   it('survives a re-import, and reaches the sidebar', () => {

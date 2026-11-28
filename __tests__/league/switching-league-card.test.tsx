@@ -68,6 +68,33 @@ describe('the commissioner card', () => {
   })
 })
 
+describe("Everyone's here", () => {
+  const official = { ...inSeason, official: true, invitePath: '/join/tok', teams: [
+    { name: 'Ghosts', manager: 'A', switched: true },
+    { name: 'Owls', manager: 'B', switched: false },
+  ] }
+
+  it('asks once more, says what stops, then posts the end', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    const onChanged = vi.fn()
+    render(<SwitchingLeagueCommissionerView leagueId="L1" state={official} onChanged={onChanged} />)
+    fireEvent.click(screen.getByText("Everyone's here"))
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.getByText(/This team stops copying from Sleeper/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Yes, stop copying'))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    expect(fetchMock).toHaveBeenCalledWith('/api/leagues/L1/switching/end', { method: 'POST' })
+  })
+
+  it('once ended: the teams that had not switched, and no button', () => {
+    render(<SwitchingLeagueCommissionerView leagueId="L1" onChanged={() => {}} state={{ ...official, ended: true, leftBehind: [{ name: 'Owls', manager: 'B' }] }} />)
+    expect(screen.getByText('Your league runs fully on AllFantasy')).toBeTruthy()
+    expect(screen.getByTestId('switching-left-behind').textContent).toBe('Owls · B')
+    expect(screen.queryByText("Everyone's here")).toBeNull()
+  })
+})
+
 describe('one switch card at a time in the Commissioner tab', () => {
   const offseason = <p>offseason switch card</p>
   const withState = (state: Partial<SwitchingState>) =>
@@ -78,6 +105,12 @@ describe('one switch card at a time in the Commissioner tab', () => {
     render(<ImportedLeagueSwitchCard leagueId="L1" offseasonCard={offseason} />)
     expect(await screen.findByText('Make AllFantasy your official league')).toBeTruthy()
     expect(screen.queryByText('offseason switch card')).toBeNull()
+  })
+
+  it('in the offseason the in-place card finishes even an official league', async () => {
+    withState({ seasonInProgress: false, official: true, ended: true })
+    render(<ImportedLeagueSwitchCard leagueId="L1" offseasonCard={offseason} />)
+    expect(await screen.findByText('offseason switch card')).toBeTruthy()
   })
 
   it('[control] in the offseason: the in-place switch card', async () => {
