@@ -51,6 +51,8 @@ type UseLiveDraftSyncProps = {
   fetchDraftAssistantContext: () => Promise<unknown>
   fetchDraftPool: () => Promise<unknown>
   fetchLeagueAiAdp: () => Promise<unknown>
+  /** Rosters whose manager has the room open (lib/draft-room/draftPresence.ts). */
+  setOnlineRosterIds?: React.Dispatch<React.SetStateAction<string[]>>
 }
 
 export function useLiveDraftSync({
@@ -76,6 +78,7 @@ export function useLiveDraftSync({
   fetchDraftAssistantContext,
   fetchDraftPool,
   fetchLeagueAiAdp,
+  setOnlineRosterIds,
 }: UseLiveDraftSyncProps): void {
   const [pollInterval, setPollInterval] = useState(POLL_MS)
   const refetchOnceRef = useRef<(() => void) | null>(null)
@@ -107,6 +110,12 @@ export function useLiveDraftSync({
         if (opts.includeQueue && Array.isArray(data.queue)) {
           const next = data.queue as QueueEntry[]
           setQueue((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next))
+        }
+
+        const online = data.presence?.onlineRosterIds
+        if (setOnlineRosterIds && Array.isArray(online)) {
+          const next = (online as unknown[]).filter((x): x is string => typeof x === 'string')
+          setOnlineRosterIds((prev) => (prev.length === next.length && prev.every((x, i) => x === next[i]) ? prev : next))
         }
 
         if (opts.includeChat && Array.isArray(data.messages)) {

@@ -61,6 +61,8 @@ type DraftBoardProps = {
   aiManagedRosterIds?: string[]
   /** Teams picking by themselves right now (auto-pick on, or Chimmy-run). Marked AUTO in the header. */
   autoDraftRosterIds?: string[]
+  /** Rosters whose manager has the room open right now (lib/draft-room/draftPresence.ts). */
+  onlineRosterIds?: string[]
   /** Auto draft (execution mode `auto`): the current tile reads "Picking", not "On the clock". */
   autoDraft?: boolean
   orderSourceLabel?: string | null
@@ -208,6 +210,7 @@ function DraftBoardInner({
   currentUserRosterId = null,
   aiManagedRosterIds = [],
   autoDraftRosterIds = [],
+  onlineRosterIds = [],
   autoDraft = false,
   orderSourceLabel,
   onCellTrade,
@@ -866,6 +869,9 @@ function DraftBoardInner({
                   } ${isUser ? 'bg-white/[0.16] ring-1 ring-inset ring-white/70' : ''}`}
                   data-viewer={isUser ? 'true' : undefined}
                 >
+                  {/* Unclipped wrapper: the avatar below is overflow-hidden and round, so a mark inside
+                      it loses its corner (measured: the presence dot showed as a sliver). */}
+                  <span className="relative inline-flex shrink-0">
                   <span
                     className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-bold uppercase tracking-[0.03em] shadow-sm ${
                       currentOwnerSlot === entry.slot
@@ -902,12 +908,24 @@ function DraftBoardInner({
                       <SurvivorTribeMark tribe={entry.tribe} className="absolute -bottom-0.5 -right-0.5" />
                     ) : null}
                   </span>
+                    {/* In the room now. Yahoo's 2026 room: "I couldn't tell who was in the draft. No
+                        logo change or icon change when they were in. Or out." Bottom-left: the orphan
+                        mark owns top-right and the tribe mark bottom-right. */}
+                    {onlineRosterIds.includes(entry.rosterId) ? (
+                      <span
+                        className="absolute -bottom-0.5 -left-0.5 z-10 h-2.5 w-2.5 rounded-full border border-[#0b1428] bg-emerald-400"
+                        title="In the draft room"
+                        data-testid={`draft-board-team-header-online-${entry.slot}`}
+                      />
+                    ) : null}
+                  </span>
                   <span
                     className={`w-full truncate text-center text-[11px] leading-none ${
                       isUser ? 'font-bold text-white' : 'font-medium text-white/72'
                     }`}
                   >
                     {headerName}
+                    {onlineRosterIds.includes(entry.rosterId) ? <span className="sr-only">, in the draft room</span> : null}
                   </span>
                   {tribeColorHex(entry.tribe) ? (
                     <span
