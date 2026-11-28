@@ -258,7 +258,7 @@ describe('Invariant 13: the pool strip drops redundant and diagnostic-only neste
     display: {
       assets: {
         headshotUrl: 'https://a.espncdn.com/x.png',
-        teamLogoUrl: 'https://r2.thesportsdb.com/badge.png',
+        teamLogoUrl: 'https://cdn.example.com/badge.png',
         headshotFallbackUrl: 'data:image/svg+xml;utf8,AAA',
         teamLogoFallbackUrl: 'data:image/svg+xml;utf8,BBB',
         headshotFallbackUsed: false,
@@ -275,7 +275,7 @@ describe('Invariant 13: the pool strip drops redundant and diagnostic-only neste
   })
   it('keeps the real photo and logo', () => {
     expect(out.display.assets.headshotUrl).toBe('https://a.espncdn.com/x.png')
-    expect(out.display.assets.teamLogoUrl).toBe('https://r2.thesportsdb.com/badge.png')
+    expect(out.display.assets.teamLogoUrl).toBe('https://cdn.example.com/badge.png')
   })
   it('drops only the diagnostic stats and metadata fields', () => {
     expect(out.display.stats).toEqual({ pointsPerGame: 22.6 })
