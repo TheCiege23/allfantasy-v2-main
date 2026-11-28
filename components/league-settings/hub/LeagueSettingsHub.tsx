@@ -21,6 +21,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { MID_SEASON_CONFIRMATION_CODE, MID_SEASON_CONFIRM_FLAG } from '@/lib/league/midSeasonConfirmation'
 import dynamic from 'next/dynamic'
 import type { TaskCardsResult } from '@/lib/core-app/commissioner/tasks'
 import type { ConnectedGroup } from '@/lib/league/connectedLeagues'
@@ -270,6 +271,25 @@ export function LeagueSettingsHub({
     return null
   }, [leagueId, loadSettings])
 
+  /**
+   * One scoring stat (2026-11-28): the commissioner scoring PUT already merges a partial rule list over
+   * the league's rules, so one rule is sent. Mid-season it answers 409 with a confirmation code; that is
+   * handed back for the sheet to ask, and `confirmMidSeasonChange` goes only with the second request.
+   */
+  const onSetScoringRule = useCallback(async (statKey: string, points: number, confirmMidSeason: boolean) => {
+    const r = await sendJson(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/scoring`, 'PUT', {
+      rules: [{ statKey, pointsValue: points, enabled: true }],
+      ...(confirmMidSeason ? { [MID_SEASON_CONFIRM_FLAG]: true } : {}),
+    })
+    if (!r.ok) {
+      const needsConfirm = r.json?.code === MID_SEASON_CONFIRMATION_CODE
+      return { error: tx(r.error ?? 'Save failed'), needsConfirm }
+    }
+    toast.success(tx('Saved'))
+    await loadSettings()
+    return { error: null }
+  }, [leagueId, loadSettings])
+
   const onSaveNote = useCallback(async (text: string): Promise<string | null> => {
     const r = await sendJson('/api/league/settings', 'PATCH', { leagueId, settingsMerge: { [COMMISSIONER_NOTES_KEY]: text.slice(0, 2000) } })
     if (!r.ok) return r.error
@@ -429,6 +449,7 @@ export function LeagueSettingsHub({
       cb={{
         onToggleSetting: (f, n) => void onToggleSetting(f, n),
         onSetSetting,
+        onSetScoringRule,
         onSaveTeamName,
         onSaveNote,
         onToggleNotification,

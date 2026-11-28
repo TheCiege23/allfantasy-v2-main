@@ -347,3 +347,16 @@
 /* The sheet is portalled out of `.af-lsh`, so it restates the two base rules it no longer inherits. */
 .af-lsh-sheet-backdrop, .af-lsh-sheet-backdrop * { box-sizing: border-box; }
 .af-lsh-sheet { font-family: inherit; font-size: 14px; --lsh-accent: #22d3ee; --lsh-text: #eef5ff; --lsh-muted: #9fb2c9; --lsh-card: #0a1228; --lsh-line: rgba(34, 211, 238, .38); }
+
+/* One scoring stat's editor (2026-11-28): minus / value / plus, common values, Save. */
+.af-lsh-stepper { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; gap: 10px; padding: 8px 18px; }
+.af-lsh-step { min-height: 52px; border-radius: 14px; border: 1px solid rgba(255,255,255,.16); background: #12163e; color: var(--lsh-text, #eef5ff); font-size: 24px; font-weight: 700; cursor: pointer; }
+.af-lsh-step:disabled { opacity: .5; }
+.af-lsh-step-input { min-height: 52px; width: 100%; border-radius: 14px; border: 1px solid var(--lsh-line, rgba(34,211,238,.38)); background: #070d20; color: var(--lsh-text, #eef5ff); font: 800 24px/1 'JetBrains Mono', ui-monospace, monospace; text-align: center; -moz-appearance: textfield; }
+.af-lsh-step-input::-webkit-outer-spin-button, .af-lsh-step-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.af-lsh-quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 18px 4px; }
+.af-lsh-quick .af-lsh-pill[aria-pressed=true] { background: var(--lsh-accent, #22d3ee); border-color: var(--lsh-accent, #22d3ee); color: #04202a; }
+.af-lsh-sheet-actions { padding: 12px 18px 4px; }
+.af-lsh-sheet-actions .af-lsh-btn, .af-lsh-sheet-confirm .af-lsh-btn { width: 100%; min-height: 48px; font-size: 14px; }
+.af-lsh-sheet-confirm { margin: 10px 18px 4px; padding: 12px; border-radius: 12px; border: 1px solid rgba(245,158,11,.45); background: rgba(245,158,11,.08); }
+.af-lsh-sheet-confirm p { margin: 0 0 10px; font-size: 13px; line-height: 1.45; color: #fcd34d; }

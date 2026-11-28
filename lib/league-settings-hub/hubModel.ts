@@ -772,7 +772,12 @@ export function buildRosterItems(
 
 /* -------------------------------------------------------------- scoring */
 
-export type HubScoringCategory = { key: string; label: string; rows: Array<{ key: string; label: string; value: string; perUnit?: string }> }
+export type HubScoringCategory = {
+  key: string
+  label: string
+  /** `points` is the raw value per unit, for the stat's own editor (2026-11-28); `perYard` marks a per-yard stat. */
+  rows: Array<{ key: string; label: string; value: string; perUnit?: string; points?: number; perYard?: boolean }>
+}
 
 function fmtPoints(n: number): string {
   const r = Math.round(n * 1000) / 1000
@@ -795,8 +800,8 @@ export function groupScoringRules(rules: HubScoringRule[] | null | undefined, sp
     const isYards = football && /(_yd|_yds|yards)$/.test(k) && Math.abs(r.pointsValue) < 1
     const label = statLabel(sport, k) ?? humanize(r.statKey)
     const row = isYards
-      ? { key: r.statKey, label, value: `${fmtPoints(r.pointsValue)} / yd`, perUnit: `1 point every ${Math.round(1 / Math.abs(r.pointsValue))} yards` }
-      : { key: r.statKey, label, value: fmtPoints(r.pointsValue) }
+      ? { key: r.statKey, label, value: `${fmtPoints(r.pointsValue)} / yd`, perUnit: `1 point every ${Math.round(1 / Math.abs(r.pointsValue))} yards`, points: r.pointsValue, perYard: true }
+      : { key: r.statKey, label, value: fmtPoints(r.pointsValue), points: r.pointsValue }
     if (!cat) {
       other.rows.push(row)
       continue
