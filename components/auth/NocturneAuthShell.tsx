@@ -3,6 +3,7 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { ShieldCheck, Zap, Globe } from "lucide-react"
+import { seasonalShieldSrc } from "@/lib/brand/seasonalShield"
 import "./nocturne-auth.css"
 
 const TRUST_ROWS: { icon: typeof ShieldCheck; label: string }[] = [
@@ -27,6 +28,8 @@ export function NocturneAuthShell({
   navRight: ReactNode
   children: ReactNode
 }) {
+  // Seasonal shield art (fall / winter / New Year), plain shield otherwise.
+  const shieldSrc = seasonalShieldSrc()
   return (
     <div className="nocturne-auth grid min-h-screen grid-cols-1 lg:grid-cols-[440px_1fr]">
       {/* Left brand panel — desktop only */}
@@ -48,7 +51,8 @@ export function NocturneAuthShell({
         />
         <div className="relative" style={{ zIndex: 1 }}>
           <img
-            src="/brand/af-shield-transparent.png"
+            src={shieldSrc}
+            suppressHydrationWarning
             alt=""
             style={{ height: 52, width: "auto", marginBottom: 28 }}
           />
@@ -114,7 +118,8 @@ export function NocturneAuthShell({
           {/* Compact brand strip — mobile only, in place of the left panel */}
           <div className="mb-6 flex flex-col items-center text-center lg:hidden">
             <img
-              src="/brand/af-shield-transparent.png"
+              src={shieldSrc}
+              suppressHydrationWarning
               alt=""
               style={{ height: 40, width: "auto", marginBottom: 12 }}
             />
