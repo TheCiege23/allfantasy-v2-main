@@ -28,6 +28,7 @@ import { mergeKnownYearsExp } from '@/lib/draft-room/nonNflRookieFields'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { rowsDescribeSamePlayer, selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
 import { isSleeperPlaceholderName } from '@/lib/sleeper/placeholderPlayers'
+import { isEspnProHeadshot } from '@/lib/espn/espnProHeadshots'
 
 /**
  * In-process memos in front of the DB-backed cache. That cache saved CPU but not egress: the NFL
@@ -352,6 +353,8 @@ function sportsPlayerQuality(row: {
 }): number {
   let score = 0
   if (isHttpImage(row.imageUrl)) score += 100
+  // A current-team ESPN headshot (GAPS E-08) outranks any other photo: TheSportsDB keeps a traded player's old jersey.
+  if (isEspnProHeadshot(row.imageUrl)) score += 200
   if (String(row.sleeperId ?? '').trim()) score += 50
   score += sourceRank(row.source) * 10
   return score

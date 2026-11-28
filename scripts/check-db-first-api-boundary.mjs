@@ -546,6 +546,15 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^lib\/espn\/espnNcaabFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
+   * `lib/espn/espnProRosterFetch.ts` — ESPN NBA / NHL / MLB teams + rosters, the adapter half of the
+   * current-team headshot source (contracts/espn GAPS E-08, 2026-11-27). Same split as the NCAAB entry above:
+   * every export is a live fetch or a pure parser, and the writing lives in `lib/espn/proEspnHeadshotIngest.ts`.
+   *
+   * ⚠ RE-CHECK BEFORE TRUSTING THIS. Valid only while that ingest module is the sole runtime importer.
+   * Censused on 2026-11-27 across all four forms: the ingest module and tests, nothing else.
+   */
+  /^lib\/espn\/espnProRosterFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
    * `lib/cfbd-fetch.ts` — the single CFBD request path, and where `CFBD_BASE_URL`
    * is defined. It is an ADAPTER rather than a pure definition site: `cfbdGet`
    * performs the request, so it is allowlisted here with the other clients
