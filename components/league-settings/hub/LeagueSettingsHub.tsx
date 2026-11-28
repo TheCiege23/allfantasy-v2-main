@@ -81,6 +81,9 @@ type HighScoresPayload = {
   teamRows?: Array<{ rank: number; teamName: string; season: number; week: number; points: number }>
 }
 
+/** Draft session statuses before the first pick (lib/league/structuralSettingsLock.ts). */
+const DRAFT_NOT_STARTED = new Set(['pre_draft', 'configuring', 'configured'])
+
 async function getJson<T>(url: string): Promise<T | null> {
   try {
     const res = await fetch(url, { credentials: 'include', cache: 'no-store' })
@@ -423,7 +426,8 @@ export function LeagueSettingsHub({
       commissionerNote: p === undefined ? undefined : typeof noteRaw === 'string' ? noteRaw : null,
       roster: roster === undefined ? undefined : roster ? buildRosterItems(roster.unifiedConfig as Parameters<typeof buildRosterItems>[0], roster.slotDefs, sport) : null,
       scoring: p === undefined ? undefined : p?.scoringConfig?.rules?.length ? { preset: preset ? String(preset).replace(/_/g, ' ') : null, categories: groupScoringRules(p.scoringConfig.rules, sport) } : null,
-      draft: p ? buildDraftGroups(p) : p === null ? [] : undefined,
+      // A draft past setup keeps its format: the draft pickers stand down (buildDraftGroups).
+      draft: p ? buildDraftGroups(p, { draftStarted: orderStatus != null && !DRAFT_NOT_STARTED.has(orderStatus) }) : p === null ? [] : undefined,
       draftOrder: order,
       members: p === undefined ? undefined : teams.map((t) => ({
         id: t.id,

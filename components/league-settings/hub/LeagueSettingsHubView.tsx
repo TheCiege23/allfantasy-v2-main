@@ -1141,7 +1141,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
       </Card>
 
       <Card id="draft" fold="closed" title="Draft Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('draft')} />}>
-        {data.draft === undefined ? <Loading lines={4} /> : <GroupGrid groups={data.draft} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
+        {data.draft === undefined ? <Loading lines={4} /> : <GroupGrid groups={data.draft} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} onSet={cb.onSetSetting} />}
         <div className="af-lsh-card-body" style={{ paddingTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <strong style={{ fontSize: 15 }}>{t('Draft Order')}</strong>

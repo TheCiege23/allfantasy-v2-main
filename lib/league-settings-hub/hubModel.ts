@@ -677,18 +677,74 @@ export function pickTimerText(preset: unknown, custom: unknown): string | null {
   return humanize(p)
 }
 
-export function buildDraftGroups(p: HubSettingsPayload): HubGroup[] {
+/** The draft types the settings PATCH accepts (`DRAFT_TYPES` in lib/league/execute-league-settings-patch.ts). */
+export const DRAFT_TYPE_CHOICES: HubRowChoice[] = [
+  { value: 'snake', label: 'Snake', note: 'The order reverses every round' },
+  { value: 'linear', label: 'Linear', note: 'The same order every round' },
+  { value: '3rd_reversal', label: '3rd Round Reversal', note: 'Snake, with round 3 in round 2’s order' },
+  { value: 'auction', label: 'Auction', note: 'Managers bid on every player' },
+]
+/** Its `TIMER_PRESETS`, less `custom`, which needs a number of seconds and stays in the full editor. */
+export const PICK_TIMER_CHOICES = ['30s', '60s', '90s', '120s', '300s', '600s', '1800s', '3600s', '3h', '8h', '24h']
+/** Its `PLAYER_POOLS`. */
+export const PLAYER_POOL_CHOICES: HubRowChoice[] = [
+  { value: 'all', label: 'All players' },
+  { value: 'rookies_only', label: 'Rookies only' },
+  { value: 'veterans_only', label: 'Veterans only' },
+]
+
+/**
+ * `draftStarted`: the league's draft session is past `pre_draft` / `configuring` / `configured`. The
+ * settings PATCH does not freeze the draft type, rounds, timer or player pool once picks are being made
+ * (lib/league/structuralSettingsLock.ts freezes only sport, season, size, type and dynasty), so the
+ * pickers stand down here instead: changing the format of a draft in progress is never one tap.
+ */
+export function buildDraftGroups(p: HubSettingsPayload, opts: { draftStarted?: boolean } = {}): HubGroup[] {
   const s = p.settings ?? {}
   const tz = str(p.league?.timezone) ?? str(s.timezone)
+  const open = opts.draftStarted !== true
+  const type = str(s.draftType)
+  const pool = str(s.playerPool)
+  const timer = str(s.pickTimerPreset)
+  const rounds = num(s.rounds)
+  const typeLabel = (v: string | number) => DRAFT_TYPE_CHOICES.find((c) => c.value === v)?.label ?? humanize(String(v))
   const left: HubRow[] = [
     { key: 'time', label: 'Draft Time', description: tz ? `Shown in ${tz}` : undefined, value: formatDate(s.draftDateUtc, tz) },
-    { key: 'type', label: 'Draft Type', value: str(s.draftType) ? humanize(String(s.draftType)) : DASH },
+    {
+      key: 'type',
+      label: 'Draft Type',
+      value: type ? typeLabel(type) : DASH,
+      edit: open ? { field: 'draftType', current: type, choices: choicesWith(type, DRAFT_TYPE_CHOICES, typeLabel) } : undefined,
+    },
     { key: 'autostart', label: 'Auto-start Draft', description: 'Draft begins automatically at start time', value: yesNo(s.autostart), toggle: bool(s.autostart) == null ? undefined : { field: 'autostart', on: s.autostart === true } },
-    { key: 'pool', label: 'Available Players to Draft', value: str(s.playerPool) ? humanize(String(s.playerPool)) : 'All' },
+    {
+      key: 'pool',
+      label: 'Available Players to Draft',
+      value: pool ? PLAYER_POOL_CHOICES.find((c) => c.value === pool)?.label ?? humanize(pool) : 'All',
+      edit: open ? { field: 'playerPool', current: pool ?? 'all', choices: choicesWith(pool ?? 'all', PLAYER_POOL_CHOICES, (v) => humanize(String(v))) } : undefined,
+    },
   ]
   const right: HubRow[] = [
-    { key: 'timer', label: 'Time per Pick', value: pickTimerText(s.pickTimerPreset, s.pickTimerCustomValue) },
-    { key: 'rounds', label: 'Rounds', value: num(s.rounds) != null ? String(s.rounds) : DASH },
+    {
+      key: 'timer',
+      label: 'Time per Pick',
+      value: pickTimerText(s.pickTimerPreset, s.pickTimerCustomValue),
+      // A custom number of seconds is set in the full editor; a league on one keeps its value listed.
+      edit: open
+        ? {
+            field: 'pickTimerPreset',
+            current: timer,
+            choices: choicesWith(timer, PICK_TIMER_CHOICES.map((v) => ({ value: v, label: pickTimerText(v, null) ?? v })), (v) => pickTimerText(v, s.pickTimerCustomValue) ?? String(v)),
+          }
+        : undefined,
+    },
+    {
+      key: 'rounds',
+      label: 'Rounds',
+      value: rounds != null ? String(rounds) : DASH,
+      // The server also checks that the rounds fit the roster (validateDraftRoundsFitRoster) and says so.
+      edit: open ? rangeEdit('rounds', rounds, 1, 30, (n) => (n === 1 ? '1 round' : `${n} rounds`)) : undefined,
+    },
     { key: 'cpu', label: 'CPU Autopick', description: 'When managers run out of time', value: yesNo(s.cpuAutoPick), toggle: bool(s.cpuAutoPick) == null ? undefined : { field: 'cpuAutoPick', on: s.cpuAutoPick === true } },
     { key: 'alpha', label: 'Alphabetical Sort', description: 'Sort players by name instead of ADP', value: yesNo(s.alphabeticalSort), toggle: bool(s.alphabeticalSort) == null ? undefined : { field: 'alphabeticalSort', on: s.alphabeticalSort === true } },
   ]
