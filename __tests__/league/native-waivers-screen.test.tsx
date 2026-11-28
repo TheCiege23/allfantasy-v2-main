@@ -63,9 +63,9 @@ describe('NativeWaiversScreen', () => {
     const calls = stubFetch(base({ waiverType: 'faab', faabBudget: 100 }))
     render(<NativeWaiversScreen league={league} />)
     expect(await screen.findByText('Tank Bigsby')).toBeTruthy()
-    expect(screen.getByText('FAAB $86 left')).toBeTruthy()
-    expect(screen.getByText('Priority 7 of 12')).toBeTruthy()
-    expect(screen.getByText('+2')).toBeTruthy() // one processed add in league history
+    // Sleeper pass 2: one waiver line instead of header chips; the AF trend column is gone (Trend tab sorts by it).
+    expect(screen.getByTestId('players-waiver-line').textContent).toContain('FAAB $86 left of $100')
+    expect(screen.getByTestId('players-waiver-line').textContent).toContain('Priority 7 of 12')
     fireEvent.click(screen.getAllByRole('button', { name: 'Claim' })[0])
     expect(screen.getByTestId('claim-drawer').textContent).toContain('Tank Bigsby · faab')
     expect(calls.some((c) => c.url.includes('/add-drop'))).toBe(false)
@@ -156,5 +156,52 @@ describe('a locked instant add becomes a claim (owner report, 2026-11-28)', () =
     fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0])
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Locked.'))
     expect(screen.queryByTestId('claim-drawer')).toBeNull()
+  })
+})
+
+describe('Players tab, Sleeper pass 2 (owner, 2026-11-28)', () => {
+  const rows = [
+    { ...player('p1', 'Tank Bigsby', 'RB', 11.2), adp: 80, fantasyPointsPerGame: 7, product: { unified: {}, yearsExp: 2 } },
+    { ...player('p2', "Wan'Dale Robinson", 'WR', 10.6), adp: 40, fantasyPointsPerGame: 12, product: { unified: {}, yearsExp: 0 } },
+  ]
+  const routes = (s: Record<string, unknown> = { waiverType: 'rolling' }) => ({ ...base(s), '/players': { players: rows } })
+  const names = () => screen.getAllByRole('row').slice(1).map((r) => r.textContent ?? '')
+
+  it('three list tabs, a search bar, a sort, Filters and a Claims button; no Trade, Watchlist or My claims tab', async () => {
+    stubFetch(routes())
+    render(<NativeWaiversScreen league={{ ...league, lifecycleState: 'in_season' } as UserLeague} />)
+    await screen.findByText('Tank Bigsby')
+    const toolbar = screen.getByTestId('players-toolbar')
+    for (const label of ['Trend', 'Available', 'Leaders']) expect(toolbar.textContent).toContain(label)
+    for (const label of ['Search', 'Watchlist', 'My claims']) expect(toolbar.textContent).not.toContain(label)
+    expect(screen.queryByRole('button', { name: 'Trade' })).toBeNull()
+    expect(screen.getByTestId('players-search')).toBeTruthy()
+    expect(screen.getByTestId('players-claims-toggle')).toBeTruthy()
+    // In season: projection first.
+    expect((screen.getByTestId('players-sort') as HTMLSelectElement).value).toBe('projection')
+    expect(names()[0]).toContain('Tank Bigsby')
+    fireEvent.change(screen.getByTestId('players-sort'), { target: { value: 'adp' } })
+    await waitFor(() => expect(names()[0]).toContain("Wan'Dale Robinson"))
+  })
+
+  it('before the draft the list sorts by ADP', async () => {
+    stubFetch(routes())
+    render(<NativeWaiversScreen league={{ ...league, lifecycleState: 'pre_draft' } as UserLeague} />)
+    await screen.findByText('Tank Bigsby')
+    expect((screen.getByTestId('players-sort') as HTMLSelectElement).value).toBe('adp')
+    expect(names()[0]).toContain("Wan'Dale Robinson")
+  })
+
+  it('Filters: Rookies narrows the list, Reset brings everyone back', async () => {
+    stubFetch(routes())
+    render(<NativeWaiversScreen league={{ ...league, lifecycleState: 'in_season' } as UserLeague} />)
+    await screen.findByText('Tank Bigsby')
+    fireEvent.click(screen.getByTestId('players-filters-toggle'))
+    fireEvent.click(screen.getByRole('button', { name: 'Rookies' }))
+    await waitFor(() => expect(screen.queryByText('Tank Bigsby')).toBeNull())
+    expect(screen.getByText("Wan'Dale Robinson")).toBeTruthy()
+    expect(screen.getByTestId('players-filters-toggle').textContent).toContain('(1)')
+    fireEvent.click(screen.getByTestId('players-filters-reset'))
+    expect(await screen.findByText('Tank Bigsby')).toBeTruthy()
   })
 })

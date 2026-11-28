@@ -59,6 +59,7 @@ import {
 } from '@/lib/pwa/offlineLineupQueue'
 import { OfflineLineupSnapshotView } from './OfflineLineupSnapshotView'
 import { TeamWeekCard, useTeamWeek } from './TeamWeekCard'
+import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { dailyOffDayIds, isOnBye } from '@/lib/league-media/redraftScreens'
 import { RedraftBadge, RedraftScreen, useRedraftScreen } from './RedraftScreenParts'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -277,7 +278,6 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const isGoalie = (p: { position?: string | null } | undefined) => String(p?.position ?? '').toUpperCase() === 'G'
   /** Tap to swap: the first tap, waiting for the second. */
   const [picked, setPicked] = useState<LineupTap | null>(null)
-  const [tab, setTab] = useState<'lineup' | 'roster'>('lineup')
   const [pendingClaims, setPendingClaims] = useState<number | null>(null)
   const [nextRunAt, setNextRunAt] = useState<string | null>(null)
   const [faabBudget, setFaabBudget] = useState<number | null>(null)
@@ -991,7 +991,14 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     )
   }
 
-  const allRoster = data ? [...(lists?.starters ?? []), ...(lists?.bench ?? []), ...(lists?.ir ?? []), ...(lists?.taxi ?? []), ...(lists?.devy ?? [])].filter(Boolean) : []
+  const devyIds = (lists?.devy ?? []).filter(Boolean)
+  /*
+   * Before the draft (Sleeper pass 2, owner 2026-11-28): no players yet, so the trade / add-drop / optimize
+   * buttons, the roster-moves card and the automations have nothing to act on. Just the empty slots and the
+   * way to the draft. A league that already has players in its setup phase (a dynasty offseason) is not this.
+   */
+  const phase = nativeLeaguePhase(league)
+  const predraft = (phase === 'Setup' || phase === 'Draft') && !(lists && [...lists.starters, ...lists.bench].some(Boolean))
 
   return (
     <RedraftScreen identity={rd}>
@@ -1002,18 +1009,30 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
         line={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}
         week={teamWeek}
         actions={
-          <>
-            {/* Best ball has no trades and no lineup to set: neither button is offered (see the note below). */}
-            {league.bestBallMode ? null : <button type="button" className="nls-btn" data-size="sm" onClick={() => onSelectTab('trades')}>Propose trade</button>}
-            <button type="button" className="nls-btn" data-size="sm" onClick={() => onSelectTab('waivers')}>Add / drop</button>
-            <button type="button" className="nls-btn" data-size="sm" data-variant="primary" hidden={Boolean(league.bestBallMode)} disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
-              Optimize lineup
-            </button>
-          </>
+          /*
+           * One action (Sleeper pass 2): Optimize. Propose trade lives on the player card and the League tab;
+           * Add / drop is the Players tab, one tap away in the bottom bar.
+           */
+          predraft ? null : (
+            <>
+              <button type="button" className="nls-btn" data-size="sm" data-variant="primary" hidden={Boolean(league.bestBallMode)} disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
+                Optimize lineup
+              </button>
+            </>
+          )
         }
       />
 
-      <Segmented label="Team view" value={tab} onChange={setTab} options={[{ id: 'lineup', label: 'Lineup' }, { id: 'roster', label: 'Full roster' }]} />
+      {predraft ? (
+        <div className="nls-card" data-testid="lineup-predraft">
+          <p>Your roster fills in at the draft.</p>
+          <div className="nls-actions nls-actions-top">
+            <button type="button" className="nls-btn" data-variant="primary" data-block="true" onClick={() => onSelectTab('draft')}>
+              Go to draft
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/*
         A best ball manager landed on a lineup to arrange and an Optimize button, with nothing saying
@@ -1030,7 +1049,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       {!data && offlineSnapshot ? <OfflineLineupSnapshotView snapshot={offlineSnapshot} /> : null}
 
       {data ? (
-        <div className="nls-cols">
+        <div>
           <div className="nls nls-stack">
             {pendingEdit ? (
               <div className="nls-lockbar" role="status" data-testid="lineup-pending-sync">
@@ -1062,7 +1081,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               </div>
             ) : null}
 
-            {tab === 'lineup' && daily ? (
+            {daily ? (
               <div className="nls-daypick" data-testid="daily-day-picker">
                 <Segmented
                   label="Lineup day"
@@ -1074,7 +1093,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               </div>
             ) : null}
 
-            {tab === 'lineup' && weekRows ? (
+            {weekRows ? (
               <WeekByPlayerCard
                 data={weekRows}
                 renderName={(id) => {
@@ -1090,9 +1109,9 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               />
             ) : null}
 
-            {tab === 'lineup' && viewDay?.status === 'past' ? (
+            {viewDay?.status === 'past' ? (
               renderPastDay(viewDay)
-            ) : tab === 'lineup' ? (
+            ) : (
               lists && slots.length ? (
                 <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragId(null)} accessibility={{ announcements }}>
                   {byeStarters.length ? (
@@ -1150,9 +1169,34 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
                     Automations sit under the roster (2026-11-28, Sleeper pass): above it they pushed the
                     starters off the first screen. What AllFantasy changed is still listed, and undoable.
                   */}
-                  {data?.rosterId && !daily ? <AutoBenchByeToggle leagueId={league.id} /> : null}
-                  {data?.rosterId ? <AutomaticChangesLog leagueId={league.id} className="nls-card" onUndone={() => void load()} /> : null}
-                  {data?.rosterId ? <MyTeamAutomations leagueId={league.id} /> : null}
+                  {devyIds.length ? (
+                    <section className="nls-card nls-card-flush" aria-label="College" data-testid="lineup-devy">
+                      <h3 className="nls-label nls-card-head"><span>College</span><span>{devyIds.length}</span></h3>
+                      <ul className="nls-rows">
+                        {devyIds.map((id) => {
+                          const p = players[id]
+                          return (
+                            <li key={id}>
+                              <div className="nls-lrow" data-cols="3">
+                                <PosPill label={p?.position ?? '—'} />
+                                <div className="nls-player"><strong>{p?.name ?? 'Unknown player'}<RankTag p={p} /><InjuryFlag status={p?.injuryStatus} /></strong><small>{gameLine(p) || '—'}</small></div>
+                                <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </section>
+                  ) : null}
+                  {/* The three automation blocks fold into one row (Sleeper pass 2); nothing to automate before the draft. */}
+                  {data?.rosterId && !predraft ? (
+                    <details className="nls-card" data-testid="lineup-automations">
+                      <summary className="nls-label">Lineup automations</summary>
+                      {!daily ? <AutoBenchByeToggle leagueId={league.id} /> : null}
+                      <AutomaticChangesLog leagueId={league.id} className="nls-card" onUndone={() => void load()} />
+                      <MyTeamAutomations leagueId={league.id} />
+                    </details>
+                  ) : null}
                   <DragOverlay dropAnimation={null}>
                     {dragId ? <div className="nls-drag-overlay"><PosPill label={players[dragId]?.position ?? '—'} /><strong>{players[dragId]?.name ?? 'Player'}</strong></div> : null}
                   </DragOverlay>
@@ -1160,41 +1204,10 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
               ) : (
                 <Card><p>Your league has no starting lineup template yet, so there is nothing to set. Your commissioner can set roster slots in league settings.</p></Card>
               )
-            ) : (
-              <section className="nls-card nls-card-flush" aria-label="Full roster">
-                <h3 className="nls-label nls-card-head"><span>Full roster</span><span>{allRoster.length} players</span></h3>
-                <ul className="nls-rows">
-                  {allRoster.map((id) => {
-                    const p = players[id]
-                    return (
-                      <li key={id}>
-                        <div className="nls-lrow" data-cols="3">
-                          <PosPill label={p?.position ?? '—'} />
-                          <div className="nls-player"><strong>{p?.name ?? 'Unknown player'}<RankTag p={p} /><InjuryFlag status={p?.injuryStatus} />{dayBadge(id)}</strong><small>{gameLine(p) || '—'}</small></div>
-                          <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </section>
             )}
           </div>
 
-          <aside className="nls-aside" aria-label="Roster moves">
-            <Card label="Roster moves">
-              <dl className="nls-stats">
-                <div className="nls-stat"><dt>FAAB left</dt><dd>{faab != null ? <>${faab}{faabBudget ? <small> / {faabBudget}</small> : null}</> : '—'}</dd></div>
-                <div className="nls-stat"><dt>Pending claims</dt><dd>{pendingClaims ?? '—'}</dd></div>
-              </dl>
-              <p>{runLabel ? `Waivers run ${runLabel}.` : 'Waiver timing follows your league settings.'}</p>
-              <div className="nls-actions nls-actions-top">
-                <button type="button" className="nls-btn" data-block="true" onClick={() => onSelectTab('waivers')}>Manage claims</button>
-              </div>
-            </Card>
-            {/* The "Trade block" card went 2026-11-24 (the simplify pass): its button opened the Trades tab, which
-                "Propose trade" at the top of this screen already does. */}
-          </aside>
+          {/* The Roster moves card (FAAB, pending claims) went in Sleeper pass 2: both live on the Players tab. */}
         </div>
       ) : null}
     </div>

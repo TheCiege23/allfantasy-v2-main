@@ -77,7 +77,7 @@ describe('NativeLineupScreen', () => {
     render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
     expect(await screen.findByText('Jalen Hurts')).toBeTruthy()
     expect(screen.getByText('3–1 · 2nd place · PF 478.6')).toBeTruthy()
-    await waitFor(() => expect(screen.getByText('/ 100')).toBeTruthy())
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Optimize lineup' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: 'Optimize lineup' }))
     await waitFor(() => expect(calls.some((c) => c.url === '/api/leagues/roster/save')).toBe(true))
     const body = JSON.parse(String(calls.find((c) => c.url === '/api/leagues/roster/save')!.init!.body))
@@ -194,7 +194,7 @@ describe('NativeLineupScreen', () => {
     expect(screen.queryByTestId('daily-day-picker')).toBeNull()
   })
 
-  it('reaches Trades from one place: "Propose trade", with no "Trade block" card repeating it (2026-11-24)', async () => {
+  it('Sleeper pass 2: one action (Optimize); no trade, add/drop, roster-moves card or lineup/full-roster toggle', async () => {
     stubFetch({
       '/api/league/roster': roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4)]),
       '/claims': { claims: [] },
@@ -203,10 +203,40 @@ describe('NativeLineupScreen', () => {
     })
     render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
     await screen.findByText('Jalen Hurts')
-    expect(screen.getByText('Roster moves')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Optimize lineup' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Propose trade' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add / drop' })).toBeNull()
+    expect(screen.queryByText('Roster moves')).toBeNull()
     expect(screen.queryByText('Trade block')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Open trade block' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Propose trade' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Full roster' })).toBeNull()
+  })
+
+  it('before the draft: empty slots and Go to draft, no Optimize or automations', async () => {
+    stubFetch({
+      '/api/league/roster': { ...roster([]), roster: { lineup_sections: { starters: [], bench: [], ir: [], taxi: [], devy: [] } } },
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    const onSelectTab = vi.fn()
+    render(<NativeLineupScreen league={{ ...league, lifecycleState: 'pre_draft' } as UserLeague} userTeam={team} onSelectTab={onSelectTab} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Go to draft' }))
+    expect(onSelectTab).toHaveBeenCalledWith('draft')
+    expect(screen.queryByRole('button', { name: 'Optimize lineup' })).toBeNull()
+    expect(screen.queryByTestId('lineup-automations')).toBeNull()
+  })
+
+  it('college (devy) players get their own section now the full-roster toggle is gone', async () => {
+    const r = roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('cfb1', 'College Kid', 'WR', 0)])
+    stubFetch({
+      '/api/league/roster': { ...r, roster: { lineup_sections: { ...r.roster.lineup_sections, devy: [{ id: 'cfb1' }] } } },
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    const section = await screen.findByTestId('lineup-devy')
+    expect(section.textContent).toContain('College Kid')
   })
 
   const saves = (calls: Array<{ url: string; init?: RequestInit }>) =>
