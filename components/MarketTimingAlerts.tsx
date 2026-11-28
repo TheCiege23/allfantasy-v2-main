@@ -296,6 +296,23 @@ export default function MarketTimingAlerts() {
         </div>
       )}
 
+      {!loading && data?.narrativesWithheld && (
+        <p className="text-[11px] text-white/45 text-center pt-2" data-testid="market-alerts-narratives-withheld">
+          {data.narrativesWithheld.message}
+          {data.narrativesWithheld.reason === 'sign_in' ? (
+            <>
+              {' '}
+              <a href="/login?callbackUrl=%2Faf-legacy" className="font-semibold text-amber-300 underline">Sign in</a>
+            </>
+          ) : data.narrativesWithheld.upgradePath ? (
+            <>
+              {' '}
+              <a href={data.narrativesWithheld.upgradePath} className="font-semibold text-amber-300 underline">See plans</a>
+            </>
+          ) : null}
+        </p>
+      )}
+
       {!loading && data && (
         <p className="text-[11px] text-white/20 text-center pt-2">
           Market data refreshed {formatTimeInTimezone(data.generatedAt)} · Powered by FantasyCalc + Chimmy

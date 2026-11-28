@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 import { useSearchParams } from 'next/navigation'
 import {
   DEFAULT_SPORT,
@@ -209,16 +211,29 @@ function TrendCard({ item }: { item: TrendFeedItem }) {
   const toneForEfficiency =
     (signals.efficiencyDelta ?? 0) > 0 ? 'positive' : (signals.efficiencyDelta ?? 0) < 0 ? 'negative' : 'neutral'
 
+  const [insightRefusal, setInsightRefusal] = useState<PlanRefusal | null>(null)
+  const [insightError, setInsightError] = useState<string | null>(null)
+
   const loadInsight = useCallback(() => {
     if (insight !== null) return
     setLoadingInsight(true)
+    setInsightRefusal(null)
+    setInsightError(null)
     fetch(
       `/api/player-trend/insight?playerId=${encodeURIComponent(item.playerId)}&sport=${encodeURIComponent(item.sport)}`
     )
-      .then((response) => response.json())
-      .then((data) => {
-        if (data?.insight) setInsight(data.insight)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}))
+        if (data?.insight) {
+          setInsight(data.insight)
+          return
+        }
+        // Sign-in (401) and the daily cap (429) say what to do next; show it rather than nothing.
+        const refused = readPlanRefusal(response.status, data, { returnTo: currentPathForReturn() })
+        if (refused) setInsightRefusal(refused)
+        else if (!response.ok) setInsightError(typeof data?.error === 'string' ? data.error : 'Chimmy insight unavailable right now.')
       })
+      .catch(() => setInsightError('Chimmy insight unavailable right now.'))
       .finally(() => setLoadingInsight(false))
   }, [insight, item.playerId, item.sport])
 
@@ -314,6 +329,10 @@ function TrendCard({ item }: { item: TrendFeedItem }) {
         >
           {loadingInsight ? 'Loading...' : "Get Chimmy's insight"}
         </button>
+        {insightRefusal ? <PlanRefusalNotice refusal={insightRefusal} className="mt-3" /> : null}
+        {insightError ? (
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300" data-testid="trend-insight-error">{insightError}</p>
+        ) : null}
         {insight && (
           <div className="mt-4 grid gap-3 xl:grid-cols-3">
             <InsightBlock label="DeepSeek math validation" value={insight.mathValidation} />

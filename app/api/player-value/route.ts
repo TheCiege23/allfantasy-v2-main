@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { openaiChatJson } from '@/lib/openai-client';
+import { aiCostGate } from '@/lib/ai-protection/costGate';
 import { getPlayerADP } from '@/lib/adp-data';
 import { z } from 'zod';
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch';
@@ -206,6 +207,10 @@ export async function POST(req: Request) {
     } catch {
       // ADP lookup is non-critical
     }
+
+    // Owner, 2026-11-28: every model call is signed in and capped. The daily cap, immediately before the call.
+    const gated = await aiCostGate(req, 'player_value_ai', session.user.id);
+    if (gated) return gated;
 
     const result = await openaiChatJson({
       messages: [

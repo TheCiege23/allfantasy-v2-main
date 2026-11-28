@@ -4,6 +4,7 @@ import { requireVerifiedUser } from "@/lib/auth-guard"
 import { getEntryBracketData } from "@/lib/brackets/getEntryBracketData"
 import { computePickDistribution, computeBracketUniqueness } from "@/lib/brackets/intelligence/data-engine"
 import { openaiChatJson, parseJsonContentFromChatCompletion } from "@/lib/openai-client"
+import { aiCostGate } from "@/lib/ai-protection/costGate"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -165,6 +166,11 @@ export async function POST(req: Request) {
     strategyNotes: string[]
     summary: string
   } | null = null
+
+  // Owner, 2026-11-28: every model call is signed in and capped. The metrics above are deterministic; the
+  // daily cap is taken immediately before the review model call.
+  const capped = await aiCostGate(req, "bracket_review_ai", auth.userId)
+  if (capped) return capped
 
   try {
     const res = await openaiChatJson({

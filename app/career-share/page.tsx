@@ -276,12 +276,13 @@ export default function CareerSharePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(selectedLeagueId ? { leagueId: selectedLeagueId } : {}),
       })
-      const data = (await res.json().catch(() => ({}))) as { success?: boolean; report?: DynastyReport; error?: string }
+      const data = (await res.json().catch(() => ({}))) as { success?: boolean; report?: DynastyReport; error?: string; message?: string }
       if (data.success && data.report) {
         setReport(data.report)
         setReportExpanded(true)
       } else {
-        throw new Error(data.error ?? 'Report failed')
+        // The daily cap (429) carries a sentence saying when it resets; prefer it to the bare error word.
+        throw new Error((res.status === 429 && data.message) || data.error || 'Report failed')
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Report failed')

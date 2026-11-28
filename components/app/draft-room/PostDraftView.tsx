@@ -409,7 +409,12 @@ export function PostDraftView({
         }
         setRecapExecutionMode(typeof data?.execution?.mode === 'string' ? data.execution.mode : null)
       } else if (includeAiExplanation) {
-        setRecapError(data.error ?? 'Failed to load recap')
+        // The daily cap (429) says when it resets and which plan raises it; prefer that sentence.
+        setRecapError(
+          (data?.code === 'daily_limit_reached' && typeof data.message === 'string' ? data.message : null) ??
+            data.error ??
+            'Failed to load recap',
+        )
       } else {
         setRecapSectionsError(data.error ?? 'Deterministic recap unavailable')
       }

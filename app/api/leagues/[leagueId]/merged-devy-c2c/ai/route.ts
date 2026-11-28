@@ -19,6 +19,7 @@ import {
 } from '@/lib/merged-devy-c2c/ai/C2CAIContext'
 import { buildC2CAIPrompt } from '@/lib/merged-devy-c2c/ai/C2CAIPrompts'
 import { openaiChatText } from '@/lib/openai-client'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { withOfficialTimeUserMessage } from '@/lib/time-engine/chimmyPromptPrefix'
 
 export const dynamic = 'force-dynamic'
@@ -90,6 +91,11 @@ export async function POST(
       { status: 400 }
     )
   }
+
+  // OpenAI per call, and it had no plan check and no cap. Same gate as its devy and IDP siblings
+  // (league_format_ai), after the request is validated so a bad request costs no allowance.
+  const gated = await aiCostGate(req, 'league_format_ai', userId)
+  if (gated) return gated
 
   const { system, user } = buildC2CAIPrompt(context as any)
   const userWithTime = await withOfficialTimeUserMessage(userId, user)

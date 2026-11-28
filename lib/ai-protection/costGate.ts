@@ -116,6 +116,39 @@ export const AI_COST_GATES = {
    * the League Settings panel borrowed that key for its upgrade prompt.
    */
   trash_talk: { label: 'trash talk', paidFromLaunch: false, perMinute: 5, dailyFree: 10, dailyPaid: 10 },
+
+  /*
+   * 🛑 OWNER'S DECISION 2026-11-28: EVERY MODEL CALL NEEDS SIGN-IN AND A SMALL DAILY CAP. The routes below had
+   * sign-in at most and no cap at all (two had neither). They stay free, so `paidFromLaunch: false`; a free
+   * account gets the small `dailyFree`, a plan holder the larger `dailyPaid`, and the 429 names the plan and
+   * links it (`upgradePath`). Conservative starting points — tune here.
+   */
+  // GET /api/player-trend/insight — three models (DeepSeek, Grok, OpenAI) per call. Was anonymous.
+  player_trend_insight: { label: "Chimmy's trend insights", featureId: 'af_intelligence', paidFromLaunch: false, perMinute: 5, dailyFree: 3, dailyPaid: 30, upgradePath: '/upgrade?plan=pro' },
+  // GET /api/market-alerts, the narrative half only. SOFT: the signals stay public; a refused caller gets them
+  // without Chimmy's headlines. Only a narrative-cache MISS counts (the cache is shared, 15 minutes).
+  market_alert_ai: { label: 'market alert write-ups', paidFromLaunch: false, perMinute: 5, dailyFree: 5, dailyPaid: 5 },
+  player_value_ai: { label: 'Chimmy value checks', featureId: 'af_intelligence', paidFromLaunch: false, perMinute: 10, dailyFree: 5, dailyPaid: 50, upgradePath: '/upgrade?plan=pro' },
+  ai_feature_insight: { label: 'Chimmy feature previews', featureId: 'af_intelligence', paidFromLaunch: false, perMinute: 10, dailyFree: 5, dailyPaid: 50, upgradePath: '/upgrade?plan=pro' },
+  legacy_ai_report: { label: 'AF Legacy reports', paidFromLaunch: false, perMinute: 3, dailyFree: 3, dailyPaid: 3 },
+  commish_note: { label: 'commissioner notes', featureId: 'commissioner_ai_tools', paidFromLaunch: false, perMinute: 5, dailyFree: 3, dailyPaid: 20, upgradePath: '/upgrade?plan=commissioner' },
+  draft_recap_ai: { label: "Chimmy's draft recaps", featureId: 'af_intelligence', paidFromLaunch: false, perMinute: 5, dailyFree: 3, dailyPaid: 20, upgradePath: '/upgrade?plan=pro' },
+  // Both explainers run the multi-model consensus orchestration.
+  reputation_explain_ai: { label: 'reputation explainers', featureId: 'af_intelligence', paidFromLaunch: false, perMinute: 5, dailyFree: 5, dailyPaid: 30, upgradePath: '/upgrade?plan=pro' },
+  legacy_score_explain_ai: { label: 'legacy score explainers', featureId: 'af_intelligence', paidFromLaunch: false, perMinute: 5, dailyFree: 5, dailyPaid: 30, upgradePath: '/upgrade?plan=pro' },
+  bracket_review_ai: { label: 'bracket reviews', featureId: 'af_intelligence', paidFromLaunch: false, perMinute: 5, dailyFree: 3, dailyPaid: 20, upgradePath: '/upgrade?plan=pro' },
+  matchup_insight_ai: { label: 'matchup insights', featureId: 'af_intelligence', paidFromLaunch: false, perMinute: 10, dailyFree: 5, dailyPaid: 30, upgradePath: '/upgrade?plan=pro' },
+
+  /*
+   * Expensive player tools: AF Pro / AF Supreme (requireFeatureEntitlement runs FIRST, fail closed, launch or
+   * not — lib/ai-protection/planCostGate.ts) and then this cap. `dailyFree: 0` because nobody without the plan
+   * reaches the counter.
+   */
+  // /api/draft/ai/* (best-pick, compare, grade, scarcity, queue-suggestions, roster-fit, pick-survival,
+  // draft-recap). One shared allowance for all eight.
+  draft_ai_tools: { label: 'Chimmy draft tools', featureId: 'pro_draft_ai', paidFromLaunch: true, perMinute: 10, dailyFree: 0, dailyPaid: 100 },
+  // /api/legacy/player-finder — up to ~20 model calls per search, so the allowance is in searches.
+  player_finder_ai: { label: 'Player Finder searches', featureId: 'player_finder_stock_ai', paidFromLaunch: true, perMinute: 3, dailyFree: 0, dailyPaid: 15 },
 } as const satisfies Record<string, AiCostGateConfig>
 
 export type AiCostGateKey = keyof typeof AI_COST_GATES

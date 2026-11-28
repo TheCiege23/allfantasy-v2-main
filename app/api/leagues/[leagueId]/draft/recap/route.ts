@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { openaiChatText } from '@/lib/openai-client'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 import { getProviderStatus } from '@/lib/provider-config'
 import {
   buildDraftExecutionMetadata,
@@ -157,6 +158,11 @@ export async function POST(
     if (cachedAi) {
       return jsonFromCacheEntry(cachedAi)
     }
+
+    // Owner, 2026-11-28: every model call is signed in and capped. After the AI cache (a hit costs nothing),
+    // before the model call. The deterministic recap above stays free and uncapped.
+    const gated = await aiCostGate(req, 'draft_recap_ai', userId)
+    if (gated) return gated
 
     const aiResponse = await dedupeInFlight(aiCacheKey, async () => {
       const hotCachedAi = getApiCached(aiCacheKey)

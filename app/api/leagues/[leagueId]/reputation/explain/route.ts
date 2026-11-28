@@ -6,6 +6,7 @@ import {
   listEvidenceForManager,
 } from '@/lib/reputation-engine/ManagerTrustQueryService'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
+import { aiCostGate } from '@/lib/ai-protection/costGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,6 +121,11 @@ export async function POST(
       userMessage:
         'Explain this manager reputation in 3-5 concise sentences. Highlight strongest strengths, biggest risk, and one practical commissioner action.',
     })
+    // Owner, 2026-11-28: every model call is signed in and capped. The consensus orchestration below runs
+    // several models; the daily cap is taken immediately before it.
+    const capped = await aiCostGate(req, 'reputation_explain_ai', gate.userId)
+    if (capped) return capped
+
     const orchestration = await runUnifiedOrchestration({
       envelope,
       mode: 'consensus',

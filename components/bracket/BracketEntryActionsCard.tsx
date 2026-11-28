@@ -104,7 +104,7 @@ export default function BracketEntryActionsCard({ leagueId, tournamentId, entryI
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        setReviewError(data?.error || t("bracket.intel.review.error"))
+        setReviewError(data?.message || data?.error || t("bracket.intel.review.error"))
         return
       }
       const m = data.metrics || {}

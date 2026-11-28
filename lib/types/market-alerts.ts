@@ -36,4 +36,9 @@ export interface MarketAlertResponse {
     marketSentiment: 'bullish' | 'bearish' | 'neutral'
   }
   generatedAt: string
+  /**
+   * Set when Chimmy's headlines were NOT written for this response (2026-11-28): the signals are public, the
+   * model write-up needs sign-in and has a daily cap. `message` says what to do next.
+   */
+  narrativesWithheld?: { reason: 'sign_in' | 'daily' | 'rate' | 'plan'; message: string; upgradePath?: string | null }
 }

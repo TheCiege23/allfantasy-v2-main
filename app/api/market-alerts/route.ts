@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { evaluateAiCostGate } from '@/lib/ai-protection/costGate'
 import { type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
 import { prisma } from '@/lib/prisma'
@@ -201,13 +204,26 @@ function computeDevySignal(player: any, cfbdStats?: CFBDStatLine): { signal: Mar
   return { signal, strength: Math.min(100, Math.abs(score) * 3), tags, projectedRound, volatility, cfbdStats }
 }
 
-async function generateAlertNarratives(alerts: MarketAlert[]): Promise<MarketAlert[]> {
+type NarrativeGate = () => Promise<{ ok: true } | { ok: false; withheld: NonNullable<MarketAlertResponse['narrativesWithheld']> }>
+
+/**
+ * 🛑 THE MODEL CALL IS GATED, THE SIGNALS ARE NOT (owner, 2026-11-28). The alerts are deterministic and stay
+ * public. Only a narrative-cache MISS reaches the model, and only after `gate` (sign-in + the daily cap
+ * AI_COST_GATES.market_alert_ai) says yes; otherwise the alerts go out with their deterministic headlines.
+ * A cache hit costs nothing, so it is served to every caller.
+ */
+async function generateAlertNarratives(
+  alerts: MarketAlert[],
+  gate: NarrativeGate,
+): Promise<{ alerts: MarketAlert[]; withheld?: MarketAlertResponse['narrativesWithheld'] }> {
   if (narrativeCache && Date.now() - narrativeCache.ts < NARRATIVE_CACHE_TTL) {
-    return alerts.map(a => {
-      const cached = narrativeCache!.data.get(a.name.toLowerCase())
-      if (cached) return { ...a, headline: cached.headline, reasoning: cached.reasoning }
-      return a
-    })
+    return {
+      alerts: alerts.map(a => {
+        const cached = narrativeCache!.data.get(a.name.toLowerCase())
+        if (cached) return { ...a, headline: cached.headline, reasoning: cached.reasoning }
+        return a
+      }),
+    }
   }
 
   const topAlerts = alerts
@@ -215,7 +231,10 @@ async function generateAlertNarratives(alerts: MarketAlert[]): Promise<MarketAle
     .sort((a, b) => b.signalStrength - a.signalStrength)
     .slice(0, 30)
 
-  if (topAlerts.length === 0) return alerts
+  if (topAlerts.length === 0) return { alerts }
+
+  const allowed = await gate()
+  if (!allowed.ok) return { alerts, withheld: allowed.withheld }
 
   const playerSummaries = topAlerts.map(a => {
     const cat = a.category === 'devy' ? `(College - ${a.school || 'Unknown'})` : `(${a.team || 'FA'})`
@@ -247,21 +266,23 @@ Only return the JSON array, no other text.`
       narratives = JSON.parse(cleaned)
     } catch {
       console.warn('[Market Alerts] AI returned non-JSON, using defaults')
-      return alerts
+      return { alerts }
     }
 
     const narrativeMap = new Map(narratives.map(n => [n.name.toLowerCase(), { headline: n.headline, reasoning: n.reasoning }]))
 
     narrativeCache = { data: narrativeMap, ts: Date.now() }
 
-    return alerts.map(a => {
-      const match = narrativeMap.get(a.name.toLowerCase())
-      if (match) return { ...a, headline: match.headline, reasoning: match.reasoning }
-      return a
-    })
+    return {
+      alerts: alerts.map(a => {
+        const match = narrativeMap.get(a.name.toLowerCase())
+        if (match) return { ...a, headline: match.headline, reasoning: match.reasoning }
+        return a
+      }),
+    }
   } catch (e) {
     console.error('[Market Alerts] AI narrative generation failed:', e)
-    return alerts
+    return { alerts }
   }
 }
 
@@ -460,7 +481,26 @@ export async function GET(req: Request) {
 
     const limited = alerts.slice(0, limit)
 
-    const enriched = await generateAlertNarratives(limited)
+    const narrated = await generateAlertNarratives(limited, async () => {
+      // Read the session only when a model call is actually on the table.
+      const session = (await getServerSession(authOptions as never).catch(() => null)) as {
+        user?: { id?: string; email?: string | null }
+      } | null
+      const outcome = await evaluateAiCostGate(req, 'market_alert_ai', session?.user?.id ?? null, {
+        email: session?.user?.email ?? null,
+      })
+      if (outcome.ok) return { ok: true as const }
+      const body = (await outcome.response.json().catch(() => ({}))) as { message?: string; upgradePath?: string | null }
+      return {
+        ok: false as const,
+        withheld: {
+          reason: outcome.reason,
+          message: body.message ?? 'Chimmy write-ups are unavailable right now.',
+          upgradePath: body.upgradePath ?? null,
+        },
+      }
+    })
+    const enriched = narrated.alerts
 
     const strongBuys = enriched.filter(a => a.signal === 'STRONG_BUY').length
     const buys = enriched.filter(a => a.signal === 'BUY').length
@@ -481,6 +521,7 @@ export async function GET(req: Request) {
         marketSentiment: bullish > bearish * 1.5 ? 'bullish' : bearish > bullish * 1.5 ? 'bearish' : 'neutral',
       },
       generatedAt: new Date().toISOString(),
+      ...(narrated.withheld ? { narrativesWithheld: narrated.withheld } : {}),
     }
 
     return NextResponse.json(response)

@@ -77,11 +77,11 @@ export default function LegacyBreakdownPage() {
     })
       .then(async (r) => {
         const res = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(res?.error ?? "Could not load explanation.")
+        if (!r.ok) throw new Error(res?.message ?? res?.error ?? "Could not load explanation.")
         return res
       })
       .then((res) => setNarrative(res?.narrative ?? "No explanation available."))
-      .catch(() => setNarrative("Could not load explanation."))
+      .catch((e: unknown) => setNarrative(e instanceof Error && e.message ? e.message : "Could not load explanation."))
       .finally(() => setNarrativeLoading(false))
   }
 

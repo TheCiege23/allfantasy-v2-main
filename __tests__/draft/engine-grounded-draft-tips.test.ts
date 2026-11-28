@@ -11,6 +11,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const getServerSessionMock = vi.hoisted(() => vi.fn(async () => ({ user: { id: 'u1' } })))
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+// The AF Pro plan + daily cap (2026-11-28) is covered by __tests__/monetization/model-call-gates-2026-11-28.test.ts;
+// this suite is about what happens past it.
+vi.mock('@/lib/ai-protection/planCostGate', () => ({ requirePlanThenAiCostGate: async () => null }))
 
 const draftAiTextMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/draft/ai-claude', () => ({ draftAiText: draftAiTextMock }))
