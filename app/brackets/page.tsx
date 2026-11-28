@@ -178,7 +178,7 @@ export default async function BracketsHomePage() {
         <Image
           src={AF_WORDMARK_SRC}
           alt={t("brk.hub.logoAlt")}
-          width={1198}
+          width={1294}
           height={306}
           className="h-8 w-auto object-contain"
           priority

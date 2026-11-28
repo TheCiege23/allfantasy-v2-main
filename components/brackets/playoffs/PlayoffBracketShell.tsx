@@ -290,7 +290,7 @@ export default function PlayoffBracketShell({ initialView, initialInviteCode }: 
       <AndroidBracketAppOption />
       <div className="af-bx-top af-pd-top">
         <Link href="/brackets" className="af-pd-back"><ArrowLeft className="h-4 w-4" aria-hidden />{copy.allBrackets}</Link>
-        <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} className="af-pd-wordmark" />
+        <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1294} height={306} className="af-pd-wordmark" />
         <LanguageToggle variant="compact" />
       </div>
 

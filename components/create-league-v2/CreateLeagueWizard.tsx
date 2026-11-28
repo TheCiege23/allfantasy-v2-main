@@ -566,7 +566,7 @@ export function CreateLeagueWizard(props: WizardProps) {
           <header className="space-y-3">
             {/* The theme toggle is fixed to the top-right corner on this route; keep the logo row clear of it. */}
             <div className="flex min-h-11 items-center pr-16 lg:pr-0">
-              <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} priority className="h-auto w-36 max-w-full sm:w-52" />
+              <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1294} height={306} priority className="h-auto w-36 max-w-full sm:w-52" />
             </div>
             {props.importSourceName ? (
               <p className="rounded-xl border border-violet-500/35 bg-violet-600/10 p-3 text-sm leading-6" data-testid="standalone-import-template-notice">
