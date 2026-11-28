@@ -5,28 +5,14 @@ import { submitCreateLeagueV2 } from '@/lib/create-league-v2/submit'
 afterEach(() => vi.unstubAllGlobals())
 
 describe('create league submission contract', () => {
-  it('sends explicit weekly-lineup acceptance with the native MLB copy', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({leagueId:'native-mlb'}), {status:201}))
+  it('a baseball league is created without any copy source or weekly-lineup flag', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ leagueId: 'native-mlb' }), { status: 201 }))
     vi.stubGlobal('fetch', fetchMock)
-    await submitCreateLeagueV2({...DEFAULT_V2_STATE,sport:'MLB',leagueType:'redraft',name:'Baseball',scoringPresetId:'mlb_h2h_5x5'},'source-mlb',true)
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toMatchObject({sourceLeagueId:'source-mlb',conceptSetup:{acceptWeeklyLineups:true}})
-  })
-
-  it('sends the imported source ID and surfaces incomplete native materialization', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      success: true,
-      leagueId: 'native-league',
-      warnings: [{ code: 'IMPORT_MATERIALIZATION_PENDING', message: 'Native season materialization is pending.' }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-    vi.stubGlobal('fetch', fetchMock)
-    const result = await submitCreateLeagueV2({
-      ...DEFAULT_V2_STATE,
-      leagueType: 'redraft',
-      name: 'Imported Copy',
-      scoringPresetId: 'fb_half_ppr',
-    }, 'source-league')
-    expect(result).toMatchObject({ ok: true, leagueId: 'native-league', warning: 'Native season materialization is pending.' })
-    expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toMatchObject({ sourceLeagueId: 'source-league' })
+    const result = await submitCreateLeagueV2({ ...DEFAULT_V2_STATE, sport: 'MLB', leagueType: 'redraft', name: 'Baseball', scoringPresetId: 'mlb_h2h_5x5' })
+    expect(result).toEqual({ ok: true, leagueId: 'native-mlb', redirectTo: expect.any(String) })
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))
+    expect(body).not.toHaveProperty('sourceLeagueId')
+    expect(body.conceptSetup ?? {}).not.toHaveProperty('acceptWeeklyLineups')
   })
 
   it.each([

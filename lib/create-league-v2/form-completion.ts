@@ -20,7 +20,6 @@ import {
   getSurvivorTribeOptions,
 } from './rules-engine'
 import { isUniversalTeamCount } from '@/lib/create-league-v2/simple-create'
-import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
 import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
@@ -46,11 +45,7 @@ function isKeeperSetupValid(k: ReturnType<typeof getDefaultKeeperSetup>): boolea
 /**
  * Returns blocking issues that prevent POST /api/leagues (or tournament create).
  */
-export function analyzeCreateLeagueCompletion(
-  state: CreateLeagueV2State,
-  /** An import carryover's team count, which the import-flexible types accept off their list. */
-  options: { importedTeamCount?: number | null } = {},
-): CreateLeagueCompletionIssue[] {
+export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): CreateLeagueCompletionIssue[] {
   const issues: CreateLeagueCompletionIssue[] = []
   const lt = getEffectiveLeagueType(state)
 
@@ -94,11 +89,7 @@ export function analyzeCreateLeagueCompletion(
       message: `Team count must be from 2 through ${MAX_NATIVE_TEAMS}.`,
     })
   } else {
-    const allowedTeams = teamCountOptionsWithImported(
-      getTeamCountOptions(state.sport, lt, state.soccerPipeline),
-      state.idpSelected ? 'idp' : lt,
-      options.importedTeamCount,
-    )
+    const allowedTeams = getTeamCountOptions(state.sport, lt, state.soccerPipeline)
     if (!allowedTeams.includes(state.teamCount)) {
       issues.push({
         code: 'team_count_invalid',
@@ -283,7 +274,7 @@ export function analyzeCreateLeagueCompletion(
   for (const refusal of pool?.refusals ?? []) {
     issues.push({ code: 'best_ball_pool', message: refusal.message })
   }
-  const supply = playerSupplyCheckForWizard(state, options.importedTeamCount != null && options.importedTeamCount === state.teamCount)
+  const supply = playerSupplyCheckForWizard(state)
   if (supply && !supply.ok && supply.message) issues.push({ code: 'player_supply', message: supply.message })
 
   return issues
@@ -303,12 +294,11 @@ export function bestBallPoolCheckForWizard(state: CreateLeagueV2State): BestBall
 
 /**
  * The player supply check for the league the wizard is about to create (lib/league-creation/
- * playerSupply.ts): a pro-sport Redraft or Dynasty league. Null for every other league, and for one
- * carried over from an import (it keeps the size it has).
+ * playerSupply.ts): a pro-sport Redraft or Dynasty league. Null for every other league.
  */
-export function playerSupplyCheckForWizard(state: CreateLeagueV2State, importCarryover = false): PlayerSupplyCheck | null {
+export function playerSupplyCheckForWizard(state: CreateLeagueV2State): PlayerSupplyCheck | null {
   const lt = getEffectiveLeagueType(state)
-  if (importCarryover || (lt !== 'redraft' && lt !== 'dynasty') || !(state.teamCount > 0)) return null
+  if ((lt !== 'redraft' && lt !== 'dynasty') || !(state.teamCount > 0)) return null
   const check = checkNewLeaguePlayerSupply({ sport: state.sport, leagueType: state.idpSelected ? 'idp' : lt, teamCount: state.teamCount })
   return check.verified ? check : null
 }

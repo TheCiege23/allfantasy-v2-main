@@ -1,7 +1,7 @@
 /**
- * The create wizard offers Dynasty (and the other import-flexible types) for an import whose team
- * count is off that type's native list, keeps the special modes hidden, and does not report the
- * imported count as an issue. A native create sees no change.
+ * Team counts in the create wizard. The import-copy path that let a league keep an off-list size is
+ * retired (docs/league-import/IN_PLACE_NATIVE_CONVERSION_PLAN.md §10), so every create sees the
+ * format's own list. A template built from an imported league still keeps that league's size.
  */
 import React from 'react'
 import { render, screen } from '@testing-library/react'
@@ -17,26 +17,7 @@ vi.mock('@/components/create-league-v2/CreateLeagueVideoTile', () => ({
 
 import { LeagueBasicsStep } from '@/components/create-league-v2/CreateLeagueWizard'
 
-describe('wizard league types for an imported team count', () => {
-  it('shows Dynasty, Keeper and Best Ball for a 32-team NFL import', () => {
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 32, sport: 'NFL' as const }
-    render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} importCarryover />)
-    expect(screen.getByTestId('g30-league-type-redraft')).toBeInTheDocument()
-    expect(screen.getByTestId('g30-league-type-dynasty')).toBeInTheDocument()
-    expect(screen.getByTestId('g30-league-type-keeper')).toBeInTheDocument()
-    expect(screen.getByTestId('g30-league-type-best_ball')).toBeInTheDocument()
-    // Special modes keep their own size lists.
-    expect(screen.queryByTestId('g30-league-type-zombie')).toBeNull()
-    expect(screen.queryByTestId('g30-league-type-salary_cap')).toBeNull()
-  })
-
-  it('control: Zombie and Salary Cap do appear for a 12-team import', () => {
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
-    render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} importCarryover />)
-    expect(screen.getByTestId('g30-league-type-zombie')).toBeInTheDocument()
-    expect(screen.getByTestId('g30-league-type-salary_cap')).toBeInTheDocument()
-  })
-
+describe('wizard team counts', () => {
   it('a native create still offers only the listed sizes', () => {
     const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 250, sport: 'NFL' as const }
     render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
@@ -55,11 +36,10 @@ describe('import template and completion for an off-list team count', () => {
     expect(template.teamCount).toBe(32)
   })
 
-  it('does not flag the imported count, and still flags it for a native create', () => {
+  it('flags an off-list count', () => {
     // Best ball is still list-bound (even sizes 4–16); dynasty now takes every size from 4 to 250.
     const state = { ...DEFAULT_V2_STATE, leagueType: 'best_ball' as const, teamCount: 9, sport: 'NFL' as const }
     const codes = (issues: { code: string }[]) => issues.map((issue) => issue.code)
     expect(codes(analyzeCreateLeagueCompletion(state))).toContain('team_count_invalid')
-    expect(codes(analyzeCreateLeagueCompletion(state, { importedTeamCount: 9 }))).not.toContain('team_count_invalid')
   })
 })
