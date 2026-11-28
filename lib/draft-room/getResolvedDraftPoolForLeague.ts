@@ -430,6 +430,29 @@ function poolMergeCap(limit: number): number {
   return Math.min(25_000, Math.max(limit * 14, 6000))
 }
 
+/**
+ * A college basketball draft offers EVERY current Division I player (owner decision, 2026-11-28).
+ * The sized-by-limit fetch below (300 x 8 = 2,400) kept the top ~2,400 of ~5,500 by this season's
+ * production, so a manager could not find a bench player such as Duke's Cameron Williams. The
+ * NCAAB pool is already only current-roster players (ncaabPlayerPoolRules.ts), so "every row it
+ * returns" is the whole of Division I. The ceiling is a guard, not a size: above the ~5,500 ESPN
+ * roster athletes, below the 22,000 raw NCAAB rows across every source and season.
+ */
+export const NCAAB_EVERY_PLAYER_POOL_LIMIT = 12_000
+
+/** How many distinct pool rows to read for a sport before ranking and merging. */
+export function draftPoolFetchLimit(sport: string, limit: number): number {
+  if (sport === 'NFL') return Math.min(50_000, Math.max(limit * 12, 16_000))
+  if (sport === 'NCAAB') return NCAAB_EVERY_PLAYER_POOL_LIMIT
+  return Math.min(Math.max(limit * 8, 1600), 4500)
+}
+
+/** The merge must not stop before the fetch does, or the extra rows read are dropped again. */
+export function draftPoolMergeCap(sport: string, limit: number): number {
+  const cap = poolMergeCap(limit)
+  return sport === 'NCAAB' ? Math.max(cap, NCAAB_EVERY_PLAYER_POOL_LIMIT) : cap
+}
+
 function adpLookupKey(name: string, position: string, team?: string | null): string {
   return `${normalizeDraftPoolNameForDedupe(name)}|${normalizeKeyPart(position)}|${normalizeKeyPart(team)}`
 }
@@ -1339,10 +1362,7 @@ async function buildResolvedDraftPoolForLeague(
 
   type RawRow = DraftPoolRawRow
   let rawList: RawRow[] = []
-  const poolFetchLimit =
-    sport === 'NFL'
-      ? Math.min(50_000, Math.max(limit * 12, 16_000))
-      : Math.min(Math.max(limit * 8, 1600), 4500)
+  const poolFetchLimit = draftPoolFetchLimit(sport, limit)
   const perfPlayerPool = perfStart(`5. getPlayerPoolForLeague (limit=${poolFetchLimit})`)
   const poolRows: SportPoolRow[] = await getPlayerPoolForLeague(leagueId, sport, {
     limit: poolFetchLimit,
@@ -1561,7 +1581,7 @@ async function buildResolvedDraftPoolForLeague(
     mergeDbPoolIntoRawList(
       rawList,
       poolRows as SportPoolRow[],
-      poolMergeCap(limit),
+      draftPoolMergeCap(sport, limit),
       useMixedPoolTypeMarkers,
       seenAuction,
       sport === 'NFL' ? nflPoolRowIdResolver(poolRows as SportPoolRow[]) : externalSourceIdAsIs,
@@ -1603,7 +1623,7 @@ async function buildResolvedDraftPoolForLeague(
     mergeDbPoolIntoRawList(
       rawList,
       poolRows as SportPoolRow[],
-      poolMergeCap(limit),
+      draftPoolMergeCap(sport, limit),
       useMixedPoolTypeMarkers,
       seenAfterRanked,
       nflIdFor,
@@ -1638,7 +1658,7 @@ async function buildResolvedDraftPoolForLeague(
       mergeDbPoolIntoRawList(
         rawList,
         poolRows as SportPoolRow[],
-        poolMergeCap(limit),
+        draftPoolMergeCap(sport, limit),
         useMixedPoolTypeMarkers,
         seenAfterAdpSeed,
       )
@@ -1674,7 +1694,7 @@ async function buildResolvedDraftPoolForLeague(
       mergeDbPoolIntoRawList(
         rawList,
         poolRows as SportPoolRow[],
-        poolMergeCap(limit),
+        draftPoolMergeCap(sport, limit),
         useMixedPoolTypeMarkers,
         seenNonNfl,
       )

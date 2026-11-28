@@ -151,7 +151,15 @@ export function rosterResponse(sport: HarnessSport) {
           slots[p.id] = cfg.slots[j]
           if (status === 'past') points[p.id] = Math.round(p.projected * (0.6 + ((i + j) % 5) / 6) * 10) / 10
         })
-        return { day: iso(d), status, slots, points, starterPoints: Object.values(points).reduce((s, v) => s + v, 0) }
+        const startedIds = Object.keys(points)
+        const starterPoints = Math.round(Object.values(points).reduce((s, v) => s + v, 0) * 10) / 10
+        // The bench is on the roster every day; one bench player scores on the first day, so the
+        // week-by-player table has points left on the bench to show (they never count).
+        t.bench.forEach((p, j) => {
+          slots[p.id] = 'bench'
+          if (status === 'past' && i === 0 && j === 2) points[p.id] = Math.round(p.projected * 0.9 * 10) / 10
+        })
+        return { day: iso(d), status, slots, points, starterPoints, startedIds }
       })
     : []
   return {
@@ -169,7 +177,16 @@ export function rosterResponse(sport: HarnessSport) {
     lineupLock: { lockedPlayerIds: t.starters.filter(p => p.status !== 'upcoming').map(p => p.id), perPlayerReasons: {} },
     irRules: { irAllowOut: true, irAllowCovid: false, irAllowSuspended: false, irAllowNA: false, irAllowDNR: false, irAllowDoubtful: false },
     dailyLineups: cfg.daily
-      ? { week: cfg.week, today: days[2].day, days, weekPoints: days.reduce((s, d) => s + d.starterPoints, 0), startedPoints: {} }
+      ? {
+          week: cfg.week,
+          today: days[2].day,
+          days,
+          weekPoints: Math.round(days.reduce((s, d) => s + d.starterPoints, 0) * 10) / 10,
+          startedPoints: days.reduce<Record<string, number>>((acc, d) => {
+            for (const id of d.startedIds) acc[id] = Math.round(((acc[id] ?? 0) + d.points[id]) * 10) / 10
+            return acc
+          }, {}),
+        }
       : null,
   }
 }
@@ -442,4 +459,66 @@ export function activityResponse(sport: HarnessSport) {
     ],
     leagues: [],
   }
+}
+
+/** `/api/leagues/[id]/manager-contacts`: every other team's manager is messageable (r-0 is the viewer). */
+export function managerContactsResponse() {
+  const contacts: Record<string, { username: string; displayName: string; avatarUrl: null }> = {}
+  MANAGERS.forEach((teamName, i) => {
+    if (i === 0) return
+    contacts[`r-${i}`] = { username: `manager${i}`, displayName: teamName.replace(/^The /, ''), avatarUrl: null }
+  })
+  return { contacts }
+}
+
+/** `/api/leagues/[id]/week-planner`: the sport's eight teams over the league week, in the planner's shape. */
+export function weekPlannerResponse(sport: HarnessSport, offset: number) {
+  const cfg = SPORTS[sport]
+  const teams = cfg.teams
+  const start = new Date()
+  start.setUTCHours(0, 0, 0, 0)
+  start.setUTCDate(start.getUTCDate() - 2 + offset * 7)
+  const today = new Date().toISOString().slice(0, 10)
+  // Busy and light nights: four games, one game, four, one, four, two, four.
+  const perNight = [4, 1, 4, 1, 4, 2, 4]
+  const days = perNight.map((n, i) => {
+    const d = new Date(start.getTime() + i * 86_400_000).toISOString().slice(0, 10)
+    return { day: d, games: n, status: d < today ? 'past' : d === today ? 'today' : 'future', light: n <= 1 }
+  })
+  const byTeam = new Map(teams.map((t) => [t, [] as Array<{ day: string; opponent: string; home: boolean; started: boolean }>]))
+  days.forEach((d, i) => {
+    for (let k = 0; k < d.games; k++) {
+      const home = teams[(i * 3 + k * 2) % teams.length]
+      const away = teams[(i * 3 + k * 2 + 1) % teams.length]
+      byTeam.get(home)!.push({ day: d.day, opponent: away, home: true, started: d.status === 'past' })
+      byTeam.get(away)!.push({ day: d.day, opponent: home, home: false, started: d.status === 'past' })
+    }
+  })
+  const lightDays = new Set(days.filter((d) => d.light).map((d) => d.day))
+  const rows = [...byTeam.entries()].map(([team, games]) => {
+    const open = games.filter((g) => !g.started)
+    return { team, label: team, games, count: games.length, remaining: open.length, lightRemaining: open.filter((g) => lightDays.has(g.day)).length }
+  })
+  rows.sort((a, b) => b.remaining - a.remaining || b.lightRemaining - a.lightRemaining || a.label.localeCompare(b.label))
+  const teamCodes: Record<string, string> = {}
+  for (const t of teams) teamCodes[t] = t
+  return { planner: { sport, week: cfg.week + offset, days, teams: rows }, teamCodes }
+}
+
+/** `/api/nhl/goalie-starts`: the viewer's two goalies, one projected to start and one the backup. */
+export function goalieStartsResponse() {
+  const goalies = [...teamPlayers('NHL', 0).starters, ...teamPlayers('NHL', 0).bench].filter((p) => p.position === 'G')
+  const fa = waiverPlayersResponse('NHL').players.filter((p) => p.position === 'G')
+  const today = new Date().toISOString().slice(0, 10)
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+  const proj = (day: string, starter: { id: string; name: string }, backup: { id: string; name: string } | null, confidence: 'likely' | 'lean', basis: string, team: string) => ({
+    day, team, opponent: 'DAL', home: true, status: 'projected', confidence,
+    goalie: { playerId: starter.id, name: starter.name }, alternate: backup ? { playerId: backup.id, name: backup.name } : null,
+    basis, starts: confidence === 'likely' ? 8 : 5, games: 10,
+  })
+  const out = []
+  if (goalies[0]) out.push(proj(today, goalies[0], goalies[1] ?? null, 'likely', `${goalies[0].name} has started 8 of the last 10 games.`, goalies[0].team))
+  if (goalies[2]) out.push(proj(tomorrow, goalies[2], null, 'lean', `Second night of a back-to-back: the No. 1 started last night, so ${goalies[2].name} is the likelier starter.`, goalies[2].team))
+  if (fa[0]) out.push(proj(tomorrow, fa[0], null, 'lean', `${fa[0].name} has started 5 of the last 10 games.`, fa[0].team))
+  return { generatedAt: new Date().toISOString(), projections: out }
 }

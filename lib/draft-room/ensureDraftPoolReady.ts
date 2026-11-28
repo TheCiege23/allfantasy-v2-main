@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { STARTUP_COLLEGE_DRAFT_LABEL, STARTUP_PRO_DRAFT_LABEL } from '@/lib/draft-defaults/startupCollegeDraft'
 import { compactDraftPoolCacheKey } from './draftPoolCacheKey'
+import { stripPoolEntriesFallbacks } from './stripPoolEntryFallbacks'
 import { collegeScopeSignature, collegeScopeSportFor, readCollegeConferenceScope } from '@/lib/college/conferenceScope'
 import {
   getEffectiveLeagueRosterTemplate,
@@ -555,6 +556,8 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
     }
 
     if (model) {
+      // Same slim entries the route writes and serves (stripPoolEntryFallbacks.ts).
+      const storedEntries = stripPoolEntriesFallbacks(resolved.entries)
       const expiresAt = new Date(Date.now() + Math.max(1, dbFirstMode.draftPoolCacheTtlSeconds) * 1000)
       await model.upsert({
         where: { cacheKey },
@@ -566,7 +569,7 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
           sourceFingerprint: rosterFp,
           entryCount: Number(resolved.count ?? resolved.entries.length),
           payload: {
-            entries: resolved.entries,
+            entries: storedEntries,
             sport: resolved.sport,
             count: resolved.count,
             rosterConfigurationIncomplete: resolved.rosterConfigurationIncomplete,
@@ -585,7 +588,7 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
           sourceFingerprint: rosterFp,
           entryCount: Number(resolved.count ?? resolved.entries.length),
           payload: {
-            entries: resolved.entries,
+            entries: storedEntries,
             sport: resolved.sport,
             count: resolved.count,
             rosterConfigurationIncomplete: resolved.rosterConfigurationIncomplete,
