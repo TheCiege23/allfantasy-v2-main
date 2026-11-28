@@ -148,7 +148,8 @@ export const AI_COST_GATES = {
   // /api/draft/ai/* (best-pick, compare, grade, scarcity, queue-suggestions, roster-fit, pick-survival,
   // draft-recap). One shared allowance for all eight.
   draft_ai_tools: { label: 'Chimmy draft tools', featureId: 'pro_draft_ai', paidFromLaunch: true, perMinute: 10, dailyFree: 0, dailyPaid: 100 },
-  // /api/legacy/player-finder — up to ~20 model calls per search, so the allowance is in searches.
+  // /api/legacy/player-finder — up to ~20 model calls per search, so the allowance is in searches. Its plan key
+  // also opens AF Legacy (an AF Legacy tool; owner follow-up 2026-11-28).
   /*
    * Member devy / C2C / IDP player advice (lib/subscription/memberPlayerAiGate.ts): Chimmy Intelligence
    * (`af_intelligence`: AF Pro, AF Commissioner, AF Supreme), required first, then this cap (owner, 2026-11-28).

@@ -264,7 +264,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/player-finder", tool: 
     }
 
     /*
-     * 🛑 AF PRO / AF SUPREME, THEN A DAILY CAP (owner, 2026-11-28). One search fans out to ~20 model calls (a
+     * 🛑 AF PRO / AF LEGACY / AF SUPREME, THEN A DAILY CAP (owner, 2026-11-28). One search fans out to ~20 model calls (a
      * buy/sell signal per owned player), so this is an expensive player tool. Both run before any league read
      * or model call; the identity gate above only ever resolves a signed-in session here (no guest).
      */

@@ -360,15 +360,17 @@ export const ENTITLEMENTS = {
   },
   /*
    * The AF Legacy Player Finder (POST /api/legacy/player-finder), owner's decision 2026-11-28. One search fans
-   * out to ~20 model calls (a buy/sell signal per owned player), so it is an expensive player tool: AF Pro and
-   * AF Supreme only, plus a daily cap (AI_COST_GATES.player_finder_ai). No existing key fit — `pro_draft_ai` is
-   * draft help and `af_intelligence` includes AF Commissioner. Not in the plan matrix (one plan per row).
+   * out to ~20 model calls (a buy/sell signal per owned player), so it is an expensive player tool with a daily
+   * cap (AI_COST_GATES.player_finder_ai). It is an AF Legacy tool, so AF Legacy keeps it (owner follow-up, same
+   * day): AF Pro + AF Legacy + AF Supreme, the shape of `draft_room_ai_explanation`. AF Commissioner alone and
+   * Free stay locked. No existing key fit — `pro_draft_ai` is draft help and `af_intelligence` includes AF
+   * Commissioner. Not in the plan matrix (one plan per row).
    */
   player_finder_stock_ai: {
     key: 'player_finder_stock_ai',
     label: 'Player Finder',
-    description: "Find every league where you own a player, with Chimmy's buy/sell signal. Included with AF Pro and AF Supreme.",
-    requiredPlan: ['af_pro', 'af_supreme'],
+    description: "Find every league where you own a player, with Chimmy's buy/sell signal. Included with AF Pro, AF Legacy and AF Supreme.",
+    requiredPlan: ['af_pro', 'af_war_room', 'af_supreme'],
     upgradeUrl: '/upgrade?plan=pro',
     upgradeLabel: 'Get AF Pro',
   },

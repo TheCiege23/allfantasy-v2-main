@@ -54,6 +54,9 @@ describe('3. the smaller items', () => {
   it('a. AF Legacy portfolio history (legacy_portfolio_history) = AF Legacy + AF Supreme', async () => {
     expect(await tiersFor('legacy_portfolio_history')).toEqual(['legacy', 'supreme'])
   })
+  it('the AF Legacy Player Finder (player_finder_stock_ai) = AF Pro + AF Legacy + AF Supreme; Free stays locked', async () => {
+    expect(await tiersFor('player_finder_stock_ai')).toEqual(['pro', 'legacy', 'supreme'])
+  })
   it('b. the full decision log behind the Receipts card (decision_log_history) = AF Pro + AF Supreme', async () => {
     expect(await tiersFor('decision_log_history')).toEqual(['pro', 'supreme'])
   })

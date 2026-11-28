@@ -388,7 +388,10 @@ describe('A. /api/market-alerts: the signals stay public, only the model write-u
 /** Expensive player tools: AF Pro / AF Supreme, then a cap. */
 const PRO_SUPREME: Tier[] = ['pro', 'supreme']
 const DRAFT_AI = ['best-pick', 'compare', 'grade', 'scarcity', 'queue-suggestions', 'roster-fit', 'pick-survival', 'draft-recap']
-const PRO_ROWS: Row[] = [
+// The AF Legacy Player Finder keeps AF Legacy (owner follow-up 2026-11-28): Pro + Legacy + Supreme.
+const PRO_LEGACY_SUPREME: Tier[] = ['pro', 'legacy', 'supreme']
+type ProRow = Row & { allowed?: Tier[] }
+const PRO_ROWS: ProRow[] = [
   ...DRAFT_AI.map((name) => ({
     name: `POST /api/draft/ai/${name}`,
     path: `@/app/api/draft/ai/${name}/route`,
@@ -400,6 +403,7 @@ const PRO_ROWS: Row[] = [
     path: '@/server/api-route-modules/legacy/player-finder/route',
     url: 'http://localhost/api/legacy/player-finder',
     body: { query: 'Bijan', sport: 'nfl' },
+    allowed: PRO_LEGACY_SUPREME,
   },
 ]
 
@@ -415,7 +419,7 @@ describe('A. expensive player tools: AF Pro / AF Supreme, then a daily cap', () 
       })
 
       for (const tier of TIERS) {
-        const open = PRO_SUPREME.includes(tier)
+        const open = (row.allowed ?? PRO_SUPREME).includes(tier)
         it(`${tier}: ${open ? 'past the plan gate' : '403 feature_not_entitled — the cap and the model are never touched'}`, async () => {
           setTier(tier)
           const r = await call(row)
