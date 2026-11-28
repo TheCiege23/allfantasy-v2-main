@@ -136,11 +136,13 @@ async function clean() {
 /** Every row the switch or later native activity can touch, minus bookkeeping timestamps, for a field-level comparison. */
 async function captureLeague(leagueId: string) {
   const strip = <T extends Record<string, unknown>>(rows: T[]) =>
-    rows.map(({ updatedAt: _u, ...rest }) => rest).sort((a, b) => String(a.id ?? a.matchupId).localeCompare(String(b.id ?? b.matchupId)))
+    // `updatedAt` / `lastUpdatedAt` (LeagueTeam) are @updatedAt bookkeeping: any write moves them, undo's included.
+    rows.map(({ updatedAt: _u, lastUpdatedAt: _l, ...rest }) => rest).sort((a, b) => String(a.id ?? a.matchupId).localeCompare(String(b.id ?? b.matchupId)))
   const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId } })
   // The switch writes the roster layout through the one roster writer BEFORE its transaction (and before its snapshot);
-  // an imported league reads its provider's positions first, so undo leaves it. Everything else must come back.
-  const { roster: _layout, ...settings } = (league.settings ?? {}) as Record<string, unknown>
+  // an imported league reads its provider's positions first, so undo leaves it. That writer saves two keys: `roster`
+  // and the sport's `<sport>_roster_config` (UnifiedRosterConfigService). Everything else must come back.
+  const { roster: _layout, nfl_roster_config: _sportLayout, ...settings } = (league.settings ?? {}) as Record<string, unknown>
   const redraftRosters = await prisma.redraftRoster.findMany({ where: { leagueId } })
   return {
     league: { platform: league.platform, platformLeagueId: league.platformLeagueId, syncStatus: league.syncStatus, settings, playoffTeams: league.playoffTeams, playoffStartWeek: league.playoffStartWeek },
