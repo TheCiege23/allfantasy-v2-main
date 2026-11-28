@@ -25,6 +25,7 @@ import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLin
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { MAKE_NATIVE_LABEL, NATIVE_SWITCH_ANCHOR } from '@/lib/league/makeNativeLeague'
 import { NativeReadinessCard } from '@/components/league-home/NativeReadinessCard'
+import { ImportedLeagueSwitchCard } from '@/components/league-home/SwitchingLeagueCard'
 import { NativeUndoCard } from '@/components/league-home/NativeUndoCard'
 
 type WorkspaceAction = {
@@ -208,7 +209,11 @@ export function CommissionerOperationsWorkspace({
       <div className="af-admin-sections">
       {/* Imported leagues: what the in-place switch to AllFantasy would need. A league that switched in place: undo, while
           it is open (it renders nothing otherwise). Both routes answer the head commissioner alone. */}
-      {!isNativePlatform(league.platform) ? <NativeReadinessCard leagueId={leagueId} /> : <NativeUndoCard leagueId={leagueId} />}
+      {/* In season (or once official), the switching league's "Make it official" takes that place instead: one switch
+          card at a time (components/league-home/SwitchingLeagueCard.tsx). */}
+      {!isNativePlatform(league.platform)
+        ? <ImportedLeagueSwitchCard leagueId={leagueId} offseasonCard={<NativeReadinessCard leagueId={leagueId} />} />
+        : <NativeUndoCard leagueId={leagueId} />}
       {/* Decision OS commissioner lens — the same live CommissionerPulse engine
           the Decide tab renders: inactive/at-risk managers from counted signals
           (empty starters, transaction drought, scoring trend, orphan rosters). */}
