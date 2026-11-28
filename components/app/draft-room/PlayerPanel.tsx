@@ -4,6 +4,7 @@ import { canDisplayAiAdp } from '@/lib/draft-room/adpPresentation'
 
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
+import { useHydrationSafeId } from './useHydrationSafeId'
 import { Check, Search, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage, useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -445,7 +446,8 @@ function PlayerPanelInner({
   const compareUi = usePlayerComparisonUIOptional()
   const [phoneLayout, setPhoneLayout] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const filterRegionId = React.useId()
+  // Not `React.useId()`: that id can differ from the server's here (useHydrationSafeId says why).
+  const filterRegionId = useHydrationSafeId()
   useEffect(() => {
     const query = window.matchMedia(DRAFT_PHONE_LAYOUT_QUERY)
     const update = () => setPhoneLayout(query.matches)
@@ -936,7 +938,7 @@ function PlayerPanelInner({
             />
           </div>
           <button type="button" className="draft-filter-toggle rounded-lg border border-white/15 px-3 text-sm text-cyan-100"
-            data-testid="draft-mobile-filters-toggle" aria-expanded={filtersOpen} aria-controls={`draft-player-more-filters ${filterRegionId}`}
+            data-testid="draft-mobile-filters-toggle" aria-expanded={filtersOpen} aria-controls={filterRegionId ? `draft-player-more-filters ${filterRegionId}` : 'draft-player-more-filters'}
             aria-label={`Filters, ${filtered.length} players`}
             onClick={() => setFiltersOpen(open => !open)}>
             <SlidersHorizontal className="h-4 w-4 inline-block mr-1" aria-hidden />
@@ -948,9 +950,9 @@ function PlayerPanelInner({
               Same sort state and keys as the headers, so switching layout keeps the order. */}
           {phoneLayout ? (
             <div className="flex items-center gap-1" data-testid="draft-mobile-sort">
-              <label className="sr-only" htmlFor={`${filterRegionId}-sort`}>Sort players by</label>
+              <label className="sr-only" htmlFor={filterRegionId ? `${filterRegionId}-sort` : undefined}>Sort players by</label>
               <select
-                id={`${filterRegionId}-sort`}
+                id={filterRegionId ? `${filterRegionId}-sort` : undefined}
                 data-testid="draft-mobile-sort-key"
                 value={phoneSortOptions.some((o) => o.key === sortBy) ? sortBy : ''}
                 onChange={(e) => {

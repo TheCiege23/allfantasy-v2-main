@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useHydrationSafeId } from './useHydrationSafeId'
 import { ChevronDown, ChevronUp, Lock } from 'lucide-react'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
 import type { KeeperSessionSnapshot } from '@/lib/live-draft-engine/types'
@@ -48,7 +49,7 @@ export function KeeperRollCall({
   /** AF placed the locked keepers (lib/keeper/keeperAutoBoard.ts): flags the commissioner must resolve. */
   autoPlacement?: AutoPlacement | null
 }) {
-  const listId = useId()
+  const listId = useHydrationSafeId()
   const [collapsed, setCollapsed] = useState(false)
 
   useEffect(() => {
