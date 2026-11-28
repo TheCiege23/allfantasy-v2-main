@@ -36,6 +36,8 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
 import { withNewestKickoffs } from './nextGameMap'
 import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
+import { loadOfficialWeeklyRows } from '@/lib/league/switching/officialWeeklyRows'
+import { isOfficialOnAllFantasy } from '@/lib/league/switching/switchingLeague'
 
 /*
  * The opposing side's two name lines. The importer stores an unowned Sleeper roster as team
@@ -696,9 +698,18 @@ async function buildMatchupData(
     String(sport ?? '').toUpperCase() === 'NFL'
       ? timer.time('finishedNfl', loadFinishedNflWeeks([{ season: latest.seasonYear, week: latest.week }]).catch(() => undefined))
       : Promise.resolve(undefined)
-  const storedWeeksRead = timer.time('storedWeeks', prisma.weeklyMatchup
-    .groupBy({ by: ['week'], where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear } })
-    .then((g) => g.map((r) => r.week).sort((a, b) => a - b))
+  /*
+   * 🛑 AN OFFICIAL SWITCHING LEAGUE IS SCORED BY ALLFANTASY, so its week comes from AllFantasy's own
+   * schedule (lib/league/switching/officialWeeklyRows.ts), in the same row shape. Its `WeeklyMatchup`
+   * rows are the platform's and are shared with every other user who imported the league.
+   */
+  const official = isOfficialOnAllFantasy(league.settings)
+  const storedWeeksRead = timer.time('storedWeeks', (official
+    ? loadOfficialWeeklyRows(league, latest.seasonYear).then((r) => [...new Set((r ?? []).map((x) => x.week))])
+    : prisma.weeklyMatchup
+      .groupBy({ by: ['week'], where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear } })
+      .then((g) => g.map((r) => r.week)))
+    .then((weeks) => weeks.sort((a, b) => a - b))
     .catch(() => [] as number[]))
   const finishedNfl = await finishedNflRead
   const finalProgress = finishedNfl ? leagueWeekProgress(league, finishedNfl) : progress
@@ -709,10 +720,12 @@ async function buildMatchupData(
     const week = currentScheduledLeagueWeek(league, latest.seasonYear, storedWeeks, finishedNfl)
     if (week != null) latest = { ...latest, week }
   }
-  const rows = await prisma.weeklyMatchup.findMany({
-    where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear, week: latest.week },
-    select: { rosterId: true, matchupId: true, game: true, pointsFor: true, pointsAgainst: true, win: true },
-  })
+  const rows = official
+    ? (await loadOfficialWeeklyRows(league, latest.seasonYear, { week: latest.week })) ?? []
+    : await prisma.weeklyMatchup.findMany({
+      where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear, week: latest.week },
+      select: { rosterId: true, matchupId: true, game: true, pointsFor: true, pointsAgainst: true, win: true },
+    })
   // All-zero rows are a scheduled matchup, not a scored result.
   const anyPoints = rows.some((r) => r.pointsFor > 0 || r.pointsAgainst > 0)
 
@@ -794,11 +807,20 @@ async function buildMatchupData(
    * The week on screen is left out: it is the game being played, not history.
    */
   const headToHeadRead: Promise<MatchupData['headToHead']> = opponentRow
-    ? timer.time('headToHead', prisma.weeklyMatchup
+    ? timer.time('headToHead', (official
+        // This season from AllFantasy's schedule; earlier seasons were played on the platform.
+        ? Promise.all([
+          loadOfficialWeeklyRows(league, latest.seasonYear, { rosterIds: [mine.rosterId, opponentRow.rosterId] }),
+          prisma.weeklyMatchup.findMany({
+            where: { leagueId: platformLeagueId, seasonYear: { not: latest.seasonYear }, rosterId: { in: [mine.rosterId, opponentRow.rosterId] } },
+            select: { seasonYear: true, week: true, rosterId: true, matchupId: true, pointsFor: true },
+          }),
+        ]).then(([thisSeason, earlier]) => [...earlier, ...(thisSeason ?? [])])
+        : prisma.weeklyMatchup
         .findMany({
           where: { leagueId: platformLeagueId, rosterId: { in: [mine.rosterId, opponentRow.rosterId] } },
           select: { seasonYear: true, week: true, rosterId: true, matchupId: true, pointsFor: true },
-        })
+        }))
         .then((rowsAll) => headToHeadFrom(rowsAll, mine.rosterId, { season: latest.seasonYear, week: latest.week }))
         .catch(() => null))
     : Promise.resolve(null)
@@ -823,8 +845,9 @@ async function buildMatchupData(
     opponent: opponentRow
       ? { platformUserId: oppTeam?.platformUserId ?? null, rosterId: String(opponentRow.rosterId) }
       : null,
-    // A Sleeper league's live lineups for this week, where Sleeper can vouch for them.
-    source: { platform: league.platform, platformLeagueId },
+    // A Sleeper league's live lineups for this week, where Sleeper can vouch for them. Not once the league
+    // is official: a switched team's lineup is set here, and AllFantasy's stored lineups cover every team.
+    source: official ? null : { platform: league.platform, platformLeagueId },
   })
 
   const anyProjected =

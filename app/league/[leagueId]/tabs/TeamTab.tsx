@@ -62,6 +62,8 @@ import { useByeTeams } from './useByeTeams'
 import { useNoGameTeams } from './useNoGameTeams'
 import { TeamFuturePicks } from '@/components/league/TeamFuturePicks'
 import { AutoSwitchOwnerCard } from '@/components/league/AutoSwitchOwnerCard'
+import { SwitchingLeagueTeamCard } from '@/components/league-home/SwitchingLeagueCard'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 const TeamTabMatchupBanner = dynamic(
   () =>
@@ -1739,6 +1741,8 @@ const maxWeekMenu = useMemo(() => {
       {league.status === 'in_season' ? (
         <TeamTabMatchupBanner leagueId={league.id} />
       ) : null}
+      {/* An imported league AllFantasy is taking over: "Switch to AllFantasy" on the manager's own team. */}
+      {!isNativePlatform(league.platform) ? <SwitchingLeagueTeamCard leagueId={league.id} /> : null}
       {/* The commissioner's auto-switch for this team, with the manager's own off switch (#18). */}
       <AutoSwitchOwnerCard leagueId={league.id} />
       {legalitySnapshot && !legalitySnapshot.isLegal ? (
