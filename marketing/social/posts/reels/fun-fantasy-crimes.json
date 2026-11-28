@@ -1,0 +1,113 @@
+{
+  "name": "fun-fantasy-crimes",
+  "accent": "#FF5A6E",
+  "seconds": 16,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "emoji": "⚖️",
+      "text": "Rate these\nfantasy\n[crimes]",
+      "size": "h1",
+      "pop": true,
+      "top": 160
+    },
+    {
+      "in": 0.6,
+      "out": 2.4,
+      "text": "1 = forgivable. 10 = removed from the league.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 2.5,
+      "out": 4.5,
+      "emoji": "🛌",
+      "text": "Starting a player\non [bye]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 2.8,
+      "out": 4.5,
+      "text": "Crime 1. Zero points. Full confidence.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 4.55,
+      "out": 6.55,
+      "emoji": "🤝",
+      "text": "Trading with your\n[brother-in-law]",
+      "size": "h2",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 4.85,
+      "out": 6.55,
+      "text": "Crime 2. At the deadline. Totally a coincidence.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 6.6,
+      "out": 8.6,
+      "emoji": "📉",
+      "text": "[Tanking]\nin Week 4",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 6.8999999999999995,
+      "out": 8.6,
+      "text": "Crime 3. It's a “rebuild.” It's October.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 8.649999999999999,
+      "out": 10.649999999999999,
+      "emoji": "🗳️",
+      "text": "Commish [vetoing]\nhis rival's trade",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 8.95,
+      "out": 10.649999999999999,
+      "text": "Crime 4. “For the integrity of the league.”",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 10.7,
+      "out": 12.7,
+      "emoji": "💸",
+      "text": "Never paying\nleague [dues]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 11.0,
+      "out": 12.7,
+      "text": "Crime 5. “I'll Venmo you after the season.”",
+      "size": "p",
+      "top": 1000
+    }
+  ],
+  "end": {
+    "in": 12.85,
+    "line": "Drop your\n[scores] 👇"
+  },
+  "caption": {
+    "instagram": "Rate these fantasy crimes 1–10 ⚖️ (1 = forgivable, 10 = removed from the league)\n\nDrop your scores in order, like 7-3-10-6-9 👇 and send this to the guilty party.\n\n#fantasyfootball #fantasyfootballmemes #fantasyfootballcommunity #commissioner #allfantasy",
+    "tiktok": "Rate these fantasy crimes 1–10 ⚖️ drop your scores 👇 #fantasyfootball #fantasyfootballtok #fantasymemes #allfantasy",
+    "youtube": "Rate these fantasy crimes 1–10 ⚖️ Drop your scores in the comments #fantasyfootball #shorts",
+    "facebook": "Rate these fantasy crimes 1 to 10 ⚖️ Drop your scores 👇 and tag the guilty party. https://allfantasy.ai"
+  }
+}

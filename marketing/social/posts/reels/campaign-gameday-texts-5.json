@@ -1,0 +1,70 @@
+{
+  "name": "campaign-gameday-texts-5",
+  "slot": "Sat 10/24 · reel",
+  "accent": "#B48CFF",
+  "seconds": 12,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "text": "Worst way to\n[lose a week?]",
+      "size": "h1",
+      "pop": true,
+      "top": 160
+    },
+    {
+      "in": 2.6,
+      "out": 4.0,
+      "text": "Started a guy\n[ruled out]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "😴"
+    },
+    {
+      "in": 4.0,
+      "out": 5.4,
+      "text": "Forgot a\n[bye week]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🗓️"
+    },
+    {
+      "in": 5.4,
+      "out": 6.8,
+      "text": "Benched the\n[30-point game]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "📉"
+    },
+    {
+      "in": 6.8,
+      "out": 8.4,
+      "text": "Never set\n[my lineup]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🙈"
+    },
+    {
+      "in": 8.6,
+      "out": 10.0,
+      "text": "Comment\n[your pick 👇]",
+      "size": "h2",
+      "pop": true,
+      "top": 200
+    }
+  ],
+  "end": {
+    "in": 10.2,
+    "line": "We can fix\n[the first one.]"
+  },
+  "caption": {
+    "instagram": "Be honest. Worst way to lose a week? 👇\n\n😴 Started a guy who was ruled out\n🗓️ Forgot about a bye week\n📉 Benched the 30-point game\n🙈 Never set my lineup\n\n(We can help with the first one: AllFantasy texts you if a starter gets ruled out near kickoff. Link in bio.)\n\n#fantasyfootball #fantasyfootballmemes #fantasyfootballcommunity #allfantasy",
+    "tiktok": "Worst way to lose a fantasy week? Comment 😴 🗓️ 📉 or 🙈\n\n#fantasyfootball #fantasyfootballtok #allfantasy",
+    "youtube": "Worst way to lose a fantasy week? Comment 😴 🗓️ 📉 or 🙈 allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "Be honest: what's the worst way you've lost a fantasy week? 😴 Started a guy who was ruled out, 🗓️ forgot a bye week, 📉 benched the 30-point game, or 🙈 never set the lineup?"
+  }
+}

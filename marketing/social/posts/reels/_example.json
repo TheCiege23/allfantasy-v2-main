@@ -1,0 +1,20 @@
+{
+  "name": "example-sunday-checklist",
+  "accent": "#3BC4FF",
+  "seconds": 12,
+  "beats": [
+    { "in": 0.2, "out": 2.4, "text": "5 checks\n[before Sunday.]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 2.6, "out": 4.0, "emoji": "🩺", "text": "The [Friday] injury report", "pop": true, "top": 200 },
+    { "in": 4.0, "out": 5.4, "emoji": "🛌", "text": "Byes in [every] league", "pop": true, "top": 200 },
+    { "in": 5.4, "out": 6.8, "emoji": "⏱️", "text": "When [waivers] clear", "pop": true, "top": 200 },
+    { "in": 6.8, "out": 8.2, "emoji": "🌙", "text": "Flex the [late] game", "pop": true, "top": 200 },
+    { "in": 8.2, "out": 9.6, "emoji": "✅", "text": "Starters set [everywhere]", "pop": true, "top": 200 }
+  ],
+  "end": { "in": 9.8, "line": "Every league.\n[One board.]" },
+  "caption": {
+    "instagram": "5 checks before Sunday 🏈 Save this. Which one burned you this year? 👇\n\n#fantasyfootball #allfantasy",
+    "tiktok": "5 checks before Sunday 🏈 #fantasyfootball #allfantasy",
+    "youtube": "5 checks before Sunday #fantasyfootball #shorts",
+    "facebook": "5 checks before Sunday 🏈 https://allfantasy.ai"
+  }
+}

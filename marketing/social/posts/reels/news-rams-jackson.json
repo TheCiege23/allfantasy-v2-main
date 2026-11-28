@@ -1,0 +1,82 @@
+{
+  "name": "news-rams-jackson",
+  "accent": "#FF5A6E",
+  "seconds": 15,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.6,
+      "emoji": "⛔",
+      "text": "Suspension\n[update]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 2.8,
+      "out": 5.4,
+      "text": "Alaric Jackson's ban\n[cut to 1 game]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 3.2,
+      "out": 5.4,
+      "text": "The Rams LT won his appeal. 2 games is now 1.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 5.6,
+      "out": 8.0,
+      "emoji": "🏟️",
+      "text": "Out Sunday\nvs. [Cardinals]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 6.0,
+      "out": 8.0,
+      "text": "David Quessenberry is slated to start at LT.",
+      "size": "p",
+      "top": 1000
+    },
+    {
+      "in": 8.2,
+      "out": 10.4,
+      "emoji": "🔙",
+      "text": "Back in\n[Week 7]\nvs. Raiders",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 10.6,
+      "out": 12.8,
+      "emoji": "🧠",
+      "text": "Don't\n[panic-bench]\nyour Rams",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 11.0,
+      "out": 12.8,
+      "text": "Fantasy note: one week without their starting LT.",
+      "size": "p",
+      "top": 1000
+    }
+  ],
+  "end": {
+    "in": 13.0,
+    "line": "Every league.\n[One board.]"
+  },
+  "caption": {
+    "youtube": "Rams' Alaric Jackson has his suspension cut to 1 game after appeal. Out vs. the Cardinals, back Week 7 vs. the Raiders. #NFL #Rams #fantasyfootball #shorts",
+    "tiktok": "Alaric Jackson's ban cut to 1 game ⛔ Out vs. Cardinals, back Week 7. Don't panic-bench your Rams. #NFL #Rams #fantasyfootball #allfantasy",
+    "instagram": "⛔ Suspension update: Rams LT Alaric Jackson's ban is cut to 1 game after appeal.\n\nOut Sunday vs. the Cardinals (David Quessenberry slated to start), eligible to return Week 7 vs. the Raiders.\n\nFantasy note: one week without their starting LT. Don't panic-bench your Rams.\n\n#NFL #Rams #fantasyfootball #fantasyfootballnews #allfantasy",
+    "facebook": "⛔ Rams LT Alaric Jackson's suspension was cut to 1 game on appeal. Out Sunday vs. the Cardinals, back Week 7 vs. the Raiders. https://allfantasy.ai"
+  }
+}

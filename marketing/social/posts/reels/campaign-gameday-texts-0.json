@@ -1,0 +1,52 @@
+{
+  "name": "campaign-gameday-texts-0",
+  "slot": "Mon 10/19 · reel",
+  "accent": "#3BC4FF",
+  "seconds": 12,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.6,
+      "text": "Your starter\n[got ruled out.]",
+      "size": "h1",
+      "pop": true,
+      "top": 160
+    },
+    {
+      "in": 2.8,
+      "out": 4.6,
+      "text": "Kickoff is\n[in an hour.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "⏰"
+    },
+    {
+      "in": 4.8,
+      "out": 7.0,
+      "text": "Your phone\n[buzzes.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "📲"
+    },
+    {
+      "in": 7.2,
+      "out": 9.6,
+      "text": "Who's out.\nWho to start.\n[One tap to fix it.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200
+    }
+  ],
+  "end": {
+    "in": 9.8,
+    "line": "Game-day\n[final call.]"
+  },
+  "caption": {
+    "instagram": "New on AllFantasy: the game-day final call 📲\n\nIf one of your starters gets ruled out close to kickoff and he's still in your lineup, we send you one text:\n✅ who's out\n✅ the best swap on your bench, flex spots included\n✅ a link to fix it\n\nOne text per player. Only when it matters. Turn it on in Settings → Notifications. Reply STOP anytime. Link in bio.\n\n#fantasyfootball #fantasyfootballadvice #startsit #nflsunday #allfantasy",
+    "tiktok": "Starter ruled out before kickoff? AllFantasy texts you the fix 📲 Link in bio.\n\n#fantasyfootball #fantasyfootballtok #startsit #allfantasy",
+    "youtube": "Starter ruled out before kickoff? AllFantasy texts you the fix 📲 allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "New on AllFantasy: the game-day final call. If one of your starters gets ruled out close to kickoff and he's still in your lineup, we send one text with who's out, the best swap on your bench and a link to fix it. Turn it on in Settings → Notifications. https://allfantasy.ai"
+  }
+}

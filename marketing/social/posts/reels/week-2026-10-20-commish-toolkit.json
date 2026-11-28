@@ -1,0 +1,62 @@
+{
+  "name": "week-2026-10-20-commish-toolkit",
+  "slot": "Tue Oct 20 · 6 PM",
+  "accent": "#B48CFF",
+  "seconds": 12,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.2,
+      "text": "Commish,\n[this one’s for you.]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 2.4,
+      "out": 4.0,
+      "text": "Draft timers: [30 sec] to [8 hours]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "⏱️"
+    },
+    {
+      "in": 4.2,
+      "out": 5.8,
+      "text": "[Live], [Middy] or [Slow] drafts",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🏁"
+    },
+    {
+      "in": 6.0,
+      "out": 7.6,
+      "text": "Waivers set [day by day]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🗓️"
+    },
+    {
+      "in": 7.8,
+      "out": 9.4,
+      "text": "Fix settings [mid-draft]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "✏️"
+    }
+  ],
+  "end": {
+    "in": 9.6,
+    "line": "Run your league\n[free.]"
+  },
+  "caption": {
+    "instagram": "Commish, this one's for you 🏆\n\n⏱️ Draft timers from 30 seconds to 8 hours\n🏁 Live, Middy or Slow drafts\n🗓️ Waivers set day by day\n✏️ Fix league settings even mid-draft\n\nTag your commissioner 👇 Free to run, link in bio.\n\n#fantasyfootball #fantasycommissioner #commish #allfantasy",
+    "tiktok": "Commish toolkit 🏆 Timers 30 sec to 8 hrs, waivers by day, fix settings mid-draft. Tag your commish 👇\n\n#fantasyfootball #commissioner #fantasyfootballtok #allfantasy",
+    "youtube": "Commissioner toolkit: draft timers 30 sec to 8 hours, waivers by day, fix settings mid-draft. allfantasy.ai #fantasyfootball #shorts",
+    "facebook": "Commish, this one's for you 🏆 Draft timers from 30 seconds to 8 hours, waivers set day by day, and fix league settings even mid-draft. Free: https://allfantasy.ai"
+  }
+}

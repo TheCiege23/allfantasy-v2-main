@@ -1,0 +1,64 @@
+{
+  "name": "fun-poll-worst-feeling",
+  "accent": "#FF8A3D",
+  "seconds": 14,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.2,
+      "text": "Worst feeling\nin [fantasy?]",
+      "size": "h1",
+      "pop": true,
+      "top": 200
+    },
+    {
+      "in": 2.4,
+      "out": 10.6,
+      "text": "Worst feeling\nin [fantasy?]",
+      "size": "h2",
+      "top": 0
+    },
+    {
+      "in": 3.0,
+      "out": 10.6,
+      "text": "😩 [A]  Lost by 0.2",
+      "size": "h2",
+      "pop": true,
+      "top": 280
+    },
+    {
+      "in": 4.4,
+      "out": 10.6,
+      "text": "🪑 [B]  Bench won",
+      "size": "h2",
+      "pop": true,
+      "top": 460
+    },
+    {
+      "in": 5.800000000000001,
+      "out": 10.6,
+      "text": "🦶 [C]  Their kicker",
+      "size": "h2",
+      "pop": true,
+      "top": 640
+    },
+    {
+      "in": 7.200000000000001,
+      "out": 10.6,
+      "text": "⏰ [D]  Forgot lineup",
+      "size": "h2",
+      "pop": true,
+      "top": 820
+    }
+  ],
+  "end": {
+    "in": 10.8,
+    "line": "Pick your\n[pain] 👇"
+  },
+  "caption": {
+    "instagram": "Worst feeling in fantasy? Pick your pain 👇 A, B, C or D?\n\nA 😩 Losing by 0.2 points\nB 🪑 Your bench outscores your starters\nC 🦶 Their kicker wins it\nD ⏰ Forgot to set your lineup\n\n#fantasyfootball #fantasyfootballmemes #fantasyfootballcommunity #ffl #allfantasy",
+    "tiktok": "Worst feeling in fantasy? A, B, C or D 👇 #fantasyfootball #fantasyfootballtok #fantasymemes #allfantasy",
+    "youtube": "Worst feeling in fantasy? A, B, C or D 👇 #fantasyfootball #shorts",
+    "facebook": "Worst feeling in fantasy? Pick your pain 👇 A, B, C or D?\n\nA 😩 Losing by 0.2 points\nB 🪑 Your bench outscores your starters\nC 🦶 Their kicker wins it\nD ⏰ Forgot to set your lineup\n\nhttps://allfantasy.ai"
+  }
+}

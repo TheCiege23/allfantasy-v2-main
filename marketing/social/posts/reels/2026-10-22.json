@@ -1,0 +1,24 @@
+{
+  "name": "2026-10-22-hidden-idols",
+  "accent": "#38E08F",
+  "seconds": 14,
+  "art": "league-type-survivor.png",
+  "stage": "top:700px",
+  "beats": [
+    { "in": 0.2, "out": 2.6, "emoji": "🗿", "text": "[Hidden idols]\nin the draft", "size": "h1", "pop": true, "top": 0 },
+    { "in": 0.6, "out": 2.6, "text": "New in AllFantasy Survivor leagues.", "size": "p", "top": 560 },
+    { "in": 2.8, "out": 5.4, "emoji": "🤫", "text": "Location?\n[Secret.]", "size": "h1", "pop": true, "top": 0 },
+    { "in": 3.2, "out": 5.4, "text": "Not even the commissioner.", "size": "p", "top": 560 },
+    { "in": 5.6, "out": 8.2, "emoji": "✨", "text": "Draft one,\n[find out]", "size": "h1", "pop": true, "top": 0 },
+    { "in": 6.0, "out": 8.2, "text": "A private reveal tells you what it does.", "size": "p", "top": 560 },
+    { "in": 8.4, "out": 11.0, "emoji": "🗂️", "text": "Some are on\nthe [wire]", "size": "h1", "pop": true, "top": 0 },
+    { "in": 8.8, "out": 11.0, "text": "A waiver claim can carry one too.", "size": "p", "top": 560 }
+  ],
+  "end": { "in": 11.2, "line": "Start a\n[Survivor] league", "top": 60 },
+  "caption": {
+    "instagram": "Your draft has hidden idols. 🗿\n\nAllFantasy Survivor leagues now hide idols on players in the draft pool. Nobody knows where, not even the commish. Draft one and a private reveal tells you what you found.\n\nStart a Survivor league free, link in bio.\n\n#fantasyfootball #survivor #fantasyleague #allfantasy",
+    "tiktok": "Hidden idols in your fantasy draft 🗿 Nobody knows where. Not even the commish. Link in bio. #fantasyfootball #survivor #fantasyfootballtok #allfantasy",
+    "youtube": "AllFantasy Survivor leagues now hide idols on players in your draft. Nobody knows where. #fantasyfootball #survivor #shorts",
+    "facebook": "AllFantasy Survivor leagues now hide idols on players in the draft pool. Nobody knows where, not even the commissioner. Draft one and you get a private reveal. https://allfantasy.ai"
+  }
+}

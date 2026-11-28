@@ -1,0 +1,62 @@
+{
+  "name": "week-2026-10-16-nba-tipoff",
+  "slot": "Fri Oct 16 · 6 PM",
+  "accent": "#FF8A3D",
+  "seconds": 13,
+  "beats": [
+    {
+      "in": 0.2,
+      "out": 2.4,
+      "text": "NBA tips off\n[Tuesday.]",
+      "size": "h1",
+      "pop": true,
+      "top": 180
+    },
+    {
+      "in": 2.6,
+      "out": 4.4,
+      "text": "Is your fantasy league [drafted?]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🏀"
+    },
+    {
+      "in": 4.6,
+      "out": 6.2,
+      "text": "Know your [scoring.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "📋"
+    },
+    {
+      "in": 6.4,
+      "out": 8.0,
+      "text": "Games played [matter.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "📅"
+    },
+    {
+      "in": 8.2,
+      "out": 9.8,
+      "text": "Punting a category is a [strategy.]",
+      "size": "h2",
+      "pop": true,
+      "top": 200,
+      "emoji": "🎯"
+    }
+  ],
+  "end": {
+    "in": 10.0,
+    "line": "No league yet?\n[Start one free.]"
+  },
+  "caption": {
+    "instagram": "The NBA season tips off Tuesday, Oct 20 🏀\n\nIs your fantasy basketball league drafted? Know your scoring, value games played, and don't be afraid to punt a category.\n\nNo league yet? Start one free on AllFantasy. Link in bio.\n\n#fantasybasketball #nbafantasy #nba #fantasybball #allfantasy",
+    "tiktok": "NBA tips off Tuesday 🏀 Is your fantasy league drafted yet? 👇\n\n#fantasybasketball #nba #nbatok #allfantasy",
+    "youtube": "NBA tips off Tuesday, Oct 20. Is your fantasy basketball league drafted? Start one free at allfantasy.ai #fantasybasketball #shorts",
+    "facebook": "The NBA season tips off Tuesday, Oct 20 🏀 Is your fantasy basketball league drafted yet? Start one free: https://allfantasy.ai"
+  }
+}

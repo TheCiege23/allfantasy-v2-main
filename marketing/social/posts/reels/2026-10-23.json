@@ -1,0 +1,22 @@
+{
+  "name": "2026-10-23-five-decisions",
+  "accent": "#4DD4FF",
+  "seconds": 15,
+  "beats": [
+    { "in": 0.2, "out": 2.4, "emoji": "✅", "text": "Set up a league\nin [5 decisions]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 0.6, "out": 2.4, "text": "New on AllFantasy, before your draft.", "size": "p", "top": 1000 },
+    { "in": 2.6, "out": 4.4, "emoji": "👥", "text": "1. How many\n[teams]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 4.6, "out": 6.4, "emoji": "🧩", "text": "2. Which\n[positions]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 6.6, "out": 8.4, "emoji": "📊", "text": "3. How players\n[score]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 8.6, "out": 10.4, "emoji": "⏱️", "text": "4. How you\n[draft]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 10.6, "out": 12.4, "emoji": "🗂️", "text": "5. How free agents\nget [claimed]", "size": "h1", "pop": true, "top": 200 },
+    { "in": 2.6, "out": 12.4, "text": "Keep it, or change it in one tap.", "size": "p", "top": 1000 }
+  ],
+  "end": { "in": 12.6, "line": "Start a league\n[free]" },
+  "caption": {
+    "instagram": "Set up a fantasy league in 5 decisions ✅\n\nTeams, positions, scoring, draft, free agents. Each shows the current answer: keep it or change it in one tap.\n\nStart a league free on AllFantasy, link in bio.\n\n#fantasyfootball #fantasybasketball #commissioner #allfantasy",
+    "tiktok": "Set up a fantasy league in 5 decisions ✅ Link in bio. #fantasyfootball #commissioner #fantasyfootballtok #allfantasy",
+    "youtube": "Set up a fantasy league in 5 decisions on AllFantasy: teams, positions, scoring, draft, free agents. #fantasyfootball #shorts",
+    "facebook": "Starting a league on AllFantasy now takes 5 decisions: teams, positions, scoring, draft and free agents. Keep each answer or change it in one tap. https://allfantasy.ai"
+  }
+}
