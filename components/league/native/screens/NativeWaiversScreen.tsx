@@ -37,6 +37,7 @@ import { ProposeTradeModal } from '@/app/league/[leagueId]/tabs/ProposeTradeModa
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
 import { Card, InjuryFlag, PlayerAvatar, PlayerNameButton, PosPill, ScreenHead, Segmented, useNativePlayerCard } from './NativeScreenParts'
+import { GamesLeftChip, WeekPlannerCard, useWeekPlanner } from './WeekPlannerCard'
 import { claimStatusLabel, faabMeter, waiverClaimTypeLabel } from '@/lib/league-media/redraftScreens'
 import { RedraftScreen, RedraftWaiverHeader, useRedraftScreen } from './RedraftScreenParts'
 
@@ -285,6 +286,10 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   }, [settings?.sport, league.sport, players, rosterable])
   const { language, t: tr, tInterpolate } = useOptionalLanguage()
   const openCard = useNativePlayerCard(settings?.sport ?? league.sport)
+  // Daily sports: each team's games this week, for the planner card and the "games left" chip.
+  const [plannerOffset, setPlannerOffset] = useState<0 | 1>(0)
+  const plannerTeams = useMemo(() => players.map((p) => p.team ?? '').filter(Boolean), [players])
+  const { planner, teamFor } = useWeekPlanner(league.id, settings?.sport ?? league.sport, plannerTeams, plannerOffset)
   // NHL dynasty: a name search also asks the server for prospects beyond the ones the list carries.
   const prospectSearchRows = useNhlProspectSearch<UnifiedPlayerWireDto>(league.id, prospectMeta, q)
   const allPlayers = useMemo(() => mergeProspectSearchRows(players, prospectSearchRows), [players, prospectSearchRows])
@@ -512,6 +517,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         </p>
       ) : null}
 
+      <WeekPlannerCard planner={planner} offset={plannerOffset} onOffset={setPlannerOffset} />
+
       <div className="nls-toolbar">
         <Segmented label="Player list" value={tab} onChange={setTab} options={[...PLAYERS_TABS]} />
         <Segmented label="Position" value={pos} onChange={setPos} options={[{ id: 'ALL', label: 'ALL' }, ...positions.map((p) => ({ id: p, label: p }))]} />
@@ -602,6 +609,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                               {/* Phone only: the position, in its colour, sits here; the wide badge beside the photo is dropped. */}
                               <span className="nls-pcell-pos"><PosPill label={p.position} /></span>
                               {p.team ?? (isNhlProspectWireRow(p) ? tr('draftRoom.pool.prospectUnsigned') : 'FA')}{a.displayByeWeek ? ` · Bye ${a.displayByeWeek}` : ''}
+                              <GamesLeftChip team={teamFor(p.team)} compact />
                               {isNhlProspectWireRow(p) ? (
                                 <span className="nls-chip" data-tone="accent" title={tr('draftRoom.pool.prospectTooltip')} data-testid={`native-waivers-prospect-badge-${p.id}`}>
                                   {tr('draftRoom.pool.prospectBadge')}
