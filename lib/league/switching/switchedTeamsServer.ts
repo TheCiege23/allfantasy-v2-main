@@ -10,6 +10,11 @@ export type TeamsRunOnAllFantasy = {
   externalIds: Set<string>
   /** `LeagueTeam.id`. */
   teamIds: Set<string>
+  /**
+   * The league is official on AllFantasy, so AllFantasy keeps every team's record (rule 3: AllFantasy
+   * scoring is official) and the re-sync must not write the platform's over it, switched or not.
+   */
+  official?: boolean
 }
 
 /**
@@ -26,7 +31,7 @@ export async function loadTeamsRunOnAllFantasy(leagueId: string): Promise<TeamsR
     const teams = await prisma.leagueTeam.findMany({ where: { leagueId }, select: { id: true, externalId: true } })
     const externalIds = teamsRunOnAllFantasy(league.settings, teams)
     const teamIds = new Set(teams.filter((t) => t.externalId && externalIds.has(t.externalId)).map((t) => t.id))
-    return { externalIds, teamIds }
+    return { externalIds, teamIds, official: true }
   } catch (err) {
     console.warn('[switching] could not read switched teams; re-sync writes every team', {
       leagueId,

@@ -46,6 +46,7 @@ import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, 
 import { capSlotKey, loadDailyGamesPlayed, loadPriorSeasonLedger, positionTokens } from './gamesLimitsScoring'
 import { loadGamesCountScoring, scoreCountedGames, type GamesCountScoring } from './gamesCountStore'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { runsOnAllFantasy } from '@/lib/league/switching/switchingLeague'
 import { heldFromSeasonStart, loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
 import { resolveBestBallScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { computeDailyBestBall, type DailyBestBallCandidate, type DailyBestBallCounted, type DailyBestBallDay } from '@/lib/bestball/dailyBestBall'
@@ -1173,7 +1174,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   if (scoringLeague && isNativePlatform(scoringLeague.platform) && isBasketballC2CLeague(scoringLeague) && (scoringMode !== 'points' || bestBall || useDevyEngine)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
 
   // Per-player points are kept only for a points league we host (see `persistNativePlayerPoints`).
-  const collectPlayerPoints = scoringMode === 'points' && isNativePlatform(scoringLeague?.platform)
+  const collectPlayerPoints = scoringMode === 'points' && runsOnAllFantasy(scoringLeague)
   // `playerPoints` is split off here so it never lands in `lineupSnapshots` below.
   const { playerPoints: homePlayerPoints, ...home } = await scoreRosterStarters({
     leagueId,

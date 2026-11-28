@@ -16,7 +16,7 @@
  * purpose, one game at a time, with a score adjustment.
  */
 import { prisma } from '@/lib/prisma'
-import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { runsOnAllFantasy } from '@/lib/league/switching/switchingLeague'
 import { isSealedWeek } from './weekSealed'
 
 export type CommissionerRecalcResult =
@@ -35,8 +35,9 @@ export async function recalcNativeLeagueWeek(
   args: { leagueId: string; seasonYear: number; week: number },
   deps: Deps = {},
 ): Promise<CommissionerRecalcResult> {
-  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { platform: true } })
-  if (!league || !isNativePlatform(league.platform)) return { kind: 'not_native_season' }
+  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { platform: true, settings: true } })
+  // Native leagues, and imported leagues made official here (rule 3: AllFantasy scoring is official).
+  if (!league || !runsOnAllFantasy(league)) return { kind: 'not_native_season' }
   const season = await prisma.redraftSeason.findFirst({
     where: { leagueId: args.leagueId, season: args.seasonYear },
     orderBy: { createdAt: 'desc' },
