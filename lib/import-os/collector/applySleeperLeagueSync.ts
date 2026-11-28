@@ -366,7 +366,11 @@ async function applyTeamsRosters(
    * Absent standings means "we did not learn anything", not "everyone is 0-0".
    */
   const standings = Array.isArray(normalized.standings) ? normalized.standings : []
-  if (standings.length === 0) {
+  if (runOnAllFantasy.official) {
+    // Rule 3 of a switching league: AllFantasy keeps the records once the league is official (its
+    // standings engine writes them), so the platform's are not copied over them for any team.
+    out.notes.push('teams_rosters: league is official on AllFantasy — records kept, platform standings not copied')
+  } else if (standings.length === 0) {
     out.notes.push('teams_rosters: no standings in response — left existing records untouched')
   } else {
     let written = 0

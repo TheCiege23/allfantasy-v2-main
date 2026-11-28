@@ -1,4 +1,5 @@
 import { applyLegacyWaiverToCanonical, mirrorCanonicalRosters } from '@/lib/redraft/legacyWaiverBridge'
+import { claimsRunOnAllFantasy, isOfficialOnAllFantasy } from '@/lib/league/switching/switchingLeague'
 import { prisma } from '@/lib/prisma'
 import { getEffectiveLeagueWaiverSettings } from './settings-service'
 import {
@@ -197,12 +198,22 @@ async function processWaiverClaimsForLeagueLocked(
     (prisma as any).leagueTeam
       .findMany({
         where: { leagueId },
-        select: { externalId: true, currentRank: true },
+        select: { id: true, externalId: true, currentRank: true },
       })
       .catch(() => []),
   ])
 
   if (!league) return []
+  /*
+   * A switching league made official here (lib/league/switching): only teams that switched make their
+   * waiver moves on AllFantasy. A claim from a team still on the old platform is left pending and never
+   * settles here, since that team's roster is copied in from the platform and the next copy would undo it.
+   * Every league that is not official runs every claim, as before.
+   */
+  if (isOfficialOnAllFantasy(league.settings)) {
+    const kept = claimsRunOnAllFantasy(league.settings, leagueTeams as Array<{ id: string; externalId: string | null }>, pendingClaims)
+    pendingClaims.splice(0, pendingClaims.length, ...kept)
+  }
   if (league.leagueVariant === 'survivor_guillotine') {
     const cutoff = (league.settings as { survivorGuillotine?: { waiversNotBefore?: string } } | null)?.survivorGuillotine?.waiversNotBefore
     if (cutoff && (!Number.isFinite(Date.parse(cutoff)) || Date.now() < Date.parse(cutoff))) return []

@@ -23,6 +23,8 @@
  * Pure and client-safe: no prisma import.
  */
 
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+
 export const SWITCHING_SETTINGS_KEY = 'switching'
 
 export type SwitchStamp = { at: string; byUserId: string }
@@ -112,4 +114,32 @@ export function tradeTeamNotSwitchedMessage(teamNames: readonly string[], platfo
   const where = platformLabel ?? 'the other platform'
   const who = teamNames.length === 1 ? `${teamNames[0]} hasn't` : `${teamNames.slice(0, -1).join(', ')} and ${teamNames[teamNames.length - 1]} haven't`
   return `${who} switched to AllFantasy yet, so this trade has to happen on ${where}. Trades here need every team to have switched.`
+}
+
+/**
+ * True when AllFantasy runs this league's season: scoring, standings and waivers (rule 3: AllFantasy
+ * scoring is official once the league is). A native league, or an imported one made official here.
+ * This is the gate AllFantasy's own engines use in place of a bare platform check.
+ */
+export function runsOnAllFantasy(league: { platform?: string | null; settings?: unknown } | null | undefined): boolean {
+  if (!league) return false
+  return isNativePlatform(league.platform) || isOfficialOnAllFantasy(league.settings)
+}
+
+/**
+ * The pending waiver claims AllFantasy may settle. In an official league, only claims from teams that
+ * switched: a claim from a team still on the old platform stays pending, since the next copy of that team's
+ * roster would undo it. Every claim in a league that is not official.
+ */
+export function claimsRunOnAllFantasy<C extends { roster?: { playerData?: unknown } | null }>(
+  settings: unknown,
+  teams: ReadonlyArray<{ id: string; externalId: string | null }>,
+  claims: readonly C[],
+): C[] {
+  if (!isOfficialOnAllFantasy(settings)) return [...claims]
+  const switched = teamsRunOnAllFantasy(settings, teams)
+  return claims.filter((c) => {
+    const pd = c.roster?.playerData && typeof c.roster.playerData === 'object' ? (c.roster.playerData as Record<string, unknown>) : {}
+    return switched.has(String(pd.source_team_id ?? ''))
+  })
 }

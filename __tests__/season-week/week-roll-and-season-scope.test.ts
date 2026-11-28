@@ -14,6 +14,7 @@
  * ones where it must say NO — a live slate, an unresolvable week, a season the
  * sport has not started.
  */
+import { Prisma } from '@prisma/client'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -86,8 +87,12 @@ describe('engineSeasonScope', () => {
     // 🛑 THE EXCLUSION IS THE POINT. It used to happen by accident, because
     // 'in_season' did not match 'active'. Now it is stated, so reading both
     // spellings cannot silently enroll 242 imported leagues into live scoring.
+    // Imported leagues come in only once made official on AllFantasy (lib/league/switching, rule 3).
     expect(where.league).toEqual({
-      platform: { in: ['allfantasy', 'af', 'manual', 'native'] },
+      OR: [
+        { platform: { in: ['allfantasy', 'af', 'manual', 'native'] } },
+        { NOT: { settings: { path: ['switching', 'official'], equals: Prisma.AnyNull } } },
+      ],
     })
   })
 
