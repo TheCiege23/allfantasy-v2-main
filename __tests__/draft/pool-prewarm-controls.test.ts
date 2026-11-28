@@ -35,6 +35,7 @@
  */
 
 import { readFileSync } from 'node:fs'
+import { stripPoolEntriesFallbacks, stripPoolEntryFallbacks } from '@/lib/draft-room/stripPoolEntryFallbacks'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -251,49 +252,52 @@ describe('Invariant 12: [draft-perf] logs in resume and cache check', () => {
 // Invariant 13-14: pool route payload strip (P1 slim)
 // ---------------------------------------------------------------------------
 
-describe('Invariant 13: pool route strips diagnostic-only nested fields', () => {
-  it('stripPoolEntryFallbacks strips rollingInsightsSupplemental from display.stats', () => {
-    expect(poolRouteSrc).toContain('rollingInsightsSupplemental')
-    // Must appear in the strip function (destructuring)
-    const stripFnIdx = poolRouteSrc.indexOf('function stripPoolEntryFallbacks(')
-    const stripBody = poolRouteSrc.slice(stripFnIdx, stripFnIdx + 1700)
-    expect(stripBody).toContain('rollingInsightsSupplemental')
-  })
+describe('Invariant 13: the pool strip drops redundant and diagnostic-only nested fields', () => {
+  const entry = {
+    name: 'Money Williams',
+    display: {
+      assets: {
+        headshotUrl: 'https://a.espncdn.com/x.png',
+        teamLogoUrl: 'https://r2.thesportsdb.com/badge.png',
+        headshotFallbackUrl: 'data:image/svg+xml;utf8,AAA',
+        teamLogoFallbackUrl: 'data:image/svg+xml;utf8,BBB',
+        headshotFallbackUsed: false,
+        teamLogoFallbackUsed: false,
+      },
+      stats: { pointsPerGame: 22.6, rollingInsightsSupplemental: { x: 1 }, projectionSource: 'ri' },
+      metadata: { position: 'G', rookieYearsExpSource: 'derived' },
+    },
+  }
+  const [out] = stripPoolEntriesFallbacks([entry]) as Array<typeof entry>
 
-  it('stripPoolEntryFallbacks strips projectionSource from display.stats', () => {
-    const stripFnIdx = poolRouteSrc.indexOf('function stripPoolEntryFallbacks(')
-    const stripBody = poolRouteSrc.slice(stripFnIdx, stripFnIdx + 1700)
-    expect(stripBody).toContain('projectionSource')
+  it('drops the repeated placeholder images and their flags', () => {
+    expect(Object.keys(out.display.assets).sort()).toEqual(['headshotUrl', 'teamLogoUrl'])
   })
-
-  it('stripPoolEntryFallbacks strips rookieYearsExpSource from display.metadata', () => {
-    const stripFnIdx = poolRouteSrc.indexOf('function stripPoolEntryFallbacks(')
-    const stripBody = poolRouteSrc.slice(stripFnIdx, stripFnIdx + 1700)
-    expect(stripBody).toContain('rookieYearsExpSource')
+  it('keeps the real photo and logo', () => {
+    expect(out.display.assets.headshotUrl).toBe('https://a.espncdn.com/x.png')
+    expect(out.display.assets.teamLogoUrl).toBe('https://r2.thesportsdb.com/badge.png')
+  })
+  it('drops only the diagnostic stats and metadata fields', () => {
+    expect(out.display.stats).toEqual({ pointsPerGame: 22.6 })
+    expect(out.display.metadata).toEqual({ position: 'G' })
+  })
+  it('does not modify the input', () => {
+    expect(entry.display.assets.headshotFallbackUrl).toBe('data:image/svg+xml;utf8,AAA')
+  })
+  it('passes entries without a display through untouched', () => {
+    expect(stripPoolEntriesFallbacks([{ name: 'x' }])).toEqual([{ name: 'x' }])
+    expect(stripPoolEntryFallbacks({ entries: [] })).toEqual({ entries: [] })
   })
 })
 
-describe('Invariant 14: strip function still preserves required SleeperPoolTable fields', () => {
-  it('display.assets.headshotUrl is not stripped', () => {
-    const stripFnIdx = poolRouteSrc.indexOf('function stripPoolEntryFallbacks(')
-    const stripBody = poolRouteSrc.slice(stripFnIdx, stripFnIdx + 1700)
-    // headshotUrl should NOT appear as a destructured stripped key
-    // The strip removes headshotFallbackUrl, not headshotUrl
-    expect(stripBody).not.toMatch(/headshotUrl:\s*_/)
-    expect(stripBody).toContain('headshotFallbackUrl')
+describe('Invariant 14: both writers of draft_pool_cache store the stripped entries', () => {
+  it('the route strips on read and write (five call sites)', () => {
+    expect(poolRouteSrc.match(/^\s*(?:const \w+ = |)(?:.*)stripPoolEntryFallbacks\(/gm)?.length).toBe(5)
   })
-
-  it('display.stats is only partially stripped (not entire stats object)', () => {
-    const stripFnIdx = poolRouteSrc.indexOf('function stripPoolEntryFallbacks(')
-    const stripBody = poolRouteSrc.slice(stripFnIdx, stripFnIdx + 1700)
-    // The strip destructures stats but spreads ...stats (keeping fantasyPointsPerGame etc)
-    expect(stripBody).toMatch(/\.\.\.stats\b/)
-  })
-
-  it('display.metadata is only partially stripped (not entire metadata object)', () => {
-    const stripFnIdx = poolRouteSrc.indexOf('function stripPoolEntryFallbacks(')
-    const stripBody = poolRouteSrc.slice(stripFnIdx, stripFnIdx + 1700)
-    expect(stripBody).toMatch(/\.\.\.metadata\b/)
+  it('ensureDraftPoolReady saves stripped entries, never resolved.entries as-is', () => {
+    expect(prewarmSrc).toMatch(/^\s*const storedEntries = stripPoolEntriesFallbacks\(resolved\.entries\)/m)
+    expect(prewarmSrc.match(/^\s*entries: storedEntries,/gm)?.length).toBe(2)
+    expect(prewarmSrc).not.toMatch(/^\s*entries: resolved\.entries,/m)
   })
 })
 
