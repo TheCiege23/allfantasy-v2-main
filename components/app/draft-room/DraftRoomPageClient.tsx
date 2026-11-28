@@ -1,5 +1,8 @@
 'use client'
 
+import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import CommsDock from '@/components/core-app/comms/CommsDock'
+import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import { queueEntryFromPlayer } from '@/lib/draft-queue-engine/queueEntryFromPlayer'
 import { ActiveTeamSwitcher } from '@/components/league/ActiveTeamSwitcher'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
@@ -296,6 +299,13 @@ export function DraftRoomPageClient({
   initialPoolReadiness = null,
 }: DraftRoomPageClientProps) {
   const leagueAccent = useMemo(() => leagueAccentFor(leagueType, { isDynasty }), [leagueType, isDynasty])
+  /*
+   * 🛑 THE SIMPLE ROOM: a plain REDRAFT league's snake (or linear) draft, nothing else (owner, 2026-11-28: "start
+   * with snake for redraft … each draft has its own functions so we have to be very specific"). Keeper, best ball,
+   * dynasty, devy, auction and every specialty room keep what they had. Read from the league, never from a setting,
+   * so a league created tomorrow gets it the same as one created today.
+   */
+  const simpleRoom = presentationVariant === 'redraft_snake' && !isDynasty && String(leagueType ?? '').trim().toLowerCase() === 'redraft'
   const { data: authSession } = useSession()
   const viewerAppUserId = (authSession?.user as { id?: string } | undefined)?.id ?? null
   const [session, setSession] = useState<DraftSessionSnapshot | null>(initialSnapshot ?? null)
@@ -526,6 +536,19 @@ export function DraftRoomPageClient({
   const [resyncLoading, setResyncLoading] = useState(false)
   const [showCommissionerModal, setShowCommissionerModal] = useState(false)
   const [draftRoomSettingsOpen, setDraftRoomSettingsOpen] = useState(false)
+  /** The simple room's "…" menu additions: what the top bar no longer draws as its own buttons. */
+  const simpleRoomMenuItems = useMemo(
+    () => [
+      { id: 'draft-settings', label: 'Draft settings', testId: 'draft-menu-draft-settings', onSelect: () => setDraftRoomSettingsOpen(true) },
+      {
+        id: 'music',
+        label: 'Music',
+        testId: 'draft-menu-music',
+        onSelect: () => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: { tab: 'music' } })),
+      },
+    ],
+    [],
+  )
   const [showTradePanel, setShowTradePanel] = useState(false)
   const [tradePanelGeneration, setTradePanelGeneration] = useState(0)
   const [tradeInitialDraft, setTradeInitialDraft] = useState<{
@@ -4023,6 +4046,7 @@ export function DraftRoomPageClient({
         draftedNames={draftedNames}
         draftedPlayerIds={draftedPlayerIds}
         presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+        simpleRoom={simpleRoom}
         sport={effectiveDraftSport}
         canDraft={!draftRoomState.isAuction && canDraft}
         onAddToQueue={handleAddToQueue}
@@ -4867,6 +4891,47 @@ export function DraftRoomPageClient({
     />
     </>
   )
+  /*
+   * The simple room's Chimmy tab (Sleeper pass 5, owner-approved 2026-11-28): one card, Chimmy's pick for your next
+   * turn with its reason and a Draft button, then Ask Chimmy and the overlays switch (moved out of the player
+   * Filters). Everything else Chimmy offers (intel queue, Decision OS, Draft Helper and its plan cards, Board read)
+   * is still here, folded under "More from Chimmy".
+   */
+  const simpleChimmyTabNode = (
+    <div className="space-y-2" data-testid="draft-chimmy-simple">
+      {intelPanelNode}
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <button
+          type="button"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: { tab: 'chimmy', leagueId, prefill: chimmyDraftPrompt ?? undefined } }))
+          }
+          className="inline-flex min-h-[40px] items-center rounded-xl border border-cyan-400/35 bg-cyan-500/10 px-3 text-[13px] font-semibold text-cyan-100"
+          data-testid="draft-chimmy-ask"
+        >
+          Ask Chimmy
+        </button>
+        <label className="ml-auto inline-flex min-h-[40px] items-center gap-2 text-[12px] text-white/70">
+          <input
+            type="checkbox"
+            checked={showAiOverlays}
+            onChange={(e) => setShowAiOverlays(e.target.checked)}
+            className="h-4 w-4 rounded border-white/20"
+            data-testid="draft-chimmy-overlays-toggle"
+          />
+          Chimmy tips on players
+        </label>
+      </div>
+      <details className="rounded-xl border border-white/10 bg-[#0a1425]" data-testid="draft-chimmy-more">
+        <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium text-cyan-100">More from Chimmy</summary>
+        <div className="space-y-2 px-1 pb-1">
+          {draftIntelSuggestionsNode}
+          {helperPanelNode}
+          <DraftTeamPanel {...draftTeamPanelProps} />
+        </div>
+      </details>
+    </div>
+  )
   const chimmyTabNode = (
     <div className="space-y-2" data-testid="draft-chimmy-merged">
       {session.draftType !== 'auction' ? (
@@ -5405,7 +5470,9 @@ export function DraftRoomPageClient({
             draftRoomPresentation={presentationVariant}
             onToggleAutoPick={handleToggleAutoPick}
             thirdRoundReversal={Boolean(session.thirdRoundReversal)}
-            aiRecommendationOverlay={showAiOverlays ? recommendationOverlaySummary : null}
+            aiRecommendationOverlay={showAiOverlays && !simpleRoom ? recommendationOverlaySummary : null}
+            simpleRoom={simpleRoom}
+            extraMenuItems={simpleRoom ? simpleRoomMenuItems : undefined}
             showAiOverlays={showAiOverlays}
             poolReadiness={poolReadiness}
             dynastySkin={isDynasty}
@@ -5422,6 +5489,20 @@ export function DraftRoomPageClient({
           {/* Space & duplicates (2026-11-19): "Auto-pick me" moved into the Queue tab, and music is a
               button in the top bar. The playing YouTube player (200x200 minimum) is portalled here. */}
           <div id={MUSIC_ROW_ANCHOR_ID} />
+          {/*
+            The simple room's chat (owner, 2026-11-28: "chat should not be a tab, it should remain in the chat
+            bubble"). The draft room never had the bubble, so it is mounted here, phone only: the desktop dock keeps
+            its Chat tab, as Sleeper's desktop room does. Draft-room posts show in league chat while the draft is live.
+          */}
+          {simpleRoom && leagueId ? (
+            <div className="md:hidden" data-testid="draft-room-chat-bubble">
+              <CommsDock
+                leagues={[{ id: leagueId, name: leagueName ?? 'League', platform: 'allfantasy', platformLeagueId: null, isCommissioner }]}
+                pageLeagueId={leagueId}
+                chimmyTokenCost={getTokenSpendRuleMatrixEntry('ai_chimmy_chat_message')?.tokenCost ?? null}
+              />
+            </div>
+          ) : null}
         </>
       }
       managerStrip={null}
@@ -5619,9 +5700,10 @@ export function DraftRoomPageClient({
       // non-premium desktop layout) shows the recap, report card and share instead.
       playerPanel={isDraftCompleted ? <div className="min-h-[70vh]">{postDraftViewNode}</div> : playerPoolNode}
       queuePanel={queueStackNode}
-      helperPanel={chimmyTabNode}
+      helperPanel={simpleRoom ? simpleChimmyTabNode : chimmyTabNode}
       /* No separate Intel tab on phones: "Before your next pick" is inside the Chimmy tab. */
       chatPanel={chatPanelNode}
+      hidePhoneChatTab={simpleRoom}
       rosterPanel={rosterPanel}
       keeperPanel={keeperPanel}
       mobileStickyBar={mobileStickyBar}

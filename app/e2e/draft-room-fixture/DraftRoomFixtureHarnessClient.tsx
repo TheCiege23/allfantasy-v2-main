@@ -26,6 +26,7 @@ export default function DraftRoomFixtureHarnessClient({
         isDynasty={false}
         isCommissioner={false}
         presentationVariant="redraft_snake"
+        leagueType="redraft"
         initialSnapshot={initialSnapshot}
         initialPoolReadiness={{ ready: true, entryCount: poolCount, source: 'db-cache', syncedAt: initialSnapshot.updatedAt }}
       />
