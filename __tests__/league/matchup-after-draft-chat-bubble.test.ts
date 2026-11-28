@@ -72,3 +72,13 @@ describe('League page: no Matchups section before the schedule exists', () => {
     expect(page).toContain('{noScheduleYet(league) ? null : <LeagueWeekMatchups leagueId={league.id} />}')
   })
 })
+
+describe('Activity filters match the other league screens', () => {
+  it('use the shared segmented switch, not their own green pills', () => {
+    const src = readFileSync(resolve(__dirname, '../../components/league/LeagueActivityTab.tsx'), 'utf8')
+    expect(src).toMatch(/role="group" aria-label="Filter activity" className="nls-seg"/)
+    const block = src.slice(src.indexOf('aria-label="Filter activity"'), src.indexOf('{failed ?'))
+    expect(block).not.toContain('--lsk-accent-strong')
+    expect(block).not.toContain('style={\n')
+  })
+})
