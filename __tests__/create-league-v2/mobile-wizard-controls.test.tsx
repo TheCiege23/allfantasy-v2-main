@@ -47,13 +47,6 @@ describe('team-size steppers walk the sizes the format allows', () => {
     view.rerender(<LeagueBasicsStep state={{ ...state, teamCount: 2 }} onChange={vi.fn()} fieldErrors={null} />)
     expect(screen.getByTestId('g30-team-count-decrease')).toBeDisabled()
   })
-
-  it('locks both steppers when an import fixes the team count', () => {
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
-    render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} importCarryover />)
-    expect(screen.getByTestId('g30-team-count-increase')).toBeDisabled()
-    expect(screen.getByTestId('g30-team-count-decrease')).toBeDisabled()
-  })
 })
 
 describe('Review sends each issue to the step that fixes it', () => {

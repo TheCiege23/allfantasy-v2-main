@@ -98,9 +98,11 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
     expect(result).toMatchObject({ ok: true, redirectTo: '/zombie/universe/universe-6' })
   })
 
-  it('keeps an imported Zombie roster in one league even if a previous universe choice was saved', async () => {
-    await submitCreateLeagueV2(state({ leagueType: 'zombie', teamCount: 20, zombieLeagueCount: 6 }), 'import-source')
-    expect(lastFetchBody()).toMatchObject({ sourceLeagueId: 'import-source', conceptSetup: { zombieLeagueCount: 1 } })
+  it('never asks the server to copy an imported league (the copy flow is retired)', async () => {
+    await submitCreateLeagueV2(state({ leagueType: 'zombie', teamCount: 20, zombieLeagueCount: 6 }), true)
+    expect(lastFetchBody()).toMatchObject({ testLeague: true, conceptSetup: { zombieLeagueCount: 6 } })
+    expect(lastFetchBody()).not.toHaveProperty('sourceLeagueId')
+    expect(lastFetchBody().conceptSetup).not.toHaveProperty('acceptWeeklyLineups')
   })
 
   it('sends the selected startup auction and weighted future rookie order', async () => {
