@@ -99,3 +99,17 @@ export function teamsRunOnAllFantasy(
   }
   return out
 }
+
+/** Refusal code when a trade names a team that has not switched. */
+export const TRADE_TEAM_NOT_SWITCHED_CODE = 'TRADE_TEAM_NOT_SWITCHED'
+
+/**
+ * The refusal shown when a trade in an official league names a team that still plays on the old platform.
+ * Both sides of a trade must be run here, or the move happens on AllFantasy only and the old platform's
+ * next copy puts the players back.
+ */
+export function tradeTeamNotSwitchedMessage(teamNames: readonly string[], platformLabel: string | null): string {
+  const where = platformLabel ?? 'the other platform'
+  const who = teamNames.length === 1 ? `${teamNames[0]} hasn't` : `${teamNames.slice(0, -1).join(', ')} and ${teamNames[teamNames.length - 1]} haven't`
+  return `${who} switched to AllFantasy yet, so this trade has to happen on ${where}. Trades here need every team to have switched.`
+}

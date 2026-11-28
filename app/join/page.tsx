@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
-import { inviteSource, joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
+import { inviteSeat, inviteSource, joinCallbackUrl, joinLandingHref } from '@/lib/league-join/joinLanding'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { RECAP_SHARE } from '@/lib/analytics/eventNames'
 import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
@@ -25,6 +25,8 @@ export default function JoinByCodePage() {
   const joinOnArrival = searchParams?.get('go') === '1'
   /* Where the link came from — `recap` for one shared from Chimmy's weekly recap (RecapShareButton). */
   const src = inviteSource(searchParams?.get('src'))
+  /* A seat-specific link from the invite panel names the open team to take (`Roster.id`). */
+  const team = inviteSeat(searchParams?.get('team'))
   const { status: authStatus } = useSession()
   /*
    * Set when the join itself answers 401. Most people opening a link someone shared from a Sleeper
@@ -92,7 +94,7 @@ export default function JoinByCodePage() {
         return
       }
       setStatus('joining')
-      const body = { code: c, password: (submitPassword ?? password)?.trim() || undefined }
+      const body = { code: c, password: (submitPassword ?? password)?.trim() || undefined, rosterId: team ?? undefined }
 
       fetch('/api/leagues/join', {
         method: 'POST',
@@ -178,7 +180,7 @@ export default function JoinByCodePage() {
           setMessage('Something went wrong')
         })
     },
-    [effectiveCode, password, src]
+    [effectiveCode, password, src, team]
   )
 
   /*
@@ -194,7 +196,7 @@ export default function JoinByCodePage() {
       signedIn: authStatus === 'authenticated',
       returning: joinOnArrival,
     })
-  }, [authStatus, codeFromUrl, joinOnArrival, preview?.leagueId, src])
+  }, [authStatus, codeFromUrl, joinOnArrival, preview?.leagueId, src, team])
 
   /* Back from signing in with `go=1`: join at once, once. A password-protected league still asks. */
   useEffect(() => {
@@ -234,7 +236,7 @@ export default function JoinByCodePage() {
       zombie={preview.zombie}
       authStatus={authStatus}
       needsSignIn={needsSignIn}
-      callbackUrl={joinCallbackUrl(codeFromUrl, src)}
+      callbackUrl={joinCallbackUrl(codeFromUrl, src, team)}
       requiresPassword={preview.requiresPassword}
       password={password}
       onPasswordChange={setPassword}
@@ -252,7 +254,7 @@ export default function JoinByCodePage() {
       survivor={preview.survivor}
       authStatus={authStatus}
       needsSignIn={needsSignIn}
-      callbackUrl={joinCallbackUrl(codeFromUrl, src)}
+      callbackUrl={joinCallbackUrl(codeFromUrl, src, team)}
       requiresPassword={preview.requiresPassword}
       password={password}
       onPasswordChange={setPassword}
@@ -264,7 +266,7 @@ export default function JoinByCodePage() {
   }
 
   if (codeFromUrl && preview && !previewError && status === 'idle' && (authStatus === 'unauthenticated' || needsSignIn)) {
-    const callbackUrl = joinCallbackUrl(codeFromUrl, src)
+    const callbackUrl = joinCallbackUrl(codeFromUrl, src, team)
     return (
       <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
         <div className="max-w-md mx-auto px-4 w-full" data-testid="league-join-signin">

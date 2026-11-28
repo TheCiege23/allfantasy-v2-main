@@ -554,14 +554,27 @@ so, because the build follows the answer.
    - **4a** — `lib/league/convertImportedLeagueInPlace.ts` and `POST /api/leagues/[leagueId]/convert-to-native`:
      the one-transaction switch (lock, re-check, snapshot, two-phase id rewrites, flip last), admin-gated as a
      supervised pilot, with a real-Postgres suite in `.github/workflows/native-conversion-db.yml`.
+   - **4b-3** — per-seat invite links (Q7): the invite panel of a switched league lists each open team with its own
+     link (`/join?code=…&team=<Roster.id>`), and the join route seats that person on exactly that team through
+     `assignLeagueSeat` (refusing a taken team by name instead of swapping). No new permission: the league's code could
+     already take any open team. **The AllFantasy-admin gate on the switch route came off here.**
    - **4b-1** — native settings (`lib/league/nativeScaffolding.ts`): the provider's scoring (NFL/MLB) and roster layout
      carried unless the commissioner saved their own in AF (Q8), fill-only waiver and draft-settings rows, and the
      league invite. ⚠ `mapImportedRosterToAF` was found to map nothing for ESPN/Sleeper and `validateRosterConfig` to
      skip unknown keys, so the layout comes from `importedLineupTemplateSlots` with a known-key check.
-   - **4b (rest)** — native settings and scoring scaffolding (§7 step 3.10, AF edits win per Q8), the past-weekly-score
+   - **4b-2** — past provider weeks into native tables (`lib/league/copyProviderWeeklyScores.ts`, Q4): the season's
+     `WeeklyMatchup` rows become final `RedraftMatchup`s on its `RedraftRoster`s (playoff weeks typed `playoff`, byes
+     one-sided), and `LeaguePlayerWeeklyScore` rows are re-keyed to `League.id` / `source='allfantasy'` / native seat
+     and player ids. Provider rows stay; anything unmatched is counted and skipped; a season that already has
+     matchups is not copied into. Standings are not recomputed.
+   - **4b (original note)** — native settings and scoring scaffolding (§7 step 3.10, AF edits win per Q8), the past-weekly-score
      copy (Q4: `RedraftMatchup` rows plus `LeaguePlayerWeeklyScore` re-keyed to `League.id`, `source='allfantasy'`),
      and per-seat invite links (Q7, which needs new plumbing: `LeagueInvite` has no seat). The admin gate comes off
      with 4b, not before.
-5. The re-import refusal at every import entry point (§6.2).
+5. The re-import refusal at every import entry point (§6.2): `lib/league/nativeConversionLookup.ts`, checked by the
+   import commit (also against the league's provider history, so next season's Sleeper league is refused too), the
+   two legacy re-syncs, and every Sleeper bulk writer (`processImportJob`, the batch route, `sleeper-import-process`,
+   `sleeper-ranking-import`). Routes answer 409 `LEAGUE_NOW_ON_ALLFANTASY` with the league id. Fails open, like the
+   deleted-league check beside it. The renewal follower needs nothing: it only reads `platform: 'sleeper'` rows.
 6. Undo.
 7. Repoint the "Make it native" button. Retire or relabel the copy flow per Q9.

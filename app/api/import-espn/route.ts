@@ -7,7 +7,7 @@ import { encrypt } from "@/lib/league-auth-crypto";
 import { getDecryptedAuth } from "@/lib/league-sync-core";
 import { consumeRateLimit, buildRateLimit429 } from "@/lib/rate-limit";
 import { runImportedLeagueNormalizationPipeline } from "@/lib/league-import/ImportedLeagueNormalizationPipeline";
-import { persistImportedLeagueFromNormalization } from "@/lib/league-import/ImportedLeagueCommitService";
+import { ImportedLeagueConvertedError, persistImportedLeagueFromNormalization } from "@/lib/league-import/ImportedLeagueCommitService";
 import { assertImportCommissioner, recordImportAttestation } from "@/lib/league-import/commissionerGate";
 import { commissionerGateFailureResponse } from "@/lib/league-import/commissionerGateResponse";
 import { testEspnLeagueConnection } from "@/lib/league-import/espn/EspnConnectionTestService";
@@ -70,6 +70,8 @@ const bodySchema = z.object({
 
 /** Messages from these are written for users; anything else gets a generic line. */
 function userSafeMessage(error: unknown): { message: string; status: number } {
+  // Already switched to AllFantasy (step 5 of the in-place conversion): say so, not "ESPN import failed".
+  if (error instanceof ImportedLeagueConvertedError) return { message: error.message, status: 409 };
   if (error instanceof EspnUnavailableError || error instanceof EspnFormatChangedError) {
     return { message: error.message, status: 503 };
   }

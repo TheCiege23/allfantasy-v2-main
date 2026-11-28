@@ -34,6 +34,8 @@ const h = vi.hoisted(() => ({
   rrpCreate: vi.fn(),
   rrpUpdateMany: vi.fn(),
   reconcile: vi.fn(),
+  leagueTeamFindMany: vi.fn(),
+  tellCommissioner: vi.fn(),
   unified: vi.fn(),
 }))
 
@@ -42,6 +44,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     roster: { findMany: h.rosterFindMany },
     league: { findUnique: h.leagueFindUnique },
+    leagueTeam: { findMany: h.leagueTeamFindMany },
     sportsPlayer: { findMany: h.sportsPlayerFindMany },
     playerIdentityMap: { findMany: h.identityMapFindMany },
     redraftRosterPlayer: {
@@ -50,6 +53,9 @@ vi.mock('@/lib/prisma', () => ({
       updateMany: h.rrpUpdateMany,
     },
   },
+}))
+vi.mock('@/lib/league/switching/doubleClaimNotice', () => ({
+  tellCommissionerOfDoubleClaims: h.tellCommissioner,
 }))
 vi.mock('@/lib/league-runtime/reconcileRosterRedraftLinks', () => ({
   reconcileRosterRedraftLinks: h.reconcile,
@@ -71,6 +77,8 @@ import { materializeRedraftRosterPlayersForLeague } from '@/lib/league-runtime/m
 beforeEach(() => {
   vi.resetAllMocks()
   h.reconcile.mockResolvedValue({ linked: 0, unlinked: 0, alreadyLinked: 0 })
+  h.leagueTeamFindMany.mockResolvedValue([])
+  h.tellCommissioner.mockResolvedValue(0)
   h.rrpFindMany.mockResolvedValue([])
   h.rrpCreate.mockResolvedValue({})
   h.rrpUpdateMany.mockResolvedValue({ count: 0 })
@@ -588,5 +596,52 @@ describe('🛑 a player the platform no longer lists is retired from an imported
     await materializeRedraftRosterPlayersForLeague('L1')
 
     expect(dropCalls()).toHaveLength(0)
+  })
+})
+
+describe("switching league rule 1: a player claimed on both sides stays with the team that switched", () => {
+  const stamp = { at: '2026-11-27T00:00:00.000Z', byUserId: 'commish' }
+  const settings = (official: boolean) => ({ switching: { official: official ? stamp : null, teams: { 'team-1': stamp } } })
+  const switchedRoster = roster({ id: 'roster-1', redraftRosterId: 'rr-1', playerData: { source_team_id: '1', players: ['p9'] } })
+  const mirroredRoster = roster({ id: 'roster-2', redraftRosterId: 'rr-2', playerData: { source_team_id: '2', players: ['p1', 'p9'] } })
+
+  beforeEach(() => {
+    h.rosterFindMany.mockResolvedValue([switchedRoster, mirroredRoster])
+    h.leagueTeamFindMany.mockResolvedValue([
+      { id: 'team-1', externalId: '1' },
+      { id: 'team-2', externalId: '2' },
+    ])
+    // The switched team already has p9 on AllFantasy; the mirrored team has nothing yet.
+    h.rrpFindMany.mockImplementation(async (args: { where: { rosterId: unknown } }) => {
+      const r = args.where.rosterId as string | { in: string[] }
+      const ids = typeof r === 'string' ? [r] : r.in
+      return ids.includes('rr-1') ? [{ playerId: 'p9', rosterId: 'rr-1', acquisitionType: 'waiver' }] : []
+    })
+  })
+
+  const createdOn = (rosterId: string) =>
+    h.rrpCreate.mock.calls.map((c) => c[0].data).filter((d) => d.rosterId === rosterId).map((d) => d.playerId)
+
+  it('official league: the team still on the old platform does not get the player, and the commissioner is told', async () => {
+    h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'sleeper', settings: settings(true) })
+
+    const result = await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(createdOn('rr-2')).toEqual(['p1'])
+    expect(createdOn('rr-1')).toEqual([])
+    expect(result.playersKeptOnSwitchedTeam).toBe(1)
+    expect(h.tellCommissioner).toHaveBeenCalledTimes(1)
+    expect(h.tellCommissioner.mock.calls[0][1]).toEqual([
+      expect.objectContaining({ playerId: 'p9', platformRedraftRosterId: 'rr-2', allFantasyRedraftRosterId: 'rr-1' }),
+    ])
+  })
+
+  it('control, not official: the copy writes both players as before and tells nobody', async () => {
+    h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'sleeper', settings: settings(false) })
+
+    await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(createdOn('rr-2')).toEqual(['p1', 'p9'])
+    expect(h.tellCommissioner).not.toHaveBeenCalled()
   })
 })

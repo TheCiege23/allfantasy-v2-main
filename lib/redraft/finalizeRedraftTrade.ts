@@ -18,6 +18,9 @@ import {
   type RedraftTradeCapTransferResult,
 } from '@/lib/idp/capEngine'
 import { settleRedraftTradeAssets } from '@/lib/redraft/tradeSettlement'
+import { tradeTeamsNotOnAllFantasy } from '@/lib/league/switching/switchedTeamsServer'
+import { tradeTeamNotSwitchedMessage } from '@/lib/league/switching/switchingLeague'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
 import { assertSeasonTradeSettlement, readSeasonTradePolicy, SeasonTradeError } from '@/lib/tournament/seasonTradePolicy'
 import { captureRedraftRosterState, writeRedraftTradeExecutionSnapshot } from '@/lib/redraft/tradeExecutionSnapshot'
 import { getPlatformEvents, EVENT } from '@/lib/events'
@@ -129,7 +132,7 @@ export async function finalizeRedraftTrade(
       eventType: 'trade_failed',
       actorUserId: decidedByUserId,
     })
-  const league = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { leagueType: true, leagueVariant: true } })
+  const league = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { leagueType: true, leagueVariant: true, platform: true } })
   const pirateLeague = league != null && isPirateLeague(league)
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
@@ -137,6 +140,16 @@ export async function finalizeRedraftTrade(
   // For a two-team trade this is exactly [proposer, receiver] and nothing below changes.
   const multiTeam = isMultiTeamTrade(proposal)
   const participantRosterIds = tradeParticipantRosterIds(proposal)
+
+  /*
+   * An offer made before the league went official can be accepted after it. Settling it is the moment the
+   * players move, so the rule that both teams switched is checked here too, not only when it was offered.
+   */
+  const notSwitched = await tradeTeamsNotOnAllFantasy(proposal.leagueId, participantRosterIds)
+  if (notSwitched.length > 0) {
+    await failEvent()
+    return { ok: false, status: 409, error: tradeTeamNotSwitchedMessage(notSwitched.map((t) => t.name), sourcePlatformLabel(league?.platform)) }
+  }
 
   // A cheap early refusal, NOT the verdict that decides. The cap numbers it reads can change before
   // the transaction below opens, so the check is repeated on `tx` after the claim — see there.

@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { isLeagueTombstoned } from '@/lib/league-delete/leagueTombstones'
+import { findConvertedLeague } from '@/lib/league/nativeConversionLookup'
 
 import { sendImportCompleteNotification } from '@/lib/import/sendImportNotification'
 import { sleeperApiSportToLeagueSport } from '@/lib/import/sleeperApiSportToLeagueSport'
@@ -179,6 +180,10 @@ export async function importLegacySeasonAtIndex(
            * work they asked for.
            */
           if (await isLeagueTombstoned({ userId, platform: 'sleeper', platformLeagueId })) {
+            continue
+          }
+          // Switched to AllFantasy in place: never written back as an imported copy (conversion plan, step 5).
+          if (await findConvertedLeague({ platform: 'sleeper', platformLeagueIds: [platformLeagueId] })) {
             continue
           }
 

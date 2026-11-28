@@ -1,4 +1,5 @@
 import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
+import { findConvertedLeague } from '@/lib/league/nativeConversionLookup'
 import pLimit from "p-limit";
 import { LeagueSport } from "@prisma/client";
 
@@ -415,6 +416,8 @@ export async function upsertSleeperLeagueMetadataOnly(
 ) {
   const platformLeagueId = leagueData.league_id?.toString();
   if (!platformLeagueId) return null;
+  // Switched to AllFantasy in place: never written back as an imported copy (conversion plan, step 5).
+  if (await findConvertedLeague({ platform: 'sleeper', platformLeagueIds: [platformLeagueId] })) return null;
   const leaguePayload = await withAfOwnedSettings(
     { userId, platformLeagueId, season },
     buildLeagueUpdateData(leagueData, season, sportLabel),
@@ -447,6 +450,8 @@ export async function processLeague(
 ): Promise<{ leagueId: string; commentaryTelemetry: MatchupCommentaryTelemetry } | null> {
   const platformLeagueId = leagueData.league_id?.toString();
   if (!platformLeagueId) return null;
+  // Switched to AllFantasy in place: never written back as an imported copy (conversion plan, step 5).
+  if (await findConvertedLeague({ platform: 'sleeper', platformLeagueIds: [platformLeagueId] })) return null;
 
   const leaguePayload = {
     ...(await withAfOwnedSettings(

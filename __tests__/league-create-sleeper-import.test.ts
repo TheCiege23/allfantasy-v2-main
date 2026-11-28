@@ -123,6 +123,7 @@ vi.mock('@/lib/league-import/importPersistenceService', () => ({
 
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   ImportedLeagueConflictError: ImportedLeagueConflictErrorMock,
+  ImportedLeagueConvertedError: class ImportedLeagueConvertedError extends Error {},
 }))
 
 describe('POST /api/league/create Sleeper import flow', () => {

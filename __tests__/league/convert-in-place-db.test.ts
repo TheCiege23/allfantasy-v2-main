@@ -30,7 +30,7 @@ const { convertImportedLeagueInPlace, NativeConversionRefusal } = await import('
 const { nativeWeeklyLeague } = await import('@/lib/core-app/weeklyCapabilities')
 const { isNativePlatform } = await import('@/lib/league/isNativeLeague')
 
-const created = { leagueIds: [] as string[], userIds: [] as string[], sleeperIds: [] as string[] }
+const created = { leagueIds: [] as string[], userIds: [] as string[], sleeperIds: [] as string[], providerLeagueIds: [] as string[] }
 
 async function seedImportedLeague() {
   const tag = randomUUID().slice(0, 8)
@@ -97,10 +97,29 @@ async function seedImportedLeague() {
     data: { matchupId: `mf-${tag}`, leagueId: league.id, sport: 'NFL', weekOrPeriod: 1, teamA: '1', teamB: '2', scoreA: 101, scoreB: 99, winnerTeamId: '1', season: 2026 },
   })
   await prisma.leagueChatMessage.create({ data: { leagueId: league.id, userId: commish!.id, message: 'before the switch' } })
-  return { league, commish: commish!, friend: friend!, seats, platformLeagueId, tag }
+  // The provider's own week rows, keyed by ITS league id and team ids: week 1 is seat 1 v seat 2 with seat 3 on a bye,
+  // week 15 a playoff game. Plus one player's points (provider rows, which other members' imports still read).
+  created.providerLeagueIds.push(platformLeagueId)
+  await prisma.weeklyMatchup.createMany({ data: [
+    { leagueId: platformLeagueId, seasonYear: 2026, week: 1, rosterId: '1', matchupId: 1, pointsFor: 101, pointsAgainst: 99, win: 1 },
+    { leagueId: platformLeagueId, seasonYear: 2026, week: 1, rosterId: '2', matchupId: 1, pointsFor: 99, pointsAgainst: 101, win: 0 },
+    { leagueId: platformLeagueId, seasonYear: 2026, week: 1, rosterId: '3', matchupId: null, pointsFor: 80, pointsAgainst: 0, win: 0 },
+    { leagueId: platformLeagueId, seasonYear: 2026, week: 15, rosterId: '1', matchupId: 7, pointsFor: 120, pointsAgainst: 110, win: 1 },
+    { leagueId: platformLeagueId, seasonYear: 2026, week: 15, rosterId: '3', matchupId: 7, pointsFor: 110, pointsAgainst: 120, win: 0 },
+  ] })
+  await prisma.leaguePlayerWeeklyScore.create({
+    data: { leagueId: platformLeagueId, seasonYear: 2026, week: 1, playerId: players(1)[0]!, rosterId: 1, isStarter: true, points: 24.5, isFinalized: true, source: 'sleeper' },
+  })
+  return { league, commish: commish!, friend: friend!, seats, platformLeagueId, tag, firstPlayer: players(1)[0]! }
 }
 
 async function clean() {
+  // Keyed by provider and native league ids, not foreign keys: nothing removes these with the league.
+  for (const id of created.providerLeagueIds.splice(0)) {
+    await prisma.weeklyMatchup.deleteMany({ where: { leagueId: id } })
+    await prisma.leaguePlayerWeeklyScore.deleteMany({ where: { leagueId: id } })
+  }
+  for (const id of created.leagueIds) await prisma.leaguePlayerWeeklyScore.deleteMany({ where: { leagueId: id } })
   for (const id of created.leagueIds.splice(0)) {
     await prisma.leagueChatMessage.deleteMany({ where: { leagueId: id } })
     await prisma.matchupFact.deleteMany({ where: { leagueId: id } })
@@ -117,7 +136,7 @@ describe.runIf(enabled)('switching an imported league to native in place, agains
   afterAll(async () => { await prisma.$disconnect() })
 
   it('rewrites every id space on the same row and keeps names, logos, chat and history', async () => {
-    const { league, commish, friend, seats } = await seedImportedLeague()
+    const { league, commish, friend, seats, platformLeagueId, firstPlayer } = await seedImportedLeague()
     // Positive control: before the switch every native gate says imported.
     expect(isNativePlatform(league.platform)).toBe(false)
     expect(nativeWeeklyLeague(league)).toBe(false)
@@ -135,6 +154,21 @@ describe.runIf(enabled)('switching an imported league to native in place, agains
     expect(await prisma.leagueWaiverSettings.count({ where: { leagueId: league.id } })).toBe(1)
     expect(await prisma.leagueSettings.count({ where: { leagueId: league.id } })).toBe(1)
     expect(await prisma.leagueInvite.count({ where: { leagueId: league.id, isActive: true } })).toBe(1)
+
+    // Past weeks copied into native tables (Q4): final matchups on the season's rows, playoff week marked, the bye kept.
+    expect(result).toMatchObject({ pastScores: { matchups: 3, matchupsSkipped: 0, playerScores: 1, playerScoresUnmapped: 0 } })
+    const season = await prisma.redraftSeason.findFirstOrThrow({ where: { leagueId: league.id } })
+    const matchups = await prisma.redraftMatchup.findMany({ where: { seasonId: season.id }, orderBy: [{ week: 'asc' }, { homeScore: 'desc' }] })
+    expect(matchups.map((m) => [m.week, m.type, m.status, m.homeRosterId, m.awayRosterId, m.homeScore, m.awayScore])).toEqual([
+      [1, 'regular', 'final', seats[0]!.redraftId, seats[1]!.redraftId, 101, 99],
+      [1, 'regular', 'final', seats[2]!.redraftId, null, 80, 0],
+      [15, 'playoff', 'final', seats[0]!.redraftId, seats[2]!.redraftId, 120, 110],
+    ])
+    expect(await prisma.leaguePlayerWeeklyScore.findMany({ where: { leagueId: league.id }, select: { playerId: true, points: true, source: true, week: true } }))
+      .toEqual([{ playerId: firstPlayer, points: 24.5, source: 'allfantasy', week: 1 }])
+    // The provider's own rows are untouched: other members' imports of that league still read them.
+    expect(await prisma.weeklyMatchup.count({ where: { leagueId: platformLeagueId } })).toBe(5)
+    expect(await prisma.leaguePlayerWeeklyScore.count({ where: { leagueId: platformLeagueId } })).toBe(1)
     expect(isNativePlatform(after.platform)).toBe(true)
     expect(nativeWeeklyLeague(after)).toBe(true)
 
