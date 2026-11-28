@@ -9,12 +9,17 @@
 # Usage:
 #   ./probe.sh draft-picks <YEAR>            # GET /draft/picks?year=YEAR
 #   ./probe.sh roster <SEASON> <TEAM>        # GET /teams/roster?season=SEASON&team=TEAM
+#   ./probe.sh recruiting <YEAR>             # GET /recruiting/players?year=YEAR   (GAPS B-04: path UNVERIFIED)
+#
+# `recruiting` exists to settle GAPS B-04: whether CBBD serves basketball recruiting at that path, and in what
+# shape. Capture ONE class, commit fixtures/recruiting-<YEAR>.json, then write the parser from it. A 404 means
+# the path guess was wrong — record that in B-04; do not try other paths blind.
 #
 # The key is read from CFBD_API_KEY / CFBD_KEY / COLLEGE_FOOTBALL_DATA_API_KEY (lib/cfbd-env.ts)
 # and only ever sent as a header. It never reaches a fixture, a log line or this script's output.
 set -euo pipefail
 set +x
-mode="${1:?usage: probe.sh draft-picks YEAR | roster SEASON TEAM}"
+mode="${1:?usage: probe.sh draft-picks YEAR | roster SEASON TEAM | recruiting YEAR}"
 key="${CFBD_API_KEY:-${CFBD_KEY:-${COLLEGE_FOOTBALL_DATA_API_KEY:-}}}"
 key="${key%\"}"; key="${key#\"}"
 [[ -n "$key" ]] || { echo "Missing CFBD/CBBD credential" >&2; exit 1; }
@@ -31,6 +36,9 @@ case "$mode" in
     slug="$(echo "$team" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed 's/-*$//')"
     enc="$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$team")"
     path="/teams/roster?season=$season&team=$enc"; target="roster-$season-$slug.json" ;;
+  recruiting)
+    year="${2:?year required}"; [[ "$year" =~ ^[0-9]{4}$ ]] || { echo "Invalid year" >&2; exit 1; }
+    path="/recruiting/players?year=$year"; target="recruiting-$year.json" ;;
   *) echo "Unsupported capture mode" >&2; exit 1 ;;
 esac
 [[ ! -e "$root/fixtures/$target" ]] || { echo "Fixture exists; refusing duplicate capture" >&2; exit 1; }

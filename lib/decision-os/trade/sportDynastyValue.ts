@@ -62,6 +62,7 @@ import {
 import type { RookieDraftEvidence } from './rookieDraftEvidence'
 import type { NbaProspectRank } from '@/lib/adp/nbaProspectRanks'
 import { LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
+import { basketballDraftRateFor, type BasketballDraftRateCell } from '@/lib/devy/basketballDraftRates'
 
 export type DynastyGradedSport = 'NBA' | 'NHL' | 'MLB' | 'SOCCER' | 'NCAAF' | 'NCAAB'
 type DynastyGradeContext = Omit<SportPointsContext, 'sport'> & { sport: DynastyGradedSport }
@@ -111,6 +112,24 @@ export type SportDynastyContext = {
   rookieDraftEvidence?: ReadonlyMap<string, RookieDraftEvidence>
   prospectAdp?: ReadonlyMap<string, { name: string; rank: number }>
   nbaProspectRanks?: ReadonlyMap<string, NbaProspectRank>
+  /**
+   * NBA only: a college prospect's recruiting evidence, for the MEASURED path (`nbaMeasuredProspectValue`).
+   * ⚠ NO LOADER FILLS THIS YET: it needs stored NCAAB recruiting rows (`cbbd:recruits:v1:*`) linked to our
+   * ESPN ids, and the recruiting feed is uncaptured (`contracts/cbbd/GAPS.md` B-04). Until then it is absent
+   * and every unranked prospect withholds, exactly as before.
+   */
+  nbaProspectRecruiting?: ReadonlyMap<string, NbaRecruitingProspect>
+}
+
+/** What the measured NBA prospect path reads for one college player. */
+export type NbaRecruitingProspect = {
+  name: string
+  /** G / F / C, the NBA draft feed's vocabulary. */
+  position: string | null
+  /** National rank in his recruiting class, 1 = best. */
+  nationalRank: number | null
+  /** The NBA draft he is expected to enter. */
+  draftYear: number | null
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -240,6 +259,55 @@ export function nbaProspectValue(rank: NbaProspectRank, args: {
   return estimate.ok ? estimate.value * FUTURE_DISCOUNT ** Math.max(0, rank.draftYear - season) : null
 }
 
+/**
+ * An earlier-class college prospect with a MEASURED recruiting cohort and no pre-draft rank (owner, 2026-11-28):
+ *
+ *     P(drafted | rank band, position) × E[this league's pickDynastyValue at the drafted slot | drafted] × discount
+ *
+ * — football's devy option (`lib/devy/devyOptionValue.ts`) with the value factor taken in THIS league's units at
+ * grade time, because the NBA scale is league-relative. The cohort table (`lib/devy/basketballDraftRates.ts`)
+ * stores where drafted recruits went, overall pick by overall pick; each slot is priced here on the same
+ * young-player pool and `pickDynastyValue` the league's own picks use, so the result adds to picks, ranked
+ * prospects and pros freely. The overall NBA pick is read as the league rookie pick of the same number — the
+ * convention `nbaProspectValue` already uses for a rank.
+ *
+ * The discount is `nbaProspectValue`'s: the pick is priced in his draft year's class, then
+ * `FUTURE_DISCOUNT` per season until that draft — one horizon rule for both NBA prospect paths.
+ *
+ * ⚠ NULL, NEVER ZERO, when the cell is missing or under its minimum n, the draft year is unknown or already
+ * past, or any slot cannot be priced. The committed table is EMPTY (not measured), so in production this
+ * returns null for everyone until the owner runs the measurement (`contracts/cbbd/GAPS.md` B-05).
+ * `table` is a test seam; production reads the generated file.
+ */
+export function nbaMeasuredProspectValue(prospect: NbaRecruitingProspect, args: {
+  pool: readonly number[]
+  teams: number
+  season: number
+  nextDraftYear: number
+  table?: readonly BasketballDraftRateCell[]
+}): { value: number; pDrafted: number; recruits: number; drafted: number; expectedIfDrafted: number } | null {
+  const { pool, teams, season, nextDraftYear } = args
+  const draftYear = prospect.draftYear
+  if (draftYear == null || !Number.isInteger(draftYear) || draftYear < nextDraftYear) return null
+  const cell = basketballDraftRateFor(prospect.position, prospect.nationalRank, args.table)
+  if (!cell) return null
+  let weighted = 0
+  let counted = 0
+  for (const { overall, count } of cell.slots) {
+    const at = pickDynastyValue({
+      sport: 'NBA', pool, teams, nextDraftYear,
+      pick: { kind: 'pick', year: draftYear, round: Math.ceil(overall / Math.max(1, Math.round(teams))), overall },
+    })
+    if (!at.ok) return null
+    weighted += at.value * count
+    counted += count
+  }
+  if (counted === 0 || counted !== cell.drafted) return null
+  const expectedIfDrafted = weighted / counted
+  const value = cell.rate * expectedIfDrafted * FUTURE_DISCOUNT ** Math.max(0, draftYear - season)
+  return { value, pDrafted: cell.rate, recruits: cell.recruits, drafted: cell.drafted, expectedIfDrafted }
+}
+
 function sportDynastyBasis(ctx: DynastyGradeContext): string {
   const pointsBasis = ctx.sport === 'NCAAF'
     ? `Points over the best free agent at each position for the ${ctx.window.seasonLabel} college football season, using this league’s rules and its remaining weeks.`
@@ -258,7 +326,7 @@ function sportDynastyBasis(ctx: DynastyGradeContext): string {
   )
 }
 
-type Priced = { name: string; value: number; kind: 'player' | 'pick'; prospectBasis?: 'draft' | 'adp' | 'nba_rank'; asOf?: string }
+type Priced = { name: string; value: number; kind: 'player' | 'pick'; prospectBasis?: 'draft' | 'adp' | 'nba_rank' | 'nba_measured'; asOf?: string }
 
 /**
  * The dynasty grade for one deal. `give` is what the graded side sends. Withheld, with the reason,
@@ -307,6 +375,16 @@ export function priceSportDynastySides(args: DynastyDeal) {
         const value = nbaProspectValue(ranked, { pool, teams: ctx.teams, season: ctx.window.season, nextDraftYear: dynasty.nextDraftYear })
         if (value != null) {
           priced.push({ name: ranked.name, value, kind: 'player', prospectBasis: 'nba_rank', asOf: ranked.publishedAt })
+          continue
+        }
+      }
+      // No usable rank (none, or for a later draft): the measured recruiting cohort, when one reaches its minimum n.
+      const recruit = rosterId && ctx.sport === 'NBA' ? dynasty.nbaProspectRecruiting?.get(rosterId) : undefined
+      if ((!found.ok || !meetsSampleBar(found.player)) && recruit && !drafted) {
+        pool ??= youngPlayerPool(ctx, dynasty)
+        const measured = nbaMeasuredProspectValue(recruit, { pool, teams: ctx.teams, season: ctx.window.season, nextDraftYear: dynasty.nextDraftYear })
+        if (measured) {
+          priced.push({ name: recruit.name, value: measured.value, kind: 'player', prospectBasis: 'nba_measured' })
           continue
         }
       }
@@ -375,6 +453,9 @@ export function priceSportDynastySides(args: DynastyDeal) {
   }
   if ([...give.priced, ...get.priced].some((p) => p.prospectBasis === 'nba_rank')) {
     notes.push('A verified pre-draft NBA rank estimates the prospect’s pro value on the same points-based rookie pick curve, discounted until his draft year.')
+  }
+  if ([...give.priced, ...get.priced].some((p) => p.prospectBasis === 'nba_measured')) {
+    notes.push('A college prospect with no pre-draft rank is priced from his recruiting cohort: the measured share of recruits like him who were drafted, times the average value of the picks they went at on this league’s rookie pick curve, discounted until his draft year.')
   }
   const dealBasis = notes.length ? `${basis} ${notes.join(' ')}` : basis
   const source = `${ctx.sport.toLowerCase()}-${ctx.valueKind === 'categories' ? 'category' : 'points'}-dynasty`
