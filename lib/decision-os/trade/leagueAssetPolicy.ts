@@ -51,6 +51,7 @@ export async function loadHeldDevyPlayers(leagueId: string): Promise<HeldDevyPla
       select: {
         id: true,
         name: true,
+        sport: true,
         position: true,
         ppaSeasonTotal: true,
         recruitingComposite: true,
@@ -62,6 +63,7 @@ export async function loadHeldDevyPlayers(leagueId: string): Promise<HeldDevyPla
   return rows.map((r) => ({
     devyPlayerId: r.id,
     name: r.name,
+    sport: r.sport ?? null,
     position: r.position ?? null,
     ppaSeasonTotal: r.ppaSeasonTotal ?? null,
     recruitingComposite: r.recruitingComposite ?? null,

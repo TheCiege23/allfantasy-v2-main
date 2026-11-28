@@ -54,7 +54,7 @@ import {
   type PointsGradedSport,
   type SportPointsContext,
 } from './sportPointsValue'
-import { FULL_SEASON_GAMES, isDynastyGradedSport, isDynastyLeagueType } from './sportDynastyValue'
+import { FULL_SEASON_GAMES, gradesFiveSeasons, isDynastyGradedSport } from './sportDynastyValue'
 
 /**
  * What a daily-sport points grade is priced from, read once per league — or once per request with no
@@ -329,7 +329,7 @@ export async function loadSportPointsBase(args: {
       for (const player of finished.ctx.board) player.tradeMarket = adjustments.get(player.id)
     }
   }
-  if (!finished.ok || !league || !isDynastyGradedSport(sport) || !isDynastyLeagueType(league.leagueType)) return finished
+  if (!finished.ok || !league || !isDynastyGradedSport(sport) || !gradesFiveSeasons(league.leagueType, sport)) return finished
   const boardIds = finished.ctx.board.map((p) => p.id)
   const nextDraftYear = nextRookieDraftYear(league, season, games.games, FULL_SEASON_GAMES[sport])
   if (sport === 'NCAAB') {

@@ -39,6 +39,7 @@ export function nflSeasonNow(now = new Date()): number {
 const HELD_SELECT = {
   id: true,
   name: true,
+  sport: true,
   position: true,
   school: true,
   ppaSeasonTotal: true,
@@ -50,6 +51,7 @@ const HELD_SELECT = {
 type DevyRow = {
   id: string
   name: string
+  sport?: string | null
   position: string | null
   school: string | null
   ppaSeasonTotal: number | null
@@ -68,6 +70,7 @@ type DevyDelegate = { devyPlayer: { findMany: (args: any) => PromiseLike<unknown
 const toHeld = (r: DevyRow): HeldDevyPlayer => ({
   devyPlayerId: r.id,
   name: r.name,
+  sport: r.sport ?? null,
   position: r.position ?? null,
   ppaSeasonTotal: r.ppaSeasonTotal ?? null,
   recruitingComposite: r.recruitingComposite ?? null,
@@ -89,7 +92,9 @@ export async function loadDevyCandidates(
   if (ids.length === 0 && names.length === 0) return []
   try {
     const rows = (await prisma.devyPlayer.findMany({
+      // NCAAF only: this analyzer prices prospects on the NFL devy board (`devyOptionValue`), never NCAAB.
       where: {
+        sport: 'NCAAF',
         graduatedToNFL: false,
         OR: [...(ids.length ? [{ id: { in: ids } }] : []), ...(names.length ? [{ normalizedName: { in: names } }] : [])],
       },
@@ -125,7 +130,7 @@ export async function searchOpenMarketDevy(
   if (needle.length < 2) return []
   try {
     const rows = (await prisma.devyPlayer.findMany({
-      where: { normalizedName: { contains: needle }, graduatedToNFL: false, position: { in: ['QB', 'RB', 'WR', 'TE'] } },
+      where: { sport: 'NCAAF', normalizedName: { contains: needle }, graduatedToNFL: false, position: { in: ['QB', 'RB', 'WR', 'TE'] } },
       select: HELD_SELECT,
       orderBy: [{ draftProjectionScore: 'desc' }, { devyValue: 'desc' }, { name: 'asc' }],
       take: opts.limit ?? 5,

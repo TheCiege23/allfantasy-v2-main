@@ -302,6 +302,23 @@ export function isFantraxCampusProjectionLeague(
 }
 
 /**
+ * 🛑 AN NBA DEVY LEAGUE IS GRADED AS AN NBA DYNASTY LEAGUE (owner, 2026-11-28). A devy league keeps its pros
+ * for years exactly as a dynasty league does, so the five-season grade (`./sportDynastyValue.ts`) is the right
+ * one for its pro players and picks. Its college prospects (`espn:ncaab:<id>`) price ONLY through a verified
+ * pre-draft NBA rank for the next draft, on the same rookie pick curve as the league's own picks
+ * (`nbaProspectValue`); every other prospect withholds the deal.
+ *
+ * ⚠ NOT A MEASURED DEVY OPTION. Football's devy price is P(drafted | recruiting) × E[board value | drafted],
+ * both measured (`lib/devy/devyOptionValue.ts`). Basketball has neither input on file — no NCAAB recruiting
+ * ratings, one NBA draft class captured — so no P(drafted) is applied here: a ranked prospect is priced as
+ * the pick his rank implies. `contracts/cbbd/GAPS.md` B-02 names the missing data. Only NBA: NHL, MLB and
+ * soccer devy have no prospect evidence wired at all, and college basketball devy is not a concept.
+ */
+export function isNbaDevyLeague(leagueType: string | null | undefined, sport: string | null | undefined): boolean {
+  return String(sport ?? '').trim().toUpperCase() === 'NBA' && String(leagueType ?? '').trim().toLowerCase() === 'devy'
+}
+
+/**
  * Why a league that keeps players past this season is not graded here. This grade counts THIS season
  * only; in a dynasty or keeper league that ignores every season after it — young players most of all —
  * and no model prices those seasons for this sport yet. The supported pro dynasty leagues use
@@ -311,6 +328,7 @@ export function multiSeasonFormatReason(leagueType: string | null | undefined, s
   const t = String(leagueType ?? '').trim().toLowerCase()
   const kept = t.includes('dynasty') || t === 'keeper' || t === 'devy' || t === 'c2c' || t === 'salary_cap'
   if (!kept) return null
+  if (isNbaDevyLeague(t, sport)) return null
   if (t.includes('dynasty') && (sport === 'NBA' || sport === 'NHL' || sport === 'MLB' || sport === 'SOCCER' || sport === 'NCAAB')) return null
   return `This is a ${t.replace('_', ' ')} league, and ${SPORT_LABEL[sport]} grades so far count this season only — that would ignore every season after it, young players most of all. This deal is not graded.`
 }

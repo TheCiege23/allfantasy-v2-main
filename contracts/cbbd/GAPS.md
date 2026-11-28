@@ -49,3 +49,47 @@ the shortened rookie draft. The football version links a CFBD draft pick to our 
 **Next:** build the basketball pipeline on this chain — store the picks once after each June draft,
 resolve each to `PlayerIdentityMap.espnId` through the draft-year roster, and feed the drafts card's
 "Moving up" section the way football does.
+
+## B-02 — Can NCAAB → NBA devy prospects be priced the way NCAAF → NFL ones are? — **OPEN 2026-11-28: no, two datasets are missing**
+
+**Why it matters.** Football prices a devy prospect as `P(drafted | position, rating) × E[board value | drafted]
+× horizon discount` (`lib/devy/devyOptionValue.ts`), both factors MEASURED and generated
+(`lib/devy/draftRates.generated.ts`: 8 recruit classes × 10 draft years, 10,028 recruits;
+`lib/devy/arrivalValues.generated.ts`: 3 draft classes on the FantasyCalc board). The owner asked for the same
+for basketball devy and C2C. Checked the repo, the schema and its writers, and every contract — no provider was
+called.
+
+**What exists:**
+
+- **NBA draft history — one class.** `fixtures/draft-picks-2025.json`: 59 picks, 46 from college (G 27, F 11,
+  C 8), 45 with an `athleteId`. `overallRank` (58 of 59 set, values up to 98) is a pre-draft rank, but the
+  endpoint lists DRAFTED players only, so it has no denominator: it cannot say how often a rank-N prospect goes
+  undrafted. The stored copy (`cbbd:draft-picks:v1:<year>`, `lib/devy/cbbdDraftPicksStore.ts`) is written for
+  the latest draft year only, so production holds at most a year or two, not a history.
+- **A pre-draft NBA rank board.** `lib/adp/nbaProspectRanks.ts` (`trade:nba:prospect-ranks:<year>`), imported by
+  hand from a licensed publisher, next draft class only, 30-day TTL.
+- **An NBA value scale — but not a fixed one.** The NBA grade is points over replacement under each league's own
+  scoring, summed over five aged seasons (`playerDynastyValue`, `lib/decision-os/trade/sportDynastyValue.ts`).
+  There is no league-independent NBA dynasty board (FantasyCalc is NFL-only), so a generated
+  E[value | drafted] table would be in no league's units.
+
+**What is missing, and who would supply it:**
+
+1. **NCAAB recruiting ratings.** Nothing stores them: `DevyPlayer.recruiting*` is written only by the CFBD
+   (football) ingestion, and `seedCollegeBasketballPlayers` never sets it. No contract in `contracts/` captures a
+   basketball recruiting endpoint. CBBD is the likely source (CFBD's sister API has one for football); it would
+   need a new `/recruiting/players`-style capture via `scripts/probe.sh` and a committed fixture before anything
+   reads it. **Unverified — do not assume the endpoint or its shape exists until it is captured.**
+2. **A multi-year NBA draft history with a cohort denominator.** P(drafted) needs the recruit class (or every
+   ranked prospect) AND who of them was drafted, over several classes. `/draft/picks` is captured and takes any
+   `year`, so the drafted half is an ingestion backfill of ~8–10 years; the denominator is item 1.
+
+**What prices today instead (2026-11-28).** An NBA devy league is graded as an NBA dynasty league, and a held
+prospect is priced ONLY from a verified pre-draft rank for the next draft, as the pick that rank implies, on the
+league's own rookie pick curve (`nbaProspectValue`). That is the same curve the league's picks use, so prospect
+and pick values are one scale by construction. It carries **no P(drafted) discount** — the rank board is the
+evidence, not a measured rate — and every unranked or later-class prospect withholds the deal. No NCAAB prospect
+is ever priced on the NFL devy option (`devyOptionValue` refuses a non-NCAAF row).
+
+**Next:** capture a CBBD recruiting endpoint (item 1), then backfill `/draft/picks` for the matching years
+(item 2); only then can a `basketballDevyOptionValue` be generated the way football's was.

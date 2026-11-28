@@ -60,11 +60,22 @@ export function pickPolicyRefusal(args: {
 export type HeldDevyPlayer = {
   devyPlayerId: string
   name: string
+  /** `DevyPlayer.sport`. Only NCAAF rows can price on this (NFL) board; absent reads as NCAAF (legacy callers). */
+  sport?: string | null
   position: string | null
   ppaSeasonTotal: number | null
   recruitingComposite: number | null
   recruitingStars: number | null
   draftEligibleYear: number | null
+}
+
+/**
+ * Whether a held row can be priced on the NFL devy board at all. A college basketball row is dropped BEFORE
+ * matching, not merely refused after it: left in, an NCAAB "Ryan Williams" makes an NCAAF "Ryan Williams"
+ * ambiguous by name, and the football prospect silently goes unpriced.
+ */
+export function onNflDevyBoard(held: Pick<HeldDevyPlayer, 'sport'>): boolean {
+  return String(held.sport ?? 'NCAAF').trim().toUpperCase() === 'NCAAF'
 }
 
 /** One held prospect, by id or by a name no other held prospect shares — or none. */
@@ -94,6 +105,7 @@ export function matchHeldDevy(
 export function heldDevyOptionValue(held: HeldDevyPlayer, currentSeason: number) {
   return devyOptionValue({
     name: held.name,
+    sport: held.sport ?? null,
     position: held.position,
     ppaSeasonTotal: held.ppaSeasonTotal,
     recruitingComposite: held.recruitingComposite,
@@ -136,9 +148,10 @@ export function priceHeldDevyAssets(args: {
   const prices = [...args.prices]
   const devyPriced: string[] = []
   const unmeasured: string[] = []
+  const nflHeld = args.held.filter(onNflDevyBoard)
   prices.forEach((p, i) => {
     if (!p.unpriced || p.type === 'pick') return
-    const held = matchHeldDevy(undefined, p.name, args.held)
+    const held = matchHeldDevy(undefined, p.name, nflHeld)
     if (!held) return
     const option = heldDevyOptionValue(held, args.currentSeason)
     if (option.value == null) {
@@ -171,10 +184,11 @@ export function applyDevyPricing(args: {
   const unmeasured: string[] = []
   // Inputs line up with lines only when nothing was skipped; otherwise match by name alone.
   const aligned = args.inputs.length === args.lines.length
+  const nflHeld = args.held.filter(onNflDevyBoard)
   lines.forEach((line, i) => {
     if (!line.unpriced || priced[i]?.type === 'pick') return
     const input = aligned ? args.inputs[i] : undefined
-    const held = matchHeldDevy(input && input.kind === 'player' ? input : undefined, line.name, args.held)
+    const held = matchHeldDevy(input && input.kind === 'player' ? input : undefined, line.name, nflHeld)
     if (!held) return
     const option = heldDevyOptionValue(held, args.currentSeason)
     if (option.value == null) {

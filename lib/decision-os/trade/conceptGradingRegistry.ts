@@ -198,6 +198,10 @@ export const CONCEPT_GRADING_REGISTRY = {
     NFL: { ...CHART, review: 'Devy NFL prices on the market chart with held prospects as devy options; the type itself adds nothing.' },
     NCAAF: COLLEGE_MULTI_SEASON,
     ...pointsSports(POINTS_MULTI_SEASON_REFUSED),
+    NBA: {
+      grader: 'sport_points',
+      basis: 'The NBA dynasty grade (five seasons plus rookie picks). A college prospect prices only from a verified pre-draft NBA rank for the next draft, on the league’s own rookie pick curve; any other prospect withholds the deal (`isNbaDevyLeague`).',
+    },
   },
   zombie: { NFL: ZOMBIE, NCAAF: ZOMBIE, NBA: ZOMBIE, NCAAB: ZOMBIE, NHL: ZOMBIE, MLB: ZOMBIE, SOCCER: ZOMBIE },
   guillotine: {

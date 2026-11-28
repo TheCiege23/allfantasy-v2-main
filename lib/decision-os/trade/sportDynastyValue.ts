@@ -49,6 +49,7 @@ import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
 import {
   indexBoard,
+  isNbaDevyLeague,
   meetsSampleBar,
   MIN_SAMPLE_GAMES,
   resolveBoardPlayer,
@@ -70,9 +71,14 @@ export function isDynastyGradedSport(sport: string | null | undefined): sport is
   return s === 'NBA' || s === 'NHL' || s === 'MLB' || s === 'SOCCER' || s === 'NCAAF' || s === 'NCAAB'
 }
 
-/** League types this grade covers. Keeper, salary-cap, devy and C2C keep their own refusal. */
+/** League types this grade covers. Keeper, salary-cap, devy and C2C keep their own refusal — except NBA devy (`gradesFiveSeasons`). */
 export function isDynastyLeagueType(leagueType: string | null | undefined): boolean {
   return String(leagueType ?? '').trim().toLowerCase().includes('dynasty')
+}
+
+/** `isDynastyLeagueType` for the points loader in one sport: an NBA devy league is graded as dynasty too (`isNbaDevyLeague`). */
+export function gradesFiveSeasons(leagueType: string | null | undefined, sport: string | null | undefined): boolean {
+  return isDynastyLeagueType(leagueType) || isNbaDevyLeague(leagueType, sport)
 }
 
 /** This season and the next four. */
@@ -205,6 +211,20 @@ export function pickDynastyValue(args: {
   return { ok: true, value: base * FUTURE_DISCOUNT ** wait, ...(deep ? { deep: true } : {}) }
 }
 
+/**
+ * A college prospect with a verified pre-draft NBA rank: the pick that rank implies, on this league's own rookie
+ * pick curve, discounted to his draft year. Used by NBA dynasty, NBA devy (`isNbaDevyLeague`) and Campus-to-Canton.
+ *
+ * ⚠ ONE SCALE WITH THE LEAGUE'S PICKS, BY CONSTRUCTION — NOT FOOTBALL'S SPLIT. Football's devy option is in
+ * FantasyCalc board units and does NOT reconcile with `lib/pick-curve.ts` (see `lib/devy/devyOptionValue.ts`).
+ * Here the prospect IS `pickDynastyValue` at his rank's slot, the same function and young-player pool every NBA
+ * pick in the deal is priced from, so a prospect and a pick can be added and compared freely. Nothing here
+ * converts to or from `lib/pick-curve.ts` or the FantasyCalc board, and nothing may.
+ *
+ * ⚠ NO P(drafted). This is not a measured devy option: the rank board is taken as the expected draft slot. The
+ * data a P(drafted | rating) for basketball would need does not exist yet (`contracts/cbbd/GAPS.md` B-02), so
+ * an unranked prospect returns nothing here rather than a rate someone invented.
+ */
 export function nbaProspectValue(rank: NbaProspectRank, args: {
   pool: readonly number[]
   teams: number
