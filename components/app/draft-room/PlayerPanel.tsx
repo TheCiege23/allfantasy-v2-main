@@ -1236,6 +1236,7 @@ function PlayerPanelInner({
       )}
       {selectedPlayer && (
         <PlayerDetailModal
+          scoringLeagueId={leagueId ?? null}
           open={true}
           onClose={() => setSelectedPlayer(null)}
           draftOutlook={getDraftOutlook?.(selectedPlayer) ?? null}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Calendar } from 'lucide-react'
 import type { PlayerIdentity } from '../PlayerProfileClient'
 import PlayerGameLogTable, { gameLogSupported } from '@/components/player-game-log/PlayerGameLogTable'
+import PlayerWindowRanks from '@/components/player-game-log/PlayerWindowRanks'
 
 type StatLine = {
   season: number
@@ -16,7 +17,12 @@ type StatLine = {
 export function GameLogTab({ player }: { player: PlayerIdentity }) {
   // NHL / NBA / NCAAB / MLB / soccer: a real per-game log (date, opponent, final score, box line).
   if (gameLogSupported(player.sport)) {
-    return <PlayerGameLogTable sport={player.sport} playerKey={{ identityId: player.id }} playerName={player.name} />
+    return (
+      <>
+        <PlayerWindowRanks sport={player.sport} playerKey={{ identityId: player.id }} />
+        <PlayerGameLogTable sport={player.sport} playerKey={{ identityId: player.id }} playerName={player.name} />
+      </>
+    )
   }
   return <SeasonTotalsLog player={player} />
 }

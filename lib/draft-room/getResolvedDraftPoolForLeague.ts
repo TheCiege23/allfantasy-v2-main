@@ -2249,9 +2249,14 @@ async function buildResolvedDraftPoolForLeague(
   const nflStatScorer = sport === 'NFL' && league
     ? (await import('@/lib/redraft/scoringEngine')).buildLeagueStatScorer(league)
     : null
+  // NHL: last season's fantasy points per game on THIS league's scoring (FP/G column).
+  const nhlSeasonScorer = sport === 'NHL' && league
+    ? (await import('@/lib/redraft/scoringEngine')).buildLeagueStatScorer(league)
+    : null
   const storedSeasonStats = await loadStoredDraftSeasonStats(String(sport),
     poolRows.flatMap((row) => { const id = rollingInsightsIdOfPoolRow(row); return id ? [id] : [] }),
     Number.isInteger(league?.season) ? Number(league?.season) : new Date().getUTCFullYear(),
+    nhlSeasonScorer,
   )
 
   /*

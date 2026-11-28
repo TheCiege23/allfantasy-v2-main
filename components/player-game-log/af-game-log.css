@@ -243,3 +243,45 @@
 .af-gl[data-density='compact'] .af-gl-pin {
   min-width: 0;
 }
+
+/* Rank by time window (PlayerWindowRanks). Four equal cells: they fit a phone without scrolling. */
+.af-gl-ranks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.af-gl-ranks-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.af-gl-rank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 4px;
+  border: 1px solid var(--gl-line, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  min-width: 0;
+}
+.af-gl-rank-label {
+  font: 800 11px/1.2 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gl-faint, rgba(255, 255, 255, 0.45));
+}
+.af-gl-rank-value {
+  font: 800 17px/1.2 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--gl-text, rgba(255, 255, 255, 0.92));
+  font-variant-numeric: tabular-nums;
+}
+.af-gl-rank-sub {
+  font: 600 11px/1.25 system-ui, sans-serif;
+  color: var(--gl-text2, rgba(255, 255, 255, 0.7));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}

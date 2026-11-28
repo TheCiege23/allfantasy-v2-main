@@ -114,11 +114,14 @@ export type DraftSeasonStatLine = Partial<Record<
   | 'homeRuns' | 'rbi' | 'runs' | 'stolenBases' | 'battingAverage' | 'onBasePercentage'
   | 'wins' | 'strikeouts' | 'saves' | 'era' | 'whip'
   | 'goals' | 'assists' | 'shots_on_goal' | 'blocks' | 'shutouts'
-  | 'goalsAgainstAverage' | 'savePercentage',
+  | 'goalsAgainstAverage' | 'savePercentage'
+  // NHL peripherals and context (2026-11-28): Yahoo's 2026 draft room showed "half the stats … couldn't
+  // see Hits or Blocks" and no games played, so averages could not be read against a sample size.
+  | 'hits' | 'power_play_points' | 'gamesPlayed' | 'seasonFantasyPointsPerGame',
   number
 >>
 
-function seasonStatRoot(blob: unknown): Record<string, unknown> | null {
+export function seasonStatRoot(blob: unknown): Record<string, unknown> | null {
   if (!blob || typeof blob !== 'object' || Array.isArray(blob)) return null
   const root = blob as Record<string, unknown>
   const nested = root.regular_season ?? root.currentSeason ?? root.season_stats ?? root.season
@@ -220,6 +223,12 @@ export function extractNhlDraftSeasonStats(blob: unknown): DraftSeasonStatLine |
     assists: n('assists') ?? undefined,
     shots_on_goal: n('shots_on_goal') ?? undefined,
     blocks: n('blocks') ?? undefined,
+    hits: n('hits') ?? undefined,
+    power_play_points:
+      n('power_play_points') ??
+      (n('power_play_goals') != null || n('power_play_assists') != null
+        ? (n('power_play_goals') ?? 0) + (n('power_play_assists') ?? 0)
+        : undefined),
     saves: saves ?? undefined,
     wins: n('win') ?? n('wins') ?? undefined,
     shutouts: n('shutouts') ?? undefined,

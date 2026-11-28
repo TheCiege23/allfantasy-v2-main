@@ -427,15 +427,27 @@ const MLB_PITCHER: DraftStatColumnDef[] = [
   col('p_proj', 'Proj/G', 'number', 'pitcher', ['projectedPointsPerGame']),
 ]
 
+/*
+ * GP first and FP/G (last season, on this league's scoring) next: a hockey manager reads every
+ * total against games played, and "sort by last year's points per game" was the one sort Yahoo's
+ * 2026 room took away. HIT and PPP sit beside BLK because "couldn't see Hits or Blocks" was the
+ * other half of that complaint.
+ */
 const NHL_SKATER: DraftStatColumnDef[] = [
+  col('gp_nhl', 'GP', 'number', 'skater', ['gamesPlayed']),
+  col('fppg_nhl', 'FP/G', 'number', 'skater', ['seasonFantasyPointsPerGame']),
   col('g', 'G', 'number', 'skater', ['goals', 'g']),
   col('a', 'A', 'number', 'skater', ['assists', 'a']),
   col('sog', 'SOG', 'number', 'skater', ['shots', 'shots_on_goal', 'sog']),
   col('blk_nhl', 'BLK', 'number', 'skater', ['blocks', 'blocked_shots']),
+  col('hit_nhl', 'HIT', 'number', 'skater', ['hits']),
+  col('ppp_nhl', 'PPP', 'number', 'skater', ['power_play_points']),
   col('nhl_sk_proj', 'Proj/G', 'number', 'skater', ['projectedPointsPerGame']),
 ]
 
 const NHL_GOALIE: DraftStatColumnDef[] = [
+  col('gp_nhl_g', 'GP', 'number', 'goalie', ['gamesPlayed']),
+  col('fppg_nhl_g', 'FP/G', 'number', 'goalie', ['seasonFantasyPointsPerGame']),
   col('sv_nhl', 'SV', 'number', 'goalie', ['saves', 'goalie_saves']),
   col('w_nhl', 'W', 'number', 'goalie', ['wins', 'goalie_wins']),
   col('sho', 'SO', 'number', 'goalie', ['shutouts', 'shutout']),

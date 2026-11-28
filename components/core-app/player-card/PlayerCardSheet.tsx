@@ -51,6 +51,7 @@ import PlayerGameLogTable, {
   gameLogSupported,
   type PlayerGameLogPayload,
 } from '@/components/player-game-log/PlayerGameLogTable'
+import PlayerWindowRanks from '@/components/player-game-log/PlayerWindowRanks'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -884,6 +885,9 @@ export default function PlayerCardSheet({
                     </>
                   ) : null}
 
+                  {activeTab === 'gamelog' && boxLogData && boxLogKey && p ? (
+                    <PlayerWindowRanks key={`ranks-${boxLogId}`} sport={p.sport} playerKey={boxLogKey} scoringContext={boxLogScoring} />
+                  ) : null}
                   {activeTab === 'gamelog' && boxLogData && boxLogKey && p ? (
                     <PlayerGameLogTable
                       key={boxLogId ?? undefined}
