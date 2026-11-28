@@ -1,4 +1,5 @@
 import type { ChimmyOrchestrationIntent } from './types'
+import { classifySpanishIntent } from './intent-classifier-es'
 
 export type ChimmyIntentClassification = {
   intent: ChimmyOrchestrationIntent
@@ -265,6 +266,15 @@ export function classifyChimmyIntent(
   if (/\b(devy|rookies?)\b/.test(text)) {
     return score('draft', 2.5)
   }
+
+  /*
+   * SPANISH (owner decision, 2026-11-28). Reached ONLY where every English branch above declined, so
+   * no English classification can change — the rows it can move are ones that were `general`. See
+   * `intent-classifier-es.ts` for the vocabulary, the accent folding and the fences that keep an
+   * English `general` question (no Spanish signal, or an English word like "bracket") where it was.
+   */
+  const spanish = classifySpanishIntent(text, message)
+  if (spanish) return score(spanish.intent, spanish.weight)
 
   return {
     intent: 'general',
