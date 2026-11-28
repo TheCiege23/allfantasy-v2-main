@@ -150,6 +150,7 @@ import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
 import { PlayerDetailModal, type DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
 import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import { AfAdpLockContext, afAdpLockOf } from './afAdpLock'
+import { isSameCachedDraftPool } from '@/lib/draft-room/draftPoolRenderHelpers'
 
 type DraftRoomPageClientProps = {
   /** Draft session id from URL (`/draft/[draftId]/snake`) — used for telemetry / deep links only. */
@@ -267,6 +268,8 @@ function normalizePoolReadiness(
 }
 
 const DRAFT_ROOM_LOCAL_PREFS_KEY_PREFIX = 'af:draft-room-prefs:'
+/** One shared empty roster: a new `[]` each render defeated the player pool's memo and React.memo(PlayerPanel). */
+const EMPTY_CURRENT_ROSTER: Array<{ playerName: string; position: string; team: string | null }> = []
 
 function mergeDraftChatWire(
   prev: DraftChatMessage[],
@@ -1245,6 +1248,9 @@ export function DraftRoomPageClient({
           if (nextPool.entries.length === 0 && prev && prev.entries.length > 0) {
             return prev
           }
+          // The live-sync refetch usually returns the copy the room already holds; keeping the old
+          // object stops every pool-derived list from being rebuilt for identical data.
+          if (isSameCachedDraftPool(prev, nextPool)) return prev
           return nextPool
         })
         setPoolReadiness((prev) => {
@@ -3609,7 +3615,7 @@ export function DraftRoomPageClient({
     assistantFeedByName,
     players,
   ])
-  const currentRoster: Array<{ playerName: string; position: string; team: string | null }> = []
+  const currentRoster = EMPTY_CURRENT_ROSTER
   const nextQueuedAvailable = queueFiltered.length > 0 && canDraft ? queueFiltered[0] : null
 
   const aiRowBadges = useMemo(() => {
