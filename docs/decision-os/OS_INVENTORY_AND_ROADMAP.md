@@ -11,7 +11,7 @@ audit) and [`HUB_BUILD_PLAN.md`](./HUB_BUILD_PLAN.md) (the owner-directed plan).
 > ⚠ **"Commissioner OS" names FOUR unrelated things in this repo — added 2026-09-06
 > after a session confused two of them.** This file covers only #1 and #2:
 > 1. `lib/decision-os/commissioner-health/` — a real, live decision engine (see §below, "THE TWO COLLISIONS ARE THE POINT").
-> 2. `app/commissioner-os/` + `lib/commissioner-ui/` — the consumer-facing UI this file scores, flatlined at 35%, demo-mode by default.
+> 2. `app/commissioner-os/` + `lib/commissioner-ui/` — the consumer-facing UI this file scores. ⚠ **Corrected 2026-11-28: it is NOT demo-mode by default.** `lib/commissioner-ui/demo-mode/constants.ts:32` sets `DEFAULT_DATA_MODE = 'live'` (read at `origin/main` `4a048906f9`); demo is an explicit choice. This line said "flatlined at 35%, demo-mode by default", and the older passages that repeat it (the 2026-09 census rows reading "Default mode `demo`" and "`DEFAULT_DATA_MODE = 'demo'`", and the "Commissioner OS (35%)" note) are the historical record of the 2026-09 code, not today's.
 > 3. `docs/commissioner-os/{CLAUDE.md,HANDOFF.md,SCOPE.md,TENANCY.md,SURVEY.md}` — a **completely separate B2B multi-tenant SaaS product**, licensing commissioner tooling to *other* fantasy platforms. Substantially landed on `main` (`lib/domain/`, `prisma/tenancy.prisma`). Explicitly not a draft board, not this file's concern, and this file is never mentioned there either.
 > 4. `docs/os/B2C_COMMISSIONER_USER_OS_PROJECT_PLAN.md` and `docs/os/COMMISSIONER_OS_SURFACE_ALIGNMENT.md` — an older (July 2026) B2C plan, superseded by this file and by the August B2B pivot. Historical only.
 >
@@ -190,6 +190,57 @@ the letter's record beside the grade — the commissioner tally when that letter
 every deal; NFL redraft only. Reported, never applied: the approve / veto recommendation is unchanged.
 ⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
 Neither is stored when shown; grading either needs it recorded first.
+
+**SCORES, 2026-11-28 at `origin/main` `4a048906f9` — owner-set, supersedes the 2026-11-24 table below.**
+
+| System | Score |
+|---|---|
+| Trade | 100 |
+| Waiver | 100 |
+| Lineup | 100 |
+| Value | 100 |
+| Draft | 93.3 |
+| League | 92.5 |
+| Import | 92.5 |
+| Projection | 92.5 |
+| Hub | 92.5 |
+| Commissioner | 82.5 |
+| Psychology | 100 |
+
+**The Hub gaps (items 1 and 2) are fixed in this change.** The 92.5 above is the mark at `4a048906f9`, before it:
+1. **Every Chimmy panel gets the packet and the second-model check.** The dashboard left panel, /legacy and
+   /chimmy/chat POST `/api/chimmy`, which ran `runAgentPipeline` — no grounding packet, no tool loop, no
+   `decisionAnswerCheck` — whenever `feature_chimmy_anthropic` was on. It now forwards every non-tournament request
+   to `/api/chat/chimmy` whatever the flag says; the allowance, token gate and refunds are that route's alone, so a
+   turn is counted once. `runAgentPipeline` has no production caller left (kept: its own suite still exercises it).
+2. **Spanish intent routing.** `classifyChimmyIntent` was English-only, so "¿acepto este intercambio?" was `general`
+   and got no `pendingTrades` slice and no check. Spanish vocabulary for every intent now runs at the English
+   router's final `general` (`lib/chimmy-orchestration/intent-classifier-es.ts`), accent-insensitive; no English
+   classification can change.
+
+Also in this change: **the manager-record screen honours the `managerRecords` kill switch**, as the packet slice and
+the `get_manager_record` tool already did — off, the card shows "temporarily unavailable", not an error or an empty
+record.
+
+**Manager Psychology — Engine and Cron are n/a by design (owner's ruling, 2026-11-28), so it scores 100.** It serves
+facts only (counts of what a manager has done, never a label or a prediction), so there is no engine to grade; and its
+feed entry is per viewer and five minutes long, warm exactly when that viewer is asking, so there is nothing for a
+schedule to warm. ⚠ The daily ESPN/MFL current-season waiver re-read recorded on 2026-11-21
+(`lib/league-import/providerWaiverRefresh.ts`) is a data import the records read, not a warm of this feed, and is
+unaffected by the ruling.
+
+**Commissioner OS default mode, corrected:** `DEFAULT_DATA_MODE = 'live'` (`lib/commissioner-ui/demo-mode/constants.ts:32`),
+not `demo` as this file's preamble said.
+
+**Packet `managerRecords` provenance — noted, not fixed (not cheap).** The slice is still stamped
+`servedFrom: 'live'` / `asOf: now` (`lib/decision-os/grounding/packet.ts`, the `present(out.text, …)` under the
+2026-11-24 ⚠ comment). The true source and time live in the feed's stored envelope, and nothing on the path exposes
+it: `OsFeed.get` (`lib/decision-os/domain-os/feed.ts`) returns the value only; `loadViewerManagerRecords` passes that
+on; `loadLeagueManagerRecords` merges a feed hit and a live build into one `SectionState`; and
+`buildManagerRecordContext` returns text. `drainOutcomes()` is per feed instance and the instance is a shared module
+singleton, so reading it after the call would race concurrent requests. The fix is an envelope-returning `get` on the
+shared `OsFeed` interface (every domain's feed) threaded through those three layers — a cross-OS change, not a slice
+edit. Stamping `'feed'` instead would be a guess in the other direction.
 
 **CODE RE-SCORE, 2026-11-24 at `0ff89d652c` — supersedes the 2026-11-21 table below and every mark it carries forward.**
 A read-only re-score at `0ff89d652c`, every gap re-checked in code, followed by one change closing the small ones. Same
