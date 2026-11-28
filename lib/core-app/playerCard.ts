@@ -7,6 +7,7 @@ import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { newsRowMatchesPlayer } from '@/lib/legacy/playerNewsMatch'
 import { selectAuthoritativePlayerRow } from '@/lib/player-match/authoritativePlayerRow'
+import { isEspnProHeadshot } from '@/lib/espn/espnProHeadshots'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
@@ -1952,7 +1953,9 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     position: player.position,
     team: player.team,
     number: player.number,
-    imageUrl: player.imageUrl,
+    // A current-team ESPN headshot on any of this player's rows beats an older photo (GAPS E-08, 2026-11-27):
+    // TheSportsDB's cutout of a traded player still shows his old jersey.
+    imageUrl: [player, anchor, ...siblings].map((r) => r.imageUrl).find((u) => isEspnProHeadshot(u, sport)) ?? player.imageUrl,
   }
 
   const projWeek = await latestProjectionWeek().catch(() => null)
