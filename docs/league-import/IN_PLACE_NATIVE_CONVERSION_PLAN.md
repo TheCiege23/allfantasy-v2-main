@@ -601,6 +601,7 @@ so, because the build follows the answer.
    the switch: a "Switch to AllFantasy" button once nothing blocks it, a short "when you switch" confirm, and for
    baseball a weekly-lineups consent the route requires. A 409 shows the new blockers in place. `/create-league?fromLeague=`
    redirects to the same card, and the wizard's copy-review branch is gone.
-   - **Kept, per §10:** `carryOverImportedLeague` and its tests, and `POST /api/leagues` still accepts `sourceLeagueId`
-     (nothing in the app sends it any more). Refusing it there is a one-line follow-up if the owner wants the copy path
-     closed for direct API callers too.
+   - **Kept, per §10:** `carryOverImportedLeague` and its tests, as internal plumbing.
+   - **API closed too (owner's call, 2026-11-27):** `POST /api/leagues` refuses any `sourceLeagueId` with `410`
+     (`IMPORT_COPY_RETIRED`) before reading or writing anything, so a direct API caller cannot make a copy either.
+     Copies made before this stay as they are, and `/api/leagues/<id>/import-carryover/finalize` still finishes one.
