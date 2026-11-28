@@ -46,57 +46,16 @@ test('authenticated league creation persists each sport, format, draft, seats, a
     expect(await prisma.draftSession.count({ where: { leagueId } })).toBeGreaterThan(0)
   }
 
-  // Use an isolated Sleeper fixture to exercise the actual standalone carryover route.
-  const friendUserId = `league-staging-friend-${randomUUID()}`
-  const friend = await page.request.put('/api/e2e/run-relay', {
-    headers: { 'x-allfantasy-e2e': '1' },
-    data: { id: friendUserId, email: `${friendUserId}@allfantasy.test`, name: 'Imported friend', username: friendUserId },
-  })
-  expect(friend.ok()).toBeTruthy()
-  const seats = await prisma.leagueEntrySlot.findMany({ where: { leagueId: sourceLeagueId }, orderBy: { slotNumber: 'asc' } })
-  const sourcePlayerIds = seats.map((_, index) => `staging-sleeper-${randomUUID()}-${index}`)
-  await prisma.player.createMany({ data: sourcePlayerIds.map((id, index) => ({
-    id, name: `Imported Player ${index + 1}`, sport: 'NFL', league: 'NFL', position: 'WR', team: 'BUF',
-  })) })
-  await prisma.league.update({ where: { id: sourceLeagueId }, data: { platform: 'sleeper' } })
-  for (let index = 0; index < seats.length; index++) {
-    const seat = seats[index]!
-    const rosterId = seat.rosterId!
-    const team = await prisma.leagueTeam.findUniqueOrThrow({ where: {
-      leagueId_externalId: { leagueId: sourceLeagueId, externalId: rosterId },
-    } })
-    const managerId = `source-manager-${index + 1}`
-    const sourceTeamId = `source-seat-${index + 1}`
-    await prisma.roster.update({ where: { id: rosterId }, data: {
-      platformUserId: managerId,
-      playerData: { source_team_id: sourceTeamId, players: [sourcePlayerIds[index]], starters: [sourcePlayerIds[index]] },
-    } })
-    await prisma.leagueTeam.update({ where: { id: team.id }, data: {
-      externalId: sourceTeamId, platformUserId: managerId,
-      claimedByUserId: index === 0 ? creatorUserId : index === 1 ? friendUserId : null,
-      isCommissioner: index === 0,
-    } })
-  }
-
-  const imported = await page.request.post('/api/leagues', {
+  // Copying an imported league into a new one is retired (docs/league-import/IN_PLACE_NATIVE_CONVERSION_PLAN.md §10):
+  // the request is refused before anything is written, and no league is created.
+  const leaguesBefore = await prisma.league.count({ where: { userId: creatorUserId } })
+  const copied = await page.request.post('/api/leagues', {
     data: { concept: 'redraft', sport: 'NFL', teamCount: 4, draftType: 'snake', scoringPreset: 'fb_half_ppr',
-      leagueName: `Staging carried league ${randomUUID().slice(0, 8)}`, sourceLeagueId },
+      leagueName: `Staging copy attempt ${randomUUID().slice(0, 8)}`, sourceLeagueId },
     timeout: 90_000,
   })
-  const importedBody = await imported.json()
-  expect(imported.status(), JSON.stringify(importedBody)).toBe(200)
-  const targetLeagueId = importedBody.league.id as string
-  expect(await prisma.draftPick.count({ where: { session: { leagueId: targetLeagueId } } })).toBe(4)
-  expect(await prisma.leagueTeam.count({ where: { leagueId: targetLeagueId, claimedByUserId: friendUserId } })).toBe(1)
-  const targetRosters = await prisma.roster.findMany({ where: { leagueId: targetLeagueId } })
-  expect(targetRosters.flatMap((roster) => (roster.playerData as { players?: string[] })?.players ?? []).sort())
-    .toEqual([...sourcePlayerIds].sort())
-
-  const finalized = await page.request.post(`/api/leagues/${targetLeagueId}/import-carryover/finalize`, { timeout: 120_000 })
-  const finalizedBody = await finalized.json()
-  expect(finalized.status(), JSON.stringify(finalizedBody)).toBe(200)
-  expect(finalizedBody.complete).toBe(true)
-  expect(await prisma.redraftRosterPlayer.count({ where: { roster: { leagueId: targetLeagueId } } })).toBe(4)
+  expect(copied.status(), JSON.stringify(await copied.json())).toBe(410)
+  expect(await prisma.league.count({ where: { userId: creatorUserId } })).toBe(leaguesBefore)
 })
 
 test('every offered concept, sport, and draft mode creates a persisted league @local-staging', async ({ page }) => {
