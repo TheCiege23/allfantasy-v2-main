@@ -16,7 +16,7 @@ export interface PhonePoolSortOption {
 }
 
 export function phonePoolSortOptions(sport: string, statOpts: DraftStatColumnOptions, useAiAdp: boolean): PhonePoolSortOption[] {
-  const out: PhonePoolSortOption[] = [{ key: useAiAdp ? 'aiAdp' : 'adp', label: useAiAdp ? 'AI ADP' : 'ADP' }]
+  const out: PhonePoolSortOption[] = [{ key: useAiAdp ? 'aiAdp' : 'adp', label: useAiAdp ? 'Chimmy ADP' : 'ADP' }]
   const seen = new Set(out.map((o) => o.key))
   for (const def of buildSleeperPoolStatColumnDefs(sport, statOpts)) {
     const key = sortKeyForColumn(def.key, sport)

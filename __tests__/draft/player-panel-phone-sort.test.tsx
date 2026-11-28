@@ -54,9 +54,9 @@ describe('phonePoolSortOptions', () => {
     expect(labels.at(-1)).toBe('Name')
   })
 
-  it('AI ADP replaces ADP when the room shows it; keys never repeat', () => {
+  it('Chimmy ADP (the room’s own label) replaces ADP when the room shows it; keys never repeat', () => {
     const opts = phonePoolSortOptions('NHL', { position: 'G' }, true)
-    expect(opts[0]).toEqual({ key: 'aiAdp', label: 'AI ADP' })
+    expect(opts[0]).toEqual({ key: 'aiAdp', label: 'Chimmy ADP' })
     expect(new Set(opts.map((o) => o.key)).size).toBe(opts.length)
   })
 })
