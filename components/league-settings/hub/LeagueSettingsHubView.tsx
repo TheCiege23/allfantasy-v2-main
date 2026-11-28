@@ -9,6 +9,7 @@
  */
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import './league-settings-hub.css'
 import {
   CalendarDays, ChevronRight, ClipboardList, Coins, Crown, Flame, Lock, LockKeyhole, Network, Scale, Settings2, Sparkles, Trophy, UserCog, Users, type LucideIcon,
@@ -115,6 +116,11 @@ export type HubSlots = { rivalryWeek?: ReactNode; storyline?: ReactNode; copyLea
 
 export type HubCallbacks = {
   onToggleSetting: (field: string, next: boolean) => void
+  /**
+   * One setting chosen from its picker (a row's `edit`): saves that one field. Resolves to the
+   * server's refusal, or null once saved. Optional: without it the rows stay read-only values.
+   */
+  onSetSetting?: (field: string, value: string | number) => Promise<string | null>
   onSaveTeamName: (name: string) => Promise<string | null>
   /** Commissioner notes, stored in `League.settings.commissioner_notes`. */
   onSaveNote: (text: string) => Promise<string | null>
@@ -408,26 +414,51 @@ function Face({ name, src }: { name: string; src?: string | null }) {
   return <span className="af-lsh-face" aria-hidden>{src ? <img src={src} alt="" /> : initials(name)}</span>
 }
 
-function RowView({ row, canEdit, busyField, onToggle }: { row: HubRow; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void }) {
+type OnSetSetting = (field: string, value: string | number) => Promise<string | null>
+
+function RowView({ row, canEdit, busyField, onToggle, onSet }: { row: HubRow; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void; onSet?: OnSetSetting }) {
   const { t, tMode } = useT()
+  const [picking, setPicking] = useState(false)
+  const value = <span className="af-lsh-value" data-empty={row.value == null ? 'true' : undefined}>{row.value == null ? '—' : translateValue(t, row.value)}</span>
+  const pickable = Boolean(row.edit && onSet && canEdit && !row.toggle)
   return (
     <>
-      <div className="af-lsh-row" data-indent={row.indent ? 'true' : undefined}>
-        <div className="af-lsh-row-copy">
-          <span>{t(row.label)}</span>
-          {row.description ? <span>{t(row.description)}</span> : null}
+      {pickable ? (
+        /*
+         * Sleeper's settings row (owner request, 2026-11-28): the whole row is the button, the value sits
+         * beside a chevron, and the choices open in a sheet that saves the one setting.
+         */
+        <button
+          type="button"
+          className="af-lsh-row af-lsh-pickrow"
+          data-indent={row.indent ? 'true' : undefined}
+          onClick={() => setPicking(true)}
+          data-testid={`setting-row-${row.edit!.field}`}
+          aria-haspopup="dialog"
+        >
+          <span className="af-lsh-row-copy">
+            <span>{t(row.label)}</span>
+            {row.description ? <span>{t(row.description)}</span> : null}
+          </span>
+          {value}
+          <ChevronRight className="af-lsh-nav-chevron" size={18} aria-hidden />
+        </button>
+      ) : (
+        <div className="af-lsh-row" data-indent={row.indent ? 'true' : undefined}>
+          <div className="af-lsh-row-copy">
+            <span>{t(row.label)}</span>
+            {row.description ? <span>{t(row.description)}</span> : null}
+          </div>
+          {row.toggle && onToggle ? (
+            <Switch
+              on={row.toggle.on}
+              label={t(row.label)}
+              disabled={!canEdit || busyField === row.toggle.field}
+              onChange={(next) => onToggle(row.toggle!.field, next)}
+            />
+          ) : row.schedule ? null : value}
         </div>
-        {row.toggle && onToggle ? (
-          <Switch
-            on={row.toggle.on}
-            label={t(row.label)}
-            disabled={!canEdit || busyField === row.toggle.field}
-            onChange={(next) => onToggle(row.toggle!.field, next)}
-          />
-        ) : row.schedule ? null : (
-          <span className="af-lsh-value" data-empty={row.value == null ? 'true' : undefined}>{row.value == null ? '—' : translateValue(t, row.value)}</span>
-        )}
-      </div>
+      )}
       {row.schedule ? (
         <div className="af-lsh-schedule">
           {row.schedule.map((d) => (
@@ -435,8 +466,80 @@ function RowView({ row, canEdit, busyField, onToggle }: { row: HubRow; canEdit: 
           ))}
         </div>
       ) : null}
+      {picking && row.edit && onSet ? <SettingPicker row={row} onSet={onSet} onClose={() => setPicking(false)} /> : null}
     </>
   )
+}
+
+/**
+ * The picker for one setting: its choices as a list, the current one marked. Choosing saves at once —
+ * no separate Save button, as in Sleeper — and the sheet closes when the server accepts it. A refusal
+ * (a playoff field the season cannot fit, a week past the cap) stays in the sheet, in the server's words.
+ */
+function SettingPicker({ row, onSet, onClose }: { row: HubRow; onSet: OnSetSetting; onClose: () => void }) {
+  const { t } = useT()
+  const edit = row.edit!
+  const [saving, setSaving] = useState<string | number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    // Start on the current choice, so a long list of weeks opens where the league is.
+    listRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.scrollIntoView?.({ block: 'center' })
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const choose = async (value: string | number) => {
+    if (saving != null) return
+    if (value === edit.current) { onClose(); return }
+    setSaving(value)
+    setError(null)
+    const refusal = await onSet(edit.field, value)
+    setSaving(null)
+    if (refusal) setError(refusal)
+    else onClose()
+  }
+  /*
+   * Portalled to <body>: `.af-lsh` is a size container, and containment makes it the containing block of
+   * a fixed-position child, so an in-place sheet would be clipped to the settings panel.
+   */
+  const sheet = (
+    <div className="af-lsh-sheet-backdrop" onClick={onClose} data-testid="setting-picker">
+      <div className="af-lsh-sheet" role="dialog" aria-modal="true" aria-label={t(row.label)} onClick={(e) => e.stopPropagation()}>
+        <div className="af-lsh-sheet-grab" aria-hidden />
+        <div className="af-lsh-sheet-head">
+          <strong>{t(row.label)}</strong>
+          <button type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" onClick={onClose}>{t('Done')}</button>
+        </div>
+        {row.description ? <p className="af-lsh-sheet-sub">{t(row.description)}</p> : null}
+        {error ? <p className="af-lsh-sheet-error" role="alert">{error}</p> : null}
+        <div className="af-lsh-sheet-list" role="radiogroup" aria-label={t(row.label)} ref={listRef}>
+          {edit.choices.map((c) => {
+            const on = c.value === edit.current
+            return (
+              <button
+                key={String(c.value)}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                className="af-lsh-choice"
+                disabled={saving != null}
+                onClick={() => void choose(c.value)}
+                data-testid={`setting-choice-${String(c.value)}`}
+              >
+                <span className="af-lsh-choice-copy">
+                  <span>{t(c.label)}</span>
+                  {c.note ? <span>{t(c.note)}</span> : null}
+                </span>
+                <span className="af-lsh-choice-mark" aria-hidden>{saving === c.value ? '…' : on ? '✓' : ''}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+  return typeof document === 'undefined' ? sheet : createPortal(sheet, document.body)
 }
 
 /** A row value: whole-string first, then a comma list ("Out, Doubtful, NA") item by item. */
@@ -447,7 +550,7 @@ function translateValue(t: (s: string) => string, value: string): string {
 }
 
 /** Groups flow into two columns at tablet width and up, balanced by row count. */
-function GroupGrid({ groups, canEdit, busyField, onToggle }: { groups: HubGroup[]; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void }) {
+function GroupGrid({ groups, canEdit, busyField, onToggle, onSet }: { groups: HubGroup[]; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void; onSet?: OnSetSetting }) {
   const { t } = useT()
   const cols = useMemo(() => {
     const left: HubGroup[] = []
@@ -467,7 +570,7 @@ function GroupGrid({ groups, canEdit, busyField, onToggle }: { groups: HubGroup[
           {col.map((g) => (
             <div key={g.key}>
               {g.label ? <div className="af-lsh-group-label">{t(g.label)}</div> : null}
-              {g.rows.map((r) => <RowView key={r.key} row={r} canEdit={canEdit} busyField={busyField} onToggle={onToggle} />)}
+              {g.rows.map((r) => <RowView key={r.key} row={r} canEdit={canEdit} busyField={busyField} onToggle={onToggle} onSet={onSet} />)}
             </div>
           ))}
         </div>
@@ -980,11 +1083,11 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
             </span>
           </div>
         </div>
-        {data.general === undefined ? <Loading lines={5} /> : <GroupGrid groups={data.general} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
+        {data.general === undefined ? <Loading lines={5} /> : <GroupGrid groups={data.general} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} onSet={cb.onSetSetting} />}
       </Card>
 
       <Card id="waivers" fold="closed" title={data.kind === 'zombie' ? 'Free Agency' : 'Waiver Settings'} action={<EditButton show={edit} onClick={() => cb.onOpenEditor('waivers')} />}>
-        {data.waivers === undefined ? <Loading /> : <GroupGrid groups={data.waivers} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
+        {data.waivers === undefined ? <Loading /> : <GroupGrid groups={data.waivers} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} onSet={cb.onSetSetting} />}
       </Card>
 
       {data.typeRules === undefined || data.typeRules.length ? (

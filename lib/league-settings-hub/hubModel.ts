@@ -16,6 +16,7 @@ import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount } from '@/lib/league/oddTe
 import { readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { copyLeagueAvailable, readCopyLeague } from '@/lib/league/copyLeague'
 import { describeByePlan, isNaturalByePlan, naturalByePlan, parseStoredByePlan } from '@/lib/playoff-brackets/byePlan'
+import { maxPlayoffStartWeekForSport } from '@/lib/redraft/regularSeasonCap'
 import { resolveHubSport, scoringCategories, scoringCategoryFor, sportCopy, sportDisplayName, sportFamily, SPORT_SLOT_NAMES, statLabel } from './sportProfile'
 
 export type HubKind =
@@ -97,8 +98,47 @@ export type HubRow = {
   indent?: boolean
   /** When set, the row is an inline switch saved through PATCH /api/league/settings. */
   toggle?: { field: string; on: boolean }
+  /**
+   * When set, tapping the row opens a picker of these choices; choosing one saves that one field
+   * through PATCH /api/league/settings (Sleeper-style, owner request 2026-11-28). The server still
+   * validates every value: a refusal is shown in the picker, never applied.
+   */
+  edit?: HubRowEdit
   schedule?: HubScheduleDay[]
 }
+
+export type HubRowChoice = { value: string | number; label: string; note?: string }
+export type HubRowEdit = { field: string; current: string | number | null; choices: HubRowChoice[] }
+
+/** The choices with the stored value kept even when it is not one of them, so a picker never hides it. */
+function choicesWith(current: string | number | null, choices: HubRowChoice[], label: (v: string | number) => string): HubRowChoice[] {
+  if (current == null || choices.some((c) => c.value === current)) return choices
+  return [...choices, { value: current, label: label(current) }].sort((a, b) =>
+    typeof a.value === 'number' && typeof b.value === 'number' ? a.value - b.value : 0,
+  )
+}
+
+const HOUR_CHOICES = [0, 12, 24, 48, 72]
+function hoursEdit(field: string, current: number | null): HubRowEdit {
+  return {
+    field,
+    current,
+    choices: choicesWith(current, HOUR_CHOICES.map((h) => ({ value: h, label: hoursText(h) ?? String(h) })), (v) => hoursText(Number(v)) ?? String(v)),
+  }
+}
+function rangeEdit(field: string, current: number | null, from: number, to: number, label: (n: number) => string, extra: HubRowChoice[] = []): HubRowEdit {
+  const choices: HubRowChoice[] = [...extra]
+  for (let n = from; n <= to; n += 1) choices.push({ value: n, label: label(n) })
+  return { field, current, choices: choicesWith(current, choices, (v) => label(Number(v))) }
+}
+
+/** The waiver systems the settings PATCH accepts (components/app/settings/WaiverSettingsPanel.tsx). */
+export const WAIVER_TYPE_CHOICES: HubRowChoice[] = [
+  { value: 'faab', label: 'FAAB Bidding', note: 'Managers bid from a season budget' },
+  { value: 'rolling', label: 'Rolling Priority', note: 'A successful claim sends you to the back' },
+  { value: 'reverse_standings', label: 'Reverse Standings', note: 'Worst record claims first' },
+  { value: 'fcfs', label: 'First Come, First Served', note: 'No waiver period: the first claim wins' },
+]
 
 export type HubGroup = { key: string; label: string; rows: HubRow[] }
 
@@ -176,6 +216,7 @@ function waiverTypeText(raw: unknown): string | null {
   if (s.includes('rolling')) return 'Rolling Priority'
   if (s.includes('reverse')) return 'Reverse Standings'
   if (s === 'none' || s.includes('free')) return 'None · free agency'
+  if (s === 'fcfs') return 'First Come, First Served'
   return humanize(s)
 }
 
@@ -268,10 +309,17 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
   }
 
   const deadline = num(l.tradeDeadlineWeek)
+  const lastWeek = Math.max(1, (num(l.playoffStartWeek) ?? maxPlayoffStartWeekForSport(l.sport)) - 1)
+  const reviewHours = num(l.tradeReviewHours)
   const trade: HubRow[] = [
-    { key: 'deadline', label: 'Trade Deadline', value: deadline != null ? (deadline > 0 ? `Week ${deadline}` : 'None') : DASH },
+    {
+      key: 'deadline',
+      label: 'Trade Deadline',
+      value: deadline != null ? (deadline > 0 ? `Week ${deadline}` : 'None') : DASH,
+      edit: rangeEdit('tradeDeadlineWeek', deadline, 1, lastWeek, (n) => `Week ${n}`, [{ value: 0, label: 'None', note: 'Trades stay open all season' }]),
+    },
     { key: 'review', label: 'Trade Review', value: tradeReviewText(snap) },
-    { key: 'reviewTime', label: 'Time to Review Pending Trades', value: hoursText(num(l.tradeReviewHours)) },
+    { key: 'reviewTime', label: 'Time to Review Pending Trades', value: hoursText(reviewHours), edit: hoursEdit('tradeReviewHours', reviewHours) },
     { key: 'pickTrading', label: 'Allow Draft Pick Trading', value: yesNo(l.draftPickTrading), toggle: bool(l.draftPickTrading) == null ? undefined : { field: 'draftPickTrading', on: l.draftPickTrading === true } },
     { key: 'benchDrops', label: 'Prevent Bench Players From Being Dropped After Game Starts', value: yesNo(l.preventBenchDrops), toggle: bool(l.preventBenchDrops) == null ? undefined : { field: 'preventBenchDrops', on: l.preventBenchDrops === true } },
   ]
@@ -288,15 +336,15 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
     l.irAllowDNR === true ? 'DNR' : null,
   ].filter(Boolean) as string[]
   const ir: HubRow[] = [
-    { key: 'irSlots', label: 'Injury Reserve Spots', value: num(l.irSlots) != null ? String(l.irSlots) : DASH },
+    { key: 'irSlots', label: 'Injury Reserve Spots', value: num(l.irSlots) != null ? String(l.irSlots) : DASH, edit: rangeEdit('irSlots', num(l.irSlots), 0, 10, String) },
     { key: 'irAllow', label: 'Also Allowed in IR', value: irAllowed.length ? irAllowed.join(', ') : DASH },
   ]
 
   const moves: HubRow[] = meta.autoLineups
     ? [{ key: 'lineups', label: 'Lineups', value: 'Auto-optimized every week' }]
     : [
-        { key: 'preDraft', label: 'Allow Pre-Draft Moves', value: yesNo(l.allowPreDraftMoves) },
-        { key: 'lockAll', label: 'Lock All Roster Moves', value: yesNo(l.lockAllMoves) },
+        { key: 'preDraft', label: 'Allow Pre-Draft Moves', value: yesNo(l.allowPreDraftMoves), toggle: bool(l.allowPreDraftMoves) == null ? undefined : { field: 'allowPreDraftMoves', on: l.allowPreDraftMoves === true } },
+        { key: 'lockAll', label: 'Lock All Roster Moves', value: yesNo(l.lockAllMoves), toggle: bool(l.lockAllMoves) == null ? undefined : { field: 'lockAllMoves', on: l.lockAllMoves === true } },
       ]
 
   const playoffTeams = num(l.playoffTeams)
@@ -305,9 +353,35 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
     meta.endgameLabel === 'Endgame'
       ? [{ key: 'endgame', label: 'Format', value: kind === 'guillotine' ? 'Last team standing' : kind === 'zombie' ? 'Last human standing' : kind === 'king_of_the_hill' ? 'Hold the crown' : 'Jury vote finale' }]
       : [
-          { key: 'playoffTeams', label: 'Playoff Teams', value: playoffTeams != null ? String(playoffTeams) : DASH },
-          { key: 'playoffStart', label: 'Playoffs Start', value: playoffStart != null ? `Week ${playoffStart}` : DASH },
-          { key: 'perRound', label: 'Weeks per Round', value: num(l.playoffWeeksPerRound) != null ? String(l.playoffWeeksPerRound) : DASH },
+          {
+            key: 'playoffTeams',
+            label: 'Playoff Teams',
+            value: playoffTeams != null ? String(playoffTeams) : DASH,
+            // Even fields only: an odd field is an AF Commissioner option, set from the full Playoffs editor.
+            edit: teamCount != null && teamCount >= 2
+              ? {
+                  field: 'playoffTeams',
+                  current: playoffTeams,
+                  choices: choicesWith(
+                    playoffTeams,
+                    Array.from({ length: Math.floor(Math.min(teamCount, 32) / 2) }, (_, i) => ({ value: (i + 1) * 2, label: `${(i + 1) * 2} teams` })),
+                    (v) => `${v} teams`,
+                  ),
+                }
+              : undefined,
+          },
+          {
+            key: 'playoffStart',
+            label: 'Playoffs Start',
+            value: playoffStart != null ? `Week ${playoffStart}` : DASH,
+            edit: rangeEdit('playoffStartWeek', playoffStart, 2, maxPlayoffStartWeekForSport(l.sport), (n) => `Week ${n}`),
+          },
+          {
+            key: 'perRound',
+            label: 'Weeks per Round',
+            value: num(l.playoffWeeksPerRound) != null ? String(l.playoffWeeksPerRound) : DASH,
+            edit: rangeEdit('playoffWeeksPerRound', num(l.playoffWeeksPerRound), 1, 2, (n) => (n === 1 ? '1 week' : `${n} weeks`)),
+          },
           { key: 'seeding', label: 'Seeding', value: str(l.playoffSeedingRule) ? humanize(String(l.playoffSeedingRule)) : DASH },
           { key: 'lower', label: 'Consolation Bracket', value: str(l.playoffLowerBracket) ? humanize(String(l.playoffLowerBracket)) : DASH },
         ]
@@ -327,16 +401,37 @@ export function buildWaiverGroups(p: HubSettingsPayload, kind: HubKind): HubGrou
   const isFaab = type === 'FAAB Bidding'
   const budget = num(l.waiverBudget)
   const minBid = num(l.waiverMinBid)
-  const left: HubRow[] = [{ key: 'type', label: 'Waiver Type', value: type }]
+  const rawType = str(l.waiverType)?.toLowerCase() ?? null
+  const money = (v: string | number) => `$${Number(v).toLocaleString('en-US')}`
+  const left: HubRow[] = [
+    {
+      key: 'type',
+      label: 'Waiver Type',
+      value: type,
+      edit: { field: 'waiverType', current: rawType, choices: choicesWith(rawType, WAIVER_TYPE_CHOICES, (v) => waiverTypeText(v) ?? String(v)) },
+    },
+  ]
   if (isFaab) {
     left.push(
-      { key: 'budget', label: 'Waiver Budget', value: budget != null ? `$${budget.toLocaleString('en-US')}` : DASH, indent: true },
-      { key: 'minBid', label: 'Min Bid', value: minBid != null ? `$${minBid}` : DASH, indent: true },
+      {
+        key: 'budget',
+        label: 'Waiver Budget',
+        value: budget != null ? money(budget) : DASH,
+        indent: true,
+        edit: { field: 'waiverBudget', current: budget, choices: choicesWith(budget, [50, 100, 200, 300, 500, 1000].map((v) => ({ value: v, label: money(v) })), money) },
+      },
+      {
+        key: 'minBid',
+        label: 'Min Bid',
+        value: minBid != null ? `$${minBid}` : DASH,
+        indent: true,
+        edit: { field: 'waiverMinBid', current: minBid, choices: choicesWith(minBid, [{ value: 0, label: '$0', note: '$0 bids allowed' }, { value: 1, label: '$1' }], (v) => `$${v}`) },
+      },
     )
   }
   left.push(
-    { key: 'clearAfter', label: 'Waivers Clear After Games', value: yesNo(l.waiverClearAfterGames) },
-    { key: 'hours', label: 'Time on Waivers After Drop', value: hoursText(num(l.waiverHours)) },
+    { key: 'clearAfter', label: 'Waivers Clear After Games', value: yesNo(l.waiverClearAfterGames), toggle: bool(l.waiverClearAfterGames) == null ? undefined : { field: 'waiverClearAfterGames', on: l.waiverClearAfterGames === true } },
+    { key: 'hours', label: 'Time on Waivers After Drop', value: hoursText(num(l.waiverHours)), edit: hoursEdit('waiverHours', num(l.waiverHours)) },
   )
   if (kind === 'guillotine') left.push({ key: 'chopped', label: 'Chopped Rosters', value: 'Released at the next waiver run' })
   if (kind === 'big_brother') left.push({ key: 'evicted', label: 'Evicted Rosters', value: 'Released at the next waiver run' })

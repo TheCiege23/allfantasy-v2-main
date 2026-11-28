@@ -259,6 +259,17 @@ export function LeagueSettingsHub({
     await loadSettings()
   }, [leagueId, loadSettings])
 
+  /** One setting from its picker (Sleeper-style rows, 2026-11-28): the same PATCH as a switch, one field. */
+  const onSetSetting = useCallback(async (field: string, value: string | number): Promise<string | null> => {
+    setBusyField(field)
+    const r = await sendJson('/api/league/settings', 'PATCH', { leagueId, [field]: value })
+    setBusyField(null)
+    if (!r.ok) return tx(r.error ?? 'Save failed')
+    toast.success(tx('Saved'))
+    await loadSettings()
+    return null
+  }, [leagueId, loadSettings])
+
   const onSaveNote = useCallback(async (text: string): Promise<string | null> => {
     const r = await sendJson('/api/league/settings', 'PATCH', { leagueId, settingsMerge: { [COMMISSIONER_NOTES_KEY]: text.slice(0, 2000) } })
     if (!r.ok) return r.error
@@ -417,6 +428,7 @@ export function LeagueSettingsHub({
       slots={slots}
       cb={{
         onToggleSetting: (f, n) => void onToggleSetting(f, n),
+        onSetSetting,
         onSaveTeamName,
         onSaveNote,
         onToggleNotification,
