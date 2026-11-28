@@ -31,6 +31,8 @@ const games = vi.fn()
 vi.mock('@/server/services/nativeMatchupCenter', () => ({
   loadNativeMatchupSeason: vi.fn(async () => season),
   loadNativeScoreboard: vi.fn(async () => ({ season: 2026, week: 7, games: games() })),
+  // The viewer's team, as the real helper finds it in a native league: the team they own.
+  viewerSeasonRosterId: vi.fn(async (_l: unknown, s: typeof season, userId: string) => s.rosters.find((r) => r.ownerId === userId)?.id ?? null),
 }))
 
 import { loadNativeLeagueWeekCards } from '@/server/services/nativeLeagueWeekCards'

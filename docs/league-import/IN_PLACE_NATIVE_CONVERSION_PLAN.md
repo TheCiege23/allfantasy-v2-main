@@ -595,4 +595,12 @@ so, because the build follows the answer.
      `LeagueNativeConversion` row, now `undone`, which releases the re-import refusal and lets the switch run again.
    - ⚠ Discards are found by `createdAt > convertedAt`. Prisma stamps both on app servers, so clock skew between
      servers of more than the gap between a switch and the first action after it would misfile that action.
-7. Repoint the "Make it native" button. Retire or relabel the copy flow per Q9.
+7. The button, and the copy flow retired (Q9). Every "Switch to AllFantasy" entry point
+   (`lib/league/makeNativeLeague.ts`: League home's "What's next?", the Commissioner tab header, the create wizard's
+   imported-leagues list) now leads to `/league/<id>?view=commissioner#native-switch`, the readiness card, which carries
+   the switch: a "Switch to AllFantasy" button once nothing blocks it, a short "when you switch" confirm, and for
+   baseball a weekly-lineups consent the route requires. A 409 shows the new blockers in place. `/create-league?fromLeague=`
+   redirects to the same card, and the wizard's copy-review branch is gone.
+   - **Kept, per §10:** `carryOverImportedLeague` and its tests, and `POST /api/leagues` still accepts `sourceLeagueId`
+     (nothing in the app sends it any more). Refusing it there is a one-line follow-up if the owner wants the copy path
+     closed for direct API callers too.

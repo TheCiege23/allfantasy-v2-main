@@ -49,6 +49,7 @@ html[data-mode='light'] .af-league-admin :is(input, select, textarea) { color-sc
 .af-league-admin .af-readiness { background: var(--surface); border-color: var(--line2); border-radius: 12px; }
 .af-league-admin .af-readiness[data-status='ready'] { border-color: var(--good); }
 .af-league-admin .af-readiness .af-readiness-index { background: var(--warn-soft); color: var(--warn); }
+.af-league-admin .af-readiness .af-readiness-primary { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
 .af-league-admin .af-admin-action-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
 .af-league-admin .af-admin-action { border-radius: 12px; background: var(--surface); border-color: var(--line2); padding: 12px 14px; }
 .af-league-admin .af-admin-action:enabled:hover { border-color: var(--accent); background: var(--surface2); }

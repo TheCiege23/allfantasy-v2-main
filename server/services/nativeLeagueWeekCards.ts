@@ -7,7 +7,7 @@ import { afSideTotal, loadMatchupAfProjections } from '@/lib/matchup-center/afPr
 import { computeMatchupWinProbability } from '@/lib/matchup-center/winProbability'
 import { managerArtUrl } from '@/lib/core-app/leagueArt'
 import type { NativeGameStatus } from '@/lib/matchup-center/nativeMatchupModel'
-import { loadNativeMatchupSeason, loadNativeScoreboard } from './nativeMatchupCenter'
+import { loadNativeMatchupSeason, loadNativeScoreboard, viewerSeasonRosterId } from './nativeMatchupCenter'
 
 /**
  * The League page's matchups (owner, 2026-11-27: "those 3 things are the only things on the league page" —
@@ -63,6 +63,7 @@ export async function loadNativeLeagueWeekCards(params: { league: LeagueArg; vie
   ])
   if (!season || !board) return null
   const { week } = board
+  const viewerRosterId = await viewerSeasonRosterId(league, season, viewerUserId)
   const rosterById = new Map(season.rosters.map((r) => [r.id, r]))
   const rosterIds = [...new Set(board.games.flatMap((g) => [g.home.rosterId, ...(g.away ? [g.away.rosterId] : [])]))]
 
@@ -104,7 +105,7 @@ export async function loadNativeLeagueWeekCards(params: { league: LeagueArg; vie
       record: r ? recordOf(r) : null,
       points: status === 'upcoming' ? null : side.totalPoints,
       projected: projectedOf(side.rosterId),
-      isYou: Boolean(r && (r.ownerId === viewerUserId || r.managerUserId === viewerUserId)),
+      isYou: viewerRosterId != null && side.rosterId === viewerRosterId,
     }
   }
 

@@ -14,6 +14,8 @@ import { prisma } from '@/lib/prisma'
 import { nbaSurvivorStarterPoints } from '@/lib/survivor/survivorNbaWeeklyScoring'
 import { loadNbaRosterOutlook } from '@/lib/redraft/nbaRosterOutlook'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { runsOnAllFantasy } from '@/lib/league/switching/switchingLeague'
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
 import { NATIVE_PLAYER_SCORE_SOURCE, nativeRosterSeat } from '@/lib/redraft/nativePlayerWeeklyScores'
@@ -83,9 +85,16 @@ const record = (v: unknown): Record<string, unknown> =>
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
-/** The season the Matchup tab reads for this league, or null when it has none (so it is not native-run). */
+/**
+ * The season the Matchup tab reads for this league, or null when it has none (so it is not native-run).
+ *
+ * An imported league that its commissioner made official on AllFantasy is read here too: from then on
+ * AllFantasy scores it, and its schedule was copied into `RedraftMatchup` before it went official
+ * (lib/league/switching/takeOverSchedule.ts). The platform's `WeeklyMatchup` rows are shared with every
+ * other user who imported the same league, so AllFantasy never writes its scores there.
+ */
 export async function loadNativeMatchupSeason(league: LeagueRow, askedYear?: number | null): Promise<SeasonRow | null> {
-  if (!isNativePlatform(league.platform)) return null
+  if (!runsOnAllFantasy(league)) return null
   const seasons = await prisma.redraftSeason.findMany({
     where: { leagueId: league.id },
     select: {
@@ -99,6 +108,20 @@ export async function loadNativeMatchupSeason(league: LeagueRow, askedYear?: num
     },
   })
   return pickNativeSeason(seasons, askedYear ?? null)
+}
+
+/**
+ * The viewer's team in this season. A native team names its AllFantasy owner. An imported team names
+ * the PLATFORM's user, so in an official imported league the viewer is found through their `Roster`
+ * (the team they claimed, or the one they switched to), the way every other screen finds it.
+ */
+export async function viewerSeasonRosterId(league: LeagueRow, season: SeasonRow, userId: string): Promise<string | null> {
+  if (!isNativePlatform(league.platform)) {
+    const viewing = await resolveViewingRoster(league.id, userId).catch(() => null)
+    const id = viewing?.redraftRosterId ?? null
+    if (id && season.rosters.some((r) => r.id === id)) return id
+  }
+  return pickViewerRosterId(season.rosters, userId)
 }
 
 /** Every game of one week: the regular-season schedule, plus any playoff round played that week. */
@@ -279,7 +302,7 @@ export async function buildNativeMatchupCenterPayload(params: {
   const season = await loadNativeMatchupSeason(league, params.season ?? league.season)
   if (!season) return null
 
-  const myRosterId = pickViewerRosterId(season.rosters, params.viewerUserId)
+  const myRosterId = await viewerSeasonRosterId(league, season, params.viewerUserId)
   if (!myRosterId) return { error: 'Roster not found', status: 404, code: 'NO_CLAIMED_TEAM' }
 
   const week = nativeMatchupWeek(params.week, season.currentWeek)
@@ -531,10 +554,13 @@ export async function loadNativeScoreboard(params: {
   const week = nativeMatchupWeek(params.week, season.currentWeek)
   // Rotisserie has no weekly opponent: its schedule rows are scoring containers pinned at 0-0.
   if (weekScoringMode(params.league.settings, season.season, week) === 'roto') return { season: season.season, week, games: [] }
-  const games = await loadNativeWeekGames(params.league, season, week)
+  const [games, viewerRosterId] = await Promise.all([
+    loadNativeWeekGames(params.league, season, week),
+    viewerSeasonRosterId(params.league, season, params.viewerUserId),
+  ])
   return {
     season: season.season,
     week,
-    games: buildNativeBoard(games, teamNameOf(season), pickViewerRosterId(season.rosters, params.viewerUserId)),
+    games: buildNativeBoard(games, teamNameOf(season), viewerRosterId),
   }
 }

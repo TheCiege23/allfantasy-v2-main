@@ -26,6 +26,7 @@ import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Lock, Minus, Plus, X } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { makeNativeLeagueHref } from '@/lib/league/makeNativeLeague'
 import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -936,7 +937,7 @@ function ImportedLeaguesCard({ leagues }: { leagues: ImportedLeagueSummary[] }) 
         {leagues.map((league) => (
           <li key={league.id}>
             <a
-              href={`/create-league?fromLeague=${encodeURIComponent(league.id)}`}
+              href={makeNativeLeagueHref(league.id)}
               className="flex min-h-12 touch-manipulation items-center justify-between gap-3 rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] px-3 py-2 text-sm transition hover:border-violet-400"
             >
               <span className="min-w-0">

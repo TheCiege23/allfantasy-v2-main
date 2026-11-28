@@ -19,6 +19,7 @@ import { dbFirstMode } from '@/lib/db-first-mode'
 import { createTtlMemo } from '@/lib/ttl-memo'
 import { filterPoolByCollegeScope, loadCollegeTeamConferences, loadLeagueCollegeScope } from '@/lib/college/collegeTeamConferences'
 import { loadNcaabSeasonBoxes, type NcaabSeasonBoxes } from './ncaabSeasonBoxes'
+import { currentNcaabSeasonYear, readEspnNcaabHeadshots } from '@/lib/espn/ncaabRosterSnapshot'
 import { buildNcaabTransferPhotoIndex, ncaabPoolRowImage, ncaabPoolRowVerdict, ncaabProductionPerGame } from './ncaabPlayerPoolRules'
 import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { resolveCurrentInjuryDesignations } from '@/lib/injuries/currentInjuryDesignations'
@@ -621,15 +622,25 @@ async function buildPlayerPoolRecords(
     ? new Set([...ncaabBoxes.byRiId].flatMap(([riId, lines]) => (lines.current ? [riId] : [])))
     : null
   const ncaabPhotoOnlyIds = new Set<string>()
-  // A transfer's photo, carried from his old school's row by ESPN id (buildNcaabTransferPhotoIndex). A failed
-  // roster read carries nothing: the pool keeps what it had.
+  // A player's ESPN photo, found by ESPN id through his current ESPN roster entry (buildNcaabTransferPhotoIndex).
+  // The photo comes from a stored row (a transfer's old school) OR from ESPN's own roster snapshot: measured on
+  // production 2026-11-28, ESPN sent a photo for 5,278 of 5,526 roster athletes, yet 284 of a 3,977-player pool
+  // showed a placeholder because only photos already on a vendor row were looked up. A failed read carries
+  // nothing: the pool keeps what it had.
   const ncaabTransferPhoto = isNcaab
-    ? buildNcaabTransferPhotoIndex({
-        roster: await prisma.devyPlayer
-          .findMany({ where: { sport: 'NCAAB', source: 'espn_ncaab_roster' }, select: { id: true, name: true, jerseyNumber: true } })
-          .catch(() => []),
-        storedImageUrls: rows.map((row) => row.imageUrl),
-      })
+    ? await (async () => {
+        const now = new Date()
+        const [roster, snapshotPhotos] = await Promise.all([
+          prisma.devyPlayer
+            .findMany({ where: { sport: 'NCAAB', source: 'espn_ncaab_roster' }, select: { id: true, name: true, jerseyNumber: true } })
+            .catch(() => []),
+          readEspnNcaabHeadshots(prisma, currentNcaabSeasonYear(now), now).catch(() => new Map<string, string>()),
+        ])
+        return buildNcaabTransferPhotoIndex({
+          roster,
+          storedImageUrls: [...rows.map((row) => row.imageUrl), ...snapshotPhotos.values()],
+        })
+      })()
     : null
   const ncaabRows = isNcaab
     ? rows.flatMap((row) => {
