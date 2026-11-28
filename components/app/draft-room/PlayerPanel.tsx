@@ -45,6 +45,7 @@ import { positionTintHex } from '@/lib/draft-room/positionTint'
 import { SKIN_CONTROL, SKIN_DRAFT_BUTTON, SKIN_FOCUS, SKIN_ON_FILL, SKIN_PANEL, SKIN_PILL_ACTIVE, SKIN_PILL_IDLE } from '@/lib/draft-room/sleeperSkin'
 import { getDraftRoomDisplayHeadshot, getDraftRoomDisplayInjury } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import { NflRedraftPremiumPlayerCardShells } from '@/components/redraft-premium'
+import { draftRowIdentityKey, draftRowIdentitySet } from '@/lib/draft-room/draftPoolRenderHelpers'
 
 const DRAFT_WATCHLIST_STORAGE_KEY = 'af:draft-room-watchlist-v1'
 const AI_ADP_NOT_READY_COPY = 'Chimmy ADP data not ready'
@@ -519,15 +520,12 @@ function PlayerPanelInner({
       if (!k) continue
       draftedByPos[k] = (draftedByPos[k] ?? 0) + 1
     }
+    // The drafted check once for the whole pool, not once per pill.
+    const undrafted = players.filter((p) => !isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds))
     const available = (filterValue: string): number => {
       const v = filterValue.trim().toUpperCase()
-      if (v === 'ALL') {
-        return players.filter(
-          (p) => !isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds),
-        ).length
-      }
-      return players.filter((p) => {
-        if (isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds)) return false
+      if (v === 'ALL') return undrafted.length
+      return undrafted.filter((p) => {
         return poolPlayerMatchesPositionPill(p.position, filterValue, {
           sport,
           formatType,
@@ -705,8 +703,11 @@ function PlayerPanelInner({
       showDrafted: !hideDrafted,
     })
     const searchLower = searchQuery.trim().toLowerCase()
+    // A Set, not `filteredDraft.some(...)` per row: that was O(n^2), ~12.6M comparisons on a
+    // 5,022-player pool every time this list rebuilt (lib/draft-room/draftPoolRenderHelpers.ts).
+    const resolvedKeys = draftRowIdentitySet(filteredDraft)
     list = list.filter((p) => {
-      const inResolved = filteredDraft.some((d) => d.name === p.name && d.position === p.position)
+      const inResolved = resolvedKeys.has(draftRowIdentityKey(p))
       const schoolMatch = Boolean(searchLower && (p.school ?? '').toLowerCase().includes(searchLower))
       const landingSpotMatch = Boolean(searchLower && (p.projectedLandingSpot ?? '').toLowerCase().includes(searchLower))
       return inResolved || schoolMatch || landingSpotMatch
