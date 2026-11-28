@@ -7,6 +7,11 @@ on:
     paths:
       - 'lib/league/convertImportedLeagueInPlace.ts'
       - 'lib/league/nativeReadiness.ts'
+      - 'lib/league/undoNativeConversion.ts'
+      - 'lib/league/copyProviderWeeklyScores.ts'
+      - 'lib/league/nativeScaffolding.ts'
+      - 'lib/league/nativeConversionLookup.ts'
+      - 'lib/league/leagueSeats.ts'
       - 'lib/league-creation/canonical/importedIdentityPlan.ts'
       - 'prisma/schema.prisma'
       - '__tests__/league/convert-in-place-db.test.ts'
