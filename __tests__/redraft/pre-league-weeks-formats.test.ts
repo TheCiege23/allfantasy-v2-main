@@ -7,8 +7,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const st = vi.hoisted(() => ({ survivorMode: false, guillotine: false, created: [] as unknown[] }))
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+vi.mock('@/lib/prisma', () => {
+  const prisma: Record<string, unknown> = {
+    // The schedule insert runs under a per-season advisory lock (lib/redraft/scheduleWriteLock.ts).
+    $executeRaw: vi.fn(async () => 0),
+    $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
     redraftSeason: { findUnique: vi.fn(async () => ({ id: 'S', leagueId: 'L', sport: 'NBA', currentWeek: 6 })) },
     league: {
       findUnique: vi.fn(async (args: { select: Record<string, boolean> }) => ('survivorMode' in args.select ? { survivorMode: st.survivorMode } : { settings: {} })),
@@ -17,11 +20,13 @@ vi.mock('@/lib/prisma', () => ({
     redraftRoster: { findMany: vi.fn(async () => [{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }, { id: 'r4' }]) },
     redraftMatchup: {
       findMany: vi.fn(async () => []),
+      count: vi.fn(async () => 0),
       createMany: vi.fn(async (args: { data: unknown[] }) => { st.created.push(...args.data); return { count: args.data.length } }),
       updateMany: vi.fn(async () => ({ count: 0 })),
     },
-  },
-}))
+  }
+  return { prisma }
+})
 vi.mock('@/lib/guillotine/GuillotineLeagueConfig', () => ({ isGuillotineLeague: vi.fn(async () => st.guillotine) }))
 vi.mock('@/lib/redraft/scoringEngine', () => ({ recalculateMatchupsForSeasonWeek: vi.fn(async () => undefined) }))
 vi.mock('@/lib/redraft/playerWeeklyScoreService', () => ({ syncPlayerWeeklyScoresForRedraftSeason: vi.fn(async () => undefined) }))

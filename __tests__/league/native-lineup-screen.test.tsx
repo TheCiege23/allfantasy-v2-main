@@ -448,3 +448,76 @@ describe('NativeLineupScreen — tap to swap', () => {
   })
 })
 
+
+describe('the Team tab, Sleeper pass (2026-11-28)', () => {
+  const slot = (playerId: string, currentPoints: number, gameStatus: string) => ({ playerId, currentPoints, gameStatus, name: playerId, position: 'QB', team: 'PHI' })
+  const matchup = {
+    payload: {
+      week: 5,
+      winProbabilityLeft: 0.21,
+      left: { teamName: "TheCiege26's Team", totalPoints: 21.34, projectedTotal: 90.42, projectedTotalIncludesFallback: false, starters: [slot('qb1', 8.54, 'final'), slot('rb1', 0, 'upcoming')] },
+      right: { teamName: 'Team ChuiMVP', totalPoints: 30.86, projectedTotal: 122.8, projectedTotalIncludesFallback: false, starters: [] },
+    },
+  }
+
+  it('opens on one team card: this week, the projection, the opponent and the win chance, then the actions', async () => {
+    stubFetch({
+      '/api/league/roster': roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)]),
+      '/matchup-center': matchup,
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Jalen Hurts')
+    const card = await screen.findByTestId('team-week-card')
+    await waitFor(() => expect(within(card).getByTestId('team-week-score').textContent).toBe('21.3Proj 90.4'))
+    expect(within(card).getByText('Team ChuiMVP')).toBeTruthy()
+    expect(within(card).getByTestId('team-week-win').textContent).toBe('21% win')
+    expect(within(card).getByRole('button', { name: 'Optimize lineup' })).toBeTruthy()
+    expect(within(card).getByText('3–1 · 2nd place · PF 478.6')).toBeTruthy()
+  })
+
+  it("shows a starter's points this week over his projection once his game has started, and only then", async () => {
+    stubFetch({
+      '/api/league/roster': roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)]),
+      '/matchup-center': matchup,
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    expect((await screen.findByTestId('lineup-points-qb1')).textContent).toBe('8.5')
+    // Tyjae's game has not started: no 0.0 that reads as a result.
+    expect(screen.queryByTestId('lineup-points-rb1')).toBeNull()
+  })
+
+  it('CONTROL: with no matchup to read, the card still shows the team and the roster still works', async () => {
+    stubFetch({
+      '/api/league/roster': roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)]),
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Jalen Hurts')
+    expect(screen.getByTestId('team-week-card')).toBeTruthy()
+    expect(screen.queryByTestId('team-week-score')).toBeNull()
+    expect(screen.queryByTestId('lineup-points-qb1')).toBeNull()
+  })
+
+  it('folds how-to-move instructions behind a disclosure, so the starters come first', async () => {
+    stubFetch({
+      '/api/league/roster': roster([wire('qb1', 'Jalen Hurts', 'QB', 22.4), wire('rb1', 'Tyjae Spears', 'RB', 8.8), wire('rb2', 'Bijan Robinson', 'RB', 19.2)]),
+      '/claims': { claims: [] },
+      '/state': { state: {} },
+      '/settings': {},
+    })
+    render(<NativeLineupScreen league={league} userTeam={team} onSelectTab={() => {}} />)
+    await screen.findByText('Jalen Hurts')
+    const help = document.querySelector('.nls-lockhelp') as HTMLDetailsElement
+    expect(help).toBeTruthy()
+    expect(help.open).toBe(false)
+    expect(help.querySelector('summary')?.textContent).toBe('Each game locks at kickoff.')
+  })
+})

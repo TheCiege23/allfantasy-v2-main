@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { reportBoundaryError } from "@/lib/observability/reportBoundaryError"
 
 /**
  * Root-level global error boundary.
@@ -19,7 +20,8 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
-    // Surface in Railway logs so we can see what's actually throwing at root.
+    // To Sentry and PostHog: this console line only ever reached the viewer's own browser.
+    reportBoundaryError(error, "global")
     // eslint-disable-next-line no-console
     console.error("[app/global-error] root layout boundary caught", {
       message: error?.message,

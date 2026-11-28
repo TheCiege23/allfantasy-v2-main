@@ -49,7 +49,9 @@ import {
   type NativeBoardGame,
   type NativeMatchupExtras,
   type NativeStarter,
+  type NativeTeamProjection,
   type NativeWeekGame,
+  withBoardProjections,
 } from '@/lib/matchup-center/nativeMatchupModel'
 
 type LeagueRow = {
@@ -558,9 +560,57 @@ export async function loadNativeScoreboard(params: {
     loadNativeWeekGames(params.league, season, week),
     viewerSeasonRosterId(params.league, season, params.viewerUserId),
   ])
-  return {
+  const board = buildNativeBoard(games, teamNameOf(season), viewerRosterId)
+  // Points weeks only: a category league's score is categories won, which no points projection predicts.
+  if (weekScoringMode(params.league.settings, season.season, week) !== 'points' || board.length === 0) {
+    return { season: season.season, week, games: board }
+  }
+  const projections = await loadBoardTeamProjections(params.league, season, week, board).catch(() => new Map<string, NativeTeamProjection>())
+  return { season: season.season, week, games: withBoardProjections(board, projections) }
+}
+
+/**
+ * Every playing team's AF projection for the week: its starters that week (the saved lineup), each
+ * projected in this league's scoring by the same reader the matchup card uses — so the scoreboard's
+ * number for the viewer's team matches the "Proj" on their own matchup. Three reads for the whole league.
+ */
+async function loadBoardTeamProjections(
+  league: LeagueRow,
+  season: SeasonRow,
+  week: number,
+  board: readonly NativeBoardGame[],
+): Promise<Map<string, NativeTeamProjection>> {
+  const rosterIds = [...new Set(board.flatMap((g) => [g.home.rosterId, ...(g.away ? [g.away.rosterId] : [])]))]
+  const [players, lineups] = await Promise.all([
+    prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: { in: rosterIds }, droppedAt: null },
+      select: { rosterId: true, playerId: true, slotType: true, position: true },
+    }),
+    loadWeekLineups(prisma, { redraftRosterIds: rosterIds, season: season.season, week }),
+  ])
+  const startersByRoster = new Map<string, string[]>()
+  for (const p of players) {
+    if (!isNflRedraftScoringStarterSlot(weekSlotType(p, lineups))) continue
+    const list = startersByRoster.get(p.rosterId) ?? []
+    list.push(p.playerId)
+    startersByRoster.set(p.rosterId, list)
+  }
+  const allStarters = [...startersByRoster.values()].flat()
+  if (allStarters.length === 0) return new Map()
+  const af = await loadMatchupAfProjections({
+    leagueId: league.id,
+    playerIds: allStarters,
     season: season.season,
     week,
-    games: buildNativeBoard(games, teamNameOf(season), viewerRosterId),
+    sport: String(league.sport),
+    platform: league.platform ?? null,
+    leagueSettings: league.settings,
+  })
+  const out = new Map<string, NativeTeamProjection>()
+  for (const [rosterId, ids] of startersByRoster) {
+    const t = afSideTotal(ids.map((id) => ({ afProjectedPoints: af.get(id) ?? null })))
+    if (t.total == null) continue
+    out.set(rosterId, { total: t.total, complete: t.from === ids.length })
   }
+  return out
 }

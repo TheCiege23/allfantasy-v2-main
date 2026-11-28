@@ -54,7 +54,8 @@ function cb(): HubCallbacks {
   }
 }
 
-const tabNames = () => screen.getAllByRole('tab').map((t) => t.textContent)
+// The tab's name is its aria-label: it carries a long label and a phone one (2026-11-28).
+const tabNames = () => screen.getAllByRole('tab').map((t) => t.getAttribute('aria-label'))
 
 describe('who gets the Commissioner Hub tab', () => {
   it('a commissioner of an AllFantasy league, between Members and Record Book', () => {
@@ -79,7 +80,9 @@ describe('Needs you', () => {
     render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="hub" />)
     expect(screen.getByText('Needs you · 3')).toBeTruthy()
     const rows = screen.getAllByTestId('hub-task')
-    expect(rows.map((r) => within(r).getAllByText(/./)[0]?.textContent)).toEqual(['Trade waiting on your review', 'Empty starting slot'])
+    expect(rows.map((r) => r.querySelector('.af-lsh-task-title')?.textContent)).toEqual(['Trade waiting on your review', 'Empty starting slot'])
+    // Each card says how urgent it is in words, not only with a coloured dot.
+    expect(rows.map((r) => r.querySelector('.af-lsh-task-tag')?.textContent)).toEqual(['Urgent', 'Soon'])
     expect(within(rows[0]!).getByRole('link', { name: 'Review' }).getAttribute('href')).toBe('/x/a')
     fireEvent.click(screen.getByRole('button', { name: 'Show 1 more' }))
     expect(screen.getAllByTestId('hub-task')).toHaveLength(3)
@@ -169,5 +172,54 @@ describe('Spanish', () => {
     expect(hubText('es', 'Needs you · 3')).toBe('Te necesita · 3')
     expect(hubText('es', 'Show 2 more')).toBe('Ver 2 más')
     expect(hubText('es', 'Commissioner Hub')).toBe('Centro del comisionado')
+  })
+})
+
+describe('the hub reads like an app (2026-11-28)', () => {
+  it('each tool is one tappable row with an icon and a chevron, not a sentence beside an "Open" pill', () => {
+    const onOpenEditor = vi.fn()
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={{ ...cb(), onOpenEditor }} initialTab="hub" />)
+    const row = screen.getByTestId('hub-edit-lineups')
+    expect(row.tagName).toBe('BUTTON')
+    expect(row.textContent).toContain('Edit lineups and records')
+    expect(row.querySelector('.af-lsh-nav-icon svg')).toBeTruthy()
+    expect(row.querySelector('.af-lsh-nav-chevron')).toBeTruthy()
+    fireEvent.click(row)
+    expect(onOpenEditor).toHaveBeenCalledWith('commissioner-tools:edit-lineups')
+  })
+
+  it('folds a long task detail to two lines with Show more', () => {
+    const long = 'Open Team 4, Open Team 5, Open Team 6 and 10 more have no manager yet. Invite someone, or let AllFantasy set their projected-best lineup every week; it stops the moment a manager saves a lineup.'
+    render(
+      <LeagueSettingsHubView
+        data={makeData('redraft', true, { commissionerTasks: { cards: [{ id: 'x', title: '13 teams have no manager', detail: long, severity: 'info', action: { label: 'Open', href: '/x' } }], overflow: [] } as never })}
+        cb={cb()}
+        initialTab="hub"
+      />,
+    )
+    const detail = document.querySelector('.af-lsh-task-detail') as HTMLElement
+    expect(detail.getAttribute('data-clamped')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Show more' }))
+    expect(detail.getAttribute('data-clamped')).toBeNull()
+  })
+})
+
+describe('league settings on a phone (2026-11-28)', () => {
+  it('each tab carries a short phone label, and keeps its full name for readers', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} />)
+    const hub = screen.getByRole('tab', { name: 'Commissioner Hub' })
+    expect(hub.querySelector('.af-lsh-tab-short')?.textContent).toBe('Commish')
+    expect(hub.querySelector('.af-lsh-tab-long')?.textContent).toBe('Commissioner Hub')
+  })
+
+  it('Advanced settings is the last row of the page, not a button beside the tabs', () => {
+    const onOpen = vi.fn()
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} advanced={{ label: 'Advanced settings', onOpen }} />)
+    const adv = screen.getByTestId('league-settings-hub-advanced')
+    expect(adv.closest('.af-lsh-tabbar')).toBeNull()
+    const stack = document.querySelector('.af-lsh-stack')!
+    expect(stack.lastElementChild?.contains(adv)).toBe(true)
+    fireEvent.click(adv)
+    expect(onOpen).toHaveBeenCalledTimes(1)
   })
 })

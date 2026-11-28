@@ -9,6 +9,8 @@ export const scopeSwitcherMessages = defineMessages({
   en: {
     sport: 'Sport',
     platform: 'Platform',
+    allSports: 'All sports',
+    allPlatforms: 'All platforms',
     kickerLeague: 'League',
     // 'Viewing' did not say what the menu picks (2026-11-13 guide): it picks a league, or all of them.
     kickerViewing: 'League',
@@ -48,6 +50,8 @@ export const scopeSwitcherMessages = defineMessages({
   es: {
     sport: 'Deporte',
     platform: 'Plataforma',
+    allSports: 'Todos los deportes',
+    allPlatforms: 'Todas las plataformas',
     kickerLeague: 'Liga',
     kickerViewing: 'Liga',
     viewingSr: 'Viendo: ',
