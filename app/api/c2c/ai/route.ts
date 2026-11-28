@@ -45,6 +45,24 @@ const C2C_MEMBER_PLAYER_AI_ACTIONS: ReadonlySet<string> = new Set([
   'draft_advice',
 ])
 
+/**
+ * 🛑 A MEMBER MAY ONLY ASK ABOUT THEIR OWN TEAM (owner follow-up 2026-11-28). `roster_balance`,
+ * `transition_advice` and `draft_advice` take a `managerId`, which used to be read straight off the body —
+ * any member could ask Chimmy about any other manager's roster. Now: your own team always; another team only
+ * when you can act as this league's commissioner AND that manager is in this league; anything else is a 403.
+ * Runs after the plan gate and before any read or model call.
+ */
+async function refuseOtherManager(leagueId: string, userId: string, managerId: string): Promise<NextResponse | null> {
+  if (managerId === userId) return null
+  const forbidden = NextResponse.json(
+    { error: "You can only ask about your own team. A commissioner can ask about any team in their league." },
+    { status: 403 },
+  )
+  if (!(await canCommissionerAct(leagueId, userId, 'league').catch(() => false))) return forbidden
+  const target = await assertLeagueMember(leagueId, managerId).catch(() => ({ ok: false as const }))
+  return target.ok ? null : forbidden
+}
+
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>
   try {
@@ -225,6 +243,8 @@ export async function POST(req: NextRequest) {
       case 'roster_balance': {
         const managerId = typeof body.managerId === 'string' ? body.managerId : userId
         if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+        const notYours = await refuseOtherManager(leagueId, userId, managerId)
+        if (notYours) return notYours
         const report = await getRosterBalanceAnalysis(leagueId, managerId)
         return NextResponse.json({ report })
       }
@@ -232,6 +252,8 @@ export async function POST(req: NextRequest) {
         const managerId = typeof body.managerId === 'string' ? body.managerId : userId
         const playerId = typeof body.playerId === 'string' ? body.playerId : ''
         if (!leagueId || !playerId) return NextResponse.json({ error: 'leagueId and playerId required' }, { status: 400 })
+        const notYours = await refuseOtherManager(leagueId, userId, managerId)
+        if (notYours) return notYours
         const cacheInputs = {
           action,
           leagueId,
@@ -303,6 +325,8 @@ export async function POST(req: NextRequest) {
         const draftType = typeof body.draftType === 'string' ? body.draftType : 'combined'
         const pickNumber = typeof body.pickNumber === 'number' ? body.pickNumber : 1
         if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+        const notYoursDraft = await refuseOtherManager(leagueId, userId, managerId)
+        if (notYoursDraft) return notYoursDraft
         const rosterId =
           typeof body.rosterId === 'string'
             ? body.rosterId
