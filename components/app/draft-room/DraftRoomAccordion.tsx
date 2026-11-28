@@ -1,6 +1,7 @@
 'use client'
 
-import { type ReactNode, useCallback, useEffect, useId, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { useHydrationSafeId } from './useHydrationSafeId'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -64,7 +65,7 @@ export function DraftRoomAccordion({
 }: DraftRoomAccordionProps) {
   const rs = variant === 'redraft_snake'
   const { open, toggle } = useAccordionPersistence(persistenceKey, defaultOpen)
-  const panelId = useId()
+  const panelId = useHydrationSafeId()
 
   return (
     <div
@@ -87,9 +88,9 @@ export function DraftRoomAccordion({
       >
         <button
           type="button"
-          id={`${panelId}-trigger`}
+          id={panelId ? `${panelId}-trigger` : undefined}
           aria-expanded={open}
-          aria-controls={`${panelId}-panel`}
+          aria-controls={panelId ? `${panelId}-panel` : undefined}
           onClick={toggle}
           className="flex min-w-0 flex-1 items-start gap-2 rounded-t-xl px-3 py-2.5 text-left"
         >
@@ -122,9 +123,9 @@ export function DraftRoomAccordion({
       </div>
       {open ? (
         <div
-          id={`${panelId}-panel`}
+          id={panelId ? `${panelId}-panel` : undefined}
           role="region"
-          aria-labelledby={`${panelId}-trigger`}
+          aria-labelledby={panelId ? `${panelId}-trigger` : undefined}
           className={cn('border-t px-3 py-3', rs ? 'border-white/10' : 'border-white/8')}
         >
           {children}
