@@ -11,7 +11,9 @@ import { loadKnownYearsExp } from './playerYearsExp'
 import { syncAfRosterLineupAssignments } from './lineupAssignmentSync'
 import { syncRedraftSlotTypesForLineup } from './redraftSlotSync'
 import { isDailyLineupScoringEnabled, writeDailyLineupForSave } from '@/lib/redraft/dailyLineups'
-import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { resolveWriteAuthority, sourcePlatformLabel } from '@/lib/league/write-authority'
+import { TEAM_NOT_SWITCHED_CODE, lineupTeamNotSwitchedMessage } from '@/lib/league/switching/switchingLeague'
+import { mirroredTeamOfRoster } from '@/lib/league/switching/switchedTeamsServer'
 import { hashPlayerDataSnapshot, recordAfRosterMoveHistory } from './rosterMoveHistory'
 import { lineupLayout, type AutomaticChangeUndo } from '@/lib/lineup-automation/automaticChangeUndo'
 import { upsertAfLineupLockState, resolveFullLineupLockContext } from './lineupLockService'
@@ -136,20 +138,20 @@ function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['sou
 
 export async function persistRosterLineupWithEngine(
   input: PersistRosterLineupInput,
-): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' | typeof BEST_BALL_LINEUP_CODE }> {
+): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' | typeof BEST_BALL_LINEUP_CODE | typeof TEAM_NOT_SWITCHED_CODE }> {
   return runRosterLineupWithEngine(input, true)
 }
 
 /** Read-only rehearsal of the same validation, taxi and lock gates as a member save. */
 export async function previewRosterLineupWithEngine(
   input: Omit<PersistRosterLineupInput, 'source' | 'skipLockCheck' | 'taxiProtection' | 'transactionCheck'>,
-): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' | typeof BEST_BALL_LINEUP_CODE }> {
+): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' | typeof BEST_BALL_LINEUP_CODE | typeof TEAM_NOT_SWITCHED_CODE }> {
   return runRosterLineupWithEngine({ ...input, source: 'user_save', skipLockCheck: false, taxiProtection: undefined }, false)
 }
 
 async function runRosterLineupWithEngine(
   input: PersistRosterLineupInput, persist: boolean,
-): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' | typeof BEST_BALL_LINEUP_CODE }> {
+): Promise<{ ok: true } | { ok: false; error: string; status?: number; code?: 'LINEUP_CONFLICT' | typeof BEST_BALL_LINEUP_CODE | typeof TEAM_NOT_SWITCHED_CODE }> {
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
   })
@@ -160,6 +162,18 @@ async function runRosterLineupWithEngine(
     where: { id: input.rosterId, leagueId: input.leagueId },
   })
   if (!roster) return { ok: false, error: 'Roster not found', status: 404 }
+  /*
+   * 🛑 IN AN OFFICIAL SWITCHING LEAGUE, A TEAM THAT HAS NOT SWITCHED SETS ITS LINEUP ON THE OLD PLATFORM.
+   * AllFantasy scores it from the lineup it copies from there, so any change made here (by the manager, the
+   * commissioner, Chimmy or an automation) would count until the next copy replaced it. Only the copy itself
+   * (`import`) writes that team's lineup. Before the league is official nothing changes.
+   */
+  if (input.source !== 'import') {
+    const mirrored = await mirroredTeamOfRoster(input.leagueId, league.settings, roster.playerData)
+    if (mirrored) {
+      return { ok: false, error: lineupTeamNotSwitchedMessage(mirrored.name, sourcePlatformLabel(league.platform)), status: 409, code: TEAM_NOT_SWITCHED_CODE }
+    }
+  }
   if (input.expectedStarters) {
     const current=(roster.playerData as Record<string,unknown> | null)?.starters
     if (!Array.isArray(current) || JSON.stringify(current.map(String))!==JSON.stringify(input.expectedStarters)) return {ok:false,error:'Your lineup changed. Refresh and compare again.',status:409}
