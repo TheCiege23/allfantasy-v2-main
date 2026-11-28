@@ -15,8 +15,8 @@ export const dynamic = 'force-dynamic'
  *
  * The league's head commissioner only (the one commissioner rule, 'head'). This was also AllFantasy-admin-only while
  * the switch was incomplete; that gate came off in step 4b-3, once native settings (4b-1), the past-week copy (4b-2)
- * and per-seat invite links (4b-3) were all in. No button calls this yet: "Make it a native league" is pointed here
- * in step 7, after the re-import refusal (step 5) and undo (step 6) land.
+ * and per-seat invite links (4b-3) were all in. Called by the "Switch to AllFantasy" card in the Commissioner tab
+ * (components/league-home/NativeReadinessCard.tsx, step 7); undo is the card that replaces it (step 6).
  *
  * 409 = refused, with the blockers the readiness card would show; nothing was written.
  */

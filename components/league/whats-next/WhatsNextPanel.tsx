@@ -156,7 +156,7 @@ export function WhatsNextPanel({
   const action = view.action
   const actionAvailable = action ? (action.href ? true : !availableTabIds || (action.tab != null && availableTabIds.includes(action.tab))) : false
   const statusLabel = view.status === 'act' ? (view.shared ? 'To do' : 'Your turn') : view.status === 'done' ? 'Done' : 'Waiting'
-  // An imported league's commissioner can move it onto AllFantasy; the create flow re-checks the role.
+  // An imported league's commissioner can move it onto AllFantasy, in place, from the Commissioner tab's switch card.
   const makeNativeHref = imported && isCommissioner ? makeNativeLeagueHref(league.id) : null
 
   return (
@@ -262,7 +262,7 @@ export function WhatsNextPanel({
       ) : null}
       {makeNativeHref ? (
         <p className="wn-note" data-testid="whats-next-make-native-note">
-          Native leagues run on AllFantasy. Teams, rosters and history copy into a new league; this import stays as it is.
+          Runs this same league on AllFantasy instead of syncing it. Teams, chat and history stay, and you can undo until next season starts.
         </p>
       ) : null}
 

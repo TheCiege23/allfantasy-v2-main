@@ -67,6 +67,8 @@ export type NativeReadinessReport = {
   status: 'native' | 'ready' | 'blocked'
   /** "Sleeper", "ESPN"… null for a native league. */
   platformLabel: string | null
+  /** The league's sport. A baseball league must also accept weekly lineups to switch (`acceptWeeklyLineups`). */
+  sport: string
   items: NativeReadinessItem[]
   teamCount: number
   playerCount: number
@@ -117,7 +119,7 @@ export async function checkNativeReadiness(db: Db, leagueId: string, now: Date =
   if (!league) return null
   const checkedAt = now.toISOString()
   if (isNativePlatform(league.platform)) {
-    return { leagueId, status: 'native', platformLabel: null, items: [], teamCount: 0, playerCount: 0, checkedAt }
+    return { leagueId, status: 'native', platformLabel: null, sport: String(league.sport), items: [], teamCount: 0, playerCount: 0, checkedAt }
   }
   const platform = String(league.platform)
   const label = importedPlatformLabel(platform) ?? platform
@@ -288,6 +290,7 @@ export async function checkNativeReadiness(db: Db, leagueId: string, now: Date =
     leagueId,
     status: items.some((item) => item.severity === 'blocker') ? 'blocked' : 'ready',
     platformLabel: label,
+    sport,
     items,
     teamCount: teams.length,
     playerCount: sourceIds.length,
