@@ -122,6 +122,8 @@ const defaultDeps: ImportedTankingScanDeps = {
   lineupScores: defaultLineupScores,
 }
 
+type UnsupportedReason = Extract<LineupIntegrityReport, { supported: false }>['reason']
+
 type ImportedTankingScanOutcome =
   | 'not_monitored'
   | 'not_entitled'
@@ -157,7 +159,7 @@ type ImportedTankingScanOutcome =
 export async function scanImportedLeagueForTanking(
   leagueId: string,
   deps: Partial<ImportedTankingScanDeps> = {},
-): Promise<{ outcome: ImportedTankingScanOutcome; week?: number; flagged: number }> {
+): Promise<{ outcome: ImportedTankingScanOutcome; week?: number; flagged: number; reason?: UnsupportedReason }> {
   const d = { ...defaultDeps, ...deps }
   const settings = await d.settings(leagueId)
   const illegalOn = settings?.tankingIllegalLineupCheck !== false
@@ -166,7 +168,13 @@ export async function scanImportedLeagueForTanking(
   if (!(await d.entitled(leagueId).catch(() => false))) return { outcome: 'not_entitled', flagged: 0 }
 
   const report = await d.report(leagueId)
-  if (!report || !report.supported) return { outcome: 'unsupported', flagged: 0 }
+  /*
+   * The refusal's reason travels with the outcome. `pasted_no_matchups`: a pasted Yahoo league stores no
+   * weekly matchups or scores (lineupIntegrityService.ts `isPastedYahooLeague`), so there is nothing to
+   * scan — the commissioner's Lineup Integrity card says "not available for pasted leagues".
+   */
+  if (!report) return { outcome: 'unsupported', flagged: 0 }
+  if (!report.supported) return { outcome: 'unsupported', reason: report.reason, flagged: 0 }
   const week = report.latestWeek
   if (week == null) return { outcome: 'no_finished_week', flagged: 0 }
   if (typeof settings.tankingStartWeek === 'number' && week < settings.tankingStartWeek) {
