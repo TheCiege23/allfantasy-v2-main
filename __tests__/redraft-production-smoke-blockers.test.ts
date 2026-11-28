@@ -26,8 +26,11 @@ describe('redraft production smoke blockers', () => {
   const mockClient = read('components/mock-draft/MockDraftSleeperRoomClient.tsx')
 
   it('uses clear pre-draft actions and opens one league settings modal source', () => {
-    expect(leagueShell).toContain('Open Live Draft Room')
-    expect(leagueShell).toContain("onOpenLeagueSettingsModal('draft')")
+    // 2026-11-28: the pre-draft actions live in the shared Draft home; the shell hands it the modal opener.
+    const draftHome = read('components/league/draft-home/PredraftDraftHome.tsx')
+    expect(draftHome).toContain('Enter draft room')
+    expect(draftHome).toContain("onOpenSettings('draft')")
+    expect(leagueShell).toContain('onOpenSettings={onOpenLeagueSettingsModal}')
     expect(leagueShell).toContain('setCommissionerSettingsOpen(false)')
     expect(leagueSettingsModal).toContain("isCommissioner && initialActivePanel === 'draft'")
     expect(leagueSettingsModal).toContain('setActivePanel(null)')
