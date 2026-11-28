@@ -438,7 +438,7 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
 
   const weekControls = (
     <>
-      <Segmented label="Matchup view" value={view} onChange={setView} options={[{ id: 'mine', label: 'My matchup' }, { id: 'league', label: 'League scoreboard' }]} />
+      {/* Sleeper pass 3 (owner, 2026-11-28): one matchup, yours. Every game of the week is on the League tab. */}
       <button type="button" className="nls-iconbtn" aria-label="Previous week" disabled={week <= 1 || loading} onClick={() => goToWeek(week - 1)}>
         <ChevronLeft size={18} aria-hidden />
       </button>
@@ -644,7 +644,7 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
       <TournamentBracketCard leagueId={league.id} settings={league.settings} week={week} />
 
       {payload ? (
-        <div className="nls-cols">
+        <div>
           {view === 'mine' ? (
             <section className="nls-card nls-card-flush" aria-label="Starters">
               <h3 className="nls-label nls-card-head">Starters</h3>
@@ -673,15 +673,11 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
           ) : (
             scoreboard
           )}
-          <aside className="nls-aside" aria-label="Matchup insight">
-            <Card label="Chimmy · AF edge" tone="accent">
-              <p>{insight || 'No edge to report for this week yet.'}</p>
-              <button type="button" className="nls-btn" data-variant="primary" data-block="true" onClick={() => onSelectTab('roster')}>Review lineup</button>
-            </Card>
-            {otherGames}
-            {/* The glance is for a wide screen's side column; on a phone "League scoreboard" is a tab at the top (2026-11-24). */}
-            {view === 'mine' ? <div className="nls-glance">{scoreboardGlance}</div> : null}
-          </aside>
+          {/*
+            The Chimmy edge card and the scoreboard glance went in Sleeper pass 3 (every game is on the League tab).
+            Your other games stay: in a league that plays more than once a week, they are how you open game 2.
+          */}
+          {otherGames}
         </div>
       ) : null}
     </div>

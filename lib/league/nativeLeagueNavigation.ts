@@ -129,6 +129,11 @@ export type NativeNavOptions = {
    * Draft HQ moves under League, where the draft results live.
    */
   draftDone?: boolean
+  /**
+   * False only while a league hosted here has not drafted: its schedule is generated when the draft ends, so
+   * there is no Matchup yet. Imported leagues (the host makes the schedule) and callers that omit it keep Matchup.
+   */
+  scheduleMade?: boolean
 }
 
 /**
@@ -169,7 +174,14 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
    */
   const guilly = tabs.some(tab => tab.id === 'guillotine')
   if (guilly) for (const id of GUILLY_MATCHUP_ALIASES) used.add(id)
-  const matchup = top(guilly ? 'league.nav.tab.chop' : 'league.nav.tab.matchup', guilly ? 'Chop' : 'Matchup', guilly ? 'guillotine' : 'matchup', [
+  /*
+   * No Matchup until the draft is done (owner, 2026-11-28: "the system auto creates the schedule after the
+   * draft concludes, not before"). Before it there is no schedule to show, so neither the tab nor any of its
+   * ids appears; a deep link to one gets LeagueShell's "after the draft" note.
+   */
+  const noSchedule = options.scheduleMade === false
+  if (noSchedule) for (const id of [...GUILLY_MATCHUP_ALIASES, 'guillotine', 'scores', 'schedule']) used.add(id)
+  const matchup = noSchedule ? [] : top(guilly ? 'league.nav.tab.chop' : 'league.nav.tab.matchup', guilly ? 'Chop' : 'Matchup', guilly ? 'guillotine' : 'matchup', [
     ...item('league.nav.chop', 'Chop', 'guillotine', 'guillotine'),
     ...(guilly ? [] : item('league.nav.matchup', 'Matchup', 'matchup', 'matchups', 'matchup', 'fixtures')),
     ...item('league.nav.liveScores', 'Live scores', 'scores', 'scores'),
@@ -207,6 +219,8 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
    * id. An imported league keeps its sub-tabs: its standings tab is a different screen.
    */
   const onePage = nativeOverview.length > 0 && standingsItem.length > 0
+  // Chat lives in the chat bubble, never in the nav (owner, 2026-11-28).
+  used.add('league_chat')
   if (onePage) for (const id of ['legacy', 'history', 'activity', 'league_chat', 'native_home', 'home']) used.add(id)
   /*
    * The older redraft screens a hosted redraft league still carries (LeagueTabs: Redraft hub, My Team, League)
@@ -220,7 +234,6 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
         ...standingsItem,
         ...item('league.nav.leagueHistory', 'League history', 'legacy', 'legacy', 'history'),
         ...item('league.nav.activity', 'Activity', 'more', 'activity'),
-        ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
         ...overview,
       ]
   const trade = top('league.nav.tab.trade', 'Trade', 'trades', [

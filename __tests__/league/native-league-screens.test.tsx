@@ -108,7 +108,7 @@ describe('NativeMatchupScreen', () => {
     insights: { matchupEdge: 'edge', startSit: 'Start Rashid Shaheed if Nacua sits.', weather: '', injuryNews: '', swingPlayers: [], riskLevel: 'low', floorVsCeiling: '' },
     partialData: false, refreshIntervalMs: 0,
   }
-  it('score header, AF win prob, slot rows and the viewer-first scoreboard', async () => {
+  it('score header, AF win prob and slot rows; no Chimmy card or league scoreboard (Sleeper pass 3)', async () => {
     const calls = stubFetch({
       '/matchup-center': { payload },
       '/scoring/matchups': { matchups: [
@@ -120,16 +120,17 @@ describe('NativeMatchupScreen', () => {
     })
     const onSelectTab = vi.fn()
     render(<NativeMatchupScreen league={league} onSelectTab={onSelectTab} />)
-    expect((await screen.findAllByText('112.4')).length).toBe(2) // header + scoreboard
+    // The header only: the league scoreboard is the League tab's now.
+    expect((await screen.findAllByText('112.4')).length).toBe(1)
     expect(screen.getByText('71%')).toBeTruthy()
     expect(screen.getByText(/proj 122.4 – 108.7/)).toBeTruthy()
-    expect(screen.getByText('Start Rashid Shaheed if Nacua sits.')).toBeTruthy()
+    expect(screen.queryByText('Start Rashid Shaheed if Nacua sits.')).toBeNull()
     // Kyren 0.0 vs Henry 11.6 with Kyren yet to play: Henry leads (good), Kyren not yet "bad".
     expect(screen.getByText('11.6').getAttribute('data-pts')).toBe('good')
     expect(screen.getByText('0.0').getAttribute('data-pts')).toBe('neutral')
-    const board = document.querySelector('.nls-board')!
-    expect(board.querySelector('li')?.getAttribute('data-mine')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: 'Review lineup' }))
+    expect(document.querySelector('.nls-board')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'League scoreboard' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit my lineup' }))
     expect(onSelectTab).toHaveBeenCalledWith('roster')
     fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
     await waitFor(() => expect(calls.some((c) => c.url.includes('week=4'))).toBe(true))

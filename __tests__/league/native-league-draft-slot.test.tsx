@@ -46,7 +46,7 @@ describe('native league phone bar — Draft slot', () => {
   it('pre-draft: Draft replaces Matchup and opens Draft HQ, not the room', () => {
     const onSelectTab = vi.fn()
     const nav = bar('setup', onSelectTab)
-    expect(labels(nav)).toEqual(['League', 'Draft', 'Team', 'Players', 'Chat'])
+    expect(labels(nav)).toEqual(['League', 'Draft', 'Team', 'Players'])
     const draft = nav.querySelector('[data-testid=nl-bottom-nav-draft-hq]')!
     expect(draft.tagName).toBe('BUTTON')
     expect(nav.querySelector('[data-testid=nl-bottom-nav-draft-room]')).toBeNull()
@@ -56,16 +56,18 @@ describe('native league phone bar — Draft slot', () => {
 
   it('drafting: Draft links straight into the draft room', () => {
     const nav = bar('drafting')
-    expect(labels(nav)).toEqual(['League', 'Draft', 'Team', 'Players', 'Chat'])
+    expect(labels(nav)).toEqual(['League', 'Draft', 'Team', 'Players'])
     expect(nav.querySelector('[data-testid=nl-bottom-nav-draft-room]')!.getAttribute('href')).toBe('/league/lg%201/draft')
   })
 
   it('in season: Matchup is back and there is no Draft slot', () => {
-    expect(labels(bar('in_season'))).toEqual(['League', 'Matchup', 'Team', 'Players', 'Chat'])
+    // Chat is the chat bubble, not a bottom-bar button (owner, 2026-11-28).
+    expect(labels(bar('in_season'))).toEqual(['League', 'Matchup', 'Team', 'Players'])
   })
 
-  it('a league without a draft section keeps Matchup even pre-draft', () => {
-    expect(labels(bar('setup', vi.fn(), TABS.filter((t) => t.id !== 'draft')))).toEqual(['League', 'Matchup', 'Team', 'Players', 'Chat'])
+  it('a hosted league with no draft section shows no Matchup before its draft either', () => {
+    // No draft section and no draft yet: no schedule either, so no Matchup (owner, 2026-11-28).
+    expect(labels(bar('setup', vi.fn(), TABS.filter((t) => t.id !== 'draft')))).toEqual(['League', 'Team', 'Players'])
   })
 })
 
