@@ -54,7 +54,8 @@ function cb(): HubCallbacks {
   }
 }
 
-const tabNames = () => screen.getAllByRole('tab').map((t) => t.textContent)
+// The tab's name is its aria-label: it carries a long label and a phone one (2026-11-28).
+const tabNames = () => screen.getAllByRole('tab').map((t) => t.getAttribute('aria-label'))
 
 describe('who gets the Commissioner Hub tab', () => {
   it('a commissioner of an AllFantasy league, between Members and Record Book', () => {
@@ -200,5 +201,25 @@ describe('the hub reads like an app (2026-11-28)', () => {
     expect(detail.getAttribute('data-clamped')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'Show more' }))
     expect(detail.getAttribute('data-clamped')).toBeNull()
+  })
+})
+
+describe('league settings on a phone (2026-11-28)', () => {
+  it('each tab carries a short phone label, and keeps its full name for readers', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} />)
+    const hub = screen.getByRole('tab', { name: 'Commissioner Hub' })
+    expect(hub.querySelector('.af-lsh-tab-short')?.textContent).toBe('Commish')
+    expect(hub.querySelector('.af-lsh-tab-long')?.textContent).toBe('Commissioner Hub')
+  })
+
+  it('Advanced settings is the last row of the page, not a button beside the tabs', () => {
+    const onOpen = vi.fn()
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} advanced={{ label: 'Advanced settings', onOpen }} />)
+    const adv = screen.getByTestId('league-settings-hub-advanced')
+    expect(adv.closest('.af-lsh-tabbar')).toBeNull()
+    const stack = document.querySelector('.af-lsh-stack')!
+    expect(stack.lastElementChild?.contains(adv)).toBe(true)
+    fireEvent.click(adv)
+    expect(onOpen).toHaveBeenCalledTimes(1)
   })
 })

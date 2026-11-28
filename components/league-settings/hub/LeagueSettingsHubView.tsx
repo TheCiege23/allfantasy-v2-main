@@ -139,12 +139,17 @@ type HubTr = { t: (s: string) => string; tStat: (s: string) => string; tMode: (s
 const HubT = createContext<HubTr>({ t: (s) => s, tStat: (s) => s, tMode: (s) => s, lang: 'en' })
 const useT = () => useContext(HubT)
 
-const TABS: Array<{ id: HubTabId; label: string }> = [
-  { id: 'my', label: 'My Settings' },
-  { id: 'setup', label: 'League Setup' },
-  { id: 'members', label: 'Members' },
-  { id: 'hub', label: 'Commissioner Hub' },
-  { id: 'record', label: 'Record Book' },
+/**
+ * `short` is the phone label (owner report, 2026-11-28: "the settings tab doesn't fit everything on
+ * mobile"): five long names scrolled off a 390px screen, so "Commissioner Hub" read as "Co". The long
+ * name stays the tab's accessible name.
+ */
+const TABS: Array<{ id: HubTabId; label: string; short: string }> = [
+  { id: 'my', label: 'My Settings', short: 'Mine' },
+  { id: 'setup', label: 'League Setup', short: 'Setup' },
+  { id: 'members', label: 'Members', short: 'Members' },
+  { id: 'hub', label: 'Commissioner Hub', short: 'Commish' },
+  { id: 'record', label: 'Record Book', short: 'History' },
 ]
 
 /**
@@ -226,16 +231,13 @@ export function LeagueSettingsHubView({
             className="af-lsh-tab"
             onClick={() => setTab(tb.id)}
             data-testid={`league-settings-hub-tab-${tb.id}`}
+            aria-label={t(tb.label)}
           >
-            {t(tb.label)}
+            <span className="af-lsh-tab-long" aria-hidden>{t(tb.label)}</span>
+            <span className="af-lsh-tab-short" aria-hidden>{t(tb.short)}</span>
           </button>
         ))}
       </div>
-        {advanced ? (
-          <button type="button" className="af-lsh-btn" data-variant="ghost" onClick={advanced.onOpen} data-testid="league-settings-hub-advanced">
-            {t(advanced.label)}
-          </button>
-        ) : null}
       </div>
 
       <div className="af-lsh-body" id="af-lsh-panel" role="tabpanel" aria-labelledby={`af-lsh-tab-${tab}`}>
@@ -276,6 +278,22 @@ export function LeagueSettingsHubView({
           {tab === 'members' ? <MembersTab data={data} cb={cb} /> : null}
           {tab === 'hub' ? <CommissionerHubTab data={data} cb={cb} slots={slots} /> : null}
           {tab === 'record' ? <RecordTab data={data} /> : null}
+          {/*
+            The full editor, last and as one row (2026-11-28): beside the tabs it took a row of its own
+            above every setting on a phone, and a manager's first tap was often the escape hatch.
+          */}
+          {advanced ? (
+            <section className="af-lsh-card" aria-label={t(advanced.label)}>
+              <button type="button" className="af-lsh-row af-lsh-nav" onClick={advanced.onOpen} data-testid="league-settings-hub-advanced">
+                <span className="af-lsh-nav-icon" aria-hidden><Settings2 size={18} strokeWidth={2} /></span>
+                <span className="af-lsh-row-copy">
+                  <span>{t(advanced.label)}</span>
+                  <span>{t('Every setting in one long editor.')}</span>
+                </span>
+                <ChevronRight className="af-lsh-nav-chevron" size={18} aria-hidden />
+              </button>
+            </section>
+          ) : null}
         </div>
       </div>
     </div>

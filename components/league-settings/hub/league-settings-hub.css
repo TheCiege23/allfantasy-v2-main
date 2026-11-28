@@ -279,3 +279,37 @@
   /* Room for the floating chat buttons: the last row is never under them. */
   [data-testid=league-settings-hub-commissioner] > .af-lsh-card:last-child { margin-bottom: 88px; }
 }
+
+/* ── League settings, phone pass (2026-11-28) ───────────────────────────────────────────────────────
+ * Owner report: "The settings tab doesn't fit everything on mobile. Seems very complicated. Should be
+ * simple and easy for the commissioner to adjust settings like Sleeper." Three rows of tabs, an
+ * Advanced button and section chips stood above the first setting, and the tabs ran off the screen.
+ * On a narrow container: the tabs are one row that fits (short names), the section chips go — every
+ * section is already its own row below — and folded sections read as one list, as Sleeper's do. */
+.af-lsh-tab-short { display: none; }
+@container (max-width: 699px) {
+  .af-lsh-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 14px; background: var(--lsh-card); border: 1px solid var(--lsh-rule); overflow: visible; }
+  /* `.af-lsh button { font: inherit }` outranks a bare class, hence the doubled selector. */
+  .af-lsh .af-lsh-tab { min-height: 38px; padding: 0 2px; border: 0; border-radius: 10px; font-size: 12px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .af-lsh-tab-long { display: none; }
+  .af-lsh-tab-short { display: inline; }
+  .af-lsh-chips { display: none; }
+  .af-lsh-stack { gap: 10px; }
+  .af-lsh-card[data-fold=true] { border-radius: 14px; }
+  .af-lsh-fold > summary.af-lsh-card-head { min-height: 60px; padding: 12px 40px 12px 16px; }
+  .af-lsh-fold:not([open]) > summary.af-lsh-card-head { padding-bottom: 12px; }
+  .af-lsh-fold > summary.af-lsh-card-head h2 { font-size: 16px; font-weight: 750; letter-spacing: 0; }
+  .af-lsh-fold > summary.af-lsh-card-head > div { min-width: 0; flex: 1 1 auto; }
+  .af-lsh-fold:not([open]) > summary.af-lsh-card-head p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .af-lsh-fold > summary::after { content: '›'; font-size: 22px; rotate: 0deg; }
+  .af-lsh-fold[open] > summary::after { rotate: 90deg; }
+  /* An open section's Edit button stays beside its title, compact. */
+  .af-lsh-fold > summary.af-lsh-card-head .af-lsh-btn { min-height: 32px; padding: 0 12px; }
+  .af-lsh-card-head { padding: 14px 16px 10px; }
+  .af-lsh-card-head h2 { font-size: 18px; }
+  .af-lsh-row { padding: 8px 16px; }
+  .af-lsh-head { padding-bottom: 10px; }
+  .af-lsh-head-copy h1 { font-size: 18px; }
+  /* Room for the floating chat buttons under the last row. */
+  .af-lsh-stack > :last-child { margin-bottom: 88px; }
+}
