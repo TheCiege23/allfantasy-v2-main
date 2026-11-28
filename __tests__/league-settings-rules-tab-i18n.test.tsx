@@ -131,7 +131,7 @@ describe('🛑 the Rules tab reads Spanish in Spanish', () => {
     }
     // The trades tab carries the exchange-rate card.
     fireEvent.click(r.getAllByText('Trades')[0]!)
-    for (const s of ['Tipo de cambio devy ↔ NFL', 'Unidades de mercado por punto devy', 'Sin definir — los trades mixtos']) expect(r.container.textContent, s).toContain(s)
+    for (const s of ['Tipo de cambio devy ↔ NFL', 'Unidades de mercado por punto devy', 'Sin definir — los prospectos en trades mixtos']) expect(r.container.textContent, s).toContain(s)
     expect(r.container.querySelector('input[placeholder="sin definir"]')).not.toBeNull()
   })
 

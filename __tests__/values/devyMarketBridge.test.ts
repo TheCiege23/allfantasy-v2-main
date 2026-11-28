@@ -134,24 +134,27 @@ describe('conversion', () => {
 
 /* ------------------------------------------------------------------ wiring */
 
-const DEVY_ROW = {
+/*
+ * 🛑 SINCE 2026-11-28 THE DEFAULT IS THE MEASURED OPTION VALUE, NOT A REFUSAL. A mixed deal is graded on
+ * `devyOptionValue` with no conversion (`lib/devy/devyTradeVerdict.ts`); the bridge is the explicit
+ * override a caller opts into by passing settings. What must still hold: nothing changes for a league
+ * that set no rate, a converted number never travels without its caveat, and a bad rate is named.
+ */
+const BLUE_CHIP = {
+  devyPlayerId: 'd1',
   name: 'Blue Chip',
   position: 'WR',
-  school: 'Ohio State',
-  draftEligibleYear: 2028,
-  recruitingComposite: 0.98,
-  breakoutAge: 19,
-  projectedDraftRound: 4,
-  devyAdp: null,
-  draftProjectionScore: 90,
+  ppaSeasonTotal: null,
+  recruitingComposite: 0.96,
+  recruitingStars: 4,
+  draftEligibleYear: 2027,
 }
 
-const seedPrisma = () => {
-  findMany.mockReset()
-  /* first call = candidates, second = the ranking board */
-  findMany
-    .mockResolvedValueOnce([DEVY_ROW])
-    .mockResolvedValueOnce([{ draftProjectionScore: 90 }, { draftProjectionScore: 50 }])
+const deps = {
+  loadCandidates: async () => [BLUE_CHIP],
+  loadHeld: async () => [],
+  loadLeague: async () => null,
+  loadBridgePoints: async () => new Map([['d1', 900]]),
 }
 
 const MIXED = {
@@ -160,27 +163,27 @@ const MIXED = {
   season: 2026,
 }
 
-beforeEach(() => seedPrisma())
+beforeEach(() => findMany.mockReset())
 
-describe('the refusal, and the one thing allowed to lift it', () => {
-  it('🛑 REFUSES A MIXED DEAL WHEN NO RATE IS SET — the default, unchanged', async () => {
-    const res = await identifyDevyAssets(MIXED)
-    expect(res).not.toBeNull()
-    expect(res!.refusal).toMatch(/cannot be graded as one number/i)
-    expect(res!.verdict).toBeNull()
-  })
-
-  it('refuses identically when the caller supplies no league settings at all', async () => {
-    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: undefined })
-    expect(res!.refusal).toMatch(/cannot be graded as one number/i)
-    expect(res!.verdict).toBeNull()
-  })
-
-  it('grades the mixed deal once a rate is set, and withdraws the refusal', async () => {
-    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(3) })
+describe('the measured default, and the one override allowed to replace it', () => {
+  it('🛑 GRADES A MIXED DEAL ON THE OPTION VALUE WHEN NO RATE IS SET — no conversion, no caveat', async () => {
+    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate('') }, deps)
     expect(res!.refusal).toBeNull()
-    expect(res!.verdict).toMatch(/you give/i)
-    expect(res!.verdict).toMatch(/you get/i)
+    expect(res!.verdict).toMatch(/measured option value/i)
+    expect(res!.verdict).not.toContain(DEVY_BRIDGE_CAVEAT)
+  })
+
+  it('is identical when the caller supplies no league settings at all', async () => {
+    const a = await identifyDevyAssets({ ...MIXED, leagueSettings: undefined }, deps)
+    const b = await identifyDevyAssets({ ...MIXED, leagueSettings: rate('') }, deps)
+    expect(a!.verdict).toBe(b!.verdict)
+  })
+
+  it('uses the commissioner’s rate once one is set', async () => {
+    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(3) }, deps)
+    expect(res!.refusal).toBeNull()
+    expect(res!.verdict).toMatch(/you give 2,700/i)
+    expect(res!.verdict).toMatch(/you get 4,000/i)
   })
 
   /*
@@ -188,28 +191,35 @@ describe('the refusal, and the one thing allowed to lift it', () => {
    * market-backed ones, with no note attached, is the invention the refusal exists to prevent.
    */
   it('carries the caveat inside the verdict itself, not only in a side field', async () => {
-    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(3) })
+    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(3) }, deps)
     expect(res!.verdict).toContain(DEVY_BRIDGE_CAVEAT)
     expect(res!.bridge?.ok).toBe(true)
   })
 
   it('names the rate it used, so the number can be checked', async () => {
-    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(3) })
+    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(3) }, deps)
     expect(res!.verdict).toMatch(/rate of 3 market units per devy point/i)
   })
 
   /*
-   * A commissioner who typed 350 instead of 3.5 must not see the ordinary refusal and conclude
-   * the feature is broken.
+   * A commissioner who typed 350 instead of 3.5 must not conclude the feature is broken.
    */
-  it('says the rate was IGNORED when it is out of range, rather than staying silent', async () => {
-    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(350) })
-    expect(res!.verdict).toBeNull()
-    expect(res!.refusal).toMatch(/outside the accepted range/i)
+  it('says the rate was IGNORED when it is out of range, and keeps the measured value', async () => {
+    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(350) }, deps)
+    expect(res!.standings.join(' ')).toMatch(/outside the accepted range/i)
+    expect(res!.verdict).toMatch(/measured option value/i)
   })
 
   it('does not issue a letter grade — the conversion has not earned one', async () => {
-    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(3) })
+    const res = await identifyDevyAssets({ ...MIXED, leagueSettings: rate(3) }, deps)
     expect(res!.verdict).not.toMatch(/\b(A\+|A-|B\+|C\+|D)\b/)
+  })
+
+  it('never converts a devy-for-devy deal, even with a rate set', async () => {
+    const res = await identifyDevyAssets(
+      { give: [{ name: 'Blue Chip', marketValue: null }], get: [{ name: 'Blue Chip', marketValue: null }], season: 2026, leagueSettings: rate(3) },
+      deps,
+    )
+    expect(res!.verdict).not.toContain(DEVY_BRIDGE_CAVEAT)
   })
 })

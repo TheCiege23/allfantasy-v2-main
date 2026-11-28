@@ -397,10 +397,14 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
               pricedGive: out.players.give.map((l) => ({
                 name: l.name,
                 marketValue: l.unpriced ? null : l.marketValue,
+                /* A prospect the grade priced: Chimmy's devy note quotes that same number. */
+                devy: l.dataSource === 'devy-option',
               })),
               pricedGet: out.players.get.map((l) => ({
                 name: l.name,
                 marketValue: l.unpriced ? null : l.marketValue,
+                /* A prospect the grade priced: Chimmy's devy note quotes that same number. */
+                devy: l.dataSource === 'devy-option',
               })),
               /* Only used for the Zombie veto warning: a lopsided deal there
                  goes to an 8-hour poll and two thirds can reverse it. */

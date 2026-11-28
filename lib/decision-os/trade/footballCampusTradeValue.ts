@@ -38,9 +38,26 @@ export function campusPointsToMarket(campus: readonly number[], canton: readonly
 export async function optionChartFactor(chart: LeagueTradeChart): Promise<number | null> {
   if (!chart.chartIsDynasty) return null
   if (chart.isSuperFlex && chart.leagueSize === 12 && chart.pprNfl === 1) return 1
+  return medianSkillRatioToDevyBoard(chart.fcPlayers)
+}
+
+/**
+ * The same factor for a caller that holds a market profile rather than a `LeagueTradeChart` — the trade
+ * evaluator, which prices on `getFantasyCalcPlayers(labelCtx)`. Reads the stored chart for that profile
+ * (DB-first, no provider call) and applies the identical rule, so a prospect is rescaled the same way on
+ * both surfaces (2026-11-28).
+ */
+export async function optionChartFactorForMarket(profile: { isDynasty: boolean; isSuperFlex: boolean; numTeams: number; ppr: 0 | 0.5 | 1 }): Promise<number | null> {
+  if (!profile.isDynasty) return null
+  if (profile.isSuperFlex && profile.numTeams === 12 && profile.ppr === 1) return 1
+  const own = await readStoredLeagueTradeChart({ isDynasty: true, numQbs: profile.isSuperFlex ? 2 : 1, numTeams: profile.numTeams, ppr: profile.ppr })
+  return medianSkillRatioToDevyBoard(own.players)
+}
+
+async function medianSkillRatioToDevyBoard(players: LeagueTradeChart['fcPlayers']): Promise<number | null> {
   const reference = await readStoredLeagueTradeChart({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 })
   const values = new Map(reference.players.filter((p) => p.player.sleeperId && p.value > 0).map((p) => [p.player.sleeperId, p.value]))
-  const ratios = chart.fcPlayers.flatMap((p) => {
+  const ratios = players.flatMap((p) => {
     const base = values.get(p.player.sleeperId)
     return base && p.value > 0 && SKILL.has(p.player.position) ? [p.value / base] : []
   }).sort((a, b) => a - b)

@@ -20,7 +20,9 @@ import { getTotalIdpStarterSlots, canFieldLegalIdpLineup } from '@/lib/trade-eng
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
 import { resolveSuperflex } from '@/lib/trade-value/superflexResolution'
-import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
+import { applyDevyVerdictPrices, identifyDevyAssets, type DevyTradeVerdict } from '@/lib/devy/devyTradeVerdict'
+import { optionChartFactorForMarket } from '@/lib/decision-os/trade/footballCampusTradeValue'
+import { nflSeasonNow } from '@/lib/devy/openMarketDevy'
 import { buildNegotiationToolkit, negotiationToolkitToLegacy } from '@/lib/trade-engine/negotiation-builder'
 import { buildNegotiationGptContract, buildNegotiationGptUserPrompt, validateNegotiationGptOutput, shouldSkipNegotiationGpt, NEGOTIATION_GPT_SYSTEM_PROMPT } from '@/lib/trade-engine/negotiation-gpt-contract'
 import type { Asset } from '@/lib/trade-engine/types'
@@ -866,8 +868,40 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
           priceEvaluatorDevy({ leagueId: devyLeagueId, prices: rawReceiverPlayerPrices }),
         ])
       : [null, null]
-    const senderPlayerPrices = senderDevyPass?.prices ?? rawSenderPlayerPrices
-    const receiverPlayerPrices = receiverDevyPass?.prices ?? rawReceiverPlayerPrices
+    let senderPlayerPrices = senderDevyPass?.prices ?? rawSenderPlayerPrices
+    let receiverPlayerPrices = receiverDevyPass?.prices ?? rawReceiverPlayerPrices
+
+    /*
+     * 🛑 ONE DEVY NUMBER (2026-11-28). A college player still unpriced here is priced by the SAME rule the
+     * grade and Chimmy's devy note use (`identifyDevyAssets` → `heldDevyOptionValue`): in a league, only a
+     * prospect the league holds; with no league, any prospect on file at his option value rescaled to the
+     * chart this route prices on (`optionChartFactorForMarket`). A devy-only deal is therefore graded on
+     * the same scale as any other deal instead of being answered in devy points. What it cannot price —
+     * an unmeasured prospect, one the league holds no rights on — stays unpriced and DEVY_SCALE refuses
+     * below, naming why. Null is never zero.
+     */
+    let devyVerdict: DevyTradeVerdict | null = null
+    if ([...senderPlayerPrices, ...receiverPlayerPrices].some((p) => p.unpriced)) {
+      const chartFactor = evaluationLeagueId
+        ? undefined
+        : await optionChartFactorForMarket({
+            isDynasty: labelCtx.isDynasty ?? true,
+            isSuperFlex: isSF,
+            numTeams: resolvedNumTeams,
+            ppr: labelCtx.ppr ?? 1,
+          }).catch(() => null)
+      const toLine = (p: PricedAsset) => ({ name: p.name, marketValue: p.unpriced ? null : p.value, devy: p.source === 'devy-option' })
+      devyVerdict = await identifyDevyAssets({
+        give: senderPlayerPrices.map(toLine),
+        get: receiverPlayerPrices.map(toLine),
+        season: nflSeasonNow(),
+        leagueId: evaluationLeagueId,
+        chartFactor,
+        otherAssets: senderPicksData.length + receiverPicksData.length > 0 || data.sender.gives_faab > 0 || data.receiver.gives_faab > 0,
+      }).catch(() => null)
+      senderPlayerPrices = applyDevyVerdictPrices(senderPlayerPrices, devyVerdict)
+      receiverPlayerPrices = applyDevyVerdictPrices(receiverPlayerPrices, devyVerdict)
+    }
 
     /*
      * 🛑 REFUSE BEFORE GRADING. An asset nothing could price is not worth zero.
@@ -948,22 +982,17 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
         )
       }
 
-      const devy = await identifyDevyAssets({
-        give: senderPlayerPrices.map((p) => ({ name: p.name, marketValue: p.unpriced ? null : p.value })),
-        get: receiverPlayerPrices.map((p) => ({ name: p.name, marketValue: p.unpriced ? null : p.value })),
-        season: new Date(data.asOfDate || Date.now()).getUTCFullYear(),
-      }).catch(() => null)
+      const devy = devyVerdict
 
-      if (devy && devy.matched.length > 0) {
+      // Only a prospect the shared rule could NOT price is refused here; the ones it priced already left
+      // `unpricedAssets` above.
+      if (devy && devy.refusal) {
         const devyNames = new Set(devy.matched.map((m) => m.name.toLowerCase()))
         const stillUnexplained = names.filter((n) => !devyNames.has(n.toLowerCase()))
         return NextResponse.json(
           {
             error: 'DEVY_SCALE',
-            message:
-              devy.refusal ??
-              devy.verdict ??
-              'This trade is between college assets, which are ranked against each other rather than priced in market units.',
+            message: devy.refusal,
             /* The devy half of the answer, so the refusal is not a dead end. */
             devyAssets: devy.matched.map((m) => m.name),
             devyStandings: devy.standings,
