@@ -237,7 +237,7 @@ function tradeReviewChoice(snapshot: Record<string, unknown>): 'commissioner' | 
  * The seeding behaviours the playoff engine actually has (lib/scoring-engine/scoringSettingsResolved.ts
  * `getPlayoffSeedingRule`, lib/playoff-defaults/seedingRule.ts `isPointsOnlySeeding`): standard
  * (record, then points for), points only, and division winners first. Any other stored value seeds as
- * standard, so a picker offering one (the full editor's "Points-for then record") would promise an
+ * standard, so a picker offering one (the full editor's "Points-for then record", removed 2026-11-28) would promise an
  * order the engine never applies. The settings PATCH mirrors the column into
  * `playoff_structure.seeding_rules`, the copy the engine reads first.
  */
