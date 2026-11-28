@@ -4631,6 +4631,10 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
           playerDepth: traceCard('player-depth', () =>
             resolveCorePaywall(userId, { email: viewerEmail, now }).then((p) => p.player_depth),
           ).catch(() => null),
+          // The Receipts card's link to the full log: /core/decisions is AF Pro + AF Supreme (2026-11-28).
+          decisionLogDepth: traceCard('decision-log-depth', () =>
+            resolveCorePaywall(userId, { email: viewerEmail, now }).then((p) => p.decision_history),
+          ).catch(() => null),
           brief,
           drafts,
           /*

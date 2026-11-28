@@ -366,7 +366,6 @@ export function C2CRosterClient({
         side={modal.side}
         leagueId={leagueId}
         userId={userId}
-        hasAfSub={hasAfSub}
         countsTowardScore={
           modal.player
             ? modal.player.bucketState === 'campus_starter' || modal.player.bucketState === 'canton_starter'

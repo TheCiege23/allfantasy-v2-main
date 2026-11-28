@@ -104,6 +104,8 @@ export type SubscriptionFeatureId =
   | 'legacy_league_transfer'
   /** /af-legacy community insights: Chimmy's news summary (GET /api/legacy/community-insights?summarize=true). AF Legacy, 2026-11-27. */
   | 'legacy_community_insights'
+  /** /af-legacy "Portfolio Over Time" chart (GET /api/legacy/portfolio/history): sign-in, then AF Legacy (Supreme inherits it). Owner, 2026-11-28. */
+  | 'legacy_portfolio_history'
 
 /** Plan slugs returned by entitlements API; used for hasAccess. */
 export type SubscriptionPlanId =

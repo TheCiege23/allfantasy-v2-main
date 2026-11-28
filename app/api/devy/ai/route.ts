@@ -2,6 +2,7 @@ import { assertCommissionerAccess, canCommissionerAct } from '@/lib/league/commi
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
+import { requireMemberPlayerAiOrHostGate } from '@/lib/subscription/memberPlayerAiGate'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { buildDevyAiCacheContextSummary, generateAnnualTransitionReport, generateImportSummary, generateLeagueConstitution, getBreakoutAlerts, getDraftStrategyAdvice, getDevyRankings, getPipelineHealthAnalysis, getSetupRecommendation, getShouldIPromoteAnalysis, handleCommissionerQuery, suggestPlayerMatches, evaluateDevyProspect } from '@/lib/devy/ai/devyChimmy'
 import {
@@ -18,6 +19,9 @@ const DEVY_CHIMMY_CACHE_TTL_MS = 30 * 60 * 1000
 
 type Body = Record<string, unknown>
 
+/** Actions a league MEMBER runs on their own player (DevyPlayerModal). Gated on `af_intelligence`. */
+const DEVY_MEMBER_PLAYER_AI_ACTIONS: ReadonlySet<string> = new Set(['prospect_eval'])
+
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : ''
 }
@@ -27,13 +31,17 @@ function num(v: unknown): number | null {
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await requireAfSub()
-  if (typeof gate !== 'string') return gate
-  const userId = gate
-
   const raw = (await req.json().catch(() => null)) as Body | null
   const body: Body = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
   const action = str(body.action)
+
+  // The member player-AI action (DevyPlayerModal's prospect read) is AF Intelligence — Pro, Commissioner,
+  // Supreme — with no commissioner requirement (owner, 2026-11-28). Every host/league tool keeps the
+  // Commissioner AI gate. Either way the gate runs before any model call.
+  const gate = await requireMemberPlayerAiOrHostGate(action, DEVY_MEMBER_PLAYER_AI_ACTIONS, requireAfSub)
+  if (typeof gate !== 'string') return gate
+  const userId = gate
+
   if (!action) {
     return NextResponse.json({ error: 'action required' }, { status: 400 })
   }

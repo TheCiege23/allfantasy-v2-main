@@ -2,6 +2,7 @@ import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
+import { requireMemberPlayerAiOrHostGate } from '@/lib/subscription/memberPlayerAiGate'
 import { getLeagueRole } from '@/lib/league/permissions'
 import {
   buildC2CAiCacheContextSummary,
@@ -30,19 +31,26 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 const C2C_AI_CACHE_TTL_MS = 30 * 60 * 1000
 
-export async function POST(req: NextRequest) {
-  const gate = await requireAfSub()
-  if (gate instanceof NextResponse) return gate
-  const userId = gate
+/** Actions a league MEMBER runs on their own player (C2CPlayerModal). Gated on `af_intelligence`. */
+const C2C_MEMBER_PLAYER_AI_ACTIONS: ReadonlySet<string> = new Set(['campus_eval'])
 
+export async function POST(req: NextRequest) {
   let body: Record<string, unknown>
   try {
     body = (await req.json()) as Record<string, unknown>
   } catch {
+    const gate = await requireAfSub()
+    if (gate instanceof NextResponse) return gate
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
   const action = typeof body.action === 'string' ? body.action : ''
+
+  // The member player-AI action (C2CPlayerModal's campus read) is AF Intelligence — Pro, Commissioner,
+  // Supreme (owner, 2026-11-28). Every host/league tool keeps the Commissioner AI gate. Before any model call.
+  const gate = await requireMemberPlayerAiOrHostGate(action, C2C_MEMBER_PLAYER_AI_ACTIONS, requireAfSub)
+  if (gate instanceof NextResponse) return gate
+  const userId = gate
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId.trim() : ''
 
   if (action !== 'setup_rec' && leagueId) {

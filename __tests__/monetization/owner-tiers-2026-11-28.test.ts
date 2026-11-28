@@ -49,3 +49,24 @@ describe('2. the draft-room AI pick explanation is AF Pro + AF Legacy + AF Supre
     expect(await tiersFor('draft_prep')).toEqual(['legacy', 'supreme'])
   })
 })
+
+describe('3. the smaller items', () => {
+  it('a. AF Legacy portfolio history (legacy_portfolio_history) = AF Legacy + AF Supreme', async () => {
+    expect(await tiersFor('legacy_portfolio_history')).toEqual(['legacy', 'supreme'])
+  })
+  it('b. the full decision log behind the Receipts card (decision_log_history) = AF Pro + AF Supreme', async () => {
+    expect(await tiersFor('decision_log_history')).toEqual(['pro', 'supreme'])
+  })
+  it('c/d. member devy/IDP/C2C player AI and the keeper trade analyzer read af_intelligence = Pro + Commissioner + Supreme', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync('lib/subscription/memberPlayerAiGate.ts', 'utf8')).toMatch(/^\s*if \(memberActions\.has\(action\)\) return requireEntitlement\('af_intelligence'\)$/m)
+    expect(readFileSync('app/api/keeper/ai/trade-analysis/route.ts', 'utf8')).toMatch(/^\s*const gate = await requireEntitlement\('af_intelligence'\)$/m)
+    expect(await tiersFor('af_intelligence')).toEqual(AF_INTELLIGENCE_TIERS)
+  })
+  it('c. the commissioner host tools keep their Commissioner key', async () => {
+    expect(await tiersFor('commissioner_ai_tools')).toEqual(['commissioner', 'supreme'])
+  })
+  it('e. Chimmy Autopilot (commissioner_chimmy_autopilot) stays AF Pro + AF Supreme — confirmed, no change', async () => {
+    expect(await tiersFor('commissioner_chimmy_autopilot')).toEqual(['pro', 'supreme'])
+  })
+})

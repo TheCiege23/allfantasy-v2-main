@@ -542,7 +542,6 @@ export function DevyRosterClient({
         onClose={() => setModal({ open: false, payload: null })}
         payload={modal.payload}
         leagueId={leagueId}
-        hasAfSub={hasAfSub}
       />
     </div>
   )

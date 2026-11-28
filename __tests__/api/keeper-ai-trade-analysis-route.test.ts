@@ -6,12 +6,13 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { requireAfSub, evaluateStoredTrade, recordTradeSurfaceShadow } = vi.hoisted(() => ({
-  requireAfSub: vi.fn(),
+const { requirePlan, evaluateStoredTrade, recordTradeSurfaceShadow } = vi.hoisted(() => ({
+  requirePlan: vi.fn(),
   evaluateStoredTrade: vi.fn(),
   recordTradeSurfaceShadow: vi.fn(),
 }))
-vi.mock('@/lib/redraft/ai/requireAfSub', () => ({ requireAfSub }))
+// The plan gate (af_intelligence since 2026-11-28) — owner-tier-gates-2026-11-28 runs it for every tier.
+vi.mock('@/lib/subscription/requireEntitlement', () => ({ requireEntitlement: requirePlan }))
 vi.mock('@/lib/decision-os/trade/evaluateStoredTrade', () => ({ evaluateStoredTrade }))
 vi.mock('@/lib/decision-os/trade/surfaceShadow', () => ({ recordTradeSurfaceShadow }))
 
@@ -33,14 +34,14 @@ const CANONICAL = {
 const receiptWith = (grade: unknown) => ({ grade, partnerGrade: { graded: false, reason: 'mirror', basis: null } })
 
 beforeEach(() => {
-  requireAfSub.mockReset().mockResolvedValue('user-1')
+  requirePlan.mockReset().mockResolvedValue('user-1')
   evaluateStoredTrade.mockReset()
   recordTradeSurfaceShadow.mockReset()
 })
 
 describe('POST /api/keeper/ai/trade-analysis', () => {
   it('returns the entitlement gate response untouched, and grades nothing', async () => {
-    requireAfSub.mockResolvedValue(new Response(null, { status: 402 }))
+    requirePlan.mockResolvedValue(new Response(null, { status: 402 }))
     expect((await POST(req({ leagueId: 'L1', tradeId: 'T1' }))).status).toBe(402)
     expect(evaluateStoredTrade).not.toHaveBeenCalled()
   })

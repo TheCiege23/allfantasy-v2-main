@@ -911,6 +911,21 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     },
   },
   {
+    key: "legacy_portfolio_history",
+    title: "Portfolio over time",
+    accessType: "subscription_only",
+    requiredPlanId: "war_room",
+    tokenRuleCode: null,
+    lockedReason: "Your trade portfolio over time is part of AF Legacy.",
+    backendEnforcement: "Server (2026-11-28): GET /api/legacy/portfolio/history needs a session (401 sign_in_required), then requireFeatureEntitlement(legacy_portfolio_history) (403 feature_not_entitled) before any Sleeper read or grading.",
+    frontendGateBehavior: "PortfolioChart shows the server's plan sentence with a sign-in or upgrade link in place of the chart.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/af-legacy"],
+      components: ["PortfolioChart"],
+    },
+  },
+  {
     key: "legacy_league_transfer",
     title: "League storylines",
     accessType: "subscription_only",

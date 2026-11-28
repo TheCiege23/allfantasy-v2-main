@@ -4,6 +4,7 @@ import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isIdpLeague } from '@/lib/idp'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
+import { requireMemberPlayerAiOrHostGate } from '@/lib/subscription/memberPlayerAiGate'
 import {
   getDefenderStartSitRec,
   getIDPWaiverTargets,
@@ -53,6 +54,9 @@ type Action =
   | 'weekly_recap'
   | 'ai_prefs'
 
+/** Actions a league MEMBER runs on their own player (IDPPlayerModal). Gated on `af_intelligence`. */
+const IDP_MEMBER_PLAYER_AI_ACTIONS: ReadonlySet<string> = new Set<Action>(['defender_eval', 'player_analysis'])
+
 export async function POST(req: NextRequest) {
   const raw = (await req.json().catch(() => null)) as Record<string, unknown> | null
   const body: Record<string, unknown> = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
@@ -60,8 +64,12 @@ export async function POST(req: NextRequest) {
   const action = body.action as Action | undefined
 
   // Cap advice is sold under AF Pro (`commissioner_cap_advice` — the key the Cap Room's upgrade prompt
-  // already names). Every other action here stays on the Commissioner AI gate.
-  const gate = action === 'cap_advice' ? await requireEntitlement('commissioner_cap_advice') : await requireAfSub()
+  // already names). The member player-AI actions (IDPPlayerModal's defender read) are AF Intelligence —
+  // Pro, Commissioner, Supreme (owner, 2026-11-28). Every other action stays on the Commissioner AI gate.
+  const gate =
+    action === 'cap_advice'
+      ? await requireEntitlement('commissioner_cap_advice')
+      : await requireMemberPlayerAiOrHostGate(action ?? '', IDP_MEMBER_PLAYER_AI_ACTIONS, requireAfSub)
   if (typeof gate !== 'string') return gate
   const userId = gate
   const week = typeof body.week === 'number' && Number.isFinite(body.week) ? Math.min(18, Math.max(1, body.week)) : 1

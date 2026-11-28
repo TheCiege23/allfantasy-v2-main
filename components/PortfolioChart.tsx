@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart } from 'recharts';
 
 interface PortfolioPoint {
@@ -77,11 +78,13 @@ export default function PortfolioChart({ leagueId, userId, isSuperFlex = false, 
   const [data, setData] = useState<PortfolioData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [locked, setLocked] = useState<PlanRefusal | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
+      setLocked(null);
       
       try {
         const response = await fetch(
@@ -89,6 +92,13 @@ export default function PortfolioChart({ leagueId, userId, isSuperFlex = false, 
         );
         
         if (!response.ok) {
+          // Sign-in + AF Legacy since 2026-11-28 (`legacy_portfolio_history`): show the way forward, not a failure.
+          const body = await response.json().catch(() => null);
+          const refusal = readPlanRefusal(response.status, body, { returnTo: currentPathForReturn() });
+          if (refusal) {
+            setLocked(refusal);
+            return;
+          }
           throw new Error('Failed to fetch portfolio data');
         }
         
@@ -111,6 +121,20 @@ export default function PortfolioChart({ leagueId, userId, isSuperFlex = false, 
       <div className="bg-gray-800 rounded-xl p-6 animate-pulse">
         <div className="h-6 bg-gray-700 rounded w-48 mb-4"></div>
         <div className="h-64 bg-gray-700 rounded"></div>
+      </div>
+    );
+  }
+
+  if (locked) {
+    return (
+      <div className="bg-gray-800 rounded-xl p-6 text-center" data-testid="portfolio-chart-locked">
+        <h3 className="text-lg font-semibold text-white mb-2">Portfolio Over Time</h3>
+        <p className="text-sm text-white/70">
+          {locked.message}{' '}
+          {locked.actionHref && locked.actionLabel ? (
+            <a href={locked.actionHref} className="text-blue-400 hover:text-blue-300 underline">{locked.actionLabel}</a>
+          ) : null}
+        </p>
       </div>
     );
   }
