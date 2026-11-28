@@ -949,7 +949,7 @@ const ES: Record<string, string> = {
   'A successful claim sends you to the back': 'Un reclamo exitoso te manda al final',
   'Worst record claims first': 'El peor récord reclama primero',
   'First Come, First Served': 'El primero que llega',
-  'No waiver period: the first claim wins': 'Sin periodo de waivers: gana el primer reclamo',
+  'No waiver period: the first claim wins': 'Sin período de reclamos: gana el primer reclamo',
   'Trades stay open all season': 'Los traspasos siguen abiertos toda la temporada',
   '$0 bids allowed': 'Se permiten pujas de $0',
   Mine: 'Lo mío',
