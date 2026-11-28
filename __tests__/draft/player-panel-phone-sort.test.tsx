@@ -5,6 +5,7 @@
  * the headers (`sortKeyForColumn`).
  */
 import React from 'react'
+import { readFileSync } from 'node:fs'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -87,5 +88,29 @@ describe('PlayerPanel phone sort control', () => {
     phone = false
     panel()
     expect(screen.queryByTestId('draft-mobile-sort')).toBeNull()
+  })
+
+  it('search takes its own full row on a phone (sharing one squeezed it to "Search p…"), and stays inline on desktop', () => {
+    panel()
+    const search = screen.getByTestId('draft-player-search')
+    const cls = search.className.split(/\s+/)
+    expect(cls).toEqual(expect.arrayContaining(['w-full', 'basis-full', 'min-h-[44px]']))
+    // `flex-1` would reset the basis to 0 and put it back beside Filters (measured in the room).
+    expect(cls).not.toContain('flex-1')
+    expect(search.contains(screen.getByTestId('draft-player-search-input'))).toBe(true)
+    cleanup()
+    phone = false
+    panel()
+    const desk = screen.getByTestId('draft-player-search').className.split(/\s+/)
+    expect(desk).not.toContain('basis-full')
+    expect(desk).toContain('flex-1')
+  })
+
+  it('the room stylesheet gives the phone search the whole row (it, not the class, decides the layout there)', () => {
+    // draft-workspace.css overrides the component's classes inside .draft-touch-room; its rule was
+    // `flex:1 1 0` (search beside Filters) and is what kept the field at 134px in the room.
+    const css = readFileSync('components/app/draft-room/draft-workspace.css', 'utf8')
+    const rules = [...css.matchAll(/\[data-testid="draft-player-toolbar"\]>div:first-child\{([^}]*)\}/g)].map((m) => m[1])
+    expect(rules.at(-1)).toMatch(/flex:1 1 100%/)
   })
 })

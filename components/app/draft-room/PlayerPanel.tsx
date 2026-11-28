@@ -907,10 +907,15 @@ function PlayerPanelInner({
         className="sticky top-0 z-20 shrink-0 border-b border-white/[0.06] bg-[#0d1424]"
       >
         <div data-testid="draft-player-toolbar" className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1 ${rs ? 'gap-y-1' : ''}`}>
+          {/* Phone: search takes its own row. Sharing it with Filters and the sort control squeezed
+              the field to a few characters ("Search p…", measured at 390px, 2026-11-28). */}
           <div
-            className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 touch-manipulation transition duration-150 focus-within:ring-2 focus-within:ring-white/25 md:max-w-[280px] ${SKIN_CONTROL} ${
+            data-testid="draft-player-search"
+            // ⚠ Not `flex-1` on a phone: its `flex: 1 1 0%` resets the basis to 0 and beats `basis-full`
+            // (measured: the field stayed 134px wide beside Filters with both classes present).
+            className={`flex min-h-[30px] items-center gap-1.5 rounded-full border px-2.5 py-1 touch-manipulation transition duration-150 focus-within:ring-2 focus-within:ring-white/25 md:max-w-[280px] ${SKIN_CONTROL} ${
               rs ? 'min-w-[150px]' : ''
-            }`}
+            } ${phoneLayout ? 'w-full basis-full min-h-[44px]' : 'flex-1'}`}
           >
             <Search className="h-4 w-4 shrink-0 text-white/45" />
             <input
