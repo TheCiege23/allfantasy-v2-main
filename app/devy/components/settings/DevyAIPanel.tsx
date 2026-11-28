@@ -20,10 +20,17 @@ const lsKey = (leagueId: string) => `af-devy-ai-prefs-${leagueId}`
 export function DevyAIPanel({
   leagueId,
   hasAfSub,
+  hasPlayerAi = hasAfSub,
   isCommissioner = false,
 }: {
   leagueId: string
   hasAfSub: boolean
+  /**
+   * Chimmy Intelligence (`af_intelligence`: AF Pro, AF Commissioner, AF Supreme). The player-level buttons
+   * (breakout alerts, rankings, draft advice) use it, as the server does since 2026-11-28; the league tools
+   * stay on `hasAfSub` (AF Commissioner).
+   */
+  hasPlayerAi?: boolean
   isCommissioner?: boolean
 }) {
   const [prefs, setPrefs] = useState<DevyPrefs>({
@@ -96,7 +103,9 @@ export function DevyAIPanel({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100">
           <Lock className="h-4 w-4 shrink-0" />
           <span>
-            Devy Chimmy runs with AF Commissioner. Until then, these toggles are saved as preferences only.
+            {hasPlayerAi
+              ? 'Devy league tools run with AF Commissioner. The player tools below are included with your plan.'
+              : 'Devy Chimmy runs with AF Commissioner. Until then, these toggles are saved as preferences only.'}
           </span>
           <SubscriptionGateBadge
             featureId="commissioner_devy_scouting"
@@ -179,7 +188,7 @@ export function DevyAIPanel({
       ) : null}
 
       <div className="space-y-3 rounded-xl border border-white/[0.08] bg-[#0a1228] p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Run tools (AF Commissioner)</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Run tools (league tools: AF Commissioner; player tools: Chimmy Intelligence)</p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -197,7 +206,7 @@ export function DevyAIPanel({
           </button>
           <button
             type="button"
-            disabled={!hasAfSub || busy !== null}
+            disabled={!hasPlayerAi || busy !== null}
             onClick={() => void run('breakout_alerts')}
             className="rounded-lg border border-white/[0.1] px-3 py-2 text-[12px] text-white/85 disabled:opacity-40"
           >
@@ -221,7 +230,7 @@ export function DevyAIPanel({
           </button>
           <button
             type="button"
-            disabled={!hasAfSub || busy !== null}
+            disabled={!hasPlayerAi || busy !== null}
             onClick={() => void run('draft_advice', { draftType: 'startup', pick: 1, managerId: undefined })}
             className="rounded-lg border border-white/[0.1] px-3 py-2 text-[12px] text-white/85 disabled:opacity-40"
           >
