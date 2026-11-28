@@ -1620,6 +1620,13 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   // foreignIdSpaceCopy.ts `leagueUnverifiedClause`, as a refusal's detail ("Roster changes cannot be priced here: …").
   [/^1 player on its rosters couldn't be matched to ours$/, () => 'no pudimos emparejar 1 jugador de sus plantillas con los nuestros'],
   [/^(\d+) players on its rosters couldn't be matched to ours$/, (m) => `no pudimos emparejar ${m[1]} jugadores de sus plantillas con los nuestros`],
+  // foreignIdSpaceCopy.ts `PASTED_BENCH_UNREADABLE` / `benchUnmatchedNote` — a pasted league's bench.
+  [
+    /^Your bench can't be told apart from your starters in a pasted league\.$/,
+    () => 'En una liga pegada no se puede distinguir tu banca de tus titulares.',
+  ],
+  [/^1 player on your bench couldn't be matched to ours\.$/, () => 'No pudimos emparejar 1 jugador de tu banca con los nuestros.'],
+  [/^(\d+) players on your bench couldn't be matched to ours\.$/, (m) => `No pudimos emparejar ${m[1]} jugadores de tu banca con los nuestros.`],
   [
     /^1 player on rosters in this league couldn't be matched to ours\.$/,
     () => 'No pudimos emparejar 1 jugador de las plantillas de esta liga con los nuestros.',
