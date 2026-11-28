@@ -13,6 +13,7 @@ import { LockedFeatureBanner } from '@/components/monetization/LockedFeatureBann
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
 import { useLaunchOffer } from '@/components/launch/LaunchOfferContext'
+import { BrandShield } from '@/components/brand/BrandShield'
 import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
 import { HolidaySaleStrip, useHolidaySale } from '@/components/launch/HolidaySaleStrip'
 import { getHolidaySale, holidaySalePriceUsd } from '@/lib/monetization/holidaySale'
@@ -333,27 +334,13 @@ function money(n: number): string {
   return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`
 }
 
-/** Same mark as the landing nav, so the two public pages share one brand lockup. */
-function Shield() {
-  return (
-    <svg width="26" height="28" viewBox="0 0 28 30" aria-hidden focusable="false">
-      <path
-        d="M14 1.5 26 6v10.5c0 6.4-5 10.6-12 12.5-7-1.9-12-6.1-12-12.5V6l12-4.5Z"
-        fill="var(--accent-soft)"
-        stroke="var(--accent)"
-        strokeWidth="1.5"
-      />
-      <text
-        x="14"
-        y="19"
-        textAnchor="middle"
-        fill="var(--accent)"
-        style={{ font: '900 10px Archivo, sans-serif', letterSpacing: '0.02em' }}
-      >
-        AF
-      </text>
-    </svg>
-  )
+/**
+ * Same mark as the landing nav. Here it also gets this viewer's founding offer
+ * (server-resolved, LaunchOfferContext), so the "50% OFF" sale art can show —
+ * only while that offer applies to them and its label says 50%.
+ */
+function Shield({ founding }: { founding: { label: string | null } | null }) {
+  return <BrandShield founding={founding} />
 }
 
 /**
@@ -505,7 +492,7 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
       */}
       <nav className="af-pr-nav" aria-label="Main">
         <Link href={signedIn ? '/core' : '/'} className="af-pr-brand">
-          <Shield />
+          <Shield founding={launchOffer?.founding ?? null} />
           <span className="af-pr-wordmark">Pricing</span>
         </Link>
         <div className="af-pr-nav-right">

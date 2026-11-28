@@ -27,6 +27,7 @@ import AppleNativeSignInButton from '@/components/auth/AppleNativeSignInButton'
 import PasskeySignInButton from '@/components/auth/PasskeySignInButton'
 import PasskeyOffer, { shouldOfferPasskey } from '@/components/auth/PasskeyOffer'
 import { LandingStoreBadges } from '@/components/core-app/screens/LandingStoreBadges'
+import { BrandShield } from '@/components/brand/BrandShield'
 
 /**
  * Auth — the "landing, auth & import" handoff, wired to the real endpoints.
@@ -53,27 +54,9 @@ import { LandingStoreBadges } from '@/components/core-app/screens/LandingStoreBa
 
 type AuthMode = 'signin' | 'signup'
 
-/** Shared with the landing and pricing navs, so all three public surfaces match. */
+/** Shared with the landing and pricing navs, so all the public surfaces match. */
 function Shield() {
-  return (
-    <svg width="26" height="28" viewBox="0 0 28 30" aria-hidden focusable="false">
-      <path
-        d="M14 1.5 26 6v10.5c0 6.4-5 10.6-12 12.5-7-1.9-12-6.1-12-12.5V6l12-4.5Z"
-        fill="var(--accent-soft)"
-        stroke="var(--accent)"
-        strokeWidth="1.5"
-      />
-      <text
-        x="14"
-        y="19"
-        textAnchor="middle"
-        fill="var(--accent)"
-        style={{ font: '900 10px Archivo, sans-serif', letterSpacing: '0.02em' }}
-      >
-        AF
-      </text>
-    </svg>
-  )
+  return <BrandShield />
 }
 
 /**

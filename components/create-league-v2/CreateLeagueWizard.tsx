@@ -651,7 +651,7 @@ export function CreateLeagueWizard(props: WizardProps) {
           <header className="space-y-3">
             {/* The theme toggle is fixed to the top-right corner on this route; keep the logo row clear of it. */}
             <div className="flex min-h-11 items-center pr-16 lg:pr-0">
-              <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} priority className="h-auto w-36 max-w-full sm:w-52" />
+              <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1294} height={306} priority className="h-auto w-36 max-w-full sm:w-52" />
             </div>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300 sm:text-xs">
               {t('createLeague.g30.eyebrow')}

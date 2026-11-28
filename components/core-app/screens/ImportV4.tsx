@@ -76,6 +76,7 @@ import {
 import { readImportReview } from '@/lib/league-import/review/readImportReview'
 import type { ImportReview, ImportReviewOverrides } from '@/lib/league-import/review/types'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
+import { BrandShield } from '@/components/brand/BrandShield'
 
 /**
  * Import & connect — the "landing, auth & import" handoff, wired to the real job.
@@ -109,25 +110,7 @@ export type ImportPreviewState = 'pick' | 'connecting' | 'result'
 
 /** Same lockup as the landing, pricing and auth screens. */
 function Shield() {
-  return (
-    <svg width="26" height="28" viewBox="0 0 28 30" aria-hidden focusable="false">
-      <path
-        d="M14 1.5 26 6v10.5c0 6.4-5 10.6-12 12.5-7-1.9-12-6.1-12-12.5V6l12-4.5Z"
-        fill="var(--accent-soft)"
-        stroke="var(--accent)"
-        strokeWidth="1.5"
-      />
-      <text
-        x="14"
-        y="19"
-        textAnchor="middle"
-        fill="var(--accent)"
-        style={{ font: '900 10px Archivo, sans-serif', letterSpacing: '0.02em' }}
-      >
-        AF
-      </text>
-    </svg>
-  )
+  return <BrandShield />
 }
 
 /**
