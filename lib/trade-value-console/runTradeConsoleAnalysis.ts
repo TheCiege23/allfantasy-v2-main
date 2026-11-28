@@ -359,6 +359,7 @@ export async function runTradeConsoleAnalysis(
           leagueType: leagueTypeBasis({ settings: leagueRow.settings, leagueType: leagueRow.leagueType, platform: leagueRow.platform ?? null }),
           season: leagueRow.season ?? null,
           status: leagueRow.status ?? null,
+          leagueSize: leagueRow.leagueSize ?? null,
         })
       : null
   let devyPricedCount = 0

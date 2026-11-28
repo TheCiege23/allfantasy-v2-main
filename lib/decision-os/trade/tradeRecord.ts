@@ -49,7 +49,7 @@ import { c2cDraftSide, parsePickLabel, type C2CDraftSide } from '@/lib/parsePick
 
 export type LoadedTradeAsset =
   | { kind: 'player'; playerId: string; name: string; position: string | null; idSpace?: PlayerIdSpace; identity?: Extract<ResolvedTradePlayer, { ok: true }> }
-  | { kind: 'pick'; season: number; round: number; originalTeamId: string | null; label: string; draftSide?: C2CDraftSide }
+  | { kind: 'pick'; season: number; round: number; originalTeamId: string | null; label: string; draftSide?: C2CDraftSide; pool?: 'devy' }
   | { kind: 'faab'; amount: number }
 
 export type TradeSide = {
@@ -199,7 +199,7 @@ export function providerTradeStatus(status: string): TradeStatus {
 /** Before player resolution: a player is only an id. */
 export type RawTradeAsset =
   | { kind: 'player'; playerId: string }
-  | { kind: 'pick'; season: number; round: number; originalTeamId: string | null; label: string; draftSide?: C2CDraftSide }
+  | { kind: 'pick'; season: number; round: number; originalTeamId: string | null; label: string; draftSide?: C2CDraftSide; pool?: 'devy' }
   | { kind: 'faab'; amount: number }
 
 export type RawMovement = { fromTeamId: string; toTeamId: string; asset: RawTradeAsset }
@@ -256,7 +256,9 @@ export function afItemAsset(item: {
       str(meta.originalRosterId) ?? ref?.originalTeamId ?? null,
       str(meta.pickLabel, meta.label) ?? 'a draft pick',
     )
-    return draftSide && typeof pick !== 'string' && pick.kind === 'pick' ? { ...pick, draftSide } : pick
+    if (typeof pick === 'string' || pick.kind !== 'pick') return pick
+    // A devy-draft pick buys a college prospect; carried so the grade does not price it as a rookie pick.
+    return { ...pick, ...(draftSide ? { draftSide } : {}), ...(type === 'devy_pick' ? { pool: 'devy' as const } : {}) }
   }
   if (type === 'player' || type === 'keeper' || type === 'devy') {
     const id = str(item.itemReference)

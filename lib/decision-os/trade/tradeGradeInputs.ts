@@ -151,7 +151,9 @@ export function gradeInputsFromNativeItems(
       const year = num(meta.pickSeason ?? meta.season) ?? (ref ? Number(ref[1]) : null)
       const round = num(meta.pickRound ?? meta.round) ?? (ref ? Number(ref[2]) : null)
       const draftSide = item.itemReference?.startsWith('fdp:') && ref ? 'canton' : c2cDraftSide(meta.pickSide) ?? parsePickLabel(str(meta.pickLabel ?? meta.label) ?? '')?.draftSide
-      if (year && round) out.assets.push({ kind: 'pick', year, round, ...(draftSide ? { draftSide } : {}) })
+      // A devy-draft pick buys a college prospect, not an NFL rookie: say so, or it prices on the rookie chart.
+      const pool = type === 'devy_pick' ? ({ pool: 'devy' } as const) : {}
+      if (year && round) out.assets.push({ kind: 'pick', year, round, ...(draftSide ? { draftSide } : {}), ...pool })
       // Named by its label, never by its id: a row id in a sentence tells a manager nothing.
       else out.unpriceable.push(str(meta.pickLabel ?? meta.label) ?? 'a draft pick with no season or round on file')
       continue
