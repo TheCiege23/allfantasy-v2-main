@@ -1,3 +1,10 @@
+/**
+ * @vitest-environment node
+ *
+ * A server route test: under the default jsdom environment `Blob` is jsdom's, which stringifies a
+ * Node Buffer to "undefined", so the forwarded image arrived as 9 bytes of text (and, on Node 24's
+ * FormData, threw inside the handler and surfaced as the billing wrapper's 503).
+ */
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createMockNextRequest } from "@/__tests__/helpers/createMockNextRequest"
@@ -87,6 +94,8 @@ describe("POST /api/chimmy compatibility route", () => {
     })
     refundSpendByLedgerMock.mockResolvedValue(null)
     streamAgentPipelineMock.mockReset()
+    // clearAllMocks keeps queued *Once implementations; drop them so one test's cannot answer another's call.
+    chatChimmyPostMock.mockReset()
   })
 
   it("maps the JSON compatibility contract into the dedicated Chimmy handler", async () => {
@@ -272,11 +281,22 @@ describe("POST /api/chimmy compatibility route", () => {
 
   it("forwards image requests to the dedicated handler when Anthropic is enabled", async () => {
     isAnthropicChimmyEnabledMock.mockResolvedValue(true)
+    // Record what the handler received and assert OUTSIDE it: an assertion thrown inside the handler is
+    // caught by `withPaidToolBilling` and comes back as a bare 503, which hides the real mismatch.
+    let received: { kind: string; type: string | null; size: number | null; error: string | null } | null = null
     chatChimmyPostMock.mockImplementationOnce(async (req: Request) => {
-      const formData = await req.formData()
-      const image = formData.get("image") as File | null
-      expect(image).toBeTruthy()
-      expect(image?.type).toBe("image/png")
+      try {
+        const formData = await req.formData()
+        const image = formData.get("image")
+        received = {
+          kind: image === null ? "missing" : typeof image === "string" ? "string" : "blob",
+          type: image && typeof image !== "string" ? image.type : null,
+          size: image && typeof image !== "string" ? image.size : null,
+          error: null,
+        }
+      } catch (error) {
+        received = { kind: "error", type: null, size: null, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }
+      }
       return new Response(JSON.stringify({ response: "Read the screenshot." }), { status: 200 })
     })
 
@@ -289,7 +309,9 @@ describe("POST /api/chimmy compatibility route", () => {
       }) as any
     )
 
-    expect(res.status).toBe(200)
+    // "image-bytes" is 11 bytes once the base64 payload is decoded.
+    expect(received).toEqual({ kind: "blob", type: "image/png", size: 11, error: null })
+    expect({ status: res.status, body: res.status === 200 ? null : await res.clone().text() }).toEqual({ status: 200, body: null })
     expect(chatChimmyPostMock).toHaveBeenCalledTimes(1)
     expect(runAgentPipelineMock).not.toHaveBeenCalled()
   })
